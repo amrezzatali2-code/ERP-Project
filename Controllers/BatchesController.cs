@@ -1,117 +1,618 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
+using System.Text;
 using System.Threading.Tasks;
-using ERP.Data;
-using ERP.Infrastructure;                 // ApplySearchSort
-using ERP.Models;
+using ClosedXML.Excel;                          // لتصدير Excel
+using ERP.Data;                                // سياق قاعدة البيانات
+using ERP.Infrastructure;                      // كلاس PagedResult
+using ERP.Models;                              // الموديلات Batch / Product / Customer
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc.Rendering;      // القوائم المنسدلة
+using Microsoft.EntityFrameworkCore;           // LINQ to Entities
 
 namespace ERP.Controllers
 {
     /// <summary>
-    /// تقرير تشغيلات (تعريف التشغيلة) — عرض فقط (قراءة).
+    /// كونترولر إدارة جدول التشغيلات Batch:
+    /// - عرض قائمة التشغيلات بنظام القوائم الموحد.
+    /// - إضافة / تعديل / حذف تشغيلة.
+    /// - حذف محدد / حذف الكل.
+    /// - تصدير (Excel / CSV).
     /// </summary>
     public class BatchesController : Controller
     {
-        private readonly AppDbContext context;   // متغير: سياق قاعدة البيانات الرئيسي
+        private readonly AppDbContext _db;   // متغير: سياق قاعدة البيانات
 
-        public BatchesController(AppDbContext ctx) => context = ctx;
-
-        // GET: /Batches
-        public async Task<IActionResult> Index(
-            string? search,                  // متغير: نص البحث الذي يكتبه المستخدم
-            string? searchBy = "all",        // متغير: العمود الذي سيتم البحث فيه
-            string? sort = "Product",        // متغير: اسم عمود الترتيب الافتراضي
-            string? dir = "asc",             // متغير: اتجاه الترتيب (تصاعدي/تنازلي)
-            int page = 1,                    // متغير: رقم الصفحة الحالية
-            int pageSize = 50)               // متغير: عدد السطور في كل صفحة
+        // دالة البناء: نستقبل السياق من الـ DI
+        public BatchesController(AppDbContext context)
         {
-            // 1) الاستعلام الأساسي من جدول التشغيلات بدون تتبّع (لزيادة سرعة القراءة في التقارير)
-            IQueryable<Batch> q = context.Batches.AsNoTracking();
+            _db = context;
+        }
 
-            // 2) مفاتيح البحث النصي (string) — هنا التشغيلة فقط
-            var stringFields = new Dictionary<string, Expression<Func<Batch, string?>>>()
-            {
-                ["batch"] = x => x.BatchNo          // تعليق: البحث بالنص داخل رقم/كود التشغيلة
-            };
-
-            // 3) مفاتيح البحث الرقمي (int) — الصنف والعميل
-            var intFields = new Dictionary<string, Expression<Func<Batch, int>>>()
-            {
-                ["product"] = x => x.ProdId,        // تعليق: البحث برقم الصنف (ProductId)
-                // لو CustomerId عندك int? (nullable) نستخدم ?? 0 لتحويلها لـ int
-                ["customer"] = x => x.CustomerId ?? 0   // تعليق: البحث برقم العميل (CustomerId كمرجع لمن اشتريت منه/له)
-            };
-
-            // 4) مفاتيح الترتيب المسموحة (Sorting)
-            var orderFields = new Dictionary<string, Expression<Func<Batch, object>>>()
-            {
-                ["Product"] = x => x.ProdId,                           // ترتيب حسب رقم الصنف
-                ["Batch"] = x => x.BatchNo!,                            // ترتيب حسب كود التشغيلة
-                ["Expiry"] = x => x.Expiry,                              // ترتيب حسب تاريخ الصلاحية
-                ["Retail"] = x => x.PriceRetailBatch ?? 0m,              // ترتيب حسب سعر الجمهور لهذه التشغيلة
-                ["Cost"] = x => x.UnitCostDefault ?? 0m,               // ترتيب حسب التكلفة الافتراضية
-                ["EntryDate"] = x => x.EntryDate                            // ترتيب حسب تاريخ الإدخال للنظام
-            };
-
-            // 5) تطبيق منظومة البحث/الترتيب الموحّدة
-            q = q.ApplySearchSort(
-                    search, searchBy,
-                    sort, dir,
-                    stringFields, intFields, orderFields,
-                    defaultSearchBy: "all",   // تعليق: لو المستخدم لم يحدد عمود بحث، نبحث في الكل
-                    defaultSortBy: "Product"  // تعليق: الترتيب الافتراضي حسب الصنف
-                );
-
-            // 6) ترقيم بسيط (Paging)
-            var totalRows = await q.CountAsync();                              // إجمالي عدد السطور
-            var totalPages = (int)Math.Ceiling(totalRows / (double)pageSize);  // إجمالي عدد الصفحات
-            page = Math.Max(1, Math.Min(page, Math.Max(1, totalPages)));       // ضمان أن رقم الصفحة داخل الحدود
-
-            var rows = await q
-                .Skip((page - 1) * pageSize)   // تخطي السطور السابقة
-                .Take(pageSize)                // أخذ عدد السطور المطلوبة للصفحة الحالية
+        // =========================================================
+        // دالة مساعدة: تحميل قائمة الأصناف للكومبوبوكس
+        // =========================================================
+        private async Task FillProductsDropDownAsync(int? selectedProdId = null)
+        {
+            // نجيب الأصناف مرتبة بالاسم لسهولة الاختيار
+            var products = await _db.Products
+                .OrderBy(p => p.ProdName)
+                .Select(p => new SelectListItem
+                {
+                    Value = p.ProdId.ToString(),          // لو عندك اسم مختلف غيّره هنا
+                    Text = p.ProdName
+                })
                 .ToListAsync();
 
-            // 7) خيارات البحث لعرضها في الكمبو بوكس في البارشال
-            ViewBag.SearchOptions = new List<SelectListItem>
+            ViewBag.Products = products;                     // متغير: القائمة المنسدلة في الفيو
+            ViewBag.SelectedProdId = selectedProdId;         // متغير: الصنف المختار مبدئياً
+        }
+
+        // =========================================================
+        // دالة مساعدة: تطبيق البحث / الفلترة / الترتيب
+        // =========================================================
+        private IQueryable<Batch> SearchSortFilter(
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? dateField,
+            int? fromCode,
+            int? toCode)
+        {
+            // الاستعلام الأساسي من جدول Batch مع ربط اسم الصنف
+            var q = _db.Batches
+                .Include(b => b.Product)
+                .AsNoTracking()
+                .AsQueryable();
+
+            // ------------------------------
+            // فلتر التاريخ (CreatedAt / UpdatedAt)
+            // ------------------------------
+            bool dateFilterActive = useDateRange || fromDate.HasValue || toDate.HasValue;
+            string df = string.IsNullOrWhiteSpace(dateField) ? "CreatedAt" : dateField;
+
+            if (dateFilterActive)
             {
-                new("الكل",      "all"){ Selected = (searchBy ?? "all").Equals("all", StringComparison.OrdinalIgnoreCase) },
-                new("الصنف",     "product"),
-                new("التشغيلة",  "batch"),
-                new("العميل",    "customer")
-            };
+                bool filterOnUpdated = df.Equals("UpdatedAt", StringComparison.OrdinalIgnoreCase);
 
-            // 8) خيارات الترتيب
-            ViewBag.SortOptions = new List<SelectListItem>
+                if (filterOnUpdated)
+                {
+                    if (fromDate.HasValue)
+                    {
+                        q = q.Where(b => b.UpdatedAt.HasValue && b.UpdatedAt.Value >= fromDate.Value);
+                    }
+                    if (toDate.HasValue)
+                    {
+                        q = q.Where(b => b.UpdatedAt.HasValue && b.UpdatedAt.Value <= toDate.Value);
+                    }
+                }
+                else
+                {
+                    if (fromDate.HasValue)
+                    {
+                        q = q.Where(b => b.CreatedAt >= fromDate.Value);
+                    }
+                    if (toDate.HasValue)
+                    {
+                        q = q.Where(b => b.CreatedAt <= toDate.Value);
+                    }
+                }
+            }
+
+            // ------------------------------
+            // فلتر كود من/إلى (BatchId)
+            // ------------------------------
+            if (fromCode.HasValue)
             {
-                new("الصنف",                 "Product"),
-                new("التشغيلة",             "Batch"),
-                new("الصلاحية",             "Expiry"),
-                new("سعر الجمهور (تشغيلة)", "Retail"),
-                new("التكلفة الافتراضية",   "Cost"),
-                new("تاريخ الإدخال",        "EntryDate"),
-            };
+                int cf = fromCode.Value;
+                q = q.Where(b => b.BatchId >= cf);
+            }
 
-            // 9) تمرير حالة الفلاتر والصفحات للـ View (الفوتر والبارشال)
-            ViewBag.Search = search ?? "";
-            ViewBag.SearchBy = searchBy ?? "all";
-            ViewBag.Sort = sort ?? "Product";
-            ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
+            if (toCode.HasValue)
+            {
+                int ct = toCode.Value;
+                q = q.Where(b => b.BatchId <= ct);
+            }
 
-            ViewBag.Page = page;
-            ViewBag.PageSize = pageSize;
-            ViewBag.TotalPages = totalPages;
-            ViewBag.RangeStart = totalRows == 0 ? 0 : ((page - 1) * pageSize) + 1;
-            ViewBag.RangeEnd = Math.Min(page * pageSize, totalRows);
-            ViewBag.TotalRows = totalRows;
+            // ------------------------------
+            // البحث (نص حر)
+            // ------------------------------
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                string term = search.Trim();
+                string sb = (searchBy ?? "batchno").ToLower();
 
-            // 10) إرجاع النتيجة للـ View على شكل قائمة تشغيلات
-            return View(rows);
+                switch (sb)
+                {
+                    case "id":      // كود التشغيلة
+                        q = q.Where(b => b.BatchId.ToString() == term);
+                        break;
+
+                    case "prod":    // كود الصنف أو اسمه
+                        q = q.Where(b =>
+                            b.ProdId.ToString() == term ||
+                            (b.Product != null && b.Product.ProdName.Contains(term)));
+                        break;
+
+                    case "prodname":
+                        q = q.Where(b => b.Product != null && b.Product.ProdName.Contains(term));
+                        break;
+
+                    case "expiry":
+                        if (DateTime.TryParse(term, out var dtExp))
+                        {
+                            var dateOnly = dtExp.Date;
+                            q = q.Where(b => b.Expiry.Date == dateOnly);
+                        }
+                        break;
+
+                    case "created":
+                        if (DateTime.TryParse(term, out var dtCr))
+                        {
+                            var dateOnly = dtCr.Date;
+                            q = q.Where(b => b.CreatedAt.Date == dateOnly);
+                        }
+                        break;
+
+                    case "updated":
+                        if (DateTime.TryParse(term, out var dtUp))
+                        {
+                            var dateOnly = dtUp.Date;
+                            q = q.Where(b =>
+                                b.UpdatedAt.HasValue &&
+                                b.UpdatedAt.Value.Date == dateOnly);
+                        }
+                        break;
+
+                    case "batchno":
+                    default:
+                        q = q.Where(b => b.BatchNo.Contains(term));
+                        break;
+                }
+            }
+
+            // ------------------------------
+            // الترتيب
+            // ------------------------------
+            bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            string sortCol = (sort ?? "expiry").ToLower();
+
+            IOrderedQueryable<Batch> ordered;
+
+            switch (sortCol)
+            {
+                case "id":
+                    ordered = descending
+                        ? q.OrderByDescending(b => b.BatchId)
+                        : q.OrderBy(b => b.BatchId);
+                    break;
+
+                case "batchno":
+                    ordered = descending
+                        ? q.OrderByDescending(b => b.BatchNo)
+                        : q.OrderBy(b => b.BatchNo);
+                    break;
+
+                case "prod":
+                    ordered = descending
+                        ? q.OrderByDescending(b => b.Product!.ProdName)
+                        : q.OrderBy(b => b.Product!.ProdName);
+                    break;
+
+                case "created":
+                    ordered = descending
+                        ? q.OrderByDescending(b => b.CreatedAt)
+                        : q.OrderBy(b => b.CreatedAt);
+                    break;
+
+                case "updated":
+                    ordered = descending
+                        ? q.OrderByDescending(b => b.UpdatedAt)
+                        : q.OrderBy(b => b.UpdatedAt);
+                    break;
+
+                case "expiry":
+                default:
+                    ordered = descending
+                        ? q.OrderByDescending(b => b.Expiry)
+                        : q.OrderBy(b => b.Expiry);
+                    break;
+            }
+
+            return ordered;
+        }
+
+        // =========================================================
+        // GET: /Batches
+        // شاشة قائمة التشغيلات (النظام الموحد)
+        // =========================================================
+        public async Task<IActionResult> Index(
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            int page = 1,
+            int pageSize = 25,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null)
+        {
+            // نحدد الترتيب تصاعدي/تنازلي
+            bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+
+            // نطبّق الفلاتر والبحث والترتيب
+            var query = SearchSortFilter(
+                search,
+                searchBy,
+                sort,
+                dir,
+                useDateRange,
+                fromDate,
+                toDate,
+                "CreatedAt",
+                fromCode,
+                toCode);
+
+            // نستخدم PagedResult لتقسيم الصفحات
+            var model = await PagedResult<Batch>.CreateAsync(
+                query,
+                page,
+                pageSize,
+                search,
+                descending,
+                sort,
+                searchBy);
+
+            // تعبئة خصائص إضافية للنظام الموحد
+            model.UseDateRange = useDateRange;
+            model.FromDate = fromDate;
+            model.ToDate = toDate;
+
+
+            // فلاتر البحث تُرسل للـ View عن طريق ViewBag
+            ViewBag.Search = search;
+            ViewBag.SearchBy = searchBy;
+            ViewBag.Sort = sort;
+            ViewBag.Dir = dir;
+
+
+            // فلتر الكود من/إلى هنستعمله في الواجهة فقط (مش لازم جوّة PagedResult)
+            ViewBag.FromCode = fromCode;   // متغير: أقل كود تشغيلة في الفلتر
+            ViewBag.ToCode = toCode;     // متغير: أعلى كود تشغيلة في الفلتر
+
+            return View(model);
+        }
+
+        // =========================================================
+        // GET: /Batches/Create
+        // فتح شاشة إضافة تشغيلة جديدة
+        // =========================================================
+        public async Task<IActionResult> Create()
+        {
+            await FillProductsDropDownAsync();
+            return View(new Batch());    // متغير: موديل فارغ
+        }
+
+        // =========================================================
+        // POST: /Batches/Create
+        // حفظ تشغيلة جديدة
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create(Batch model)
+        {
+            if (!ModelState.IsValid)
+            {
+                // لو في أخطاء فاليديشن نرجع نفس الشاشة مع نفس البيانات
+                await FillProductsDropDownAsync(model.ProdId);
+                return View(model);
+            }
+
+            // لو EntryDate لسه Default نحط تاريخ اليوم
+            if (model.EntryDate == default)
+            {
+                model.EntryDate = DateTime.UtcNow;
+            }
+
+            model.CreatedAt = DateTime.UtcNow;
+
+            _db.Batches.Add(model);              // إضافة السجل
+            await _db.SaveChangesAsync();        // حفظ في قاعدة البيانات
+
+            TempData["Success"] = "تم إضافة التشغيلة بنجاح.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // GET: /Batches/Edit/5
+        // فتح شاشة تعديل تشغيلة
+        // =========================================================
+        public async Task<IActionResult> Edit(int id)
+        {
+            var batch = await _db.Batches.FindAsync(id);
+            if (batch == null)
+            {
+                return NotFound();
+            }
+
+            await FillProductsDropDownAsync(batch.ProdId);
+            return View(batch);
+        }
+
+        // =========================================================
+        // POST: /Batches/Edit/5
+        // حفظ تعديل التشغيلة
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, Batch model)
+        {
+            if (id != model.BatchId)
+            {
+                return NotFound();
+            }
+
+            if (!ModelState.IsValid)
+            {
+                await FillProductsDropDownAsync(model.ProdId);
+                return View(model);
+            }
+
+            try
+            {
+                model.UpdatedAt = DateTime.UtcNow;   // تحديث آخر تعديل
+                _db.Batches.Update(model);
+                await _db.SaveChangesAsync();
+
+                TempData["Success"] = "تم حفظ تعديلات التشغيلة بنجاح.";
+                return RedirectToAction(nameof(Index));
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!await _db.Batches.AnyAsync(b => b.BatchId == id))
+                {
+                    return NotFound();
+                }
+                throw;
+            }
+        }
+
+        // =========================================================
+        // GET: /Batches/Show/5
+        // عرض تفاصيل تشغيلة واحدة
+        // =========================================================
+        public async Task<IActionResult> Show(int id)
+        {
+            var batch = await _db.Batches
+                .Include(b => b.Product)
+                .Include(b => b.Customer)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.BatchId == id);
+
+            if (batch == null)
+            {
+                return NotFound();
+            }
+
+            return View(batch);
+        }
+
+        // =========================================================
+        // GET: /Batches/Delete/5
+        // تأكيد حذف تشغيلة
+        // =========================================================
+        public async Task<IActionResult> Delete(int id)
+        {
+            var batch = await _db.Batches
+                .Include(b => b.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(b => b.BatchId == id);
+
+            if (batch == null)
+            {
+                return NotFound();
+            }
+
+            return View(batch);
+        }
+
+        // =========================================================
+        // POST: /Batches/Delete/5
+        // تنفيذ الحذف
+        // =========================================================
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            var batch = await _db.Batches.FindAsync(id);
+            if (batch != null)
+            {
+                _db.Batches.Remove(batch);
+                await _db.SaveChangesAsync();
+                TempData["Success"] = "تم حذف التشغيلة.";
+            }
+
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // POST: /Batches/BulkDelete
+        // حذف مجموعة تشغيلات من جدول الاندكس
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkDelete(string selectedIds)
+        {
+            if (string.IsNullOrWhiteSpace(selectedIds))
+            {
+                TempData["Error"] = "لم يتم اختيار أي تشغيلة للحذف.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var ids = selectedIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(id => int.TryParse(id, out var v) ? v : (int?)null)
+                .Where(v => v.HasValue)
+                .Select(v => v!.Value)
+                .ToList();
+
+            if (ids.Count == 0)
+            {
+                TempData["Error"] = "لم يتم اختيار تشغيلات صالحة للحذف.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var batches = await _db.Batches
+                .Where(b => ids.Contains(b.BatchId))
+                .ToListAsync();
+
+            _db.Batches.RemoveRange(batches);
+            await _db.SaveChangesAsync();
+
+            TempData["Success"] = "تم حذف التشغيلات المحددة.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // POST: /Batches/DeleteAll
+        // حذف جميع تشغيلات الجدول
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteAll()
+        {
+            var all = await _db.Batches.ToListAsync();
+            _db.Batches.RemoveRange(all);
+            await _db.SaveChangesAsync();
+
+            TempData["Success"] = "تم حذف جميع التشغيلات.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // GET: /Batches/Export
+        // تصدير (Excel / CSV) بنفس فلاتر الاندكس
+        // =========================================================
+        public async Task<IActionResult> Export(
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string format = "excel")
+        {
+            var query = SearchSortFilter(
+                search,
+                searchBy,
+                sort,
+                dir,
+                useDateRange,
+                fromDate,
+                toDate,
+                "CreatedAt",
+                fromCode,
+                toCode);
+
+            var data = await query.ToListAsync();
+
+            if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
+            {
+                // تصدير CSV بسيط
+                var sb = new StringBuilder();
+                sb.AppendLine("BatchId,ProdId,BatchNo,Expiry,PriceRetailBatch,UnitCostDefault,EntryDate,CreatedAt,UpdatedAt,IsActive");
+
+                foreach (var b in data)
+                {
+                    sb.AppendLine(string.Join(",",
+                        b.BatchId,
+                        b.ProdId,
+                        EscapeCsv(b.BatchNo),
+                        b.Expiry.ToString("yyyy-MM-dd"),
+                        b.PriceRetailBatch?.ToString("0.##") ?? "",
+                        b.UnitCostDefault?.ToString("0.####") ?? "",
+                        b.EntryDate.ToString("yyyy-MM-dd"),
+                        b.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
+                        b.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "",
+                        b.IsActive ? "1" : "0"
+                    ));
+                }
+
+                var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+                var csvName = $"Batches_{DateTime.Now:yyyyMMdd_HHmm}.csv";
+                return File(bytes, "text/csv", csvName);
+            }
+            else
+            {
+                // تصدير Excel باستخدام ClosedXML
+                using var wb = new XLWorkbook();
+                var ws = wb.Worksheets.Add("Batches");
+
+                // عناوين الأعمدة
+                ws.Cell(1, 1).Value = "كود التشغيلة";
+                ws.Cell(1, 2).Value = "كود الصنف";
+                ws.Cell(1, 3).Value = "اسم الصنف";
+                ws.Cell(1, 4).Value = "رقم التشغيلة";
+                ws.Cell(1, 5).Value = "تاريخ الصلاحية";
+                ws.Cell(1, 6).Value = "سعر الجمهور للتشغيلة";
+                ws.Cell(1, 7).Value = "التكلفة الافتراضية";
+                ws.Cell(1, 8).Value = "تاريخ الإدخال";
+                ws.Cell(1, 9).Value = "تاريخ الإنشاء";
+                ws.Cell(1, 10).Value = "آخر تعديل";
+                ws.Cell(1, 11).Value = "نشط؟";
+
+                int row = 2;
+
+                foreach (var b in data)
+                {
+                    ws.Cell(row, 1).Value = b.BatchId;
+                    ws.Cell(row, 2).Value = b.ProdId;
+                    ws.Cell(row, 3).Value = b.Product?.ProdName ?? "";
+                    ws.Cell(row, 4).Value = b.BatchNo;
+                    ws.Cell(row, 5).Value = b.Expiry;
+                    ws.Cell(row, 6).Value = b.PriceRetailBatch;
+                    ws.Cell(row, 7).Value = b.UnitCostDefault;
+                    ws.Cell(row, 8).Value = b.EntryDate;
+                    ws.Cell(row, 9).Value = b.CreatedAt;
+                    ws.Cell(row, 10).Value = b.UpdatedAt;
+                    ws.Cell(row, 11).Value = b.IsActive ? "نشط" : "موقوف";
+
+                    row++;
+                }
+
+                ws.Columns().AdjustToContents();
+
+                using var stream = new System.IO.MemoryStream();
+                wb.SaveAs(stream);
+                var fileName = $"Batches_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                return File(stream.ToArray(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    fileName);
+            }
+        }
+
+        // دالة صغيرة لهروب نص CSV
+        private static string EscapeCsv(string? value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return "";
+
+            if (value.Contains(",") || value.Contains("\"") || value.Contains("\n"))
+            {
+                return "\"" + value.Replace("\"", "\"\"") + "\"";
+            }
+
+            return value;
         }
     }
 }

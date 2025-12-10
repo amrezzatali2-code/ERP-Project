@@ -19,7 +19,7 @@ namespace ERP.Data
         public DbSet<ERP.Models.City> Cities { get; set; } = null!;
         public DbSet<ERP.Models.Area> Areas { get; set; } = null!;
         public DbSet<ERP.Models.Customer> Customers { get; set; } = null!;
-       
+
         public DbSet<ERP.Models.Product> Products { get; set; } = null!;   // جدول الأصناف
         public DbSet<Branch> Branches { get; set; } = null!;
         public DbSet<ERP.Models.Warehouse> Warehouses { get; set; } = null!;
@@ -30,7 +30,6 @@ namespace ERP.Data
         public DbSet<StockLedger> StockLedger => Set<StockLedger>();
         public DbSet<StockFifoMap> StockFifoMap => Set<StockFifoMap>();
         public DbSet<Batch> Batches => Set<Batch>();
-        public DbSet<StockBatch> StockBatches => Set<StockBatch>();
         public DbSet<SalesReturn> SalesReturns => Set<SalesReturn>();
         public DbSet<SalesReturnLine> SalesReturnLines => Set<SalesReturnLine>();
         public DbSet<ERP.Models.DocumentSeries> DocumentSeries => Set<ERP.Models.DocumentSeries>();
@@ -59,7 +58,7 @@ namespace ERP.Data
         public DbSet<UserExtraPermissions> UserExtraPermissions { get; set; } = null!;
         public DbSet<UserActivityLog> UserActivityLogs { get; set; } = null!; // سجل نشاط المستخدمين
 
-               // جداول السياسات
+        // جداول السياسات
         public DbSet<Policy> Policies { get; set; } = null!;                    // جدول السياسات العامة
         public DbSet<WarehousePolicyRule> WarehousePolicyRules { get; set; } = null!; // قواعد السياسة لكل مخزن
         public DbSet<ProductGroup> ProductGroups { get; set; } = null!;         // مجموعات الأصناف
@@ -102,7 +101,7 @@ namespace ERP.Data
             _httpContextAccessor = httpContextAccessor; // تعليق: للحصول على اسم المستخدم عند الحفظ
         }
 
-   
+
 
 
 
@@ -239,7 +238,7 @@ namespace ERP.Data
             // ========================
             // إعداد جدول سطور التسوية StockAdjustmentLine
             // ========================
-          
+
             mb.Entity<StockAdjustmentLine>(entity =>
             {
                 entity.HasKey(e => e.Id);                               // كود السطر
@@ -309,7 +308,7 @@ namespace ERP.Data
                 entity.Property(p => p.IsActive)
                       .HasDefaultValue(true);
 
-               
+
             });
 
 
@@ -785,9 +784,9 @@ namespace ERP.Data
             });
 
 
-           
 
-        
+
+
 
             // ===== PurchaseReturn =====
             mb.Entity<PurchaseReturn>(e =>
@@ -799,15 +798,15 @@ namespace ERP.Data
 
                 // 🔹 خصائص أساسية
                 e.Property(x => x.PRetId)
-                    
+
                     .IsRequired();
 
                 e.Property(x => x.WarehouseId)
-                    
+
                     .IsRequired();
 
                 e.Property(x => x.CustomerId)
-             
+
                     .IsRequired();
 
                 e.Property(x => x.Status)
@@ -960,15 +959,15 @@ namespace ERP.Data
 
                 // 🔹 الخصائص الأساسية
                 e.Property(x => x.PIId)
-            
+
                     .IsRequired();
 
                 e.Property(x => x.WarehouseId)
-            
+
                     .IsRequired();
 
                 e.Property(x => x.CustomerId)
-                
+
                     .IsRequired();
 
                 e.Property(x => x.Status)
@@ -977,7 +976,7 @@ namespace ERP.Data
 
                 // مرجع طلب الشراء (اختياري) – نفس طول PRId
                 e.Property(x => x.RefPRId);
-                    
+
 
                 // 🔹 علاقة 1..N مع سطور الفاتورة + حذف تتابعي
                 e.HasMany(x => x.Lines)
@@ -992,7 +991,7 @@ namespace ERP.Data
                  .HasForeignKey(x => x.CustomerId)
                  .OnDelete(DeleteBehavior.Restrict); // لا نحذف الفواتير عند حذف العميل
 
-             
+
             });
 
 
@@ -1092,7 +1091,7 @@ namespace ERP.Data
                 e.HasKey(x => x.GovernorateId);
 
                 e.Property(x => x.GovernorateId)
-             
+
                  .IsRequired();
 
                 e.Property(x => x.GovernorateName)
@@ -1111,7 +1110,7 @@ namespace ERP.Data
 
 
 
-            
+
             mb.Entity<ERP.Models.City>(entity =>
             {
                 entity.ToTable("Cities");
@@ -1192,7 +1191,7 @@ namespace ERP.Data
 
 
             // ===== Areas =====
-           
+
             mb.Entity<Area>(entity =>
             {
                 entity.ToTable("Areas");
@@ -1326,7 +1325,7 @@ namespace ERP.Data
 
                 // الخصائص الأساسية (كل خاصية عليها تعليق عربي لشرح الاستخدام)
                 e.Property(x => x.ProdId)               // معرف الصنف (PK)
-                  
+
                     .IsUnicode(true)
                     .IsRequired();
 
@@ -1392,7 +1391,7 @@ namespace ERP.Data
                 entity.HasKey(e => e.BranchId);           // المفتاح الأساسي (string)
 
                 entity.Property(e => e.BranchId)
-                 
+
                       .IsRequired();
 
                 entity.Property(e => e.BranchName)
@@ -1411,7 +1410,7 @@ namespace ERP.Data
                 mb.HasKey(w => w.WarehouseId);                     // PK
 
                 mb.Property(w => w.WarehouseId)
-              
+
                   .IsRequired();
 
                 mb.Property(w => w.WarehouseName)
@@ -1419,7 +1418,7 @@ namespace ERP.Data
                   .IsRequired();
 
                 mb.Property(w => w.BranchId)
-              
+
                   .IsRequired();
 
                 mb.Property(w => w.IsActive)
@@ -1434,12 +1433,12 @@ namespace ERP.Data
                   .HasForeignKey(w => w.BranchId)
                   .OnDelete(DeleteBehavior.Restrict); // منع الحذف التتبعي للفرع
 
-        
+
 
             });
 
 
-             
+
             // ===== Categories =====
 
             mb.Entity<Category>(e =>
@@ -1600,11 +1599,11 @@ namespace ERP.Data
 
                 // ===== أطوال الحقول النصية =====
                 e.Property(x => x.SIId)
-      
+
                  .IsRequired();                             // رقم الفاتورة إجباري
 
                 e.Property(x => x.ProdId)
-   
+
                  .IsRequired();                             // كود الصنف إجباري
 
                 e.Property(x => x.BatchNo)
@@ -1827,7 +1826,7 @@ namespace ERP.Data
                  .IsRequired();
 
                 e.Property(x => x.WarehouseId)
-                 
+
                  .IsRequired();
 
                 e.Property(x => x.Status)
@@ -1840,7 +1839,7 @@ namespace ERP.Data
 
                 // 🔹 علاقة هيدر ← سطور أمر البيع (حذف الهيدر يمسح السطور)
                 e.HasMany(x => x.Lines)
-                 .WithOne(l => l.SalesOrder)                        
+                 .WithOne(l => l.SalesOrder)
                  .HasForeignKey(l => l.SOId)
                  .OnDelete(DeleteBehavior.Cascade);
 
@@ -1869,11 +1868,11 @@ namespace ERP.Data
 
                 // 🔹 خصائص أساسية
                 e.Property(x => x.SOId)
-                 
+
                  .IsRequired();
 
                 e.Property(x => x.ProdId)
-                 
+
                  .IsRequired();
 
                 e.Property(x => x.PriceBasis)
@@ -1963,77 +1962,45 @@ namespace ERP.Data
 
 
 
-            // ===== Batches (تشغيلات) =====
-
 
             // =======================
             // جدول التشغيلات Batch
             // =======================
-            mb.Entity<Batch>(entity =>
-            {
-                // PK: BatchId فقط  ✅
-                entity.HasKey(b => b.BatchId);
+            // علاقة Batch ← Product (كل تشغيلة مرتبطة بصنف)
+            mb.Entity<Batch>()
+                .HasOne(b => b.Product)
+                .WithMany() // لو حبيت تضيف ICollection<Batch> فى Product بعدين تقدر تغيّرها
+                .HasForeignKey(b => b.ProdId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-                // رقم التشغيلة
-                entity.Property(b => b.BatchNo)
-                      .IsRequired()
-                      .HasMaxLength(50);
+            // علاقة StockLedger ← Product
+            mb.Entity<StockLedger>()
+                .HasOne(sl => sl.Product)
+                .WithMany()
+                .HasForeignKey(sl => sl.ProdId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-                // (اختياري لكن مفيد) منع تكرار نفس التشغيلة لنفس الصنف ونفس الصلاحية
-                entity.HasIndex(b => new { b.ProdId, b.BatchNo, b.Expiry })
-                      .IsUnique();
+            // علاقة StockLedger ← Warehouse
+            mb.Entity<StockLedger>()
+                .HasOne(sl => sl.Warehouse)
+                .WithMany()
+                .HasForeignKey(sl => sl.WarehouseId)
+                .OnDelete(DeleteBehavior.Restrict);
 
-                // تاريخ الإدخال
-                entity.Property(b => b.EntryDate)
-                      .HasColumnType("datetime2");
-
-                // ربط التشغيلة بالصنف
-                entity.HasOne<Product>()                 // لو ما عندك Navigation في Product
-                      .WithMany()
-                      .HasForeignKey(b => b.ProdId)
-                      .OnDelete(DeleteBehavior.Restrict);
-            });
-
-
-
-
-
-
-            // ===== Stock_Batches (مخزون التشغيلات) =====
-
-
-            mb.Entity<StockBatch>(e =>
-            {
-                e.ToTable("Stock_Batches");
-
-                // مفتاح مركب: Warehouse + Product + Batch + Expiry
-                e.HasKey(x => new { x.WarehouseId, x.ProdId, x.BatchNo, x.Expiry });
-
-                e.Property(x => x.WarehouseId).IsRequired();
-                e.Property(x => x.ProdId).IsRequired();
-                e.Property(x => x.BatchNo).HasMaxLength(50).IsRequired();
-
-                // فهارس شائعة للاستخدام
-                e.HasIndex(x => new { x.ProdId, x.Expiry });
-                e.HasIndex(x => x.QtyOnHand);
-
-                // منع الرصيد السالب (لو عايز تخلّيه صارم)
-                e.ToTable(tb =>
-                {
-                    tb.HasCheckConstraint("CK_StockBatches_Qty", "[QtyOnHand] >= 0");
-                });
-            });
-
-
-
-
-
-
-
-
-
-
+            // علاقة StockLedger ← Batch (اختيارية)
+            mb.Entity<StockLedger>()
+                .HasOne(sl => sl.Batch)
+                .WithMany()
+                .HasForeignKey(sl => sl.BatchId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
+
+        
+
+
+
+
+        
 
 
         public override int SaveChanges()

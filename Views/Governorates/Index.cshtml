@@ -51,8 +51,8 @@
     int next = Math.Min(last, page + 1);
 
     // فلتر كود من/إلى (يُستخدم فقط في اللينكات والهيدن)
-    int? fromCode = ViewBag.FromCode as int?;
-    int? toCode = ViewBag.ToCode as int?;
+    int? CodeFrom = ViewBag.CodeFrom as int?;
+    int? CodeTo = ViewBag.CodeTo as int?;
 
     var dateField = (string?)ViewBag.DateField ?? "created";   // created | updated
 
@@ -89,8 +89,8 @@
             fromDate = Model.FromDate,
             toDate = Model.ToDate,
             dateField = dateField,
-            fromCode,
-            toCode
+            CodeFrom,
+            CodeTo
         }) ?? "#";
 
         string icon = "⇅";
@@ -100,6 +100,54 @@
         return new HtmlString($@"<a href=""{url}"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>");
     };
 }
+
+
+
+
+<style>
+    /* كروت فلاتر المحافظات فقط – من غير ما نلمس باقي الكروت في الموقع */
+
+    /* شكل الكارت نفسه */
+    .gov-filter-card {
+        border-radius: 0.75rem; /* حواف مستديرة بسيطة */
+        border: 1px solid #e0e0e0; /* إطار خفيف */
+        box-shadow: 0 2px 4px rgba(0,0,0,.04); /* ظل خفيف */
+    }
+
+    /* الهيدر البسيط للكارت */
+    .gov-filter-header {
+        background-color: #f8f9fa; /* رمادي فاتح بدل الجريدنت */
+        border-bottom: 1px solid #e0e0e0;
+        padding: .4rem .75rem;
+        font-size: .9rem;
+        font-weight: 600;
+        color: #333;
+    }
+
+    /* تكبير بسيط للمسافة داخل الكارت */
+    .gov-filter-card .card-body {
+        padding: .6rem .75rem;
+    }
+
+    /* شكل زرار البحث/الإلغاء داخل كروت الفلاتر */
+    .gov-filter-card .btn-erp.btn-erp-secondary {
+        padding-inline: .75rem;
+        padding-block: .25rem;
+        font-size: .85rem;
+    }
+
+    /* حتة صغيرة علشان أيقونة العدسة تبقى مظبوطة */
+    .gov-filter-card .input-group-text {
+        font-size: .9rem;
+    }
+
+    /* (اختياري) تصغير الهوامش شويّة بين الكروت لتدي شكل متماسك */
+    .gov-filters-row > [class*="col-xxl"],
+    .gov-filters-row > [class*="col-lg"],
+    .gov-filters-row > [class*="col-md"] {
+        margin-bottom: .4rem;
+    }
+</style>
 
 
 
@@ -118,16 +166,21 @@
             <form method="get"
                   action="@Url.Action(action, controller)">
 
-                <div class="row g-2">
+                @* صف واحد فيه 5 كروت متساوية *@
+                <div class="row g-2 gov-filters-row
+                    row-cols-xxl-5
+                    row-cols-lg-3
+                    row-cols-md-2
+                    row-cols-1">
 
                     @*======================================================
-                      الكارت 1: بحث نصي 1
-                      ======================================================*@
-                    <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
+              الكارت 1: بحث نصي 1
+              ======================================================*@
+                    <div class="col">
                         <div class="card shadow-sm h-100">
                             <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #7b1fa2, #2196f3);">
-                                <span class="fw-semibold">بحث نصي 1</span>
+                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
+                                <span class="fw-semibold">بحث</span>
                             </div>
 
                             <div class="card-body py-2">
@@ -136,7 +189,7 @@
                                     <div class="input-group">
                                         <span class="input-group-text px-2">🔍</span>
                                         <input type="text"
-                                               name="search1" @* نص البحث للكارت 1 *@
+                                               name="search1"
                                                class="form-control"
                                                style="font-size:.95rem;"
                                                placeholder="اكتب نص البحث..."
@@ -161,7 +214,6 @@
                                     </select>
                                 </div>
 
-                                @* أزرار البحث / الإلغاء (تبعت نفس الفورم) *@
                                 <div class="d-flex gap-1 mt-1">
                                     <button type="submit"
                                             class="btn btn-erp btn-erp-secondary btn-erp-lg">
@@ -177,13 +229,13 @@
                     </div>
 
                     @*======================================================
-                      الكارت 2: بحث نصي 2
-                      ======================================================*@
-                    <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
+              الكارت 2: بحث نصي 2
+              ======================================================*@
+                    <div class="col">
                         <div class="card shadow-sm h-100">
                             <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #7b1fa2, #2196f3);">
-                                <span class="fw-semibold">بحث نصي 2</span>
+                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
+                                <span class="fw-semibold">بحث</span>
                             </div>
 
                             <div class="card-body py-2">
@@ -230,13 +282,13 @@
                     </div>
 
                     @*======================================================
-                      الكارت 3: بحث نصي 3
-                      ======================================================*@
-                    <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
+              الكارت 3: بحث نصي 3
+              ======================================================*@
+                    <div class="col">
                         <div class="card shadow-sm h-100">
                             <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #7b1fa2, #2196f3);">
-                                <span class="fw-semibold">بحث نصي 3</span>
+                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
+                                <span class="fw-semibold">بحث</span>
                             </div>
 
                             <div class="card-body py-2">
@@ -283,13 +335,13 @@
                     </div>
 
                     @*======================================================
-                      الكارت 4: بحث نصي 4
-                      ======================================================*@
-                    <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
+              الكارت 4: بحث نصي 4
+              ======================================================*@
+                    <div class="col">
                         <div class="card shadow-sm h-100">
                             <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #7b1fa2, #2196f3);">
-                                <span class="fw-semibold">بحث نصي 4</span>
+                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
+                                <span class="fw-semibold">بحث</span>
                             </div>
 
                             <div class="card-body py-2">
@@ -336,13 +388,13 @@
                     </div>
 
                     @*======================================================
-                      الكارت 5: فلترة كود المحافظة (داخل نفس الفورم)
-                      ======================================================*@
-                    <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
+              الكارت 5: فلترة كود المحافظة
+              ======================================================*@
+                    <div class="col">
                         <div class="card shadow-sm h-100">
                             <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #7b1fa2, #2196f3);">
-                                <span class="fw-semibold">فلترة كود المحافظة</span>
+                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
+                                <span class="fw-semibold">فلترة بالأكواد</span>
                             </div>
 
                             <div class="card-body py-2">
@@ -351,7 +403,7 @@
                                     <div class="input-group">
                                         <span class="input-group-text px-2">من كود</span>
                                         <input type="number"
-                                               name="fromCode" @* بداية مدى الأكواد *@
+                                               name="codeFrom" @* لازم نفس اسم باراميتر الأكشن *@
                                                class="form-control"
                                                style="font-size:.95rem;"
                                                value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
@@ -363,7 +415,7 @@
                                     <div class="input-group">
                                         <span class="input-group-text px-2">إلى كود</span>
                                         <input type="number"
-                                               name="toCode" @* نهاية مدى الأكواد *@
+                                               name="codeTo" @* نفس اسم باراميتر الأكشن *@
                                                class="form-control"
                                                style="font-size:.95rem;"
                                                value="@(ViewBag.CodeTo?.ToString() ?? "")" />
@@ -384,7 +436,7 @@
                         </div>
                     </div>
 
-                </div> @* نهاية row الكروت الخمسة *@
+                </div> @* نهاية صف الكروت الخمسة *@
 
                 @* ===== الهيدن المشتركة للفورم كله (ترتيب، حجم الصفحة، التاريخ) ===== *@
                 @{
@@ -407,7 +459,6 @@
                     <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
                 }
 
-                @* زر بحث بكل الفلاتر + زر إلغاء الكل *@
                 <div class="col-12 mt-2 d-flex justify-content-center gap-2 d-print-none">
                     <button type="submit"
                             class="btn btn-erp btn-erp-secondary btn-erp-lg">
@@ -423,15 +474,16 @@
             </form>
         </div>
 
+
         @* ==========================================================
            ثانياً: كارت إجراءات المحافظات (زي ما كان بالظبط – آخر كولمن)
            ========================================================== *@
         <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
             <div class="card shadow-sm h-100">
                 <div class="card-header text-white py-1"
-                     style="background: linear-gradient(90deg, #7b1fa2, #2196f3);">
+                     style="background: linear-gradient(90deg, #4b5563, #64748b);">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold">إجراءات المحافظات</span>
+                        <span class="fw-semibold">buttons</span>
                     </div>
                 </div>
 
@@ -526,11 +578,11 @@
 
                             @if (ViewBag.CodeFrom != null)
                             {
-                                <input type="hidden" name="fromCode" value="@ViewBag.CodeFrom" />
+                                <input type="hidden" name="CodeFrom" value="@ViewBag.CodeFrom" />
                             }
                             @if (ViewBag.CodeTo != null)
                             {
-                                <input type="hidden" name="toCode" value="@ViewBag.CodeTo" />
+                                <input type="hidden" name="CodeTo" value="@ViewBag.CodeTo" />
                             }
 
                             <select name="format"
@@ -657,13 +709,13 @@
             {
                 <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
             }
-            @if (fromCode.HasValue)
+            @if (CodeFrom.HasValue)
             {
-                <input type="hidden" name="fromCode" value="@fromCode" />
+                <input type="hidden" name="CodeFrom" value="@CodeFrom" />
             }
-            @if (toCode.HasValue)
+            @if (CodeTo.HasValue)
             {
-                <input type="hidden" name="toCode" value="@toCode" />
+                <input type="hidden" name="CodeTo" value="@CodeTo" />
             }
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
@@ -736,8 +788,8 @@
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
                     <input type="hidden" name="pageSize" value="@ps" />
-                    <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
-                    <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
+                    <input type="hidden" name="CodeFrom" value="@(CodeFrom?.ToString() ?? "")" />
+                    <input type="hidden" name="CodeTo" value="@(CodeTo?.ToString() ?? "")" />
 
                     <div class="mb-3">
                         <div class="form-check d-flex align-items-center">
@@ -976,11 +1028,11 @@
 
             function buildUrl(codeFrom, codeTo) {
                 const url = new URL(window.location.href);
-                if (codeFrom) url.searchParams.set("fromCode", codeFrom);
-                else          url.searchParams.delete("fromCode");
+                if (codeFrom) url.searchParams.set("CodeFrom", codeFrom);
+                else          url.searchParams.delete("CodeFrom");
 
-                if (codeTo)   url.searchParams.set("toCode", codeTo);
-                else          url.searchParams.delete("toCode");
+                if (codeTo)   url.searchParams.set("CodeTo", codeTo);
+                else          url.searchParams.delete("CodeTo");
 
                 // نرجع لأول صفحة مع الحفاظ على باقي الفلاتر
                 url.searchParams.set("page", "1");

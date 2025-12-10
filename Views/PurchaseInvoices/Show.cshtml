@@ -260,45 +260,56 @@
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <label class="form-label form-label-sm">تاريخ الفاتورة</label>
-                                        <input class="form-control form-control-sm text-center"
+                                        <input id="InvoiceDateDisplay" @* متغير: يعرض تاريخ الفاتورة *@
+                                               class="form-control form-control-sm text-center"
                                                value="@invoiceDateText"
                                                readonly />
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                        <input class="form-control form-control-sm text-center"
+                                        <input id="InvoiceTimeDisplay" @* متغير: يعرض وقت إنشاء الفاتورة *@
+                                               class="form-control form-control-sm text-center"
                                                value="@invoiceTimeText"
                                                readonly />
                                     </div>
                                 </div>
                             </div>
 
+
                         </div>
 
                         <br />
 
                         <div class="row g-3">
-                            <div class="col-lg-4 col-md-4">
-                                <label class="form-label form-label-sm">حالة الفاتورة</label>
-                                <input class="form-control form-control-sm text-center"
-                                       value="@Model.Status"
-                                       readonly />
+
+
+
+                                          @* حقل مخفي: حالة الفاتورة النصية (Draft / Posted / Cancelled ...)
+                                          يخص منطق الموديل فقط ولا يظهر للمستخدم *@
+                                      <input type="hidden"
+                                       asp-for="Status"
+                                         id="InvoiceStatusHidden" />
+
+                                      @* بوكس واحد فقط لعرض هل الفاتورة مُرحَّلة أم لا *@
+                              <div class="col-lg-4 col-md-4">
+                                  <label class="form-label form-label-sm">مُرحَّلة؟</label>
+                                  <input id="InvoiceIsPostedDisplay"               @* متغير: يعرض نعم/لا حسب الترحيل *@
+                                    class="form-control form-control-sm text-center"
+                                   value="@(Model.IsPosted ? "نعم" : "لا")"
+                                  readonly />
                             </div>
 
-                            <div class="col-lg-4 col-md-4">
-                                <label class="form-label form-label-sm">مرحّلة؟</label>
-                                <input class="form-control form-control-sm text-center"
-                                       value="@(Model.IsPosted ? "نعم" : "لا")"
-                                       readonly />
-                            </div>
+                                  @* طلب الشراء المرجعي كما هو *@
+                             <div class="col-lg-4 col-md-4">
+                                       <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
+                                      <input class="form-control form-control-sm text-center"
+                                      value="@(Model.RefPRId?.ToString() ?? "")"
+                                      readonly />
+                              </div>
 
-                            <div class="col-lg-4 col-md-4">
-                                <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
-                                <input class="form-control form-control-sm text-center"
-                                       value="@(Model.RefPRId?.ToString() ?? "")"
-                                       readonly />
-                            </div>
-                        </div>
+    
+                         </div>
+
 
                       
                         <div class="row g-4">
@@ -425,20 +436,7 @@
                             </div>
                         </div>
 
-                        @* أزرار الحركة وتعديل بيانات الصنف *@
-                        <div class="d-flex gap-2 mb-2">
-                            <button type="button"
-                                    id="btnOpenProductMovement"
-                                    class="btn btn-outline-secondary btn-sm">
-                                حركة الصنف
-                            </button>
-
-                            <button type="button"
-                                    id="btnOpenProductEdit"
-                                    class="btn btn-outline-primary btn-sm">
-                                تعديل بيانات الصنف
-                            </button>
-                        </div>
+                      
 
 
                     </div> @* نهاية card-body *@
@@ -446,8 +444,8 @@
 
 
                 @* =====================================================
-   4) كارت إدخال الصنف في فاتورة المشتريات
-   ===================================================== *@
+                      4) كارت إدخال الصنف في فاتورة المشتريات
+                   ===================================================== *@
                 <div class="card shadow-sm mb-3 invoice-Add-card">
                     <div class="card-header">
                         <h6 class="mb-0">إضافة صنف للفاتورة</h6>
@@ -503,7 +501,22 @@
                                 @* الحقل الفعلي لحفظ كود الصنف في السطر *@
                                 <input type="hidden" id="ProdId" />
 
-                                @* تم حذف النص أسفل البوكس بناءً على طلبك *@
+                                
+                                </div>
+
+                                @* أزرار الحركة وتعديل بيانات الصنف *@
+                                <div class="d-flex gap-2 mb-2">
+                                    <button type="button"
+                                            id="btnOpenProductMovement"
+                                            class="btn btn-outline-secondary btn-sm">
+                                        حركة الصنف
+                                    </button>
+
+                                    <button type="button"
+                                            id="btnOpenProductEdit"
+                                            class="btn btn-outline-primary btn-sm">
+                                        تعديل بيانات الصنف
+                                    </button>
                             </div>
                         </div>
 
@@ -673,7 +686,7 @@
 
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
-                                    <span class="small text-muted">عدد السطور</span>
+                                    <span id="TotalLinesBadge" class="small text-muted">عدد السطور</span>
                                     <span class="badge bg-light text-dark summary-badge">
                                         @totalLines
                                     </span>
@@ -682,7 +695,7 @@
 
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
-                                    <span class="small text-muted">عدد الأصناف</span>
+                                    <span id="TotalItemsBadge" class="small text-muted">عدد الأصناف</span>
                                     <span class="badge bg-light text-dark summary-badge">
                                         @totalItems
                                     </span>
@@ -691,7 +704,7 @@
 
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي الكمية</span>
+                                    <span id="TotalQtyBadge" class="small text-muted">إجمالي الكمية</span>
                                     <span class="badge bg-light text-dark summary-badge">
                                         @totalQty
                                     </span>
@@ -700,7 +713,7 @@
 
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي سعر الجمهور</span>
+                                    <span id="TotalRetailBadge" class="small text-muted">إجمالي سعر الجمهور</span>
                                     <span class="badge bg-light text-dark summary-badge">
                                         @totalRetail.ToString("0.00")
                                     </span>
@@ -709,7 +722,7 @@
 
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
-                                    <span class="small text-muted">الإجمالي بعد الخصم</span>
+                                    <span id="TotalAfterDiscountBadge" class="small text-muted">الإجمالي بعد الخصم</span>
                                     <span class="badge bg-light text-dark summary-badge">
                                         @totalAfterDiscount.ToString("0.00")
                                     </span>
@@ -718,7 +731,7 @@
 
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
-                                    <span class="small text-muted">قيمة الضريبة</span>
+                                    <span id="TaxAmountBadge" class="small text-muted">قيمة الضريبة</span>
                                     <span class="badge bg-info text-dark summary-badge">
                                         @taxAmount.ToString("0.00")
                                     </span>
@@ -730,12 +743,12 @@
 
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
-                                <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
+                                <span id="TotalAfterDiscountAndTaxBadge" class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
                                 <h5 class="mb-1">
                                     @totalAfterDiscountAndTax.ToString("0.00")
                                 </h5>
 
-                                <span class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
+                                <span id="NetTotalBadge" class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
                                 <h3 class="mb-0 text-success">
                                     @netTotal.ToString("0.00")
                                 </h3>
@@ -770,9 +783,12 @@
                     <div class="card-body d-grid">
 
                         <a class="btn btn-erp btn-erp-outline-success btn-erp-sm"
-                           asp-action="Create">
+                           asp-action="Create" @* هنسيب اللينك كـ fallback *@
+                           id="btnNewInvoice">
+                            @* متغير: زر فتح فاتورة جديدة على الواجهة *@
                             ➕ فاتورة جديدة
                         </a>
+
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
@@ -1459,6 +1475,40 @@
             }
 
         })(); // ← نهاية IIFE الخاصة بالأصناف
+
+
+
+        // =========================================================
+        // ثالثاً: منطق "فاتورة جديدة" (فوكس على المورد فقط)
+        // =========================================================
+        (function () {
+
+            // متغير: هل هذه فاتورة جديدة؟ (PIId = 0)
+            const isNewInvoice = @(Model == null || Model.PIId == 0 ? "true" : "false");
+
+            // لو مش فاتورة جديدة (يعني فاتورة قديمة) → لا نعمل شيء
+            if (!isNewInvoice) {
+                return;
+            }
+
+            // فوكس على اسم المورد بعد فتح الفاتورة الجديدة
+            const custNameInput = document.getElementById('CustomerNameInput'); // حقل: اسم المورد
+            if (custNameInput) {
+                setTimeout(function () {
+                    custNameInput.focus();
+                    if (typeof custNameInput.select === 'function') {
+                        custNameInput.select();    // تحديد النص بالكامل ليسهّل الكتابة فوقه
+                    }
+                }, 300);
+            }
+
+        })();
+
+
+
+
+
+
 
     </script>
 }
