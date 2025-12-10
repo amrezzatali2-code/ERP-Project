@@ -1,0 +1,24 @@
+﻿@model ERP.Models.DocumentSeries
+@{
+    ViewData["Title"] = "حذف سلسلة الترقيم";
+}
+<h3 class="mb-3 text-danger">حذف سلسلة الترقيم</h3>
+<p>هل تريد حذف هذه السلسلة؟ (لن تُحذف أي فواتير؛ هذا جدول إعداد الترقيم فقط)</p>
+
+<div class="table-responsive">
+    <table class="table table-bordered w-auto" dir="rtl">
+        <tr><th>المعرف</th><td>@Model.SeriesId</td></tr>
+        <tr><th>النوع</th><td>@Model.DocType</td></tr>
+        <tr><th>السلسلة</th><td>@Model.SeriesCode</td></tr>
+        <tr><th>السنة</th><td>@Model.FiscalYear</td></tr>
+        <tr><th>السياسة</th><td>@Model.ResetPolicy</td></tr>
+        <tr><th>العدد الحالي</th><td>@Model.CurrentNo</td></tr>
+    </table>
+</div>
+
+<form asp-action="Delete" method="post">
+    @Html.AntiForgeryToken()
+    <input type="hidden" asp-for="SeriesId" />
+    <button class="btn btn-danger">تأكيد الحذف</button>
+    <a class="btn btn-secondary" asp-action="Index">إلغاء</a>
+</form>

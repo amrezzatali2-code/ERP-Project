@@ -1,0 +1,65 @@
+﻿@model ERP.Models.Warehouse
+
+@{
+    ViewData["Title"] = "تعديل مخزن";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">@ViewData["Title"]</h2>
+
+    <!-- ملخص أخطاء التحقق إن وجدت -->
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <!-- نموذج تعديل بيانات المخزن -->
+    <form asp-action="Edit" method="post" class="row g-3">
+        @Html.AntiForgeryToken()   <!-- حماية من هجمات CSRF -->
+        <!-- معرّف المخزن (قراءة فقط حتى لا يتغيّر) -->
+        <div class="col-md-4">
+            <label asp-for="WarehouseId" class="form-label">معرّف المخزن</label>
+            <input asp-for="WarehouseId" class="form-control" readonly />
+            <span asp-validation-for="WarehouseId" class="text-danger"></span>
+        </div>
+
+        <!-- اسم المخزن -->
+        <div class="col-md-8">
+            <label asp-for="WarehouseName" class="form-label">اسم المخزن</label>
+            <input asp-for="WarehouseName" class="form-control" />
+            <span asp-validation-for="WarehouseName" class="text-danger"></span>
+        </div>
+
+        <!-- الفرع التابع له المخزن -->
+        <div class="col-md-6">
+            <label class="form-label">الفرع</label>
+            <!-- قائمة الفروع قادمة في ViewBag.BranchId من الكنترولر -->
+            <select asp-for="BranchId" class="form-select" asp-items="ViewBag.BranchId">
+                <option value="">-- اختر الفرع --</option>
+            </select>
+            <span asp-validation-for="BranchId" class="text-danger"></span>
+        </div>
+
+        <!-- حالة المخزن (فعّال / غير فعّال) -->
+        <div class="col-md-2 d-flex align-items-center">
+            <div class="form-check mt-4">
+                <input class="form-check-input" asp-for="IsActive" />
+                <label class="form-check-label" asp-for="IsActive">فعّال</label>
+            </div>
+        </div>
+
+        <!-- ملاحظات -->
+        <div class="col-md-12">
+            <label asp-for="Notes" class="form-label">ملاحظات</label>
+            <textarea asp-for="Notes" rows="3" class="form-control"></textarea>
+            <span asp-validation-for="Notes" class="text-danger"></span>
+        </div>
+
+        <!-- أزرار الحفظ والرجوع -->
+        <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
+            <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

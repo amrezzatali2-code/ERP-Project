@@ -1,0 +1,26 @@
+﻿@model ERP.Models.SalesReturn
+@{
+    ViewData["Title"] = "حذف مرتجع بيع";
+    var lines = (int)(ViewBag.LinesCount ?? 0);
+}
+
+<h2 class="mb-3 text-danger">حذف مرتجع بيع</h2>
+
+<div class="alert alert-warning">
+    <div><strong>تنبيه:</strong> سيتم حذف المرتجع <b>@Model.SRId</b> وحذف <b>@lines</b> سطر/سطور تابعة له نهائيًا.</div>
+</div>
+
+<table class="table table-bordered w-auto">
+    <tr><th>رقم المرتجع</th><td>@Model.SRId</td></tr>
+    <tr><th>التاريخ</th><td>@Model.SRDate.ToString("yyyy-MM-dd") @Model.SRTime</td></tr>
+    <tr><th>العميل</th><td>@Model.CustomerId</td></tr>
+    <tr><th>المخزن</th><td>@Model.WarehouseId</td></tr>
+    <tr><th>الصافي</th><td>@Model.NetTotal.ToString("0.00")</td></tr>
+    <tr><th>الحالة</th><td>@Model.Status</td></tr>
+    <tr><th>أنشأه</th><td>@Model.CreatedBy (@Model.CreatedAt)</td></tr>
+</table>
+
+<form asp-action="Delete" asp-route-id="@Model.SRId" method="post" class="d-flex gap-2">
+    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+    <a class="btn btn-secondary" asp-action="Index">رجوع</a>
+</form>

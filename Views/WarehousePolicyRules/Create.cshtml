@@ -1,0 +1,80 @@
+﻿@model ERP.Models.WarehousePolicyRule
+
+@{
+    ViewData["Title"] = "إضافة قاعدة سياسة لمخزن";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">إضافة قاعدة سياسة لمخزن</h2>
+
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+
+                @* اختيار المخزن بالاسم *@
+                <div class="mb-3">
+                    <label asp-for="WarehouseId" class="form-label">المخزن</label>
+                    <select asp-for="WarehouseId"
+                            class="form-select"
+                            asp-items="@(ViewBag.WarehouseList as SelectList)">
+                        <option value="">-- اختر المخزن --</option>
+                    </select>
+                    <span asp-validation-for="WarehouseId" class="text-danger"></span>
+                </div>
+
+                @* اختيار السياسة بالاسم *@
+                <div class="mb-3">
+                    <label asp-for="PolicyId" class="form-label">السياسة</label>
+                    <select asp-for="PolicyId"
+                            class="form-select"
+                            asp-items="@(ViewBag.PolicyList as SelectList)">
+                        <option value="">-- اختر السياسة --</option>
+                    </select>
+                    <span asp-validation-for="PolicyId" class="text-danger"></span>
+                </div>
+
+                @* نسبة الربح % *@
+                <div class="mb-3">
+                    <label asp-for="ProfitPercent" class="form-label">نسبة الربح %</label>
+                    <input asp-for="ProfitPercent" class="form-control" />
+                    <span asp-validation-for="ProfitPercent" class="text-danger"></span>
+                </div>
+
+                @* أقصى خصم للعميل % (اختياري) *@
+                <div class="mb-3">
+                    <label asp-for="MaxDiscountToCustomer" class="form-label">
+                        أقصى خصم للعميل % (اختياري)
+                    </label>
+                    <input asp-for="MaxDiscountToCustomer" class="form-control" />
+                    <span asp-validation-for="MaxDiscountToCustomer" class="text-danger"></span>
+                </div>
+
+                @* لو عندك حقل IsActive في الموديل *@
+                
+                <div class="mb-3 form-check">
+                    <input asp-for="IsActive" class="form-check-input ms-2" />
+                    <label asp-for="IsActive" class="form-check-label">مفعّلة؟</label>
+                </div>
+               
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-primary">
+                        حفظ
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        رجوع للقائمة
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

@@ -1,0 +1,102 @@
+﻿@model ERP.Models.StockTransfer
+
+@{
+    ViewData["Title"] = "تفاصيل تحويل مخزني";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تفاصيل تحويل مخزني — @Model.Id</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+
+            <dl class="row">
+                <dt class="col-sm-3">رقم التحويل</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">تاريخ التحويل</dt>
+                <dd class="col-sm-9">
+                    @Model.TransferDate.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+
+                <dt class="col-sm-3">من مخزن</dt>
+                <dd class="col-sm-9">
+                    @Model.FromWarehouseId
+                </dd>
+
+                <dt class="col-sm-3">إلى مخزن</dt>
+                <dd class="col-sm-9">
+                    @Model.ToWarehouseId
+                </dd>
+
+                <dt class="col-sm-3">المستخدم</dt>
+                <dd class="col-sm-9">
+                    @(Model.UserId.HasValue? Model.UserId.ToString() : "-")
+                </dd>
+
+                <dt class="col-sm-3">الملاحظات</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Note) ? "-" : Model.Note)
+                </dd>
+
+                <dt class="col-sm-3">تاريخ الإنشاء</dt>
+                <dd class="col-sm-9">
+                    @Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+
+                <dt class="col-sm-3">آخر تعديل</dt>
+                <dd class="col-sm-9">
+                    @(Model.UpdatedAt.HasValue
+                                        ? Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                        : "-")
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    @* جدول سطور التحويل (الأصناف) *@
+    @if (Model.Lines != null && Model.Lines.Any())
+    {
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">
+                سطور التحويل (الأصناف)
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-striped table-bordered table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>رقم السطر</th>
+                            <th>كود الصنف</th>
+                            <th>كود التشغيلة</th>
+                            <th>الكمية</th>
+                            <th>تكلفة الوحدة</th>
+                            <th>الملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
+                        {
+                            <tr>
+                                <td>@line.LineNo</td>
+                                <td>@line.ProductId</td>
+                                <td>@(line.BatchId.HasValue? line.BatchId.ToString() : "-")</td>
+                                <td>@line.Qty</td>
+                                <td>@line.UnitCost.ToString("0.####")</td>
+                                <td>@(string.IsNullOrWhiteSpace(line.Note) ? "-" : line.Note)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    <div class="d-flex justify-content-between mt-3">
+        <a asp-action="Index" class="btn btn-secondary">
+            رجوع إلى القائمة
+        </a>
+        <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">
+            تعديل هذا التحويل
+        </a>
+    </div>
+</div>

@@ -1,0 +1,60 @@
+﻿@model ERP.Models.StockAdjustmentLine
+
+@{
+    ViewData["Title"] = "حذف سطر تسوية";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3 text-danger">حذف سطر تسوية — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذا السطر؟
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th>رقم التسوية</th>
+                    <td>@Model.StockAdjustmentId</td>
+                </tr>
+                <tr>
+                    <th>كود الصنف</th>
+                    <td>@Model.ProductId</td>
+                </tr>
+                <tr>
+                    <th>الكمية قبل</th>
+                    <td>@Model.QtyBefore</td>
+                </tr>
+                <tr>
+                    <th>الكمية بعد</th>
+                    <td>@Model.QtyAfter</td>
+                </tr>
+                <tr>
+                    <th>فرق الكمية</th>
+                    <td>@Model.QtyDiff</td>
+                </tr>
+                <tr>
+                    <th>فرق التكلفة</th>
+                    <td>@Model.CostDiff?.ToString("0.00")</td>
+                </tr>
+            </table>
+
+            <form asp-action="Delete" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Id" />
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-danger">
+                        نعم، حذف
+                    </button>
+                    <a asp-action="Index"
+                       asp-route-stockAdjustmentId="@Model.StockAdjustmentId"
+                       class="btn btn-erp btn-erp-secondary">
+                        إلغاء
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

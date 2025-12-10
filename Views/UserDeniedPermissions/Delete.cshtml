@@ -1,0 +1,56 @@
+﻿@model ERP.Models.UserDeniedPermission
+
+@{
+    ViewData["Title"] = "حذف استثناء صلاحية";
+    var userName = Model.User?.DisplayName ?? Model.User?.UserName ?? "";
+    var permName = Model.Permission?.NameAr ?? "";
+    var permCode = Model.Permission?.Code ?? "";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف استثناء صلاحية — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذا الاستثناء؟ لا يمكن التراجع بعد الحذف.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+
+                <dt class="col-sm-3">المستخدم</dt>
+                <dd class="col-sm-9">
+                    @userName (@Model.UserId)
+                </dd>
+
+                <dt class="col-sm-3">الصلاحية</dt>
+                <dd class="col-sm-9">
+                    @if (!string.IsNullOrEmpty(permCode))
+                    {
+                        @($"{permName} ({permCode})")
+                    }
+                    else
+                    {
+                        @permName
+                    }
+                </dd>
+
+                <dt class="col-sm-3">سماح/منع</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsAllowed ? "سماح (Allow)" : "منع (Deny)")
+                </dd>
+
+                <dt class="col-sm-3">تاريخ الإضافة</dt>
+                <dd class="col-sm-9">
+                    @Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary ms-2">إلغاء</a>
+    </form>
+</div>

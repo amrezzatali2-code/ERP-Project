@@ -1,0 +1,105 @@
+﻿@model ERP.Models.Role
+
+@{
+    ViewData["Title"] = "عرض تفاصيل الدور";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تفاصيل الدور — @Model.Name</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم الدور</dt>
+                <dd class="col-sm-9">@Model.RoleId</dd>
+
+                <dt class="col-sm-3">اسم الدور</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Description)
+                                        ? "-"
+                                        : Model.Description)
+                </dd>
+
+                <dt class="col-sm-3">دور نظامي؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsSystemRole ? "نعم" : "لا")
+                </dd>
+
+                <dt class="col-sm-3">نشط؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsActive ? "نشط" : "متوقف")
+                </dd>
+
+                <dt class="col-sm-3">تاريخ الإنشاء</dt>
+                <dd class="col-sm-9">
+                    @Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+
+                <dt class="col-sm-3">آخر تعديل</dt>
+                <dd class="col-sm-9">
+                    @(Model.UpdatedAt.HasValue
+                                        ? Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                        : "-")
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    @* المستخدمون داخل الدور *@
+    <div class="card mb-3">
+        <div class="card-header">
+            المستخدمون داخل الدور
+        </div>
+        <div class="card-body">
+            @if (Model.UserRoles == null || !Model.UserRoles.Any())
+            {
+                <span class="text-muted">لا يوجد مستخدمون داخل هذا الدور.</span>
+            }
+            else
+            {
+                <ul class="list-group list-group-flush">
+                    @foreach (var ur in Model.UserRoles)
+                    {
+                        <li class="list-group-item">
+                            @ur.User?.UserName
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+
+    @* صلاحيات الدور *@
+    <div class="card mb-3">
+        <div class="card-header">
+            صلاحيات الدور
+        </div>
+        <div class="card-body">
+            @if (Model.RolePermissions == null || !Model.RolePermissions.Any())
+            {
+                <span class="text-muted">لا توجد صلاحيات مرتبطة بهذا الدور حتى الآن.</span>
+            }
+            else
+            {
+                <ul class="list-group list-group-flush">
+                    @foreach (var rp in Model.RolePermissions)
+                    {
+                        <li class="list-group-item">
+                            @rp.Permission?.NameAr
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+
+    <a asp-action="Edit" asp-route-id="@Model.RoleId" class="btn btn-primary">
+        تعديل
+    </a>
+    <a asp-action="Index" class="btn btn-secondary">
+        رجوع للقائمة
+    </a>
+</div>

@@ -1,0 +1,175 @@
+﻿@model ERP.Models.UserDeniedPermission   
+                                            @* نفس الموديل القديم *@
+
+@{
+    ViewData["Title"] = "استثناء صلاحيات المستخدم";
+
+    // جلب البيانات القادمة من الكنترولر
+    var roleName    = ViewBag.RoleName as string ?? "لا يوجد دور محدد";
+    var permissions = ViewBag.Permissions as List<ERP.Models.RolePermission> 
+                      ?? new List<ERP.Models.RolePermission>();
+    var deniedIds   = ViewBag.DeniedIds as List<int> 
+                      ?? new List<int>();
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">استثناء صلاحيات المستخدم</h2>
+
+    <form asp-action="Create" method="post" class="card">
+        <div class="card-body">
+
+            @* اختيار المستخدم *@
+            <div class="mb-3">
+                <label asp-for="UserId" class="form-label fw-semibold">المستخدم</label>
+                <select asp-for="UserId"
+                        asp-items="ViewBag.UserId"
+                        class="form-select selectpicker"
+                        data-live-search="true"    @* لو استخدمت Bootstrap-Select هتلاقي البحث شغال *@
+                        id="UserId">
+                    <option value="">-- اختر مستخدم --</option>
+                </select>
+                <span asp-validation-for="UserId" class="text-danger"></span>
+            </div>
+
+            @* عرض الدور الحالي *@
+            <div class="mb-3">
+                <label class="form-label fw-semibold">الدور الحالي</label>
+                <input type="text"
+                       class="form-control"
+                       value="@roleName"
+                       readonly />
+            </div>
+
+            @* مربع بحث فى الصلاحيات *@
+            <div class="mb-2">
+                <label for="permSearch" class="form-label fw-semibold">
+                    بحث في الصلاحيات
+                </label>
+                <input id="permSearch"
+                       type="text"
+                       class="form-control"
+                       placeholder="اكتب جزء من اسم الصلاحية أو الموديول..." />
+            </div>
+
+            @* جدول صلاحيات الدور *@
+            <div class="table-responsive"
+                 style="max-height:400px; overflow-y:auto; border:1px solid #ddd;">
+                <table id="permissionsTable"
+                       class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:90px;" class="text-center">
+                                <input type="checkbox"
+                                       id="checkAllPerms"
+                                       class="form-check-input" />
+                                <span class="ms-1">مسموح؟</span>
+                            </th>
+                            <th>الصلاحية</th>
+                            <th style="width:220px;">الموديول</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!permissions.Any())
+                        {
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-3">
+                                    اختر مستخدمًا لعرض صلاحيات دوره.
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            foreach (var rp in permissions)
+                            {
+                                var perm   = rp.Permission;
+                                var name   = perm?.NameAr ?? perm?.Code ?? "";
+                                var module = perm?.Module ?? "";
+                                bool isAllowed = !deniedIds.Contains(rp.PermissionId);
+
+                                var searchText = (module + " " + name) ?? "";
+
+                                <tr data-search-text="@searchText">
+                                    <td class="text-center">
+
+                                        @* تشيك بوكس السماح/المنع *@
+                                        <input type="checkbox"
+                                               name="allowedPermissionIds"
+                                               value="@rp.PermissionId"
+                                               class="form-check-input perm-checkbox"
+                                               @(isAllowed ? "checked=\"checked\"" : "") />
+
+                                        @* رقم الصلاحية (حتى لو unchecked) *@
+                                        <input type="hidden"
+                                               name="permissionIds"
+                                               value="@rp.PermissionId" />
+                                    </td>
+                                    <td>@name</td>
+                                    <td>@module</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-text mt-2">
+                ✔ الصلاحيات المتعلَّم عليها = مسموح بها للمستخدم.<br />
+                ✖ لو ألغيت العلامة من صلاحية ⇒ تُسجَّل كاستثناء (منع) لهذا المستخدم.
+            </div>
+        </div>
+
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary">
+                رجوع للقائمة
+            </a>
+
+            <button type="submit" class="btn btn-primary">
+                حفظ الاستثناءات
+            </button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+
+            // تغيير المستخدم يعيد تحميل الصفحة مع userId فى الـ QueryString
+            var userSelect = document.getElementById("UserId");
+            if (userSelect) {
+                userSelect.addEventListener("change", function () {
+                    var userId = this.value;
+                    if (userId) {
+                        var url = "@Url.Action("Create", "UserDeniedPermissions")" + "?userId=" + userId;
+                        window.location = url;
+                    }
+                });
+            }
+
+            // تشيك بوكس تحديد الكل
+            var checkAll = document.getElementById("checkAllPerms");
+            if (checkAll) {
+                checkAll.addEventListener("change", function () {
+                    var checked = this.checked;
+                    document.querySelectorAll(".perm-checkbox").forEach(function (cb) {
+                        cb.checked = checked;
+                    });
+                });
+            }
+
+            // بحث فى جدول الصلاحيات
+            var searchInput = document.getElementById("permSearch");
+            if (searchInput) {
+                searchInput.addEventListener("keyup", function () {
+                    var term = this.value.toLowerCase();
+                    document.querySelectorAll("#permissionsTable tbody tr").forEach(function (row) {
+                        var text = (row.getAttribute("data-search-text") || "").toLowerCase();
+                        row.style.display = text.indexOf(term) !== -1 ? "" : "none";
+                    });
+                });
+            }
+        });
+    </script>
+}

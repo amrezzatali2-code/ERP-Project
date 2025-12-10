@@ -1,0 +1,20 @@
+﻿@model ERP.Models.Governorate
+@{
+    ViewData["Title"] = "تفاصيل المحافظة";
+}
+<div dir="rtl" class="container" style="max-width:720px;">
+    <h2 class="mb-3">تفاصيل المحافظة</h2>
+
+    <dl class="row">
+        <dt class="col-sm-3">معرّف المحافظة</dt>
+        <dd class="col-sm-9">@Model.GovernorateId</dd>
+
+        <dt class="col-sm-3">اسم المحافظة</dt>
+        <dd class="col-sm-9">@Model.GovernorateName</dd>
+    </dl>
+
+    <div class="d-flex gap-2">
+        <a asp-action="Edit" asp-route-id="@Model.GovernorateId" class="btn btn-primary">تعديل</a>
+        <a asp-action="Index" class="btn btn-outline-secondary">رجوع</a>
+    </div>
+</div>

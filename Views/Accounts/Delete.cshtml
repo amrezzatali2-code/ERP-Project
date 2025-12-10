@@ -1,0 +1,57 @@
+﻿@model ERP.Models.Account
+@using ERP.Models
+
+@{
+    ViewData["Title"] = "حذف حساب";
+}
+
+@functions {
+    public static string GetAccountTypeArabic(AccountType type)
+    {
+        switch (type)
+        {
+            case AccountType.Asset: return "أصل";
+            case AccountType.Liability: return "التزام";
+            case AccountType.Equity: return "حقوق ملكية";
+            case AccountType.Revenue: return "إيراد";
+            case AccountType.Expense: return "مصروف";
+            default: return type.ToString();
+        }
+    }
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف حساب</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذا الحساب؟
+        <br />
+        يُفضّل عدم حذف حسابات عليها حركات فعلية في النظام.
+    </div>
+
+    <dl class="row">
+        <dt class="col-sm-3">الرقم الداخلي</dt>
+        <dd class="col-sm-9">@Model.AccountId</dd>
+
+        <dt class="col-sm-3">كود الحساب</dt>
+        <dd class="col-sm-9">@Model.AccountCode</dd>
+
+        <dt class="col-sm-3">اسم الحساب</dt>
+        <dd class="col-sm-9">@Model.AccountName</dd>
+
+        <dt class="col-sm-3">نوع الحساب</dt>
+        <dd class="col-sm-9">@GetAccountTypeArabic(Model.AccountType)</dd>
+
+        <dt class="col-sm-3">الحساب الأب</dt>
+        <dd class="col-sm-9">@((Model.ParentAccount != null) ? Model.ParentAccount.AccountName : "-")</dd>
+    </dl>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="AccountId" />
+
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+    </form>
+</div>
+

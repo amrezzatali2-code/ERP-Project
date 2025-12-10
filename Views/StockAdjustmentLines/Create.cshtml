@@ -1,0 +1,81 @@
+﻿@model ERP.Models.StockAdjustmentLine
+
+@{
+    ViewData["Title"] = "إضافة سطر تسوية";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">إضافة سطر تسوية جديد</h2>
+
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label asp-for="StockAdjustmentId" class="form-label">رقم التسوية</label>
+                    <input asp-for="StockAdjustmentId" class="form-control" />
+                    <span asp-validation-for="StockAdjustmentId" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="ProductId" class="form-label">كود الصنف</label>
+                    <input asp-for="ProductId" class="form-control" />
+                    <span asp-validation-for="ProductId" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="BatchId" class="form-label">كود الباتش (اختياري)</label>
+                    <input asp-for="BatchId" class="form-control" />
+                    <span asp-validation-for="BatchId" class="text-danger"></span>
+                </div>
+
+                <div class="row g-2">
+                    <div class="col-md-4">
+                        <label asp-for="QtyBefore" class="form-label">الكمية قبل</label>
+                        <input asp-for="QtyBefore" class="form-control" />
+                        <span asp-validation-for="QtyBefore" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="QtyAfter" class="form-label">الكمية بعد</label>
+                        <input asp-for="QtyAfter" class="form-control" />
+                        <span asp-validation-for="QtyAfter" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="CostPerUnit" class="form-label">تكلفة الوحدة (اختياري)</label>
+                        <input asp-for="CostPerUnit" class="form-control" />
+                        <span asp-validation-for="CostPerUnit" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3 mt-2">
+                    <label asp-for="Note" class="form-label">ملاحظات</label>
+                    <textarea asp-for="Note" class="form-control" rows="2"></textarea>
+                    <span asp-validation-for="Note" class="text-danger"></span>
+                </div>
+
+                <p class="text-muted small">
+                    * فرق الكمية (QtyDiff) وفرق التكلفة (CostDiff) يتم حسابهما أوتوماتيكياً من القيم التي أدخلتها.
+                </p>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-primary">
+                        حفظ
+                    </button>
+                    <a asp-action="Index" asp-route-stockAdjustmentId="@Model.StockAdjustmentId"
+                       class="btn btn-erp btn-erp-secondary">
+                        رجوع للقائمة
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

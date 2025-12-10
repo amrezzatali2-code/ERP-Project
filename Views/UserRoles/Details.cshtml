@@ -1,0 +1,58 @@
+﻿@model ERP.Models.UserRole
+
+@{
+    ViewData["Title"] = "تفاصيل دور مستخدم";
+
+    var userName = Model.User?.UserName ?? "";
+    var display = Model.User?.DisplayName ?? "";
+    var roleName = Model.Role?.Name ?? "";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تفاصيل دور مستخدم — @Model.Id</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <dl class="row">
+
+                <dt class="col-sm-3">المعرّف</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">المستخدم</dt>
+                <dd class="col-sm-9">
+                    @if (!string.IsNullOrEmpty(display))
+                    {
+                        @($"{display} ({userName}) — رقم: {Model.UserId}")
+                    }
+                    else
+                    {
+                        @($"{userName} — رقم: {Model.UserId}")
+                    }
+                </dd>
+
+                <dt class="col-sm-3">الدور</dt>
+                <dd class="col-sm-9">
+                    @roleName (@Model.RoleId)
+                </dd>
+
+                <dt class="col-sm-3">دور افتراضي؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsPrimary ? "نعم" : "لا")
+                </dd>
+
+                <dt class="col-sm-3">تاريخ الإسناد</dt>
+                <dd class="col-sm-9">
+                    @Model.AssignedAt.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+            </dl>
+        </div>
+
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <div>
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">تعديل</a>
+                <a asp-action="Delete" asp-route-id="@Model.Id" class="btn btn-danger ms-2">حذف</a>
+            </div>
+        </div>
+    </div>
+</div>

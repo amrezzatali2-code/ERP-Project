@@ -1,0 +1,68 @@
+﻿@model ERP.Models.Account
+
+@{
+    ViewData["Title"] = "إضافة حساب جديد";
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3">إضافة حساب جديد</h2>
+
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+
+        <div class="mb-3">
+            <label asp-for="AccountCode" class="form-label">كود الحساب</label>
+            <input asp-for="AccountCode" class="form-control" />
+            <span asp-validation-for="AccountCode" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="AccountName" class="form-label">اسم الحساب</label>
+            <input asp-for="AccountName" class="form-control" />
+            <span asp-validation-for="AccountName" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">نوع الحساب</label>
+            <select asp-for="AccountType" asp-items="ViewBag.AccountTypes" class="form-select"></select>
+            <span asp-validation-for="AccountType" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">الحساب الأب</label>
+            <select asp-for="ParentAccountId" asp-items="ViewBag.ParentAccounts" class="form-select"></select>
+            <span asp-validation-for="ParentAccountId" class="text-danger"></span>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Level" class="form-label">مستوى الحساب في الشجرة</label>
+            <input asp-for="Level" class="form-control" />
+            <span asp-validation-for="Level" class="text-danger"></span>
+        </div>
+
+        <div class="form-check mb-3">
+            <input asp-for="IsLeaf" class="form-check-input" />
+            <label asp-for="IsLeaf" class="form-check-label">حساب طرف (يُسجَّل عليه حركات)</label>
+        </div>
+
+        <div class="form-check mb-3">
+            <input asp-for="IsActive" class="form-check-input" />
+            <label asp-for="IsActive" class="form-check-label">نشط</label>
+        </div>
+
+        <div class="mb-3">
+            <label asp-for="Notes" class="form-label">ملاحظات</label>
+            <textarea asp-for="Notes" class="form-control"></textarea>
+            <span asp-validation-for="Notes" class="text-danger"></span>
+        </div>
+
+        <button type="submit" class="btn btn-success">حفظ</button>
+        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+    </form>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

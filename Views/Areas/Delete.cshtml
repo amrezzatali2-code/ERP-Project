@@ -1,0 +1,36 @@
+﻿@model ERP.Models.Area
+@{
+    ViewData["Title"] = "حذف منطقة";
+}
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">@ViewData["Title"]</h2>
+
+    <div class="alert alert-warning" role="alert">
+        هل أنت متأكد من حذف السجل التالي؟
+    </div>
+
+    <div class="card shadow-sm mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">المعرّف</dt>
+                <dd class="col-sm-9">@Model.AreaId</dd>
+
+                <dt class="col-sm-3">اسم المنطقة/</dt>
+                <dd class="col-sm-9">@Model.AreaName</dd>
+
+                <dt class="col-sm-3">المحافظة</dt>
+                <dd class="col-sm-9">@Model.Governorate?.GovernorateName</dd>
+
+                <dt class="col-sm-3">الحي/المركز</dt>
+                <dd class="col-sm-9">@Model.District?.DistrictName</dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post" class="d-flex" style="gap:.5rem;">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="AreaId" />
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a class="btn btn-outline-secondary" asp-action="Index">إلغاء</a>
+    </form>
+</div>

@@ -1,0 +1,42 @@
+﻿@model IEnumerable<ERP.Models.RolePermission>   
+                                                @* قائمة صلاحيات الدور *@
+
+@using System.Linq
+
+@{
+    // متغير: لو مفيش صلاحيات أصلاً
+    bool hasItems = Model != null && Model.Any();
+}
+
+@if (!hasItems)
+{
+    <div class="text-muted">
+        لا توجد صلاحيات مسموح بها لهذا الدور.
+    </div>
+}
+else
+{
+    <table class="table table-sm table-bordered mb-0">
+        <thead class="table-light">
+            <tr>
+                <th>الموديول</th>          @* مثل: المبيعات / إدارة المخازن *@
+                <th>الصلاحية</th>          @* اسم الصلاحية بالعربي *@
+                <th style="width:70px">مسموح؟</th>  @* هل الدور مسموح له بهذه الصلاحية *@
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var rp in Model)
+        {
+            var module = rp.Permission?.Module ?? "";
+            var name   = rp.Permission?.NameAr ?? rp.Permission?.Code ?? "";
+            var allowedText = rp.IsAllowed ? "✔" : "✖";
+
+            <tr>
+                <td>@module</td>
+                <td>@name</td>
+                <td class="text-center">@allowedText</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

@@ -1,0 +1,14 @@
+﻿@model ERP.Models.Product
+@{
+    ViewData["Title"] = "حذف صنف";
+}
+<div class="container" dir="rtl">
+    <h3 class="mb-3 text-danger">تأكيد حذف الصنف</h3>
+    <p>هل أنت متأكد من حذف: <strong>@Model.ProdId - @Model.ProdName</strong> ؟</p>
+
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="ProdId" />
+        <button class="btn btn-danger">حذف</button>
+        <a class="btn btn-secondary" asp-action="Index">إلغاء</a>
+    </form>
+</div>

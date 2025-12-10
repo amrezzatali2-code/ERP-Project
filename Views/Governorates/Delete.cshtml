@@ -1,0 +1,28 @@
+﻿@model ERP.Models.Governorate
+@{
+    ViewData["Title"] = "حذف محافظة";
+}
+<div dir="rtl" class="container" style="max-width:720px;">
+    <h2 class="mb-3 text-danger">حذف محافظة</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد من حذف المحافظة التالية؟ هذا الإجراء لا يمكن التراجع عنه.
+    </div>
+
+    <dl class="row">
+        <dt class="col-sm-3">معرّف المحافظة</dt>
+        <dd class="col-sm-9">@Model.GovernorateId</dd>
+
+        <dt class="col-sm-3">اسم المحافظة</dt>
+        <dd class="col-sm-9">@Model.GovernorateName</dd>
+    </dl>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="GovernorateId" />
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+            <a asp-action="Index" class="btn btn-outline-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>

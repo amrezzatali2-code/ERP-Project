@@ -1,0 +1,82 @@
+﻿@model ERP.Models.Customer
+
+@{
+    ViewData["Title"] = "تفاصيل عميل";
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3">تفاصيل عميل</h2>
+
+    <dl class="row">
+        <dt class="col-sm-3">كود العميل</dt>
+        <dd class="col-sm-9">@Model.CustomerId</dd>
+
+        <dt class="col-sm-3">اسم العميل</dt>
+        <dd class="col-sm-9">@Model.CustomerName</dd>
+
+        <dt class="col-sm-3">نوع الطرف</dt>
+        <dd class="col-sm-9">@Model.PartyCategory</dd>
+
+        <dt class="col-sm-3">هاتف 1</dt>
+        <dd class="col-sm-9">@Model.Phone1</dd>
+
+        <dt class="col-sm-3">هاتف 2</dt>
+        <dd class="col-sm-9">@Model.Phone2</dd>
+
+        <dt class="col-sm-3">واتساب</dt>
+        <dd class="col-sm-9">@Model.Whatsapp</dd>
+
+        <dt class="col-sm-3">العنوان</dt>
+        <dd class="col-sm-9">@Model.Address</dd>
+
+        <dt class="col-sm-3">الحساب المحاسبي</dt>
+        <dd class="col-sm-9">
+            @if (Model.Account != null)
+            {
+                @($"{Model.Account.AccountCode} — {Model.Account.AccountName}")
+            }
+        </dd>
+
+        @* سياسة العميل *@
+        <dt class="col-sm-3">سياسة العميل</dt>
+        <dd class="col-sm-9">
+            @Model.PolicyId   @* يمكن لاحقاً إظهار اسم السياسة من Model.Policy.Name *@
+        </dd>
+
+        @* المستخدم المسئول عن العميل *@
+        <dt class="col-sm-3">المستخدم المسئول</dt>
+        <dd class="col-sm-9">
+            @Model.UserId    @* يمكن لاحقاً عرض اسم المستخدم من كيان User *@
+        </dd>
+
+        @* مسئول الطلب داخل الصيدلية *@
+        <dt class="col-sm-3">اسم مسئول الطلب</dt>
+        <dd class="col-sm-9">@Model.OrderContactName</dd>
+
+        <dt class="col-sm-3">هاتف مسئول الطلب</dt>
+        <dd class="col-sm-9">@Model.OrderContactPhone</dd>
+
+        <dt class="col-sm-3">الحد الائتماني</dt>
+        <dd class="col-sm-9">@Model.CreditLimit</dd>
+
+        <dt class="col-sm-3">الرصيد الحالي</dt>
+        <dd class="col-sm-9">@Model.CurrentBalance</dd>
+
+        @* معلومات الكوتة *@
+        <dt class="col-sm-3">مضاعفة الكوتة</dt>
+        <dd class="col-sm-9">
+            @(Model.IsQuotaMultiplierEnabled
+                        ? $"مفعّلة ×{Model.QuotaMultiplier}"
+                        : "غير مفعّلة")
+        </dd>
+
+        <dt class="col-sm-3">نشط؟</dt>
+        <dd class="col-sm-9">@(Model.IsActive ? "نعم" : "لا")</dd>
+
+        <dt class="col-sm-3">ملاحظات</dt>
+        <dd class="col-sm-9">@Model.Notes</dd>
+    </dl>
+
+    <a asp-action="Edit" asp-route-id="@Model.CustomerId" class="btn btn-warning">تعديل</a>
+    <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+</div>

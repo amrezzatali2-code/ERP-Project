@@ -1,0 +1,51 @@
+﻿@model ERP.Models.Area
+@{
+    ViewData["Title"] = "تفاصيل المنطقة";
+}
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">@ViewData["Title"]</h2>
+
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">المعرّف</dt>
+                <dd class="col-sm-9">@Model.AreaId</dd>
+
+                <dt class="col-sm-3">اسم المنطقة</dt>
+                <dd class="col-sm-9">@Model.AreaName</dd>
+
+                <dt class="col-sm-3">المحافظة</dt>
+                <dd class="col-sm-9">@Model.Governorate?.GovernorateName</dd>
+
+                <dt class="col-sm-3">الحي/المركز</dt>
+                <dd class="col-sm-9">@Model.District?.DistrictName</dd>
+
+                <dt class="col-sm-3">الحالة</dt>
+                <dd class="col-sm-9">
+                    @if (Model.IsActive)
+                    {
+                        <span class="badge bg-success">نشط</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">موقوف</span>
+                    }
+                </dd>
+
+                <dt class="col-sm-3">ملاحظات</dt>
+                <dd class="col-sm-9">@Model.Notes</dd>
+
+                <dt class="col-sm-3">تاريخ الإنشاء</dt>
+                <dd class="col-sm-9">@Model.CreatedAt?.ToString("yyyy/MM/dd HH:mm")</dd>
+
+                <dt class="col-sm-3">آخر تعديل</dt>
+                <dd class="col-sm-9">@Model.UpdatedAt?.ToString("yyyy/MM/dd HH:mm")</dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="mt-3 d-flex" style="gap:.5rem;">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.AreaId">تعديل</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">رجوع</a>
+    </div>
+</div>

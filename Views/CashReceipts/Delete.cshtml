@@ -1,0 +1,58 @@
+﻿@model ERP.Models.CashReceipt
+
+@{
+    ViewData["Title"] = "حذف إذن استلام نقدية";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف إذن استلام نقدية</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد من حذف هذا الإذن؟ لا يمكن التراجع بعد الحذف.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم المستند</dt>
+                <dd class="col-sm-9">@Model.ReceiptNumber</dd>
+
+                <dt class="col-sm-3">التاريخ</dt>
+                <dd class="col-sm-9">@Model.ReceiptDate.ToString("yyyy-MM-dd")</dd>
+
+                <dt class="col-sm-3">الطرف</dt>
+                <dd class="col-sm-9">@Model.Customer?.CustomerName</dd>
+
+                <dt class="col-sm-3">حساب الصندوق / البنك</dt>
+                <dd class="col-sm-9">
+                    @if (Model.CashAccount != null)
+                    {
+                        @($"{Model.CashAccount.AccountCode} - {Model.CashAccount.AccountName}")
+                    }
+                </dd>
+
+                <dt class="col-sm-3">حساب الطرف</dt>
+                <dd class="col-sm-9">
+                    @if (Model.CounterAccount != null)
+                    {
+                        @($"{Model.CounterAccount.AccountCode} - {Model.CounterAccount.AccountName}")
+                    }
+                </dd>
+
+                <dt class="col-sm-3">المبلغ</dt>
+                <dd class="col-sm-9">@Model.Amount.ToString("N2")</dd>
+
+                <dt class="col-sm-3">البيان</dt>
+                <dd class="col-sm-9">@Model.Description</dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete">
+        <input type="hidden" asp-for="CashReceiptId" />
+        <div class="d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary btn-sm">إلغاء</a>
+            <button type="submit" class="btn btn-danger btn-sm">تأكيد الحذف</button>
+        </div>
+    </form>
+</div>

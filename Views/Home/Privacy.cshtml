@@ -1,0 +1,224 @@
+﻿@{
+    ViewData["Title"] = "الرئيسية";
+    // تعليق: عنوان الصفحة الذي يظهر في التاب وفي الهيدر
+}
+
+<div class="container-fluid py-3" dir="rtl">
+    <!-- ===== عنوان لوحة التحكم ===== -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h3 class="mb-0">لوحة التحكم</h3>
+        @* <small class="text-muted">
+            <!-- تعليق: هنا ممكن نعرض تاريخ اليوم أو اسم المستخدم -->
+            مرحباً بك في نظام الـ ERP
+        </small> *@
+    </div>
+
+    <!-- ===== الصف الأول: كروت إحصائيات سريعة ===== -->
+    <div class="row g-3 mb-4">
+        <!-- كرت عدد العملاء -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">عدد العملاء</h6>
+                            <h3 class="mb-0">
+                                <!-- تعليق: هنا لاحقاً نربطها ببيانات حقيقية -->
+                                0
+                            </h3>
+                        </div>
+                        <div class="rounded-circle bg-primary bg-opacity-10 p-3">
+                            <span class="fw-bold text-primary">C</span>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        إجمالي العملاء المسجلين في النظام
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- كرت عدد الأصناف -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">عدد الأصناف</h6>
+                            <h3 class="mb-0">0</h3>
+                        </div>
+                        <div class="rounded-circle bg-success bg-opacity-10 p-3">
+                            <span class="fw-bold text-success">P</span>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        كل الأصناف المسجلة في المخزون
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- كرت فواتير اليوم -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">فواتير اليوم</h6>
+                            <h3 class="mb-0">0</h3>
+                        </div>
+                        <div class="rounded-circle bg-warning bg-opacity-10 p-3">
+                            <span class="fw-bold text-warning">S</span>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        عدد فواتير البيع المسجلة اليوم
+                    </small>
+                </div>
+            </div>
+        </div>
+
+        <!-- كرت رصيد المخزون (مثال) -->
+        <div class="col-md-3 col-sm-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="text-muted mb-1">تنبيهات المخزون</h6>
+                            <h3 class="mb-0">0</h3>
+                        </div>
+                        <div class="rounded-circle bg-danger bg-opacity-10 p-3">
+                            <span class="fw-bold text-danger">!</span>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block mt-2">
+                        أصناف وصلت لحد إعادة الطلب
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== الصف الثاني: عمودين (مخطط + آخر الحركات) ===== -->
+    <div class="row g-3 mb-4">
+        <!-- مخطط مبسط (مكان لتشارت لاحقاً) -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">مبيعات آخر 7 أيام</h6>
+                    <small class="text-muted">عرض توضيحي – سيتم ربطه لاحقاً</small>
+                </div>
+                <div class="card-body">
+                    <!-- تعليق: هنا مستقبلاً نضيف Chart.js أو أي مكتبة رسم -->
+                    <div class="border rounded-3 bg-light d-flex align-items-center justify-content-center" style="height:260px;">
+                        <span class="text-muted">
+                            مساحة مخصصة للمخطط (Chart)
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- جدول آخر الحركات -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white border-0">
+                    <h6 class="mb-0">أحدث العمليات</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table mb-0 table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>العملية</th>
+                                <th>الطرف</th>
+                                <th class="text-end">القيمة</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- تعليق: الصفوف هنا مجرد مثال ثابت، لاحقاً نربطها من الداتا بيز -->
+                            <tr>
+                                <td>فاتورة بيع</td>
+                                <td>صيدلية تجريبية</td>
+                                <td class="text-end">0.00</td>
+                            </tr>
+                            <tr>
+                                <td>مرتجع شراء</td>
+                                <td>مورد تجريبي</td>
+                                <td class="text-end">0.00</td>
+                            </tr>
+                            <tr>
+                                <td>إيصال قبض</td>
+                                <td>عميل تجريبي</td>
+                                <td class="text-end">0.00</td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="text-center text-muted">
+                                    البيانات الحالية للعرض فقط
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== الصف الثالث: اختصارات سريعة ===== -->
+    <div class="row g-3">
+        <div class="col-md-3 col-sm-6">
+            <a asp-controller="Products" asp-action="Index" class="text-decoration-none">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h5 class="mb-1">قائمة الأصناف</h5>
+                        <small class="text-muted d-block mb-2">إدارة الأصناف والأسعار</small>
+                        <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1">
+                            فتح الشاشة
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-md-3 col-sm-6">
+            <a asp-controller="Customers" asp-action="Index" class="text-decoration-none">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h5 class="mb-1">العملاء / الأطراف</h5>
+                        <small class="text-muted d-block mb-2">إضافة وتعديل العملاء والموردين</small>
+                        <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1">
+                            فتح الشاشة
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-md-3 col-sm-6">
+            <a asp-controller="SalesInvoices" asp-action="Index" class="text-decoration-none">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h5 class="mb-1">فواتير البيع</h5>
+                        <small class="text-muted d-block mb-2">عرض وإنشاء فواتير جديدة</small>
+                        <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1">
+                            فتح الشاشة
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+
+        <div class="col-md-3 col-sm-6">
+            <a asp-controller="Reports" asp-action="Index" class="text-decoration-none">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body text-center">
+                        <h5 class="mb-1">التقارير</h5>
+                        <small class="text-muted d-block mb-2">ملخصات المبيعات والمخزون</small>
+                        <span class="badge bg-primary-subtle text-primary border rounded-pill px-3 py-1">
+                            فتح الشاشة
+                        </span>
+                    </div>
+                </div>
+            </a>
+        </div>
+    </div>
+</div>

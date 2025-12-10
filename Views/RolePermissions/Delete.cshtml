@@ -1,0 +1,56 @@
+﻿@model ERP.Models.RolePermission
+
+@{
+    ViewData["Title"] = "حذف صلاحية دور";
+
+    var roleName = Model.Role?.Name ?? "";
+    var permName = Model.Permission?.NameAr ?? "";
+    var permCode = Model.Permission?.Code ?? "";
+    var module = Model.Permission?.Module ?? "";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف صلاحية دور — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذا الربط بين الدور والصلاحية؟ لا يمكن التراجع بعد الحذف.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+
+                <dt class="col-sm-3">الدور</dt>
+                <dd class="col-sm-9">
+                    @roleName (@Model.RoleId)
+                </dd>
+
+                <dt class="col-sm-3">الصلاحية</dt>
+                <dd class="col-sm-9">
+                    @if (!string.IsNullOrEmpty(permCode))
+                    {
+                        @($"{permName} ({permCode})")
+                    }
+                    else
+                    {
+                        @permName
+                    }
+                </dd>
+
+                <dt class="col-sm-3">الموديول</dt>
+                <dd class="col-sm-9">@module</dd>
+
+                <dt class="col-sm-3">مسموح؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsAllowed ? "مسموح" : "ممنوع")
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary ms-2">إلغاء</a>
+    </form>
+</div>

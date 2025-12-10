@@ -1,0 +1,734 @@
+﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@model ERP.Models.SalesReturn
+
+@{
+    ViewData["Title"] = Model.SRId == 0
+        ? "مرتجع بيع"
+        : $"مرتجع بيع — رقم {Model.SRId}";
+}
+
+@section Styles {
+    <style>
+        /* خلفية عامة للصفحة */
+        .invoice-page {
+            background-color: #f3f6fb; /* لون خفيف مريح للعين */
+            min-height: 100vh;
+            padding-bottom: 2rem;
+        }
+
+        /* الكروت الرئيسية (الهيدر + تفاصيل + إدخال صنف + بيانات الصنف + السطور + الإجماليات + الكارت الجانبي) */
+        .invoice-header-card,
+        .invoice-details-card,
+        .invoice-lines-card,
+        .invoice-totals-card,
+        .invoice-side-card,
+        .invoice-Add-card,
+        .invoice-product-card {
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        /* شريط الهيدر الملون للهيدر الرئيسي للمرتجع */
+        .invoice-header-bar {
+            background: linear-gradient(90deg, #6f42c1 0%, #0dcaf0 100%);
+            color: #ffffff;
+            padding: 0.75rem 1.25rem;
+        }
+
+            .invoice-header-bar h5 {
+                margin-bottom: 0.1rem;
+            }
+
+        /* نفس لون الهيدر لباقي الكروت */
+        .invoice-details-card .card-header,
+        .invoice-Add-card .card-header,
+        .invoice-product-card .card-header,
+        .invoice-lines-card .card-header,
+        .invoice-side-card .card-header {
+            background: linear-gradient(90deg, #6f42c1 0%, #0dcaf0 100%);
+            color: #ffffff;
+            padding: 0.55rem 1rem;
+        }
+
+        .invoice-status-badge {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.7rem;
+        }
+
+        .badge-status-draft {
+            background-color: #6f42c1;
+        }
+
+        .badge-status-notposted {
+            background-color: #343a40;
+        }
+
+        .form-label-sm {
+            font-size: 0.85rem;
+        }
+
+        .invoice-small-input {
+            max-width: 150px;
+        }
+
+        .customer-summary-line {
+            font-size: 0.82rem;
+        }
+
+        .invoice-side-card .btn-erp {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.6rem;
+        }
+
+            .invoice-side-card .btn-erp + .btn-erp {
+                margin-top: 0.25rem;
+            }
+
+        .invoice-lines-header {
+            background: linear-gradient(90deg, #6f42c1 0%, #0dcaf0 100%);
+            color: #fff;
+        }
+
+            .invoice-lines-header th {
+                border-color: #0b5ed7 !important;
+            }
+
+        .erp-table-wrapper {
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        .summary-badge {
+            min-width: 80px;
+            text-align: center;
+        }
+    </style>
+}
+
+<div class="invoice-page" dir="rtl">
+    <div class="container-fluid pt-3">
+
+        <div class="row g-3">
+
+            @* =========================
+               العمود الرئيسي (الهيدر + العميل + الأصناف + الإجماليات)
+               ========================= *@
+            <div class="col-lg-10">
+
+                @* ====================================================
+                   1) كارت بيانات مرتجع البيع + العميل + المخزن
+                   ==================================================== *@
+                <div class="card shadow-sm mb-2 invoice-header-card">
+
+                    @{
+                        // لو SRId = 0 يبقى لسه مرتجع جديد (لسه ما اتسجلش في الداتا)
+                        bool isNewReturn = Model == null || Model.SRId == 0;
+
+                        bool hasReturn = Model.SRId > 0;
+
+                        // نص تاريخ/وقت المرتجع المعروضين في الكروت
+                        string returnDateText = hasReturn
+                        ? Model.SRDate.ToString("yyyy/MM/dd")
+                        : "";
+
+                        string returnTimeText = hasReturn
+                        ? Model.SRTime.ToString(@"hh\:mm")
+                        : "";
+                    }
+
+                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        @* الجزء الأيسر: عنوان مرتجع البيع + اسم المنشئ *@
+                        <div>
+                            <h5 class="mb-1">
+                                @if (isNewReturn)
+                                {
+                                    @:مرتجع بيع
+                                }
+                                else
+                                {
+                                    @:مرتجع بيع
+                                    <span class="small opacity-100">رقم @Model.SRId</span>
+                                }
+                            </h5>
+
+                            @if (!isNewReturn && !string.IsNullOrWhiteSpace(Model.CreatedBy))
+                            {
+                                <div class="small opacity-100">
+                                    أُنشئ بواسطة:
+                                    <span class="fw-semibold">@Model.CreatedBy</span>
+                                </div>
+                            }
+                        </div>
+
+                        @* الجزء الأيمن: حالة المرتجع *@
+                        <div class="text-end">
+                            @if (isNewReturn)
+                            {
+                                <span class="text-white fw-semibold">
+                                    اضغط على "مرتجع جديد".
+                                </span>
+                            }
+                            else if (Model.IsPosted)
+                            {
+                                <span class="text-white fw-semibold">
+                                    مرتجع مرحّل
+                                </span>
+                            }
+                            else if (string.Equals(Model.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="text-white fw-semibold">
+                                    مرتجع ملغى
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-white fw-semibold">
+                                    مرتجع مفتوح
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="row g-3 align-items-end">
+
+                            @* اسم العميل + أوتوكومبليت *@
+                            <div class="col-lg-4 col-md-6">
+                                <label for="CustomerNameInput" class="form-label form-label-sm">اسم العميل</label>
+                                <input id="CustomerNameInput"
+                                       class="form-control form-control-sm"
+                                       placeholder="اكتب اسم العميل أو جزء منه للبحث..."
+                                       list="customersList"
+                                       autocomplete="off" />
+
+                                <datalist id="customersList">
+                                    @if (ViewBag.Customers != null)
+                                    {
+                                        foreach (var c in ViewBag.Customers)
+                                        {
+                                            <option value="@c.Name"
+                                                    data-id="@c.Id"
+                                                    data-policy="@c.PolicyName"
+                                                    data-user="@c.UserName"
+                                                    data-phone="@c.Phone"
+                                                    data-address="@c.Address"
+                                                    data-credit="@c.CreditLimit">
+                                            </option>
+                                        }
+                                    }
+                                </datalist>
+
+                                <small id="CustomerSummaryText"
+                                       class="text-muted customer-summary-line d-block mt-1">
+                                    @* سيتم ملؤه بجملة مختصرة عن العميل *@
+                                </small>
+                            </div>
+
+                            @* كود العميل *@
+                            <div class="col-lg-2 col-md-3">
+                                <label class="form-label form-label-sm">كود العميل</label>
+                                <input id="CustomerCodeDisplay"
+                                       class="form-control form-control-sm text-center invoice-small-input"
+                                       readonly />
+
+                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                            </div>
+
+                            @* المخزن *@
+                            <div class="col-lg-3 col-md-3">
+                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+                                <select asp-for="WarehouseId"
+                                        asp-items="ViewBag.Warehouses"
+                                        class="form-select form-select-sm">
+                                    <option value="">اختر المخزن...</option>
+                                </select>
+                            </div>
+
+                            @* التاريخ والوقت *@
+                            <div class="col-lg-3 col-md-6">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">تاريخ المرتجع</label>
+                                        <input class="form-control form-control-sm text-center"
+                                               value="@returnDateText"
+                                               readonly />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">وقت المرتجع</label>
+                                        <input class="form-control form-control-sm text-center"
+                                               value="@returnTimeText"
+                                               readonly />
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <hr class="my-3" />
+
+                        <div class="row g-3">
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">حالة المرتجع</label>
+                                <input class="form-control form-control-sm text-center"
+                                       value="@Model.Status"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">مرحّل؟</label>
+                                <input class="form-control form-control-sm text-center"
+                                       value="@(Model.IsPosted ? "نعم" : "لا")"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">فاتورة البيع الأصلية</label>
+                                <input class="form-control form-control-sm text-center"
+                                       value="@(Model.SalesInvoiceId?.ToString() ?? "")"
+                                       readonly />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* ======================================
+                   2) كارت تفاصيل العميل
+                   ====================================== *@
+                <div class="card shadow-sm mb-3 invoice-details-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">تفاصيل العميل</h6>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">الهاتف</label>
+                                <input id="CustomerPhone"
+                                       class="form-control form-control-sm"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-8 col-md-8">
+                                <label class="form-label form-label-sm">العنوان</label>
+                                <input id="CustomerAddress"
+                                       class="form-control form-control-sm"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">الحد الائتماني</label>
+                                <input id="CustomerCreditLimit"
+                                       class="form-control form-control-sm text-center"
+                                       readonly />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* =====================================================
+                   3) كارت بيانات الصنف (مخزون + خصومات)
+                   ===================================================== *@
+                <div class="card shadow-sm mb-3 invoice-product-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">بيانات الصنف (مخزون + خصومات)</h6>
+                        <small class="opacity-75">
+                            هذه البيانات للصنف الحالي في كارت "تسجيل الأصناف في المرتجع".
+                        </small>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="row g-3 mb-2">
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">الكمية المتاحة في هذا المخزن</label>
+                                <input type="text"
+                                       class="form-control form-control-sm text-center"
+                                       value="0"
+                                       readonly />
+                            </div>
+
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
+                                <input type="text"
+                                       class="form-control form-control-sm text-center"
+                                       value="0"
+                                       readonly />
+                            </div>
+
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">كمية الكوتة المتبقية</label>
+                                <input type="text"
+                                       class="form-control form-control-sm text-center"
+                                       value="0"
+                                       readonly />
+                            </div>
+
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
+                                <input type="text"
+                                       class="form-control form-control-sm text-center"
+                                       value="0"
+                                       readonly />
+                            </div>
+                        </div>
+
+                        <div class="table-responsive mt-2">
+                            <table class="table table-sm table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>المخزن</th>
+                                        <th class="text-center">الكمية المتاحة</th>
+                                        <th class="text-center">محجوزة لطلبات</th>
+                                        <th class="text-center">متاح للبيع</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @* هتملا لاحقاً من الداتا *@
+                                </tbody>
+                            </table>
+                        </div>
+
+                    </div>
+                </div>
+
+                @* =====================================================
+                   4) كارت إدخال الصنف في المرتجع
+                   ===================================================== *@
+                <div class="card shadow-sm mb-3 invoice-Add-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">تسجيل أصناف المرتجع</h6>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">كود الصنف</label>
+                                <input type="text"
+                                       class="form-control form-control-sm"
+                                       placeholder="بحث بالكود..." />
+                            </div>
+
+                            <div class="col-lg-4 col-md-8">
+                                <label class="form-label form-label-sm">اسم الصنف</label>
+                                <input type="text"
+                                       class="form-control form-control-sm"
+                                       placeholder="اكتب اسم الصنف أو جزء منه..." />
+                            </div>
+
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">سعر الجمهور</label>
+                                <input type="number"
+                                       class="form-control form-control-sm text-center"
+                                       placeholder="0.00" />
+                            </div>
+
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">الكمية</label>
+                                <input type="number"
+                                       class="form-control form-control-sm text-center"
+                                       placeholder="1" />
+                            </div>
+
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">خصم 1 %</label>
+                                <input type="number"
+                                       class="form-control form-control-sm text-center"
+                                       placeholder="0" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2 align-items-end mt-2">
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">رقم الباتش</label>
+                                <input type="text"
+                                       class="form-control form-control-sm text-center"
+                                       placeholder="Batch No" />
+                            </div>
+
+                            <div class="col-lg-3 col-md-4">
+                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                <input type="date"
+                                       class="form-control form-control-sm text-center" />
+                            </div>
+
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">خصم 2 %</label>
+                                <input type="number"
+                                       class="form-control form-control-sm text-center"
+                                       placeholder="0" />
+                            </div>
+
+                            <div class="col-lg-3 col-md-4">
+                                <div class="d-grid gap-1 invoice-item-actions">
+                                    <button type="button"
+                                            class="btn btn-erp btn-erp-primary btn-erp-sm">
+                                        إضافة الصنف للمرتجع
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="col-lg-2 d-none d-lg-block"></div>
+                        </div>
+                    </div>
+                </div>
+
+                @* ==========================================
+                   5) جدول سطور المرتجع (عرض مبدئي)
+                   ========================================== *@
+                <div class="card shadow-sm mb-3 invoice-lines-card">
+                    <div class="card-header py-2 invoice-lines-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold">
+                                سطور مرتجع البيع
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="erp-table-wrapper mb-0">
+                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">#</th>
+                                        <th>اسم الصنف</th>
+                                        <th class="text-center">الكمية</th>
+                                        <th class="text-center">سعر الجمهور</th>
+                                        <th class="text-center">خصم 1 %</th>
+                                        <th class="text-center">خصم 2 %</th>
+                                        <th class="text-center">خصم 3 %</th>
+                                        <th class="text-center">الإجمالي</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted py-4">
+                                            لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                @* ====================================
+                   6) ملخص إجماليات المرتجع
+                   ==================================== *@
+                <div class="card shadow-sm invoice-totals-card">
+                    <div class="card-body">
+
+                        <div class="row g-2 align-items-center mb-2">
+                            <div class="col-md-3">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">إجمالي قبل الخصم</span>
+                                    <span class="badge bg-light text-dark summary-badge">
+                                        @Model.TotalBeforeDiscount.ToString("0.00")
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">خصم الهيدر (قيمة)</span>
+                                    <span class="badge bg-warning text-dark summary-badge">
+                                        @Model.HeaderDiscountValue.ToString("0.00")
+                                        <span class="small">
+                                            (@Model.HeaderDiscountPercent.ToString("0.##") %)
+                                        </span>
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">إجمالي بعد الخصم وقبل الضريبة</span>
+                                    <span class="badge bg-light text-dark summary-badge">
+                                        @Model.TotalAfterDiscountBeforeTax.ToString("0.00")
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-3">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">قيمة الضريبة</span>
+                                    <span class="badge bg-info text-dark summary-badge">
+                                        @Model.TaxAmount.ToString("0.00")
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3" />
+
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <span class="small text-muted d-block">الصافي النهائي للمرتجع</span>
+                                <h3 class="mb-0 text-success">
+                                    @Model.NetTotal.ToString("0.00")
+                                </h3>
+                            </div>
+
+                            <div class="text-end small text-muted">
+                                @if (Model.UpdatedAt.HasValue)
+                                {
+                                    <div>
+                                        آخر تعديل:
+                                        <span class="fw-semibold">
+                                            @Model.UpdatedAt.Value.ToString("yyyy/MM/dd HH:mm")
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            @* =========================
+               العمود الجانبي (أزرار الحركة)
+               ========================= *@
+            <div class="col-lg-2">
+                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
+                    <div class="card-header py-2 text-center">
+                        <h6 class="mb-0">إجراءات مرتجع البيع</h6>
+                    </div>
+                    <div class="card-body d-grid">
+
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm"
+                           asp-action="Create">
+                            ➕ مرتجع جديد
+                        </a>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
+                                id="btnClearReturnLines"
+                                data-return-id="@Model.SRId">
+                            🗑️ مسح كل أصناف المرتجع
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                            ⏪ فتح المرتجع
+                        </button>
+
+                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                           asp-action="Edit"
+                           asp-route-id="@Model.SRId">
+                            ✏️ تعديل المرتجع
+                        </a>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                            📤 ترحيل المرتجع
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                onclick="window.print()">
+                            🖨️ طباعة المرتجع
+                        </button>
+
+                        <hr />
+
+                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                           asp-action="Index">
+                            ⬅️ الرجوع لقائمة مرتجعات البيع
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // دالة مساعدة: تملأ الحقول من option معين في الـ datalist
+        function fillCustomerFromOption(opt) {
+            var idInput = document.getElementById('CustomerId');              // كود العميل (للحفظ في المرتجع)
+            var codeDisplay = document.getElementById('CustomerCodeDisplay'); // كود العميل المعروض
+            var policyInput = document.getElementById('PolicyName');          // اسم السياسة (مش موجود على الشاشة هنا، لكن ممكن تضيفه بعدين)
+            var userInput = document.getElementById('LinkedUserName');        // المستخدم المربوط (لو أضفته)
+            var phoneInput = document.getElementById('CustomerPhone');        // الهاتف
+            var addressInput = document.getElementById('CustomerAddress');    // العنوان
+            var creditInput = document.getElementById('CustomerCreditLimit'); // الحد الائتماني
+            var summary = document.getElementById('CustomerSummaryText');     // سطر ملخّص صغير
+
+            if (!opt) {
+                idInput.value = '';
+                codeDisplay.value = '';
+                if (policyInput) policyInput.value = '';
+                if (userInput) userInput.value = '';
+                phoneInput.value = '';
+                addressInput.value = '';
+                creditInput.value = '';
+                summary.textContent = '';
+                return;
+            }
+
+            var id = opt.getAttribute('data-id') || '';
+            var policy = opt.getAttribute('data-policy') || '';
+            var user = opt.getAttribute('data-user') || '';
+            var phone = opt.getAttribute('data-phone') || '';
+            var address = opt.getAttribute('data-address') || '';
+            var credit = opt.getAttribute('data-credit') || '';
+
+            idInput.value = id;
+            codeDisplay.value = id;
+            if (policyInput) policyInput.value = policy;
+            if (userInput) userInput.value = user;
+            phoneInput.value = phone;
+            addressInput.value = address;
+            creditInput.value = credit;
+
+            var parts = [];
+            if (policy) parts.push('سياسة: ' + policy);
+            if (user) parts.push('مستخدم: ' + user);
+            if (credit) parts.push('حد ائتماني: ' + credit);
+            summary.textContent = parts.join(' — ');
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+
+            var customerInput = document.getElementById('CustomerNameInput');
+            var dataList = document.getElementById('customersList');
+
+            function findOptionByName(name) {
+                if (!name) return null;
+                var options = dataList.options;
+                for (var i = 0; i < options.length; i++) {
+                    if (options[i].value === name) return options[i];
+                }
+                return null;
+            }
+
+            function findOptionById(id) {
+                if (!id) return null;
+                var options = dataList.options;
+                for (var i = 0; i < options.length; i++) {
+                    if (options[i].getAttribute('data-id') == id) {
+                        return options[i];
+                    }
+                }
+                return null;
+            }
+
+            // عند اختيار اسم عميل من الأوتوكومبليت
+            customerInput.addEventListener('change', function () {
+                var opt = findOptionByName(customerInput.value);
+                fillCustomerFromOption(opt);
+            });
+
+            // تهيئة الشاشة عند الفتح – لو في كود عميل محفوظ في المرتجع
+            var initialCustomerId = '@Model.CustomerId';
+            if (initialCustomerId) {
+                var opt = findOptionById(initialCustomerId);
+                if (opt) {
+                    customerInput.value = opt.value;
+                    fillCustomerFromOption(opt);
+                }
+            }
+        });
+    </script>
+}

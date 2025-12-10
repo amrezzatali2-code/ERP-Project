@@ -1,0 +1,27 @@
+﻿@model ERP.Models.SalesInvoice
+@{
+    ViewData["Title"] = "حذف فاتورة";
+    Layout = "_Layout";
+}
+<div dir="rtl" class="container mt-3">
+    <h3 class="mb-3 text-danger">حذف فاتورة: @Model.SIId</h3>
+    <p>هل أنت متأكد من حذف هذه الفاتورة؟</p>
+
+    <dl class="row">
+        <dt class="col-sm-3">العميل</dt>
+        <dd class="col-sm-9">@Model.CustomerId</dd>
+
+        <dt class="col-sm-3">التاريخ</dt>
+        <dd class="col-sm-9">@Model.SIDate:yyyy-MM-dd</dd>
+
+        <dt class="col-sm-3">الصافي</dt>
+        <dd class="col-sm-9">@Model.NetTotal.ToString("0.00")</dd>
+    </dl>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="SIId" />
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+    </form>
+</div>

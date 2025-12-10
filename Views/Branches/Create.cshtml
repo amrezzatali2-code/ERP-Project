@@ -1,0 +1,33 @@
+﻿@model ERP.Models.Branch
+
+@{
+    ViewData["Title"] = "إضافة فرع";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">@ViewData["Title"]</h2>
+
+    <!-- ملخص أخطاء التحقق إن وجدت -->
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <!-- نموذج إضافة فرع جديد -->
+    <form asp-action="Create" method="post" class="row g-3">
+        @Html.AntiForgeryToken()   <!-- حماية من هجمات CSRF -->
+        <!-- اسم الفرع (مطلوب) -->
+        <div class="col-md-8 col-lg-6">
+            <label asp-for="BranchName" class="form-label"></label>
+            <input asp-for="BranchName" class="form-control" />
+            <span asp-validation-for="BranchName" class="text-danger"></span>
+        </div>
+
+        <!-- أزرار الحفظ والرجوع -->
+        <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-success">حفظ</button>
+            <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

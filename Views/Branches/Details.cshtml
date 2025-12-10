@@ -1,0 +1,15 @@
+﻿@model ERP.Models.Branch
+@{
+    ViewData["Title"] = "تفاصيل فرع";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تفاصيل فرع</h2>
+    <dl class="row">
+        <dt class="col-sm-2">المعرّف</dt>
+        <dd class="col-sm-10">@Model.BranchId</dd>
+        <dt class="col-sm-2">الاسم</dt>
+        <dd class="col-sm-10">@Model.BranchName</dd>
+    </dl>
+    <a asp-action="Edit" asp-route-id="@Model.BranchId" class="btn btn-primary">تعديل</a>
+    <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+</div>

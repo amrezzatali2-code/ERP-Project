@@ -1,0 +1,17 @@
+﻿@model ERP.Models.Branch
+@{
+    ViewData["Title"] = "حذف فرع";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف فرع</h2>
+    <p>هل أنت متأكد من حذف الفرع التالي؟</p>
+    <ul>
+        <li><strong>المعرّف:</strong> @Model.BranchId</li>
+        <li><strong>الاسم:</strong> @Model.BranchName</li>
+    </ul>
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="BranchId" />
+        <button class="btn btn-danger">حذف</button>
+        <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+    </form>
+</div>

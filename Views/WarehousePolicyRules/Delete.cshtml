@@ -1,0 +1,56 @@
+﻿@model ERP.Models.WarehousePolicyRule
+
+@{
+    ViewData["Title"] = "حذف قاعدة سياسة لمخزن";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3 text-danger">حذف قاعدة سياسة — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد من رغبتك في حذف هذه القاعدة؟
+        <br />
+        <strong>تنبيه:</strong> إذا كانت القاعدة مستخدمة في حسابات الأسعار والربح
+        فحذفها قد يؤثر على المنطق.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">كود القاعدة</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">كود المخزن</dt>
+                <dd class="col-sm-9">@Model.WarehouseId</dd>
+
+                <dt class="col-sm-3">كود السياسة</dt>
+                <dd class="col-sm-9">@Model.PolicyId</dd>
+
+                <dt class="col-sm-3">نسبة الربح %</dt>
+                <dd class="col-sm-9">@Model.ProfitPercent.ToString("0.00")</dd>
+
+                <dt class="col-sm-3">أقصى خصم للعميل %</dt>
+                <dd class="col-sm-9">
+                    @(Model.MaxDiscountToCustomer.HasValue
+                                        ? Model.MaxDiscountToCustomer.Value.ToString("0.00")
+                                        : "-")
+                </dd>
+            </dl>
+
+            <form asp-action="Delete" method="post" class="mt-3">
+                @Html.AntiForgeryToken()
+                @* المفتاح الأساسي للقاعدة *@
+                <input type="hidden" asp-for="Id" />
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-danger">
+                        تأكيد الحذف
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        إلغاء
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

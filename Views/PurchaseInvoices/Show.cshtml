@@ -1,0 +1,1402 @@
+﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@model ERP.Models.PurchaseInvoice
+
+@{
+    // عنوان التاب
+    ViewData["Title"] = Model.PIId == 0
+        ? "فاتورة مشتريات جديدة"
+        : $"فاتورة مشتريات — رقم {Model.PIId}";
+}
+
+@section Styles {
+    <style>
+        /* خلفية عامة للصفحة */
+        .invoice-page {
+            background-color: #f3f6fb; /* لون خفيف مريح للعين */
+            min-height: 100vh;
+            padding-bottom: 2rem;
+        }
+
+        /* الكروت الرئيسية (الهيدر + تفاصيل + إدخال صنف + بيانات الصنف + السطور + الإجماليات + الكارت الجانبي) */
+        .invoice-header-card,
+        .invoice-details-card,
+        .invoice-lines-card,
+        .invoice-totals-card,
+        .invoice-side-card,
+        .invoice-Add-card,
+        .invoice-product-card {
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        /* شريط الهيدر الملون للهيدر الرئيسي */
+        .invoice-header-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.75rem 1.25rem;
+        }
+
+            .invoice-header-bar h5 {
+                margin-bottom: 0.1rem;
+            }
+
+        /* نفس لون الهيدر لباقي الكروت */
+        .invoice-details-card .card-header,
+        .invoice-Add-card .card-header,
+        .invoice-product-card .card-header,
+        .invoice-lines-card .card-header,
+        .invoice-side-card .card-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.55rem 1rem;
+        }
+
+        .invoice-status-badge {
+            font-size: 0.8rem;
+            padding: 0.3rem 0.7rem;
+        }
+
+        .badge-status-draft {
+            background-color: #6f42c1; /* بنفسجي لمسودة */
+        }
+
+        .badge-status-notposted {
+            background-color: #343a40; /* غامق لعدم الترحيل */
+        }
+
+        .form-label-sm {
+            font-size: 0.85rem;
+        }
+
+        .invoice-small-input {
+            max-width: 150px;
+        }
+
+        .customer-summary-line {
+            font-size: 0.82rem;
+        }
+
+        /* كارت الإجراءات الجانبية: أزرار أرفع شوية */
+        .invoice-side-card .btn-erp {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.6rem;
+        }
+
+            .invoice-side-card .btn-erp + .btn-erp {
+                margin-top: 0.25rem;
+            }
+
+        /* هيدر جدول السطور */
+        .invoice-lines-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #fff;
+        }
+
+            .invoice-lines-header th {
+                border-color: #0b5ed7 !important;
+            }
+
+        .erp-table-wrapper {
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        .summary-badge {
+            min-width: 80px;
+            text-align: center;
+        }
+    </style>
+}
+
+<div class="invoice-page" dir="rtl">
+    <div class="container-fluid pt-3">
+
+        <div class="row g-3">
+
+            @* =========================
+               العمود الرئيسي (الهيدر + المورد + الأصناف + الإجماليات)
+               ========================= *@
+            <div class="col-lg-10">
+
+                @* ====================================================
+                   1) كارت بيانات فاتورة المشتريات + المورد + المخزن
+                   ==================================================== *@
+                <div class="card shadow-sm mb-2 invoice-header-card">
+
+                    @{
+                        bool isNewInvoice = Model == null || Model.PIId == 0;
+                        bool hasInvoice = !isNewInvoice;
+
+                        string invoiceDateText = hasInvoice
+                        ? Model.PIDate.ToString("yyyy/MM/dd")
+                        : "";
+
+                        // نستخدم CreatedAt لعرض وقت إنشاء الفاتورة
+                        string invoiceTimeText = hasInvoice
+                        ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
+                        : "";
+                    }
+
+                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        @* الجزء الأيسر: عنوان الفاتورة + المستخدم *@
+                        <div>
+                            <h5 class="mb-1">
+                                @if (isNewInvoice)
+                                {
+                                    @:فاتورة مشتريات
+                                }
+                                else
+                                {
+                                    @:فاتورة مشتريات
+                                    <span class="small opacity-100">رقم @Model.PIId</span>
+                                }
+                            </h5>
+
+                            @if (!isNewInvoice && !string.IsNullOrWhiteSpace(Model.CreatedBy))
+                            {
+                                <div class="small opacity-100">
+                                    أُنشئت بواسطة:
+                                    <span class="fw-semibold">@Model.CreatedBy</span>
+                                </div>
+                            }
+                        </div>
+
+                        @* الجزء الأيمن: حالة الفاتورة *@
+                        <div class="text-end">
+                            @if (isNewInvoice)
+                            {
+                                <span class="text-white fw-semibold">
+                                    اضغط على "فاتورة جديدة".
+                                </span>
+                            }
+                            else if (string.Equals(Model.Status, "Posted", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="text-white fw-semibold">
+                                    فاتورة مرحّلة
+                                </span>
+                            }
+                            else if (string.Equals(Model.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
+                            {
+                                <span class="text-white fw-semibold">
+                                    فاتورة ملغاة
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-white fw-semibold">
+                                    فاتورة مسودة
+                                </span>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="card-body">
+
+                        <div class="row g-3 align-items-end">
+
+                            @* اسم المورد + أوتوكومبليت *@
+                            <div class="col-lg-4 col-md-6">
+                                <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
+
+                                @* بوكس اسم المورد مع أوتوكومبليت من الـ datalist *@
+                                <input id="CustomerNameInput"
+                                       name="CustomerNameInput" @* متغير: يستخدمه الجافاسكربت فقط، غير مربوط بالموديل *@
+                                       class="form-control form-control-sm"
+                                       placeholder="اكتب اسم المورد ثم اختره من القائمة"
+                                       list="customersList"
+                                       autocomplete="off" 
+                                       value="@ViewBag.SelectedCustomerName" />
+
+                                @* قائمة العملاء/الموردين لأوتوكومبليت اسم المورد *@
+                                <datalist id="customersList">
+                                    @if (ViewBag.Customers != null)
+                                    {
+                                        foreach (var c in ViewBag.Customers)
+                                        {
+                                            <option value="@c.Name"
+                                                    data-id="@c.Id"
+                                                    data-phone="@c.Phone"
+                                                    data-address="@c.Address"
+                                                    data-gov="@c.Gov"
+                                                    data-district="@c.District"
+                                                    data-area="@c.Area"
+                                                    data-credit="@c.Credit">
+                                            </option>
+                                        }
+                                    }
+                                </datalist>
+
+
+                            </div>
+
+
+                            @* كود المورد *@
+                            <div class="col-lg-2 col-md-3">
+                                <label class="form-label form-label-sm">كود المورد</label>
+
+                                <!-- تعديل: شيل readonly وخليه يقبل كتابة -->
+                                <input id="CustomerCodeDisplay"
+                                       class="form-control form-control-sm text-center invoice-small-input"
+                                       type="number"         <!-- ممكن تخليها text لو حابب -->
+                               
+
+                                <!-- هذا هو الحقل الفعلي الذي يُحفظ في الفاتورة -->
+                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                            </div>
+
+
+                            @* المخزن *@
+                            <div class="col-lg-3 col-md-3">
+                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+                                <select asp-for="WarehouseId"
+                                        asp-items="ViewBag.Warehouses"
+                                        class="form-select form-select-sm">
+                                    <option value="">اختر المخزن</option>
+                                </select>
+                            </div>
+
+                            @* التاريخ والوقت *@
+                            <div class="col-lg-3 col-md-6">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">تاريخ الفاتورة</label>
+                                        <input class="form-control form-control-sm text-center"
+                                               value="@invoiceDateText"
+                                               readonly />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">وقت الإنشاء</label>
+                                        <input class="form-control form-control-sm text-center"
+                                               value="@invoiceTimeText"
+                                               readonly />
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                        <br />
+
+                        <div class="row g-3">
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">حالة الفاتورة</label>
+                                <input class="form-control form-control-sm text-center"
+                                       value="@Model.Status"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">مرحّلة؟</label>
+                                <input class="form-control form-control-sm text-center"
+                                       value="@(Model.IsPosted ? "نعم" : "لا")"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-4 col-md-4">
+                                <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
+                                <input class="form-control form-control-sm text-center"
+                                       value="@(Model.RefPRId?.ToString() ?? "")"
+                                       readonly />
+                            </div>
+                        </div>
+
+                      
+                        <div class="row g-4">
+                            <div class="col-lg-3 col-md-3">
+                                <label class="form-label form-label-sm">الهاتف</label>
+                                <input id="CustomerPhone"
+                                       class="form-control form-control-sm"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-3 col-md-3">
+                                <label class="form-label form-label-sm">المحافظة</label>
+                                <input id="CustomerGovernorate"
+                                       class="form-control form-control-sm"
+                                       readonly />
+                            </div>
+                            <div class="col-lg-3 col-md-3">
+                                <label class="form-label form-label-sm">الحي</label>
+                                <input id="CustomerDistrict"
+                                       class="form-control form-control-sm"
+                                       readonly />
+                            </div>
+                            <div class="col-lg-3 col-md-3">
+                                <label class="form-label form-label-sm">المنطقة</label>
+                                <input id="CustomerArea"
+                                       class="form-control form-control-sm"
+                                       readonly />
+                            </div>
+                        </div>
+
+                            <div class="row g-3">
+                               
+
+                                <div class="col-lg-8 col-md-6">
+                                    <label class="form-label form-label-sm">العنوان</label>
+                                    <input id="CustomerAddress"
+                                           class="form-control form-control-sm"
+                                           readonly />
+                                </div>
+                                <div class="col-lg-4 col-md-2">
+                                    <label class="form-label form-label-sm">الحد الإتماني</label>
+                                    <input id="CustomerCredit"
+                                           class="form-control form-control-sm"
+                                           readonly />
+                                </div>
+                            </div>
+                        @* </div> *@
+
+
+                    </div>
+                </div>
+
+               
+
+                @* =====================================================
+                     3) كارت بيانات الصنف من المخزون + سياسة شراء
+                  ===================================================== *@
+                <div class="card shadow-sm mb-3 invoice-product-card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h6 class="mb-0">بيانات الصنف</h6>
+                        @* ممكن نضيف وصف بسيط لو حبيت بعدين *@
+                        @* <small class="text-muted">هذه البيانات تخص الصنف الحالي في كارت "إضافة صنف للفاتورة".</small> *@
+                    </div>
+
+                    <div class="card-body">
+
+                        @* الصف العلوي: أرقام سريعة عن مخزون الصنف *@
+                        <div class="row g-2 mb-3">
+
+                            @* الكمية المتاحة في المخزن المختار في الفاتورة *@
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">الكمية في هذا المخزن</label>
+                                <input type="text"
+                                       id="ProdQtyCurrentWarehouse" @* متغير: كمية الصنف في المخزن الحالي *@
+                                       class="form-control form-control-sm text-center"
+                                       value="0"
+                                       readonly />
+                            </div>
+
+                            @* إجمالي الكمية في كل المخازن *@
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
+                                <input type="text"
+                                       id="ProdQtyAllWarehouses" @* متغير: مجموع الكميات في جميع المخازن *@
+                                       class="form-control form-control-sm text-center"
+                                       value="0"
+                                       readonly />
+                            </div>
+
+                            @* هل الصنف عليه كوتة؟ *@
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">الصنف عليه كوتة؟</label>
+                                <input type="text"
+                                       id="ProdQuotaText" @* متغير: نص يوضح حالة الكوتة *@
+                                       class="form-control form-control-sm text-center"
+                                       value="بدون كوتة"
+                                       readonly />
+                            </div>
+
+                            @* الخصم المرجّح للصنف (من سياسة الشراء / حركة المخزون) *@
+                            <div class="col-md-3 col-sm-6">
+                                <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
+                                <input type="text"
+                                       id="ProdWeightedDiscount" @* متغير: نسبة الخصم المرجّح للصنف *@
+                                       class="form-control form-control-sm text-center"
+                                       value="0"
+                                       readonly />
+                            </div>
+                        </div>
+
+                        @* الصف الثاني: بدائل الصنف حسب الاسم العلمي *@
+                        <div class="row g-2 mb-3">
+                            <div class="col-lg-6 col-md-6">
+                                <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
+                                <select id="AlternativeProducts" @* متغير: قائمة البدائل للصنف الحالي *@
+                                        class="form-select form-select-sm">
+                                    @* <option value="">
+                                        اختر بديل للصنف (الاسم - الشركة - سعر الجمهور - الخصم المرجّح)
+                                    </option> *@
+                                    @* لاحقًا: يتم تحميل البدائل من جدول Products
+                       بشرط تطابق "الاسم العلمي" مع الصنف الحالي،
+                       والسعر/الشركة من Products، والخصم المرجّح من سياسة الشراء أو حركة المخزون *@
+                                </select>
+                            </div>
+                        </div>
+
+                        @* أزرار الحركة وتعديل بيانات الصنف *@
+                        <div class="d-flex gap-2 mb-2">
+                            <button type="button"
+                                    id="btnProdMovement"
+                                    class="btn btn-outline-secondary btn-sm">
+                                حركة الصنف
+                            </button>
+
+                            <button type="button"
+                                    id="btnProdEdit"
+                                    class="btn btn-outline-primary btn-sm">
+                                تعديل بيانات الصنف
+                            </button>
+                        </div>
+
+
+                    </div> @* نهاية card-body *@
+                </div>      @* نهاية الكارت بالكامل *@
+
+
+                @* =====================================================
+   4) كارت إدخال الصنف في فاتورة المشتريات
+   ===================================================== *@
+                <div class="card shadow-sm mb-3 invoice-Add-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">إضافة صنف للفاتورة</h6>
+                    </div>
+
+                    <div class="card-body">
+
+                        @* الصف الأول: كود الصنف + اسم الصنف *@
+                        <div class="row g-2 align-items-end mb-2">
+
+                            @* كود الصنف (بحث بالكود) *@
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">كود الصنف</label>
+                                <input type="number"
+                                       id="ProdCodeInput" @* متغير: كود الصنف للبحث *@
+                                       class="form-control form-control-sm text-center pi-input"
+                                       placeholder="بحث بالكود..." />
+                            </div>
+
+                            @* اسم الصنف + أوتوكومبليت *@
+                            <div class="col-lg-4 col-md-8">
+                                <label class="form-label form-label-sm">اسم الصنف</label>
+
+                                <input id="ProdNameInput"
+                                       list="productsList"
+                                       class="form-control form-control-sm pi-input"
+                                       placeholder="اكتب اسم الصنف أو جزء منه..."
+                                       autocomplete="off" />
+
+                                @* قائمة الأصناف للأوتوكومبليت *@
+                                <datalist id="productsList">
+                                    @if (ViewBag.ProductsAuto != null)
+                                    {
+                                        foreach (var p in ViewBag.ProductsAuto)
+                                        {
+                                            <option value="@p.Name"
+                                                    data-id="@p.Id"
+                                                    data-code="@p.Id"
+                                                    data-generic="@p.GenericName"
+                                                    data-company="@p.Company"
+                                                    data-price="@p.PriceRetail"
+                                                    data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                            </option>
+                                        }
+                                    }
+                                </datalist>
+
+
+
+
+
+
+                                @* الحقل الفعلي لحفظ كود الصنف في السطر *@
+                                <input type="hidden" id="ProdId" />
+
+                                @* تم حذف النص أسفل البوكس بناءً على طلبك *@
+                            </div>
+                        </div>
+
+                        @* الصف الثاني: سعر + كمية + خصم + باتش + صلاحية + زر إضافة *@
+                        <div class="row g-2 align-items-end">
+
+                            @* سعر الجمهور *@
+                            <div class="col-lg-2 col-md-4">
+                                <label id="ProdPriceLabel" class="form-label form-label-sm">
+                                    سعر الجمهور
+                                    <small id="ProdPriceLockState" class="text-muted">(مغلق)</small>
+                                </label>
+
+                                <input type="number"
+                                       id="ProdPriceInput" @* متغير: سعر الجمهور للصنف *@
+                                       class="form-control form-control-sm text-center pi-input bg-light text-muted"
+                                       readonly />                @* مقفول مبدئياً، بدون placeholder *@
+                            </div>
+
+
+                            @* الكمية *@
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">الكمية</label>
+                                <input type="number"
+                                       id="ProdQtyInput" @* متغير: الكمية المطلوب شراؤها *@
+                                       class="form-control form-control-sm text-center pi-input"
+                                       placeholder="0" />
+                            </div>
+
+                            @* خصم 1 % *@
+                            <div class="col-lg-2 col-md-4">
+                                <label id="ProdDisc1Label" class="form-label form-label-sm">
+                                    خصم %1
+                                    <small id="ProdDisc1LockState" class="text-muted">(مغلق)</small>
+                                </label>
+
+                                <input type="number"
+                                       id="ProdDisc1Input"
+                                       class="form-control form-control-sm text-center pi-input bg-light text-muted"
+                                       value="0"
+                                       readonly />   @* مقفول مبدئياً *@
+                            </div>
+
+
+                            @* الباتش *@
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">الباتش</label>
+                                <input type="text"
+                                       id="ProdBatchInput" @* متغير: رقم التشغيلة / الباتش *@
+                                       class="form-control form-control-sm text-center pi-input"
+                                       placeholder="باتش" />
+                            </div>
+
+                            @* تاريخ الصلاحية *@
+                            <div class="col-lg-2 col-md-4">
+                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                <input type="text"
+                                       id="ProdExpiryInput" @* متغير: تاريخ صلاحية الباتش (مثال: 12/2026) *@
+                                       class="form-control form-control-sm text-center pi-input"
+                                       placeholder="MM/YYYY" />
+                            </div>
+
+                            @* زر إضافة الصنف للسطر *@
+                            <div class="col-lg-2 col-md-4 d-grid">
+                                <label class="form-label form-label-sm">&nbsp;</label>
+                                <button type="button"
+                                        id="btnAddInvoiceLine" @* متغير: زر إضافة الصنف لسطور الفاتورة *@
+                                        class="btn btn-primary btn-sm w-100">
+                                    إضافة
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+
+                @* ==========================================
+                   5) جدول سطور فاتورة المشتريات
+                   ========================================== *@
+                <div class="card shadow-sm mb-3 invoice-lines-card">
+                    <div class="card-header py-2 invoice-lines-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="fw-semibold">
+                                سطور فاتورة المشتريات
+                            </span>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="erp-table-wrapper mb-0">
+                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">#</th>
+                                        <th>اسم الصنف</th>
+                                        <th class="text-center">الكمية</th>
+                                        <th class="text-center">سعر الجمهور</th>
+                                        <th class="text-center">خصم الشراء %</th>
+                                        <th class="text-center">قيمة السطر</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="6" class="text-center text-muted py-4">
+                                            لا توجد سطور مسجَّلة لهذه الفاتورة في هذه المرحلة.
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                @* ====================================
+                   6) ملخص الفاتورة
+                   ==================================== *@
+                @{
+                    int totalLines = Model.Lines?.Count ?? 0;
+
+                    // عدد الأصناف المميزة إن وُجدت سطور
+                    int totalItems = 0;
+                    if (Model.Lines != null)
+                    {
+                        var prodIds = new HashSet<int>();
+                        foreach (var line in Model.Lines)
+                        {
+                            var propProd = line.GetType().GetProperty("ProdId");
+                            if (propProd != null)
+                            {
+                                var val = propProd.GetValue(line);
+                                if (val is int pid)
+                                    prodIds.Add(pid);
+                            }
+                        }
+                        totalItems = prodIds.Count;
+                    }
+
+                    // محاولة حساب إجمالي الكمية بالانعكاس (Qty أو QtyRequested)
+                    int totalQty = 0;
+                    if (Model.Lines != null)
+                    {
+                        foreach (var line in Model.Lines)
+                        {
+                            var pQty = line.GetType().GetProperty("Qty")
+                            ?? line.GetType().GetProperty("QtyRequested");
+
+                            if (pQty != null)
+                            {
+                                var val = pQty.GetValue(line);
+                                if (val is int q)
+                                    totalQty += q;
+                            }
+                        }
+                    }
+
+                    decimal totalRetail = Model.ItemsTotal;          // إجمالي سعر الجمهور
+                    decimal totalAfterDiscount = Model.ItemsTotal - Model.DiscountTotal;
+                    decimal taxAmount = Model.TaxTotal;
+                    decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
+                    decimal netTotal = Model.NetTotal;
+                }
+
+                <div class="card shadow-sm invoice-totals-card">
+                    <div class="card-body">
+
+                        <div class="row g-3 align-items-center mb-2">
+
+                            <div class="col-md-2">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">عدد السطور</span>
+                                    <span class="badge bg-light text-dark summary-badge">
+                                        @totalLines
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-2">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">عدد الأصناف</span>
+                                    <span class="badge bg-light text-dark summary-badge">
+                                        @totalItems
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-2">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">إجمالي الكمية</span>
+                                    <span class="badge bg-light text-dark summary-badge">
+                                        @totalQty
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-2">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">إجمالي سعر الجمهور</span>
+                                    <span class="badge bg-light text-dark summary-badge">
+                                        @totalRetail.ToString("0.00")
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-2">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">الإجمالي بعد الخصم</span>
+                                    <span class="badge bg-light text-dark summary-badge">
+                                        @totalAfterDiscount.ToString("0.00")
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div class="col-md-2">
+                                <div class="d-flex flex-column">
+                                    <span class="small text-muted">قيمة الضريبة</span>
+                                    <span class="badge bg-info text-dark summary-badge">
+                                        @taxAmount.ToString("0.00")
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <hr class="my-3" />
+
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div>
+                                <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
+                                <h5 class="mb-1">
+                                    @totalAfterDiscountAndTax.ToString("0.00")
+                                </h5>
+
+                                <span class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
+                                <h3 class="mb-0 text-success">
+                                    @netTotal.ToString("0.00")
+                                </h3>
+                            </div>
+
+                            <div class="text-end small text-muted">
+                                @if (Model.UpdatedAt.HasValue)
+                                {
+                                    <div>
+                                        آخر تعديل:
+                                        <span class="fw-semibold">
+                                            @Model.UpdatedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
+                                        </span>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>  @* نهاية العمود الرئيسي *@
+
+
+            @* =========================
+               العمود الجانبي (أزرار الحركة)
+               ========================= *@
+            <div class="col-lg-2">
+                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
+                    <div class="card-header py-2 text-center">
+                        <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
+                    </div>
+                    <div class="card-body d-grid">
+
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm"
+                           asp-action="Create">
+                            ➕ فاتورة جديدة
+                        </a>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
+                                id="btnClearInvoiceLines"
+                                data-invoice-id="@Model.PIId">
+                            🗑️ مسح كل أصناف الفاتورة
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                            ⏪ فتح الفاتورة
+                        </button>
+
+                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                           asp-action="Edit"
+                           asp-route-id="@Model.PIId">
+                            ✏️ تعديل الفاتورة
+                        </a>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                            📤 ترحيل الفاتورة
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                onclick="window.print()">
+                            🖨️ طباعة الفاتورة
+                        </button>
+
+                        <hr />
+
+                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                           asp-action="Index">
+                            ⬅️ الرجوع لقائمة فواتير المشتريات
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</div>
+@section Scripts {
+    <script>
+        // =========================================================
+        // أولاً: أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
+        // =========================================================
+        (function () {
+
+            // بوكسات بيانات المورد
+            const custNameInput      = document.getElementById('CustomerNameInput');    // اسم المورد
+            const custCodeInput      = document.getElementById('CustomerCodeDisplay');  // كود المورد الظاهر
+            const custPhoneInput     = document.getElementById('CustomerPhone');        // الهاتف
+            const custGovInput       = document.getElementById('CustomerGovernorate');  // المحافظة
+            const custDistrictInput  = document.getElementById('CustomerDistrict');     // الحي
+            const custAreaInput      = document.getElementById('CustomerArea');         // المنطقة
+            const custAddressInput   = document.getElementById('CustomerAddress');      // العنوان
+            const custCreditInput    = document.getElementById('CustomerCredit');       // الحد الائتماني
+            const custHiddenId       = document.getElementById('CustomerId');           // CustomerId (مخفي في الموديل)
+
+            // الـ datalist الخاصة بالموردين
+            const custDataList = custNameInput && custNameInput.list
+                ? custNameInput.list
+                : null;
+
+            if (!custDataList) {
+                console.warn('Supplier datalist not found for CustomerNameInput');
+                return; // نخرج من جزء المورد فقط
+            }
+
+            // توحيد نص المورد (وتجاهل الألف في أول الكلمة)
+            function normalizeSupplierText(txt) {
+                return (txt || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/^[اأإآ]/, '')
+                    .replace(/\s+/g, ' ');
+            }
+
+            // البحث عن مورد بالاسم
+            function findSupplierByName(name) {
+                const search = normalizeSupplierText(name);
+                if (!search) return null;
+
+                const opts = custDataList.options;
+                for (let i = 0; i < opts.length; i++) {
+                    const optValue = normalizeSupplierText(opts[i].value);
+                    if (optValue === search) {
+                        return opts[i]; // تطابق كامل
+                    }
+                }
+                return null;
+            }
+
+            // البحث عن مورد بالكود (data-id)
+            function findSupplierByCode(code) {
+                if (!code) return null;
+
+                const opts = custDataList.options;
+                for (let i = 0; i < opts.length; i++) {
+                    const optId = opts[i].getAttribute('data-id');
+                    if (optId == code) {
+                        return opts[i];
+                    }
+                }
+                return null;
+            }
+
+            // تعبئة كل بوكسات المورد من <option> واحد
+            function fillSupplierFromOption(opt) {
+
+                // لو مفيش مورد مطابق → نفرّغ
+                if (!opt) {
+                    if (custHiddenId)      custHiddenId.value      = '';
+                    if (custCodeInput)     custCodeInput.value     = '';
+                    if (custNameInput)     custNameInput.value     = '';
+                    if (custPhoneInput)    custPhoneInput.value    = '';
+                    if (custGovInput)      custGovInput.value      = '';
+                    if (custDistrictInput) custDistrictInput.value = '';
+                    if (custAreaInput)     custAreaInput.value     = '';
+                    if (custAddressInput)  custAddressInput.value  = '';
+                    if (custCreditInput)   custCreditInput.value   = '';
+                    return;
+                }
+
+                // قراءة البيانات من الـ option
+                const id       = opt.getAttribute('data-id')       || '';
+                const name     = opt.value                         || '';
+                const phone    = opt.getAttribute('data-phone')    || '';
+                const address  = opt.getAttribute('data-address')  || '';
+                const gov      = opt.getAttribute('data-gov')      || '';
+                const district = opt.getAttribute('data-district') || opt.getAttribute('data-District') || '';
+                const area     = opt.getAttribute('data-area')     || opt.getAttribute('data-Area')     || '';
+                const credit   = opt.getAttribute('data-credit')   || opt.getAttribute('data-Credit')   || '';
+
+                // حفظ الكود الحقيقي وإظهاره
+                if (custHiddenId)  custHiddenId.value  = id;
+                if (custCodeInput) custCodeInput.value = id;
+
+                // باقي البيانات
+                if (custNameInput)     custNameInput.value     = name;
+                if (custPhoneInput)    custPhoneInput.value    = phone;
+                if (custGovInput)      custGovInput.value      = gov;
+                if (custDistrictInput) custDistrictInput.value = district;
+                if (custAreaInput)     custAreaInput.value     = area;
+                if (custAddressInput)  custAddressInput.value  = address;
+                if (custCreditInput)   custCreditInput.value   = credit;
+            }
+
+            // التعامل مع اسم المورد
+            if (custNameInput) {
+                custNameInput.addEventListener('change', function () {
+                    const opt = findSupplierByName(custNameInput.value);
+                    fillSupplierFromOption(opt);
+                });
+
+                custNameInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const opt = findSupplierByName(custNameInput.value);
+                        fillSupplierFromOption(opt);
+                    }
+                });
+            }
+
+            // التعامل مع كود المورد
+            if (custCodeInput) {
+                custCodeInput.addEventListener('change', function () {
+                    const opt = findSupplierByCode(custCodeInput.value);
+                    fillSupplierFromOption(opt);
+                });
+
+                custCodeInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const opt = findSupplierByCode(custCodeInput.value);
+                        fillSupplierFromOption(opt);
+                    }
+                });
+            }
+
+            // عند فتح فاتورة قديمة (CustomerId موجود في الهيدر)
+            if (custHiddenId && custHiddenId.value) {
+                const opt = findSupplierByCode(custHiddenId.value);
+                fillSupplierFromOption(opt);
+            }
+
+        })();
+
+        // =========================================================
+        // ثانياً: أوتوكومبليت الصنف + كارت بياناته + التابات
+        // =========================================================
+        (function () {
+
+            // 1) عناصر سطر الصنف في الفاتورة
+            const prodCodeInput   = document.getElementById('ProdCodeInput');    // كود الصنف للبحث
+            const prodNameInput   = document.getElementById('ProdNameInput');    // اسم الصنف (أوتوكومبليت)
+            const prodPriceInput  = document.getElementById('ProdPriceInput');   // سعر الجمهور
+            const prodQtyInput    = document.getElementById('ProdQtyInput');     // الكمية
+            const prodDisc1Input  = document.getElementById('ProdDisc1Input');   // خصم 1
+            const prodBatchInput  = document.getElementById('ProdBatchInput');   // الباتش
+            const prodExpiryInput = document.getElementById('ProdExpiryInput');  // تاريخ الصلاحية
+            const prodHiddenId    = document.getElementById('ProdId');           // المعرّف الداخلي للصنف (يُستخدم في الحفظ)
+            const btnAddLine      = document.getElementById('btnAddInvoiceLine');// زر إضافة السطر
+
+            // 2) عناصر كارت بيانات الصنف (ملخص المخزون + الكوتة + الخصم المرجّح + البدائل)
+            const prodQtyWarehouse = document.getElementById('ProdQtyCurrentWarehouse'); // الكمية في هذا المخزن
+            const prodQtyAll       = document.getElementById('ProdQtyAllWarehouses');   // إجمالي الكمية في كل المخازن
+            const prodQuotaText    = document.getElementById('ProdQuotaText');          // نص يوضح هل له كوتة أم لا
+            const prodWeightedDisc = document.getElementById('ProdWeightedDiscount');   // الخصم المرجّح
+            const prodAltSelect    = document.getElementById('AlternativeProducts');    // قائمة البدائل
+
+            // 3) قائمة الأصناف المرتبطة بحقل اسم الصنف (datalist)
+            const prodDataList = (prodNameInput && prodNameInput.list)
+                ? prodNameInput.list
+                : null;
+
+            if (!prodDataList) {
+                console.warn('⚠️ لم يتم العثور على قائمة الأصناف (datalist) المرتبطة بـ ProdNameInput.');
+                return; // نخرج من جزء الأصناف فقط، باقي سكربت الصفحة لا يتأثر
+            }
+
+            // ---------------------------------------------
+            // دالة مساعدة لتوحيد النص (وتجاهل الألف في أول الكلمة)
+            // ---------------------------------------------
+            function normalizeText(txt) {
+                return (txt || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/^[اأإآ]/, '')
+                    .replace(/\s+/g, ' ');  // إزالة المسافات المكررة
+            }
+
+            // ---------------------------------------------
+            // البحث باسم الصنف داخل الـ datalist
+            // 1) تطابق تام
+            // 2) يبدأ بـ
+            // 3) يحتوي على
+            // ---------------------------------------------
+            function findProductByName(name) {
+                const search = normalizeText(name);
+                if (!search) return null;
+
+                const opts = prodDataList.options;
+
+                // 1) تطابق تام
+                for (let i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value) === search) {
+                        return opts[i];
+                    }
+                }
+
+                // 2) يبدأ بـ
+                for (let i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value).startsWith(search)) {
+                        return opts[i];
+                    }
+                }
+
+                // 3) يحتوي على
+                for (let i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value).includes(search)) {
+                        return opts[i];
+                    }
+                }
+
+                return null;
+            }
+
+            // ---------------------------------------------
+            // البحث بالكود (ProdId) داخل الـ datalist
+            // ---------------------------------------------
+            function findProductByCode(code) {
+                const search = (code || '').toString().trim();
+                if (!search) return null;
+
+                const opts = prodDataList.options;
+                for (let i = 0; i < opts.length; i++) {
+                    const idAttr   = (opts[i].getAttribute('data-id')   || '').toString();
+                    const codeAttr = (opts[i].getAttribute('data-code') || '').toString();
+
+                    if (idAttr === search || codeAttr === search) {
+                        return opts[i];
+                    }
+                }
+                return null;
+            }
+
+            // ---------------------------------------------
+            // تعبئة بيانات الصنف من <option> واحد
+            // ---------------------------------------------
+            function fillProductFromOption(opt) {
+
+                // لو مفيش صنف مطابق → نفرّغ الحقول
+                if (!opt) {
+                    if (prodHiddenId)    prodHiddenId.value    = '';
+                    if (prodCodeInput)   prodCodeInput.value   = '';
+                    if (prodNameInput)   prodNameInput.value   = '';
+                    if (prodPriceInput)  prodPriceInput.value  = '';
+
+                    if (prodQuotaText)    prodQuotaText.value    = 'بدون كوتة';
+                    if (prodWeightedDisc) prodWeightedDisc.value = '0';
+
+                    if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
+                    if (prodQtyAll)       prodQtyAll.value       = '0';
+
+                    if (prodAltSelect) {
+                        prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
+                    }
+                    return;
+                }
+
+                // قراءة البيانات من data-* على الـ option
+                const id       = opt.getAttribute('data-id')      || '';
+                const code     = opt.getAttribute('data-code')    || id;
+                const name     = opt.value                        || '';
+                let priceRaw   = opt.getAttribute('data-price')   || '0';
+                const generic  = opt.getAttribute('data-generic') || '';
+                const hasQuota = (opt.getAttribute('data-hasquota') === 'true');
+
+                // معالجة السعر وتحويله لرقم
+                priceRaw = priceRaw.toString().replace(',', '.');
+                let price = parseFloat(priceRaw);
+                if (isNaN(price)) price = 0;
+
+                // حفظ المعرّف الداخلي للصنف
+                if (prodHiddenId)  prodHiddenId.value  = id;
+
+                // إظهار الكود والاسم والسعر في البوكسات
+                if (prodCodeInput)  prodCodeInput.value  = code;
+                if (prodNameInput)  prodNameInput.value  = name;
+                if (prodPriceInput) prodPriceInput.value = price.toFixed(2);
+
+                // تحديث كارت بيانات الصنف
+                if (prodQuotaText) {
+                    prodQuotaText.value = hasQuota ? 'له كوتة' : 'بدون كوتة';
+                }
+
+                // في المرحلة الحالية: الخصم المرجّح = 0 (هنربطه بسياسة الشراء لاحقاً)
+                if (prodWeightedDisc) {
+                    prodWeightedDisc.value = '0';
+                }
+
+                // تحميل بدائل الصنف حسب الاسم العلمي
+                if (prodAltSelect && generic) {
+                    loadAlternativeProducts(id);
+                } else if (prodAltSelect) {
+                    prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
+                }
+            }
+
+            // ---------------------------------------------
+            // تحميل بدائل الصنف من الكنترولر
+            // ---------------------------------------------
+            function loadAlternativeProducts(prodId) {
+                if (!prodId || !prodAltSelect) return;
+
+                const url = '@Url.Action("GetAlternativeProducts", "PurchaseInvoices")'
+                    + '?prodId=' + encodeURIComponent(prodId);
+
+                prodAltSelect.innerHTML = '<option value="">... جاري تحميل البدائل</option>';
+
+                fetch(url)
+                    .then(r => r.ok ? r.json() : [])
+                    .then(data => {
+                        prodAltSelect.innerHTML = '<option value="">اختر بديلاً (للمشاهدة فقط)</option>';
+
+                        if (!data || !data.length) {
+                            prodAltSelect.innerHTML += '<option value="">لا توجد بدائل</option>';
+                            return;
+                        }
+
+                        data.forEach(p => {
+                            const op = document.createElement('option');
+                            op.value = p.id;
+                            op.textContent = `${p.name || ''} — ${p.company || ''} — ${p.price || 0}`;
+                            op.setAttribute('data-id', p.id);
+                            op.setAttribute('data-price', p.price || 0);
+                            prodAltSelect.appendChild(op);
+                        });
+                    })
+                    .catch(err => {
+                        console.error('❌ خطأ في تحميل بدائل الصنف:', err);
+                        prodAltSelect.innerHTML = '<option value="">خطأ في تحميل البدائل</option>';
+                    });
+            }
+
+            // ---------------------------------------------
+            // التعامل مع اسم الصنف (أوتوكومبليت)
+            // ---------------------------------------------
+            if (prodNameInput) {
+
+                prodNameInput.addEventListener('change', function () {
+                    const opt = findProductByName(this.value);
+                    fillProductFromOption(opt);
+                });
+
+                prodNameInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const opt = findProductByName(this.value);
+                        fillProductFromOption(opt);
+
+                        if (prodPriceInput) {
+                            prodPriceInput.focus();
+                            prodPriceInput.select();
+                        }
+                    }
+                });
+
+                prodNameInput.addEventListener('blur', function () {
+                    const opt = findProductByName(this.value);
+                    fillProductFromOption(opt);
+                });
+            }
+
+            // ---------------------------------------------
+            // التعامل مع كود الصنف
+            // ---------------------------------------------
+            if (prodCodeInput) {
+
+                prodCodeInput.addEventListener('change', function () {
+                    const opt = findProductByCode(this.value);
+                    fillProductFromOption(opt);
+                });
+
+                prodCodeInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const opt = findProductByCode(this.value);
+                        fillProductFromOption(opt);
+
+                        if (prodNameInput) {
+                            prodNameInput.focus();
+                            prodNameInput.select();
+                        }
+                    }
+                });
+            }
+
+            // ---------------------------------------------
+            // قفل / فتح سعر الجمهور
+            // ---------------------------------------------
+            const priceLabel     = document.getElementById('ProdPriceLabel');
+            const priceLockState = document.getElementById('ProdPriceLockState');
+            let priceLocked = true; // مبدئياً: مقفول
+
+            function applyPriceLockUI() {
+                if (!prodPriceInput) return;
+
+                prodPriceInput.readOnly = priceLocked;
+
+                if (priceLocked) {
+                    prodPriceInput.classList.add('bg-light', 'text-muted');
+                    if (priceLockState) priceLockState.textContent = '(مغلق)';
+                } else {
+                    prodPriceInput.classList.remove('bg-light', 'text-muted');
+                    if (priceLockState) priceLockState.textContent = '(مفتوح)';
+                }
+            }
+
+            applyPriceLockUI();
+
+            if (priceLabel) {
+                priceLabel.style.cursor = 'pointer';
+                priceLabel.addEventListener('click', function () {
+                    priceLocked = !priceLocked;
+                    applyPriceLockUI();
+                });
+            }
+
+            // ---------------------------------------------
+            // قفل / فتح خصم 1
+            // ---------------------------------------------
+            const disc1Label     = document.getElementById('ProdDisc1Label');
+            const disc1LockState = document.getElementById('ProdDisc1LockState');
+            let disc1Locked = true; // مبدئياً: مقفول
+
+            function applyDisc1LockUI() {
+                if (!prodDisc1Input) return;
+
+                prodDisc1Input.readOnly = disc1Locked;
+
+                if (disc1Locked) {
+                    prodDisc1Input.classList.add('bg-light', 'text-muted');
+                    if (disc1LockState) disc1LockState.textContent = '(مغلق)';
+                } else {
+                    prodDisc1Input.classList.remove('bg-light', 'text-muted');
+                    if (disc1LockState) disc1LockState.textContent = '(مفتوح)';
+                }
+            }
+
+            applyDisc1LockUI();
+
+            if (disc1Label) {
+                disc1Label.style.cursor = 'pointer';
+                disc1Label.addEventListener('click', function () {
+                    disc1Locked = !disc1Locked;
+                    applyDisc1LockUI();
+                });
+            }
+
+            // ---------------------------------------------
+            // التنقل بالإنتر + فوكس كامل على بوكسات سطر الصنف
+            // ---------------------------------------------
+            const lineInputs = [
+                prodCodeInput,
+                prodNameInput,
+                prodPriceInput,
+                prodQtyInput,
+                prodDisc1Input,
+                prodBatchInput,
+                prodExpiryInput
+            ].filter(Boolean);
+
+            lineInputs.forEach((input, index) => {
+
+                // أول ما يدخل الفوكس على الخانة → يحدد كل المحتوى
+                input.addEventListener('focus', function () {
+                    if (typeof this.select === 'function') {
+                        setTimeout(() => this.select(), 0);
+                    }
+                });
+
+                // التنقل بالإنتر
+                input.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+
+                        if (input === prodNameInput) {
+                            const opt = findProductByName(prodNameInput.value);
+                            fillProductFromOption(opt);
+                        }
+
+                        const next = lineInputs[index + 1];
+
+                        if (next) {
+                            next.focus();
+                            if (typeof next.select === 'function') {
+                                next.select();
+                            }
+                        } else if (btnAddLine) {
+                            btnAddLine.focus();
+                        }
+                    }
+                });
+            });
+
+            if (btnAddLine) {
+                btnAddLine.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        btnAddLine.click();
+                    }
+                });
+            }
+
+            // ---------------------------------------------
+            // التابات: حركة الصنف + تعديل بياناته
+            // ---------------------------------------------
+            const btnProdMovement = document.getElementById('btnOpenProductMovement');
+            const btnProdEdit     = document.getElementById('btnOpenProductEdit');
+
+            function getCurrentProdId() {
+                if (prodHiddenId && prodHiddenId.value) {
+                    return prodHiddenId.value;
+                }
+                if (prodCodeInput && prodCodeInput.value) {
+                    return prodCodeInput.value;
+                }
+                return '';
+            }
+
+            function openInAppTab(url, title) {
+                if (window.erpOpenTab && typeof window.erpOpenTab === 'function') {
+                    window.erpOpenTab(url, title || '');
+                } else {
+                    window.open(url, '_blank');
+                }
+            }
+
+            const editBaseUrl     = '@Url.Action("Edit", "Products")';
+            const movementBaseUrl = '@Url.Action("Show", "Products")';
+
+            if (btnProdEdit) {
+                btnProdEdit.addEventListener('click', function () {
+                    const id = getCurrentProdId();
+                    if (!id) {
+                        alert('من فضلك اختر صنفاً أولاً.');
+                        return;
+                    }
+
+                    const name = prodNameInput ? prodNameInput.value : '';
+                    const url  = editBaseUrl + '/' + encodeURIComponent(id);
+
+                    openInAppTab(url, 'تعديل صنف ' + name);
+                });
+            }
+
+            if (btnProdMovement) {
+                btnProdMovement.addEventListener('click', function () {
+                    const id = getCurrentProdId();
+                    if (!id) {
+                        alert('من فضلك اختر صنفاً أولاً.');
+                        return;
+                    }
+
+                    const name = prodNameInput ? prodNameInput.value : '';
+                    const url  = movementBaseUrl + '?prodId=' + encodeURIComponent(id);
+
+                    openInAppTab(url, 'حركة صنف ' + name);
+                });
+            }
+
+            // تهيئة مبدئية لو في فاتورة موجودة وبها صنف بالفعل
+            if (prodHiddenId && prodHiddenId.value) {
+                const opt = findProductByCode(prodHiddenId.value);
+                if (opt) {
+                    fillProductFromOption(opt);
+                }
+            }
+
+        })();
+    </script>
+}

@@ -1,0 +1,53 @@
+﻿@model ERP.Models.StockTransferLine
+
+@{
+    ViewData["Title"] = "تفاصيل سطر التحويل";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تفاصيل سطر التحويل</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم السطر</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">رقم التحويل</dt>
+                <dd class="col-sm-9">@Model.StockTransferId</dd>
+
+                <dt class="col-sm-3">تاريخ التحويل</dt>
+                <dd class="col-sm-9">
+                    @Model.StockTransfer?.TransferDate.ToString("yyyy-MM-dd")
+                </dd>
+
+                <dt class="col-sm-3">من مخزن</dt>
+                <dd class="col-sm-9">@Model.StockTransfer?.FromWarehouseId</dd>
+
+                <dt class="col-sm-3">إلى مخزن</dt>
+                <dd class="col-sm-9">@Model.StockTransfer?.ToWarehouseId</dd>
+
+                <dt class="col-sm-3">كود الصنف</dt>
+                <dd class="col-sm-9">@Model.ProductId</dd>
+
+                <dt class="col-sm-3">الكمية</dt>
+                <dd class="col-sm-9">@Model.Qty</dd>
+
+                <dt class="col-sm-3">ملاحظات السطر</dt>
+                <dd class="col-sm-9">@Model.Note</dd>
+            </dl>
+
+            <div class="d-flex gap-2 mt-3">
+                <a asp-action="Edit"
+                   asp-route-id="@Model.Id"
+                   class="btn btn-erp btn-erp-primary">
+                    تعديل
+                </a>
+                <a asp-action="Index"
+                   class="btn btn-erp btn-erp-secondary">
+                    رجوع للقائمة
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

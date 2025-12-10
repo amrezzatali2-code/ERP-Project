@@ -1,0 +1,132 @@
+﻿@model ERP.Models.UserRole     
+                                                @* موديل ربط المستخدم بالأدوار *@
+
+@{
+    ViewData["Title"] = "إسناد دور لمستخدم";   @* عنوان الصفحة في التاب *@
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">إسناد دور جديد لمستخدم</h2>
+
+    @* فورم إسناد الدور للمستخدم *@
+    <form asp-action="Create"
+          method="post"
+          class="card">
+
+        <div class="card-body">
+
+            @* ⭕ تم إلغاء الـ alert الأحمر الكبير
+               لو حابب رسالة عامة نقدر نخليها Text عادي من غير background *@
+            <div asp-validation-summary="ModelOnly"
+                 class="text-danger mb-3 small">
+            </div>
+
+            @* اختيار المستخدم *@
+            <div class="mb-3">
+                <label asp-for="UserId" class="form-label fw-semibold">المستخدم</label>
+                <select asp-for="UserId"
+                        asp-items="ViewBag.UserId"
+                        class="form-select">
+                    <option value="">-- اختر مستخدم --</option>
+                </select>
+                <span asp-validation-for="UserId" class="text-danger"></span>
+            </div>
+
+            @* اختيار الدور *@
+            <div class="mb-3">
+                <label asp-for="RoleId" class="form-label fw-semibold">الدور</label>
+                <select asp-for="RoleId"
+                        asp-items="ViewBag.RoleId"
+                        class="form-select"
+                        id="RoleId">
+                    <option value="">-- اختر دور --</option>
+                </select>
+                <span asp-validation-for="RoleId" class="text-danger"></span>
+            </div>
+
+            @* فلاغ اختياري: هل هذا هو الدور الأساسي للمستخدم *@
+            <div class="mb-3 form-check">
+                <input asp-for="IsPrimary"
+                       class="form-check-input ms-2"
+                       id="IsPrimary" />
+                <label asp-for="IsPrimary"
+                       class="form-check-label">
+                    @* اسم الخاصية من الموديل *@
+                </label>
+            </div>
+
+            @* ✅ هنا هنظهر تفاصيل صلاحيات الدور المختار *@
+            <div class="mb-3">
+                <label class="form-label fw-semibold">
+                    صلاحيات هذا الدور
+                </label>
+
+                <div id="role-permissions-box"
+                     class="border rounded p-2 small bg-light">
+                    @* نص افتراضي قبل اختيار أي دور *@
+                    اختر دوراً من القائمة بالأعلى لعرض صلاحياته هنا.
+                </div>
+            </div>
+
+        </div>
+
+        @* أزرار الحفظ والرجوع *@
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index"
+               class="btn btn-secondary">
+                رجوع للقائمة
+            </a>
+
+            @* زر الحفظ لازم يكون submit علشان يبعت الفورم للـ POST *@
+            <button type="submit"
+                    class="btn btn-primary">
+                حفظ الإسناد
+            </button>
+        </div>
+
+    </form>
+</div>
+
+@section Scripts {
+    @* سكربت الفاليديشن الجاهز من MVC *@
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+
+    <script>
+        // متغير: رابط الأكشن الذي يعيد بارشيال صلاحيات الدور
+        const rolePermsUrl = '@Url.Action("GetRolePermissionsPreview", "UserRoles")';
+
+        document.addEventListener("DOMContentLoaded", function () {
+            // متغير: كومبو اختيار الدور
+            const roleSelect = document.getElementById("RoleId");
+            // متغير: الصندوق الذي سيحتوي جدول الصلاحيات
+            const box = document.getElementById("role-permissions-box");
+
+            if (!roleSelect || !box) return;
+
+            // حدث تغيير الدور
+            roleSelect.addEventListener("change", function () {
+                const roleId = this.value;
+
+                // لو لم يتم اختيار دور → نص افتراضي
+                if (!roleId) {
+                    box.innerHTML = "اختر دوراً من القائمة بالأعلى لعرض صلاحياته هنا.";
+                    return;
+                }
+
+                // استدعاء الأكشن بالـ fetch لجلب البارشيال
+                fetch(rolePermsUrl + "?roleId=" + roleId)
+                    .then(r => r.text())
+                    .then(html => {
+                        // وضع HTML العائد داخل الصندوق
+                        box.innerHTML = html;
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        box.innerHTML = "حدث خطأ أثناء تحميل صلاحيات هذا الدور.";
+                    });
+            });
+        });
+    </script>
+}

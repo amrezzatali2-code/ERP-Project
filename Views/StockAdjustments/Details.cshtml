@@ -1,0 +1,60 @@
+﻿@model ERP.Models.StockAdjustment
+
+@{
+    ViewData["Title"] = "تفاصيل تسوية جرد";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">تفاصيل تسوية الجرد — @Model.Id</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th>كود التسوية</th>
+                    <td>@Model.Id</td>
+                </tr>
+                <tr>
+                    <th>تاريخ التسوية</th>
+                    <td>@Model.AdjustmentDate.ToString("yyyy-MM-dd")</td>
+                </tr>
+                <tr>
+                    <th>كود المخزن</th>
+                    <td>@Model.WarehouseId</td>
+                </tr>
+                <tr>
+                    <th>رقم مرجعي</th>
+                    <td>@Model.ReferenceNo</td>
+                </tr>
+                <tr>
+                    <th>السبب / ملاحظات</th>
+                    <td>@Model.Reason</td>
+                </tr>
+                <tr>
+                    <th>تاريخ الإنشاء</th>
+                    <td>@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+                <tr>
+                    <th>آخر تعديل</th>
+                    <td>
+                        @(Model.UpdatedAt.HasValue
+                                                ? Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                                : "-")
+                    </td>
+                </tr>
+            </table>
+
+            <div class="d-flex gap-2">
+                <a asp-action="Edit"
+                   asp-route-id="@Model.Id"
+                   class="btn btn-erp btn-erp-primary">
+                    تعديل
+                </a>
+                <a asp-action="Index"
+                   class="btn btn-erp btn-erp-secondary">
+                    رجوع للقائمة
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

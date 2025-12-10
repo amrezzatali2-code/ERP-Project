@@ -1,0 +1,57 @@
+﻿@model ERP.Models.UserRole
+
+@{
+    ViewData["Title"] = "حذف دور مستخدم";
+
+    var userName = Model.User?.UserName ?? "";
+    var display = Model.User?.DisplayName ?? "";
+    var roleName = Model.Role?.Name ?? "";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف دور مستخدم — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذا الدور من المستخدم؟ لا يمكن التراجع بعد الحذف.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+
+                <dt class="col-sm-3">المستخدم</dt>
+                <dd class="col-sm-9">
+                    @if (!string.IsNullOrEmpty(display))
+                    {
+                        @($"{display} ({userName}) — رقم: {Model.UserId}")
+                    }
+                    else
+                    {
+                        @($"{userName} — رقم: {Model.UserId}")
+                    }
+                </dd>
+
+                <dt class="col-sm-3">الدور</dt>
+                <dd class="col-sm-9">
+                    @roleName (@Model.RoleId)
+                </dd>
+
+                <dt class="col-sm-3">دور افتراضي؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsPrimary ? "نعم" : "لا")
+                </dd>
+
+                <dt class="col-sm-3">تاريخ الإسناد</dt>
+                <dd class="col-sm-9">
+                    @Model.AssignedAt.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary ms-2">إلغاء</a>
+    </form>
+</div>

@@ -1,0 +1,53 @@
+﻿@model ERP.Models.Permission
+
+@{
+    ViewData["Title"] = "حذف صلاحية";
+}
+
+<div class="container mt-3" dir="rtl">
+
+    <h2 class="mb-3 text-danger">حذف صلاحية</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذه الصلاحية؟
+        هذه العملية لا يمكن التراجع عنها.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم الصلاحية</dt>
+                <dd class="col-sm-9">@Model.PermissionId</dd>
+
+                <dt class="col-sm-3">كود الصلاحية</dt>
+                <dd class="col-sm-9">@Model.Code</dd>
+
+                <dt class="col-sm-3">اسم الصلاحية</dt>
+                <dd class="col-sm-9">@Model.NameAr</dd>
+
+                <dt class="col-sm-3">الموديول</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Module) ? "-" : Model.Module)
+                </dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Description) ? "-" : Model.Description)
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" asp-controller="Permissions" method="post">
+        @* المفتاح الأساسي مخفي *@
+        <input type="hidden" asp-for="PermissionId" />
+
+        <button type="submit" class="btn btn-danger">
+            تأكيد الحذف
+        </button>
+
+        <a asp-action="Index" class="btn btn-secondary">
+            إلغاء والرجوع للقائمة
+        </a>
+    </form>
+</div>

@@ -1,0 +1,27 @@
+﻿@model ERP.Models.PurchaseRequest
+@{
+    ViewData["Title"] = "حذف طلب شراء";
+}
+
+<h2 class="mb-3">حذف طلب شراء</h2>
+
+<div class="alert alert-warning" dir="rtl">
+    <strong>تنبيه:</strong> حذف هذا الطلب سيؤدي إلى حذف <u>كل سطور الطلب</u> المرتبطة به نهائيًا (Cascade).
+</div>
+
+<!-- عرض بيانات مختصرة للمراجعة قبل الحذف -->
+<table class="table" dir="rtl">
+    <tr><th>رقم الطلب</th>      <td>@Model.PRId</td></tr>              @* تعريف الطلب *@
+    <tr><th>التاريخ</th>         <td>@Model.PRDate.ToString("yyyy-MM-dd")</td></tr> @* تاريخ الطلب *@
+    <tr><th>العميل</th>         <td>@Model.CustomerId</td></tr>          @* معرف العميل *@
+    <tr><th>المخزن</th>         <td>@Model.WarehouseId</td></tr>       @* معرف المخزن *@
+    <tr><th>الحالة</th>         <td>@Model.Status</td></tr>            @* حالة الطلب *@
+    <tr><th>أنشأه</th>          <td>@Model.RequestedBy</td></tr>       @* اسم المُنشئ *@
+    <tr><th>ملاحظات</th>        <td>@Model.Notes</td></tr>             @* ملاحظات عامة *@
+</table>
+
+<form method="post" asp-action="Delete" asp-route-id="@Model.PRId">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+    <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+</form>

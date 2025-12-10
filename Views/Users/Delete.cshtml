@@ -1,0 +1,41 @@
+﻿@model ERP.Models.User
+
+@{
+    ViewData["Title"] = "حذف مستخدم";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3 text-danger">حذف مستخدم</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد من حذف هذا المستخدم؟
+        لا يمكن التراجع عن هذه العملية.
+    </div>
+
+    <div class="card p-3 mb-3">
+        <dl class="row">
+            <dt class="col-sm-3">رقم المستخدم</dt>
+            <dd class="col-sm-9">@Model.UserId</dd>
+
+            <dt class="col-sm-3">اسم الدخول</dt>
+            <dd class="col-sm-9">@Model.UserName</dd>
+
+         
+
+            <dt class="col-sm-3">نشط؟</dt>
+            <dd class="col-sm-9">@(Model.IsActive ? "نشط" : "موقوف")</dd>
+
+            
+        </dl>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="UserId" />
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+            <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>

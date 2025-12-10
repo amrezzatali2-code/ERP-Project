@@ -1,0 +1,151 @@
+﻿@model ERP.Models.Product
+
+@{
+    ViewData["Title"] = "تعديل صنف";
+}
+
+<div class="container" dir="rtl">
+    <h3 class="mb-3">@ViewData["Title"]</h3>
+
+    <form asp-action="Edit" method="post" class="row g-3">
+        @Html.AntiForgeryToken()
+
+        @* المفتاح الأساسي مخفي *@
+        <input type="hidden" asp-for="ProdId" />
+
+        @* أخطاء التحقق *@
+        <div class="col-12">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        </div>
+
+        @* اسم الصنف + كود الصنف للعرض فقط *@
+        <div class="col-md-8">
+            <label asp-for="ProdName" class="form-label"></label>
+            <input asp-for="ProdName" class="form-control" />
+            <span asp-validation-for="ProdName" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">معرّف الصنف</label>
+            <input class="form-control" value="@Model.ProdId" disabled />
+        </div>
+
+        @* الاسم العلمي + التركيز + الشكل الدوائي *@
+        <div class="col-md-4">
+            <label asp-for="GenericName" class="form-label"></label>
+            <input asp-for="GenericName" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="Strength" class="form-label"></label>
+            <input asp-for="Strength" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="DosageForm" class="form-label"></label>
+            <input asp-for="DosageForm" class="form-control" />
+        </div>
+
+        @* الباركود *@
+        <div class="col-md-4">
+            <label asp-for="Barcode" class="form-label"></label>
+            <input asp-for="Barcode" class="form-control" />
+        </div>
+
+        @* الفئة + مجموعة السياسة + مجموعة البونص *@
+        <div class="col-md-4">
+            <label asp-for="CategoryId" class="form-label"></label>
+            <select asp-for="CategoryId"
+                    class="form-select"
+                    asp-items="ViewBag.Categories">
+                <option value="">-- بدون فئة --</option>
+            </select>
+            <span asp-validation-for="CategoryId" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="ProductGroupId" class="form-label"></label>
+            <select asp-for="ProductGroupId"
+                    class="form-select"
+                    asp-items="ViewBag.ProductGroups">
+                <option value="">-- بدون مجموعة سياسة --</option>
+            </select>
+            <span asp-validation-for="ProductGroupId" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="ProductBonusGroupId" class="form-label"></label>
+            <select asp-for="ProductBonusGroupId"
+                    class="form-select"
+                    asp-items="ViewBag.ProductBonusGroups">
+                <option value="">-- بدون مجموعة بونص --</option>
+            </select>
+            <span asp-validation-for="ProductBonusGroupId" class="text-danger"></span>
+        </div>
+
+        @* السعر + الشركة + محلي/مستورد *@
+        <div class="col-md-4">
+            <label asp-for="PriceRetail" class="form-label"></label>
+            <input asp-for="PriceRetail" class="form-control" />
+            <span asp-validation-for="PriceRetail" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="Company" class="form-label"></label>
+            <input asp-for="Company" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="Imported" class="form-label"></label>
+            <select asp-for="Imported"
+                    class="form-select"
+                    asp-items="ViewBag.ImportedOptions">
+                <option value="">-- اختر --</option>
+            </select>
+            <span asp-validation-for="Imported" class="text-danger"></span>
+        </div>
+
+        @* تفعيل + كوتة *@
+        <div class="col-md-4">
+            <div class="form-check mt-4">
+                <input asp-for="IsActive" class="form-check-input" />
+                <label asp-for="IsActive" class="form-check-label"></label>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="form-check mt-4">
+                <input asp-for="HasQuota" class="form-check-input" />
+                <label asp-for="HasQuota" class="form-check-label"></label>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="QuotaQuantity" class="form-label"></label>
+            <input asp-for="QuotaQuantity" class="form-control" />
+            <span asp-validation-for="QuotaQuantity" class="text-danger"></span>
+        </div>
+
+        @* تاريخ آخر تغيير السعر *@
+        <div class="col-md-6">
+            <label asp-for="LastPriceChangeDate" class="form-label"></label>
+            <input asp-for="LastPriceChangeDate" type="date" class="form-control" />
+            <span asp-validation-for="LastPriceChangeDate" class="text-danger"></span>
+        </div>
+
+        @* الوصف *@
+        <div class="col-12">
+            <label asp-for="Description" class="form-label"></label>
+            <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+        </div>
+
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
+            <a class="btn btn-secondary" asp-action="Index">رجوع</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

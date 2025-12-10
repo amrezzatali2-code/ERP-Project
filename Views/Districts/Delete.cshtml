@@ -1,0 +1,60 @@
+﻿@model ERP.Models.District
+@{
+    ViewData["Title"] = "حذف حي/مركز";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">@ViewData["Title"]</h2>
+
+    @* تنبيه واضح قبل الحذف *@
+    <div class="alert alert-danger" role="alert">
+        <strong>تحذير:</strong> هل أنت متأكد من حذف هذا السجل؟ لن يمكن التراجع عن هذه العملية.
+    </div>
+
+    @* ملخص سريع للسجل المراد حذفه *@
+    <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+            <tbody>
+                <tr>
+                    <th style="width:220px;">المعرّف</th>
+                    <td>@Model.DistrictId</td>
+                </tr>
+                <tr>
+                    <th>اسم الحي/المركز</th>
+                    <td>@Model.DistrictName</td>
+                </tr>
+                <tr>
+                    <th>المحافظة</th>
+                    <td>@Model.Governorate?.GovernorateName</td>
+                </tr>
+                <tr>
+                    <th>النوع</th>
+                    <td>
+                        @(Model.DistrictType == 1 ? "مركز" :
+                                                Model.DistrictType == 0 ? "حي" : "—")
+                    </td>
+                </tr>
+                <tr>
+                    <th>الحالة</th>
+                    <td>
+                        @if (Model.IsActive)
+                        {
+                            <span class="badge bg-success">نشط</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">موقوف</span>
+                        }
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    @* نموذج إرسال الحذف إلى POST: Delete (ActionName) مع تمرير المعرّف *@
+    <form asp-action="Delete" asp-route-id="@Model.DistrictId" method="post" class="mt-3 d-flex" style="gap:.5rem;">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a class="btn btn-outline-secondary" asp-action="Index">إلغاء</a>
+    </form>
+</div>

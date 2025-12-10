@@ -1,0 +1,26 @@
+﻿@model ERP.Models.Governorate
+@{
+    ViewData["Title"] = "إضافة محافظة";
+}
+<div dir="rtl" class="container" style="max-width:720px;">
+    <h2 class="mb-3">إضافة محافظة</h2>
+
+    <form asp-action="Create" method="post">
+        @Html.AntiForgeryToken()
+        <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+        <div class="mb-3">
+            <label asp-for="GovernorateName" class="form-label"></label>
+            <input asp-for="GovernorateName" class="form-control" placeholder="اسم المحافظة" />
+            <span asp-validation-for="GovernorateName" class="text-danger"></span>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">حفظ</button>
+            <a asp-action="Index" class="btn btn-outline-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

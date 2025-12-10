@@ -1,0 +1,752 @@
+﻿<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    @* ===== الأساسيات ===== *@
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <title>@ViewData["Title"] - ERP</title>
+
+    @* Bootstrap + CSS الرئيسي *@
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+
+    @* خط عربي *@
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap"
+          rel="stylesheet">
+
+    @* سيكشن ستايل إضافي من أى View *@
+    @RenderSection("Styles", required: false)
+
+    @* كود صغير يضيف كلاس in-frame لو الصفحة داخل IFRAME *@
+    <script>
+        (function () {
+            try {
+                if (window.self !== window.top) {
+                    document.documentElement.classList.add('in-frame');
+                }
+            } catch (e) { }
+        })();
+    </script>
+
+    <style>
+        /* خط عربي عام */
+        body {
+            font-family: "Cairo", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+
+        /* ===== تثبيت النافبار أعلى الشاشة ===== */
+        header {
+            position: sticky; /* يثبت أعلى الصفحة عند الاسكرول */
+            top: 0;
+            z-index: 1050; /* فوق أى عناصر أخرى */
+        }
+
+        /* ===== شريط التابات ===== */
+        .app-tabs-bar {
+            display: flex;
+            direction: rtl; /* ترتيب العناصر من اليمين لليسار */
+            flex-direction: row; /* اتجاه فلكس عادي */
+            justify-content: flex-start; /* أول تاب يبقى ملاصق لليمين */
+            gap: 0.4rem;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0.25rem 0;
+            margin-bottom: 0.5rem;
+            overflow-x: auto;
+        }
+
+        .app-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.25rem;
+            border-radius: 999px;
+            padding-inline: 0.75rem;
+            white-space: nowrap;
+            border: 1px solid #e5e7eb;
+            background-color: #f9fafb;
+            font-size: 0.85rem;
+        }
+
+            .app-tab.active {
+                background-color: #0d6efd;
+                color: #ffffff;
+                border-color: #0d6efd;
+            }
+
+        .app-tab-close {
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        /* حاوية الإطارات: تبدأ بارتفاع صفر (لا فراغ) */
+        .app-tabs-container {
+            position: relative;
+            height: 0;
+            margin-bottom: 0;
+            overflow: hidden;
+        }
+
+        /* عندما يكون هناك تابات (body.has-tabs) نعرض مساحة للإطارات */
+        body.has-tabs .app-tabs-container {
+            height: calc(100vh - 140px); /* ارتفاع الشاشة ناقص النافبار تقريباً */
+            margin-bottom: 0.5rem;
+        }
+
+        .app-tab-frame {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            border: none;
+            background-color: #ffffff;
+        }
+
+        /* عندما تكون الصفحة داخل IFRAME: نخفي النافبار والتابات نهائياً */
+        html.in-frame header {
+            display: none;
+        }
+
+        html.in-frame #appTabsBar,
+        html.in-frame #appTabsContainer {
+            display: none !important;
+        }
+
+        html.in-frame main {
+            padding-top: 1rem;
+        }
+    </style>
+</head>
+
+<body class="bg-light">
+    @* ================= النافبار الرئيسي (ثابت أعلى الشاشة) ================= *@
+    <header>
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
+            <div class="container-fluid">
+                <a class="navbar-brand fw-bold" asp-area="" asp-controller="Home" asp-action="Index">ERP</a>
+
+                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar"
+                        aria-controls="mainNavbar" aria-expanded="false" aria-label="تبديل القائمة">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+
+                <div class="collapse navbar-collapse" id="mainNavbar">
+                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+
+                        @* ===== الإعدادات ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle"
+                               href="#"
+                               id="settingsMenu"
+                               role="button"
+                               data-bs-toggle="dropdown"
+                               aria-expanded="false">
+                                الإعدادات
+                            </a>
+
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="settingsMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="DocumentSeries"
+                                       asp-action="Index"
+                                       data-tab-id="document-series"
+                                       data-tab-title="الترقيم">
+                                        الترقيم
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="UserActivityLogs"
+                                       asp-action="Index"
+                                       data-tab-id="user-activity-logs"
+                                       data-tab-title="سجل الحركات">
+                                        سجل الحركات
+                                    </a>
+                                </li>
+
+                                <li><hr class="dropdown-divider" /></li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Policies"
+                                       asp-action="Index"
+                                       data-tab-id="policies"
+                                       data-tab-title="السياسات">
+                                        السياسات
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="ProductGroups"
+                                       asp-action="Index"
+                                       data-tab-id="product-groups"
+                                       data-tab-title="مجموعات الأصناف الخاصة بالسياسة">
+                                        مجموعات الأصناف الخاصة بالسياسة
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="ProductBonusGroups"
+                                       asp-action="Index"
+                                       data-tab-id="product-bonus-groups"
+                                       data-tab-title="مجموعات الأصناف الخاصة بالحافز">
+                                        مجموعات الأصناف الخاصة بالحافز
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="ProductGroupPolicies"
+                                       asp-action="Index"
+                                       data-tab-id="product-group-policies"
+                                       data-tab-title="سياسات مجموعات الأصناف">
+                                        سياسات مجموعات الأصناف
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="WarehousePolicyRules"
+                                       asp-action="Index"
+                                       data-tab-id="warehouse-policy-rules"
+                                       data-tab-title="سياسات المخازن">
+                                        سياسات المخازن
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        @* ===== المستخدمين ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="accountsMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                المستخدمين
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="accountsMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Users" asp-action="Index"
+                                       data-tab-id="Users"
+                                       data-tab-title=" المستخدمين">
+                                        المستخدمين
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Roles" asp-action="Index"
+                                       data-tab-id="Roles"
+                                       data-tab-title="الأدوار">
+                                        الأدوار
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Permissions" asp-action="Index"
+                                       data-tab-id="Permissions"
+                                       data-tab-title="الصلاحيات">
+                                        الصلاحيات
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="UserExtraPermissions" asp-action="Index"
+                                       data-tab-id="cash-UserExtraPermissions"
+                                       data-tab-title="صلاحيات إضافية للمستخدم">
+                                        صلاحيات إضافية للمستخدم
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="UserDeniedPermissions" asp-action="Index"
+                                       data-tab-id="UserDeniedPermissions"
+                                       data-tab-title="استثناءات صلاحيات المستخدمين">
+                                        استثناءات صلاحيات المستخدمين
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="RolePermissions" asp-action="Index"
+                                       data-tab-id="RolePermissions"
+                                       data-tab-title="صلاحيات الأدوار">
+                                        صلاحيات الأدوار
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="UserRoles" asp-action="Index"
+                                       data-tab-id="UserRoles"
+                                       data-tab-title="أدوار المستخدمين">
+                                        أدوار المستخدمين
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        @* ===== المناطق الجغرافية ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="geoMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                المناطق الجغرافية
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="geoMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Governorates" asp-action="Index"
+                                       data-tab-id="governorates"
+                                       data-tab-title="المحافظات">
+                                        المحافظات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Districts" asp-action="Index"
+                                       data-tab-id="districts"
+                                       data-tab-title="الأحياء/المراكز">
+                                        الأحياء/المراكز
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Areas" asp-action="Index"
+                                       data-tab-id="areas"
+                                       data-tab-title="المناطق">
+                                        المناطق
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Branches" asp-action="Index"
+                                       data-tab-id="branches"
+                                       data-tab-title="الفروع">
+                                        الفروع
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        @* ===== العملاء ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="customersMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                العملاء
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="customersMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Customers" asp-action="Index"
+                                       data-tab-id="customers"
+                                       data-tab-title="قائمة العملاء">
+                                        قائمة العملاء
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Customers"
+                                       asp-action="Show"
+                                       data-tab-id="customer-engagement" {{-- معرف التاب فى الجافاسكربت --}}
+                                       data-tab-title="حجم تعامل عميل">
+                                        
+                                        حجم تعامل عميل
+                                    </a>
+                                </li>
+
+                            </ul>
+                        </li>
+
+                        @* ===== إدارة المخازن ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="stockMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                إدارة المخازن
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="stockMenu">
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Products"
+                                       asp-action="Import"
+                                       data-tab-id="products-import"
+                                       data-tab-title="استيراد الأصناف">
+                                        استيراد الأصناف من إكسل
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Products" asp-action="Index"
+                                       data-tab-id="products"
+                                       data-tab-title="قائمة الأصناف">
+                                        قائمة الأصناف
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Products"
+                                       asp-action="Show"
+                                       data-tab-id="product-movement" {{-- معرف التاب في الجافاسكربت --}}
+                                       data-tab-title="حركة صنف">
+                                        
+                                        حركة صنف
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="ProductPriceHistory" asp-action="Index"
+                                       data-tab-id="price-history"
+                                       data-tab-title="سجل تغييرات الأسعار">
+                                        قائمة سجل تغييرات الأسعار
+                                    </a>
+                                </li>
+
+                                <li><hr class="dropdown-divider" /></li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Warehouses" asp-action="Index"
+                                       data-tab-id="warehouses"
+                                       data-tab-title="المخازن">
+                                        قائمة المخازن
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Categories" asp-action="Index"
+                                       data-tab-id="categories"
+                                       data-tab-title="فئات الأصناف">
+                                        فئات الأصناف
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockLedger" asp-action="Index"
+                                       data-tab-id="stock-ledger"
+                                       data-tab-title="دفتر الحركة المخزنية">
+                                        دفتر الحركة المخزنية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockFifoMap" asp-action="Index"
+                                       data-tab-id="stock-fifo"
+                                       data-tab-title="ربط FIFO">
+                                        ربط FIFO (الخروج ← الدخول)
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockAdjustments" asp-action="Index"
+                                       data-tab-id="Stock-Adjustment"
+                                       data-tab-title="التسويات الجردية">
+                                        التسويات الجردية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockAdjustmentLines" asp-action="Index"
+                                       data-tab-id="Stock-Adjustment-Line"
+                                       data-tab-title="تفاصيل التسويات الجردية">
+                                        تفاصيل التسويات الجردية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockTransfers" asp-action="Index"
+                                       data-tab-id="Stock-Transfer"
+                                       data-tab-title="التحويل بين المخازن">
+                                        التحويل بين المخازن
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockTransferLines" asp-action="Index"
+                                       data-tab-id="Stock-Transfer-Line"
+                                       data-tab-title="تفاصيل التحويل بين المخازن">
+                                        تفاصيل التحويل بين المخازن
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        @* ===== المبيعات ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="salesMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                المبيعات
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="salesMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesInvoices"
+                                       asp-action="Create"
+                                       data-tab-id="sales-invoices"
+                                       data-tab-title="فاتورة مبيعات جديدة">
+                                        فاتورة مبيعات جديدة
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesReturns"
+                                       asp-action="Create"
+                                       data-tab-id="Sales eturns"
+                                       data-tab-title="مرتجع مبيعات جديدة">
+                                        مرتجع مبيعات جديد
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesOrders"
+                                       asp-action="Create"
+                                       data-tab-id="Sales Orders"
+                                       data-tab-title="أمر بيع جديد">
+                                        أمر بيع جديد
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesInvoices" asp-action="Index"
+                                       data-tab-id="sales-invoices"
+                                       data-tab-title="قائمة فواتير المبيعات">
+                                        قائمة فواتير المبيعات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesInvoiceLines" asp-action="Index"
+                                       data-tab-id="sales-lines"
+                                       data-tab-title="قائمة أصناف المبيعات">
+                                        قائمة أصناف المبيعات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesReturns" asp-action="Index"
+                                       data-tab-id="sales-returns"
+                                       data-tab-title="قائمة مرتجعات المبيعات">
+                                        قائمة مرتجعات المبيعات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesReturnLines" asp-action="Index"
+                                       data-tab-id="sales-return-lines"
+                                       data-tab-title="قائمة أصناف مرتجعات المبيعات">
+                                        قائمة أصناف مرتجعات المبيعات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesOrders" asp-action="Index"
+                                       data-tab-id="sales-orders"
+                                       data-tab-title="قائمة أوامر المبيعات">
+                                        قائمة أوامر المبيعات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SOLines" asp-action="Index"
+                                       data-tab-id="so-lines"
+                                       data-tab-title="قائمة أصناف أوامر المبيعات">
+                                        قائمة أصناف أوامر المبيعات
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        @* ===== المشتريات ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="purchasesMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                المشتريات
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="purchasesMenu">
+                                <li>
+
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchaseRequests" asp-action="Create"
+                                       data-tab-id="PurchaseRequests "
+                                       data-tab-title="طلب شراء ">
+                                        طلب شراء جديد
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchaseInvoices" asp-action="Create"
+                                       data-tab-id="Purchase Invoice"
+                                       data-tab-title="فاتورة المشتريات">
+                                        فاتورة مشتريات جديدة
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchaseReturns" asp-action="Create"
+                                       data-tab-id="Purchase Returns"
+                                       data-tab-title="مرتجع مشتريات جديد">
+                                        مرتجع مشتريات جديد
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchaseInvoices" asp-action="Index"
+                                       data-tab-id="PurchaseInvoices"
+                                       data-tab-title="قائمة فواتير المشتريات">
+                                        قائمة فواتير المشتريات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PILines" asp-action="Index"
+                                       data-tab-id="PILines"
+                                       data-tab-title="قائمة أصناف فواتير المشتريات">
+                                        قائمة أصناف فواتير المشتريات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchaseRequests" asp-action="Index"
+                                       data-tab-id="PurchaseRequests"
+                                       data-tab-title="قائمة طلبات الشراء">
+                                        قائمة طلبات الشراء
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PRLines" asp-action="Index"
+                                       data-tab-id="PRLines"
+                                       data-tab-title="قائمة أصناف طلبات الشراء">
+                                        قائمة أصناف طلبات الشراء
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchaseReturns" asp-action="Index"
+                                       data-tab-id="PurchaseReturns"
+                                       data-tab-title="قائمة مرتجعات المشتريات">
+                                        قائمة مرتجعات المشتريات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchaseReturnLines" asp-action="Index"
+                                       data-tab-id="PurchaseReturnLines"
+                                       data-tab-title="قائمة أصناف مرتجعات المشتريات">
+                                        قائمة أصناف مرتجعات المشتريات
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        @* ===== الحسابات ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="accountsMenu2" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                الحسابات
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="accountsMenu2">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Accounts" asp-action="Index"
+                                       data-tab-id="accounts"
+                                       data-tab-title="شجرة الحسابات">
+                                        شجرة الحسابات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="LedgerEntries" asp-action="Index"
+                                       data-tab-id="ledger"
+                                       data-tab-title="دفتر الأستاذ">
+                                        دفتر الأستاذ (قيود اليومية)
+                                    </a>
+                                </li>
+
+                                <li><hr class="dropdown-divider" /></li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CashReceipts" asp-action="Index"
+                                       data-tab-id="cash-receipts"
+                                       data-tab-title="أذون استلام نقدية">
+                                        أذون استلام نقدية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CashPayments" asp-action="Index"
+                                       data-tab-id="cash-payments"
+                                       data-tab-title="أذون دفع نقدية">
+                                        أذون دفع نقدية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="DebitNotes" asp-action="Index"
+                                       data-tab-id="debit-notes"
+                                       data-tab-title="إشعارات الخصم">
+                                        إشعارات الخصم
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CreditNotes" asp-action="Index"
+                                       data-tab-id="credit-notes"
+                                       data-tab-title="إشعارات الإضافة">
+                                        إشعارات الإضافة
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        <li class="nav-item">
+                            <a class="nav-link" asp-controller="Home" asp-action="Privacy">Dash Board</a>
+                        </li>
+
+                        <li class="nav-item">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-light ms-2"
+                                    title="تحديث الشاشة الحالية"
+                                    onclick="if (window.erpTabs && typeof erpTabs.refreshActiveTab === 'function') { erpTabs.refreshActiveTab(); }">
+                                🔄
+                            </button>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>
+
+    @* ================= التابات + محتوى الصفحة الرئيسية ================= *@
+    <main role="main" class="container-fluid py-3">
+        <div id="appTabsBar" class="app-tabs-bar">
+            @* يتم ملؤه من site.js *@
+        </div>
+
+        <div id="appTabsContainer" class="app-tabs-container">
+        </div>
+
+        <div id="homeContent" class="mt-1">
+            @RenderBody()
+        </div>
+    </main>
+
+    @* ================= سكربتات JS ================= *@
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
+
+    @RenderSection("Scripts", required: false)
+</body>
+</html>

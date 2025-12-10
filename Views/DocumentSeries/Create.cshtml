@@ -1,0 +1,69 @@
+﻿@model ERP.Models.DocumentSeries
+
+@{
+    ViewData["Title"] = "إضافة سلسلة ترقيم";
+}
+
+<div class="container" dir="rtl">
+    <h3 class="mt-3 mb-3">إضافة سلسلة ترقيم</h3>
+
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <form asp-action="Create" method="post" class="row g-3">
+        @Html.AntiForgeryToken()
+
+        <div class="col-md-4">
+            <label class="form-label">نوع المستند</label>
+            <input asp-for="DocType" class="form-control" placeholder="SalesInvoice / SalesReturn" />
+            <span asp-validation-for="DocType" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">السلسلة</label>
+            <input asp-for="SeriesCode" class="form-control" placeholder="مثال: A أو BR1" />
+            <span asp-validation-for="SeriesCode" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">السياسة</label>
+            <select asp-for="ResetPolicy" class="form-select">
+                <option value="Continuous">Continuous</option>
+                <option value="Yearly">Yearly</option>
+            </select>
+            <span asp-validation-for="ResetPolicy" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">السنة (لو Yearly)</label>
+            <input asp-for="FiscalYear" class="form-control" placeholder="مثال: 2025" />
+            <span asp-validation-for="FiscalYear" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">العدد الحالي</label>
+            <input asp-for="CurrentNo" class="form-control" />
+            <span asp-validation-for="CurrentNo" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">عرض الرقم (Padding)</label>
+            <input asp-for="NumberWidth" class="form-control" />
+            <span asp-validation-for="NumberWidth" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">بادئة (اختياري)</label>
+            <input asp-for="Prefix" class="form-control" placeholder="مثال: A-2025-" />
+            <span asp-validation-for="Prefix" class="text-danger"></span>
+        </div>
+
+        <div class="col-12 mt-3 d-flex" style="gap:.5rem;">
+            <button class="btn btn-primary">حفظ</button>
+            <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

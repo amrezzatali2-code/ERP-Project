@@ -1,0 +1,45 @@
+﻿@model ERP.Models.CashReceipt
+
+@{
+    ViewData["Title"] = "بيانات إذن استلام";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">بيانات إذن استلام نقدية</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم المستند</dt>
+                <dd class="col-sm-9">@Model.ReceiptNumber</dd>
+
+                <dt class="col-sm-3">التاريخ</dt>
+                <dd class="col-sm-9">@Model.ReceiptDate.ToString("yyyy-MM-dd")</dd>
+
+                <dt class="col-sm-3">الطرف</dt>
+                <dd class="col-sm-9">@Model.Customer?.CustomerName</dd>
+
+                <dt class="col-sm-3">حساب الصندوق/البنك</dt>
+                <dd class="col-sm-9">
+                    @($"{Model.CashAccount.AccountCode} - {Model.CashAccount.AccountName}")
+                </dd>
+
+                <dt class="col-sm-3">حساب الطرف</dt>
+                <dd class="col-sm-9">
+                    @($"{Model.CounterAccount.AccountCode} - {Model.CounterAccount.AccountName}")
+                </dd>
+
+                <dt class="col-sm-3">المبلغ</dt>
+                <dd class="col-sm-9">@Model.Amount.ToString("N2")</dd>
+
+                <dt class="col-sm-3">البيان</dt>
+                <dd class="col-sm-9">@Model.Description</dd>
+            </dl>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
+            <a asp-action="Show" asp-route-id="@Model.CashReceiptId"
+               class="btn btn-info btn-sm">عرض الإيصال</a>
+        </div>
+    </div>
+</div>

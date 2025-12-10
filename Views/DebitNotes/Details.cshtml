@@ -1,0 +1,64 @@
+﻿@model ERP.Models.DebitNote
+
+@{
+    ViewData["Title"] = "تفاصيل إشعار خصم";
+}
+
+<h2 class="mb-3 text-center" dir="rtl">تفاصيل إشعار خصم</h2>
+
+<div class="row justify-content-center" dir="rtl">
+    <div class="col-md-8">
+
+        <div class="alert alert-info" dir="rtl">
+            هذه شاشة تفاصيل مختصرة للرأس فقط.
+            لعرض الإذن بالكامل استخدم زر "عرض الإذن الكامل" (Show).
+        </div>
+
+        <table class="table table-bordered" dir="rtl">
+            <tr>
+                <th>رقم الإشعار</th>
+                <td>@Model.DebitNoteId</td>
+            </tr>
+            <tr>
+                <th>رقم المستند</th>
+                <td>@Model.NoteNumber</td>
+            </tr>
+            <tr>
+                <th>تاريخ الإشعار</th>
+                <td>@Model.NoteDate.ToString("yyyy-MM-dd")</td>
+            </tr>
+            <tr>
+                <th>الطرف</th>
+                <td>@Model.Customer?.CustomerName</td>
+            </tr>
+            <tr>
+                <th>حساب الطرف</th>
+                <td>@Model.Account?.AccountName</td>
+            </tr>
+            <tr>
+                <th>الحساب المقابل</th>
+                <td>@Model.OffsetAccount?.AccountName</td>
+            </tr>
+            <tr>
+                <th>المبلغ</th>
+                <td>@Model.Amount.ToString("N2")</td>
+            </tr>
+            <tr>
+                <th>السبب</th>
+                <td>@Model.Reason</td>
+            </tr>
+            <tr>
+                <th>البيان</th>
+                <td>@Model.Description</td>
+            </tr>
+        </table>
+
+        <div class="d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <a asp-action="Show" asp-route-id="@Model.DebitNoteId" class="btn btn-primary">
+                عرض الإذن الكامل (Show)
+            </a>
+        </div>
+
+    </div>
+</div>

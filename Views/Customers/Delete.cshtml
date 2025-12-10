@@ -1,0 +1,48 @@
+﻿@model ERP.Models.Customer
+
+@{
+    ViewData["Title"] = "حذف عميل";
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف عميل</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذا العميل؟
+        <br />
+        يُفضل عدم حذف عميل له حركات محاسبية، ويمكن إيقافه بدلاً من الحذف.
+    </div>
+
+    <dl class="row">
+        <dt class="col-sm-3">كود العميل</dt>
+        <dd class="col-sm-9">@Model.CustomerId</dd>
+
+        <dt class="col-sm-3">اسم العميل</dt>
+        <dd class="col-sm-9">@Model.CustomerName</dd>
+
+        <dt class="col-sm-3">نوع الطرف</dt>
+        <dd class="col-sm-9">@Model.PartyCategory</dd>
+
+        <dt class="col-sm-3">الحساب المحاسبي</dt>
+        <dd class="col-sm-9">
+            @if (Model.Account != null)
+            {
+                @($"{Model.Account.AccountCode} — {Model.Account.AccountName}")
+            }
+        </dd>
+
+        <dt class="col-sm-3">سياسة العميل</dt>
+        <dd class="col-sm-9">@Model.PolicyId</dd>
+
+        <dt class="col-sm-3">المستخدم المسئول</dt>
+        <dd class="col-sm-9">@Model.UserId</dd>
+    </dl>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="CustomerId" />
+
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+    </form>
+</div>

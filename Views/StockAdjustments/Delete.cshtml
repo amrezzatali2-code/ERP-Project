@@ -1,0 +1,56 @@
+﻿@model ERP.Models.StockAdjustment
+
+@{
+    ViewData["Title"] = "حذف تسوية جرد";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3 text-danger">حذف تسوية — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذه التسوية؟
+        <br />
+        هذا الإجراء قد يؤثر على تقارير المخزون المرتبطة بهذه التسوية لاحقًا.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th>كود التسوية</th>
+                    <td>@Model.Id</td>
+                </tr>
+                <tr>
+                    <th>تاريخ التسوية</th>
+                    <td>@Model.AdjustmentDate.ToString("yyyy-MM-dd")</td>
+                </tr>
+                <tr>
+                    <th>كود المخزن</th>
+                    <td>@Model.WarehouseId</td>
+                </tr>
+                <tr>
+                    <th>رقم مرجعي</th>
+                    <td>@Model.ReferenceNo</td>
+                </tr>
+                <tr>
+                    <th>السبب</th>
+                    <td>@Model.Reason</td>
+                </tr>
+            </table>
+
+            <form asp-action="Delete" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Id" />
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-danger">
+                        نعم، حذف
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        إلغاء
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

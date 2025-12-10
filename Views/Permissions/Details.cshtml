@@ -1,0 +1,101 @@
+﻿@model ERP.Models.Permission
+
+@{
+    ViewData["Title"] = "تفاصيل الصلاحية";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تفاصيل الصلاحية — @Model.NameAr</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم الصلاحية</dt>
+                <dd class="col-sm-9">@Model.PermissionId</dd>
+
+                <dt class="col-sm-3">كود الصلاحية</dt>
+                <dd class="col-sm-9">@Model.Code</dd>
+
+                <dt class="col-sm-3">اسم الصلاحية</dt>
+                <dd class="col-sm-9">@Model.NameAr</dd>
+
+                <dt class="col-sm-3">الموديول</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Module) ? "-" : Model.Module)
+                </dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Description) ? "-" : Model.Description)
+                </dd>
+
+                <dt class="col-sm-3">تاريخ الإنشاء</dt>
+                <dd class="col-sm-9">
+                    @Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+
+                <dt class="col-sm-3">آخر تعديل</dt>
+                <dd class="col-sm-9">
+                    @(Model.UpdatedAt.HasValue
+                                        ? Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                        : "-")
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    @* الأدوار المرتبطة بهذه الصلاحية *@
+    <div class="card mb-3">
+        <div class="card-header">
+            الأدوار المرتبطة بهذه الصلاحية
+        </div>
+        <div class="card-body">
+            @if (Model.RolePermissions == null || !Model.RolePermissions.Any())
+            {
+                <span class="text-muted">لا توجد أدوار مرتبطة بهذه الصلاحية.</span>
+            }
+            else
+            {
+                <ul class="list-group list-group-flush">
+                    @foreach (var rp in Model.RolePermissions)
+                    {
+                        <li class="list-group-item">
+                            دور رقم @rp.RoleId
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+
+    @* استثناءات الصلاحية للمستخدمين *@
+    <div class="card mb-3">
+        <div class="card-header">
+            استثناءات هذه الصلاحية للمستخدمين
+        </div>
+        <div class="card-body">
+            @if (Model.UserDeniedPermissions == null || !Model.UserDeniedPermissions.Any())
+            {
+                <span class="text-muted">لا توجد استثناءات مسجلة لهذه الصلاحية.</span>
+            }
+            else
+            {
+                <ul class="list-group list-group-flush">
+                    @foreach (var up in Model.UserDeniedPermissions)
+                    {
+                        <li class="list-group-item">
+                            استثناء للمستخدم رقم @up.UserId
+                        </li>
+                    }
+                </ul>
+            }
+        </div>
+    </div>
+
+    <a asp-action="Edit" asp-route-id="@Model.PermissionId" class="btn btn-primary">
+        تعديل
+    </a>
+    <a asp-action="Index" class="btn btn-secondary">
+        رجوع للقائمة
+    </a>
+</div>

@@ -1,0 +1,57 @@
+﻿@model ERP.Models.RolePermission
+
+@{
+    ViewData["Title"] = "تفاصيل صلاحية دور";
+
+    var roleName = Model.Role?.Name ?? "";
+    var permName = Model.Permission?.NameAr ?? "";
+    var permCode = Model.Permission?.Code ?? "";
+    var module = Model.Permission?.Module ?? "";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تفاصيل صلاحية دور — @Model.Id</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <dl class="row">
+
+                <dt class="col-sm-3">المعرّف</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">الدور</dt>
+                <dd class="col-sm-9">
+                    @roleName (@Model.RoleId)
+                </dd>
+
+                <dt class="col-sm-3">الصلاحية</dt>
+                <dd class="col-sm-9">
+                    @if (!string.IsNullOrEmpty(permCode))
+                    {
+                        @($"{permName} ({permCode})")
+                    }
+                    else
+                    {
+                        @permName
+                    }
+                </dd>
+
+                <dt class="col-sm-3">الموديول</dt>
+                <dd class="col-sm-9">@module</dd>
+
+                <dt class="col-sm-3">مسموح؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsAllowed ? "مسموح" : "ممنوع")
+                </dd>
+            </dl>
+        </div>
+
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <div>
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">تعديل</a>
+                <a asp-action="Delete" asp-route-id="@Model.Id" class="btn btn-danger ms-2">حذف</a>
+            </div>
+        </div>
+    </div>
+</div>

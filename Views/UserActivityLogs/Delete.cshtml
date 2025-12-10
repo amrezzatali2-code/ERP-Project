@@ -1,0 +1,44 @@
+﻿@model ERP.Models.UserActivityLog
+
+@{
+    ViewData["Title"] = "حذف سجل نشاط";
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف سجل نشاط — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد من حذف هذا السجل من سجل النشاط؟
+        هذه العملية لا يمكن التراجع عنها.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">المستخدم</dt>
+                <dd class="col-sm-9">@Model.User?.UserName</dd>
+
+                <dt class="col-sm-3">نوع العملية</dt>
+                <dd class="col-sm-9">@Model.ActionType</dd>
+
+                <dt class="col-sm-3">اسم الكيان</dt>
+                <dd class="col-sm-9">@Model.EntityName</dd>
+
+                <dt class="col-sm-3">رقم السجل</dt>
+                <dd class="col-sm-9">@Model.EntityId</dd>
+
+                <dt class="col-sm-3">وقت العملية</dt>
+                <dd class="col-sm-9">@Model.ActionTime.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">@Model.Description</dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary ms-2">إلغاء</a>
+    </form>
+</div>

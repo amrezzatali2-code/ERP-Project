@@ -1,0 +1,58 @@
+﻿@* Views/PurchaseReturns/Show.cshtml — صفحة عرض مؤقتة لرأس مرتجع الشراء *@
+@model ERP.Models.PurchaseReturn
+
+@{
+    ViewData["Title"] = "مرتجع شراء";
+}
+
+<div class="container mt-3" dir="rtl">
+
+    <h2 class="mb-3">مرتجع شراء — @Model.PRetId</h2>
+
+    @* تنبيه: هذه صفحة مؤقتة لعرض رأس المرتجع فقط.
+       لاحقاً سنعرض السطور (التشغيلة/الصلاحية) ونربطها بالمخزون. *@
+    <div class="alert alert-info">
+        هذه الصفحة مؤقتة لعرض رأس المرتجع فقط. لاحقاً سنستبدلها بواجهة كاملة تشمل السطور وتحديث المخزون.
+    </div>
+
+    @* بطاقة بيانات الهيدر — حقول رأس المرتجع *@
+    <div class="card mb-3">
+        <div class="card-body row g-3">
+            <div class="col-md-4">
+                <strong>رقم المرتجع:</strong>
+                <div>@Model.PRetId</div>        @* معرّف المرتجع *@
+            </div>
+            <div class="col-md-4">
+                <strong>تاريخ المرتجع:</strong>
+                <div>@Model.PRetDate.ToString("yyyy-MM-dd")</div> @* تاريخ المرتجع *@
+            </div>
+            <div class="col-md-4">
+                <strong>الحالة:</strong>
+                <div>@Model.Status</div>        @* حالة المستند *@
+            </div>
+
+            <div class="col-md-4">
+                <strong>العميل:</strong>
+                <div>@Model.CustomerId</div>      @* مُعرّف العميل (سنُظهر الاسم لاحقاً) *@
+            </div>
+            <div class="col-md-4">
+                <strong>المخزن:</strong>
+                <div>@Model.WarehouseId</div>   @* مُعرّف المخزن *@
+            </div>
+        </div>
+    </div>
+
+    @* أزرار الإجراءات — رجوع / حذف (يمسح الهيدر وسطور المرتجع لاحقاً عند تجهيزها) *@
+    <div class="d-flex gap-2">
+        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+
+        @* زر الحذف: بنفس نمطنا في كل القوائم — يستدعي POST /PurchaseReturns/Delete/{id} *@
+        <form method="post"
+              asp-action="Delete"
+              asp-route-id="@Model.PRetId"
+              onsubmit="return confirm('حذف مرتجع الشراء وجميع سطوره؟');">
+            <button class="btn btn-outline-danger">حذف</button>
+        </form>
+    </div>
+
+</div>

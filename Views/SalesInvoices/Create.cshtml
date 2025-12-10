@@ -1,0 +1,306 @@
+﻿@model ERP.Models.SalesInvoice
+
+@{
+    ViewData["Title"] = "إنشاء فاتورة مبيعات جديدة";
+}
+
+<div dir="rtl" class="container-fluid">
+
+    @* ===== شريط العنوان + أزرار أعلى الفاتورة ===== *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">إنشاء فاتورة مبيعات جديدة</h2>
+
+        <div class="btn-toolbar gap-2">
+            @* زر حفظ الفاتورة *@
+            <button type="submit"
+                    form="invoiceForm"
+                    class="btn btn-erp btn-erp-primary btn-erp-sm px-3">
+                💾 حفظ الفاتورة
+            </button>
+
+            @* رجوع لقائمة الفواتير *@
+            <a asp-action="Index"
+               class="btn btn-erp btn-erp-secondary btn-erp-sm px-3">
+                ⬅ رجوع إلى قائمة الفواتير
+            </a>
+        </div>
+    </div>
+
+    <form asp-action="Create" method="post" id="invoiceForm">
+        @Html.AntiForgeryToken()
+
+        @* =====================================================
+           الكارت الأول: بيانات الفاتورة الأساسية (هيدر)
+           ===================================================== *@
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">
+                بيانات الفاتورة الأساسية
+            </div>
+
+            <div class="card-body">
+                <div class="row g-3">
+                    @* رقم الفاتورة (Identity من SQL) *@
+                    <div class="col-md-4">
+                        <label class="form-label">رقم الفاتورة</label>
+                        <input class="form-control" value="(جديدة)" disabled />
+                    </div>
+
+                    @* تاريخ الفاتورة *@
+                    <div class="col-md-4">
+                        <label asp-for="SIDate" class="form-label"></label>
+                        <input asp-for="SIDate"
+                               type="date"
+                               class="form-control" />
+                        <span asp-validation-for="SIDate" class="text-danger"></span>
+                    </div>
+
+                    @* وقت الفاتورة *@
+                    <div class="col-md-4">
+                        <label asp-for="SITime" class="form-label"></label>
+                        <input asp-for="SITime"
+                               type="time"
+                               class="form-control" />
+                        <span asp-validation-for="SITime" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    @* اسم العميل (دروب داون) *@
+                    <div class="col-md-8">
+                        <label class="form-label">اسم العميل</label>
+                        <select asp-for="CustomerId"
+                                class="form-select"
+                                asp-items="ViewBag.Customers">
+                            <option value="">-- اختر العميل --</option>
+                        </select>
+                        <span asp-validation-for="CustomerId" class="text-danger"></span>
+                    </div>
+
+                    @* كود العميل (يُملأ أوتوماتيك عند اختيار الاسم) *@
+                    <div class="col-md-4">
+                        <label class="form-label">كود العميل</label>
+                        <input id="CustomerCode"
+                               class="form-control"
+                               readonly
+                               value="0" />
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    @* اختيار المخزن *@
+                    <div class="col-md-6">
+                        <label class="form-label">المخزن</label>
+                        <select asp-for="WarehouseId"
+                                class="form-select"
+                                asp-items="ViewBag.Warehouses">
+                            <option value="">-- اختر المخزن --</option>
+                        </select>
+                        <span asp-validation-for="WarehouseId" class="text-danger"></span>
+                    </div>
+
+                    @* طريقة الدفع *@
+                    <div class="col-md-6">
+                        <label asp-for="PaymentMethod" class="form-label"></label>
+                        <select asp-for="PaymentMethod"
+                                class="form-select">
+                            <option value="">-- اختر طريقة الدفع --</option>
+                            @if (ViewBag.PaymentMethods is string[] methods)
+                            {
+                                foreach (var m in methods)
+                                {
+                                    <option value="@m">@m</option>
+                                }
+                            }
+                        </select>
+                        <span asp-validation-for="PaymentMethod" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    @* حالة الفاتورة (مسودة / مرحّلة / ملغاة) *@
+                    <div class="col-md-4">
+                        <label asp-for="Status" class="form-label"></label>
+                        <input asp-for="Status"
+                               class="form-control"
+                               readonly />
+                    </div>
+
+                    @* هل الفاتورة مرحّلة؟ *@
+                    <div class="col-md-4 d-flex align-items-end">
+                        <div class="form-check">
+                            <input asp-for="IsPosted"
+                                   class="form-check-input" />
+                            <label asp-for="IsPosted"
+                                   class="form-check-label"></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* =====================================================
+           الكارت الثاني: الخصومات والإجماليات
+           ===================================================== *@
+        <div class="card mb-3">
+            <div class="card-header fw-semibold">
+                الخصومات والإجماليات
+            </div>
+
+            <div class="card-body">
+                <div class="row g-3">
+                    @* خصم الهيدر % *@
+                    <div class="col-md-4">
+                        <label asp-for="HeaderDiscountPercent" class="form-label"></label>
+                        <input asp-for="HeaderDiscountPercent" class="form-control" />
+                        <span asp-validation-for="HeaderDiscountPercent" class="text-danger"></span>
+                    </div>
+
+                    @* خصم الهيدر (قيمة) *@
+                    <div class="col-md-4">
+                        <label asp-for="HeaderDiscountValue" class="form-label"></label>
+                        <input asp-for="HeaderDiscountValue" class="form-control" />
+                    </div>
+
+                    @* إجمالي قبل الخصم *@
+                    <div class="col-md-4">
+                        <label asp-for="TotalBeforeDiscount" class="form-label"></label>
+                        <input asp-for="TotalBeforeDiscount"
+                               class="form-control"
+                               readonly />
+                    </div>
+                </div>
+
+                <div class="row g-3 mt-1">
+                    @* إجمالي بعد الخصم قبل الضريبة *@
+                    <div class="col-md-4">
+                        <label asp-for="TotalAfterDiscountBeforeTax" class="form-label"></label>
+                        <input asp-for="TotalAfterDiscountBeforeTax"
+                               class="form-control"
+                               readonly />
+                    </div>
+
+                    @* قيمة الضريبة *@
+                    <div class="col-md-4">
+                        <label asp-for="TaxAmount" class="form-label"></label>
+                        <input asp-for="TaxAmount"
+                               class="form-control"
+                               readonly />
+                    </div>
+
+                    @* الصافي *@
+                    <div class="col-md-4">
+                        <label asp-for="NetTotal" class="form-label"></label>
+                        <input asp-for="NetTotal"
+                               class="form-control"
+                               readonly />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* =====================================================
+           الكارت الثالث: بيانات التتبع (CreatedBy / CreatedAt ...)
+           ===================================================== *@
+        <div class="card mb-4">
+            <div class="card-header fw-semibold">
+                بيانات التتبع
+            </div>
+
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label asp-for="CreatedBy" class="form-label"></label>
+                        <input asp-for="CreatedBy"
+                               class="form-control"
+                               readonly />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="CreatedAt" class="form-label"></label>
+                        <input asp-for="CreatedAt"
+                               class="form-control"
+                               readonly />
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="PostedAt" class="form-label"></label>
+                        <input asp-for="PostedAt"
+                               class="form-control"
+                               readonly />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* =====================================================
+           الكارت الرابع: سطور الفاتورة (Placeholder مبدئي)
+           ===================================================== *@
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-semibold">سطور الفاتورة (الأصناف)</span>
+
+                @* زر إضافة صنف - هنفعّله لما نربط اللاينز *@
+                <button type="button"
+                        class="btn btn-erp btn-erp-primary btn-erp-sm"
+                        disabled>
+                    + إضافة صنف (قريبًا)
+                </button>
+            </div>
+
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>كود الصنف</th>
+                            <th>اسم الصنف</th>
+                            <th>الكمية</th>
+                            <th>السعر</th>
+                            <th>خصم %</th>
+                            <th>خصم (قيمة)</th>
+                            <th>الإجمالي</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-3">
+                                سيتم ربط سطور الفاتورة بجدول SalesInvoiceLines في خطوة لاحقة.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @* ===== أزرار أسفل الصفحة ===== *@
+        <div class="d-flex justify-content-between mb-5">
+            <button type="submit"
+                    class="btn btn-erp btn-erp-primary px-4">
+                💾 حفظ الفاتورة
+            </button>
+
+            <a asp-action="Index"
+               class="btn btn-erp btn-erp-secondary">
+                ⬅ رجوع إلى قائمة الفواتير
+            </a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+
+    <script>
+        // عند تغيير اسم العميل نظهر كود العميل في الحقل المجاور
+        // نفترض أن كل Option في قائمة العملاء يحتوي على data-code = كود العميل
+        const ddlCustomer     = document.getElementById("CustomerId");   // دروب داون العملاء
+        const txtCustomerCode = document.getElementById("CustomerCode"); // حقل عرض كود العميل
+
+        if (ddlCustomer && txtCustomerCode) {
+            ddlCustomer.addEventListener("change", function () {
+                const opt  = this.options[this.selectedIndex];
+                const code = opt?.getAttribute("data-code") || this.value;
+                txtCustomerCode.value = code || "0";
+            });
+        }
+    </script>
+}

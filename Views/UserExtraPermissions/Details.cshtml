@@ -1,0 +1,44 @@
+﻿@model ERP.Models.UserExtraPermissions
+
+@{
+    ViewData["Title"] = "تفاصيل صلاحية إضافية";
+    var userName = Model.User?.DisplayName ?? Model.User?.UserName ?? "";
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3">تفاصيل صلاحية إضافية — @userName</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">المعرّف</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">رقم المستخدم</dt>
+                <dd class="col-sm-9">@Model.UserId</dd>
+
+                <dt class="col-sm-3">اسم المستخدم</dt>
+                <dd class="col-sm-9">@userName</dd>
+
+                <dt class="col-sm-3">رقم الصلاحية</dt>
+                <dd class="col-sm-9">@Model.PermissionId</dd>
+
+                <dt class="col-sm-3">كود الصلاحية</dt>
+                <dd class="col-sm-9">@Model.Permission?.Code</dd>
+
+                <dt class="col-sm-3">اسم الصلاحية</dt>
+                <dd class="col-sm-9">@Model.Permission?.NameAr</dd>
+
+                <dt class="col-sm-3">تاريخ الإضافة</dt>
+                <dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+            </dl>
+        </div>
+    </div>
+
+    <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">
+        تعديل
+    </a>
+    <a asp-action="Index" class="btn btn-secondary">
+        رجوع للقائمة
+    </a>
+</div>

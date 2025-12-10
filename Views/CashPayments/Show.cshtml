@@ -1,0 +1,52 @@
+﻿@model ERP.Models.CashReceipt
+
+@{
+    ViewData["Title"] = "إيصال استلام نقدية";
+}
+
+<div class="container mt-3" dir="rtl">
+    <div class="card" style="max-width: 700px; margin:auto;">
+        <div class="card-header text-center">
+            <h4 class="mb-0">إيصال استلام نقدية</h4>
+        </div>
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-3">
+                <div>
+                    <strong>رقم الإيصال:</strong> @Model.ReceiptNumber<br />
+                    <strong>التاريخ:</strong> @Model.ReceiptDate.ToString("yyyy-MM-dd")
+                </div>
+                <div class="text-end">
+                    <strong>الطرف:</strong> @Model.Customer?.CustomerName<br />
+                    <strong>المبلغ:</strong> @Model.Amount.ToString("N2")
+                </div>
+            </div>
+
+            <hr />
+
+            <p><strong>تم استلام مبلغ وقدره:</strong> @Model.Amount.ToString("N2")</p>
+            <p><strong>من السيد/السيدة:</strong> @Model.Customer?.CustomerName</p>
+            <p>
+                <strong>حساب الصندوق/البنك:</strong>
+                @($"{Model.CashAccount.AccountCode} - {Model.CashAccount.AccountName}")
+            </p>
+            <p><strong>بيان:</strong> @Model.Description</p>
+
+            <hr />
+
+            <div class="row mt-4">
+                <div class="col text-center">
+                    <strong>المستلم</strong>
+                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
+                </div>
+                <div class="col text-center">
+                    <strong>المراجع</strong>
+                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">طباعة</button>
+        </div>
+    </div>
+</div>

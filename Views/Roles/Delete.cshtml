@@ -1,0 +1,55 @@
+﻿@model ERP.Models.Role
+
+@{
+    ViewData["Title"] = "حذف دور";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف دور</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذا الدور؟
+        <strong>لا يمكن التراجع بعد الحذف.</strong>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم الدور</dt>
+                <dd class="col-sm-9">@Model.RoleId</dd>
+
+                <dt class="col-sm-3">اسم الدور</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Description)
+                                        ? "-"
+                                        : Model.Description)
+                </dd>
+
+                <dt class="col-sm-3">دور نظامي؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsSystemRole ? "نعم" : "لا")
+                </dd>
+
+                <dt class="col-sm-3">نشط؟</dt>
+                <dd class="col-sm-9">
+                    @(Model.IsActive ? "نشط" : "متوقف")
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="RoleId" />
+
+        <button type="submit" class="btn btn-danger">
+            تأكيد الحذف
+        </button>
+        <a asp-action="Index" class="btn btn-secondary">
+            إلغاء
+        </a>
+    </form>
+</div>

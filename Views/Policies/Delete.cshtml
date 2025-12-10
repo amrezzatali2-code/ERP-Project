@@ -1,0 +1,56 @@
+﻿@model ERP.Models.Policy
+
+@{
+    ViewData["Title"] = "حذف سياسة";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3 text-danger">حذف سياسة — @Model.PolicyId</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد من رغبتك في حذف هذه السياسة؟
+        <br />
+        <strong>تنبيه:</strong> لو السياسة مرتبطة بعملاء أو إعدادات أخرى قد يفشل الحذف.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">كود السياسة</dt>
+                <dd class="col-sm-9">@Model.PolicyId</dd>
+
+                <dt class="col-sm-3">اسم السياسة</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">
+                    @if (string.IsNullOrWhiteSpace(Model.Description))
+                    {
+                        <span class="text-muted">لا يوجد وصف.</span>
+                    }
+                    else
+                    {
+                        @Model.Description
+                    }
+                </dd>
+
+                <dt class="col-sm-3">مفعّلة؟</dt>
+                <dd class="col-sm-9">@(Model.IsActive ? "نعم" : "لا")</dd>
+            </dl>
+
+            <form asp-action="Delete" method="post" class="mt-3">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="PolicyId" />
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-danger">
+                        تأكيد الحذف
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        إلغاء
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,45 @@
+﻿@model ERP.Models.ProductGroupPolicy
+
+@{
+    ViewData["Title"] = "تفاصيل سياسة مجموعة أصناف";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">تفاصيل سياسة مجموعة أصناف — @Model.Id</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">كود القاعدة</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">كود مجموعة الأصناف</dt>
+                <dd class="col-sm-9">@Model.ProductGroupId</dd>
+
+                <dt class="col-sm-3">كود السياسة</dt>
+                <dd class="col-sm-9">@Model.PolicyId</dd>
+
+                <dt class="col-sm-3">مفعّلة؟</dt>
+                <dd class="col-sm-9">@(Model.IsActive ? "نعم" : "لا")</dd>
+
+                <dt class="col-sm-3">تاريخ الإنشاء</dt>
+                <dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+
+                @if (Model.UpdatedAt.HasValue)
+                {
+                    <dt class="col-sm-3">آخر تعديل</dt>
+                    <dd class="col-sm-9">@Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")</dd>
+                }
+            </dl>
+
+            <div class="d-flex gap-2">
+                <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-erp btn-erp-primary">
+                    تعديل
+                </a>
+                <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                    رجوع للقائمة
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,52 @@
+﻿@model ERP.Models.RolePermission
+
+@{
+    ViewData["Title"] = "ربط صلاحية بدور";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">ربط صلاحية بدور جديد</h2>
+
+    <form asp-action="Create" method="post" class="card">
+        <div class="card-body">
+
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+            <div class="mb-3">
+                <label asp-for="RoleId" class="form-label"></label>
+                <select asp-for="RoleId"
+                        asp-items="ViewBag.RoleId"
+                        class="form-select">
+                    <option value="">-- اختر دور --</option>
+                </select>
+                <span asp-validation-for="RoleId" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="PermissionId" class="form-label"></label>
+                <select asp-for="PermissionId"
+                        asp-items="ViewBag.PermissionId"
+                        class="form-select">
+                    <option value="">-- اختر صلاحية --</option>
+                </select>
+                <span asp-validation-for="PermissionId" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3 form-check">
+                <input asp-for="IsAllowed" class="form-check-input ms-2" />
+                <label asp-for="IsAllowed" class="form-check-label"></label>
+            </div>
+
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <button type="submit" class="btn btn-primary">حفظ الربط</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

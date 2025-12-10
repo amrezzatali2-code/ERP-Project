@@ -1,0 +1,52 @@
+﻿@model ERP.Models.Warehouse
+@{
+    ViewData["Title"] = "إضافة مخزن";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3">إضافة مخزن</h2>
+
+    @if (TempData["Ok"] is string ok)
+    {
+        <div class="alert alert-success">@ok</div>
+    }
+
+    <form asp-action="Create" method="post" class="row g-3">
+       
+
+        <div class="col-md-8">
+            <label asp-for="WarehouseName" class="form-label"></label>
+            <input asp-for="WarehouseName" class="form-control" />
+            <span asp-validation-for="WarehouseName" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">الفرع</label>
+            <select asp-for="BranchId" class="form-select" asp-items="ViewBag.BranchId">
+                <option value="">-- اختر الفرع --</option>
+            </select>
+            <span asp-validation-for="BranchId" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-2 d-flex align-items-center">
+            <div class="form-check mt-4">
+                <input class="form-check-input" asp-for="IsActive" />
+                <label class="form-check-label" asp-for="IsActive"></label>
+            </div>
+        </div>
+
+        <div class="col-md-12">
+            <label asp-for="Notes" class="form-label"></label>
+            <textarea asp-for="Notes" rows="3" class="form-control"></textarea>
+            <span asp-validation-for="Notes" class="text-danger"></span>
+        </div>
+
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary">حفظ</button>
+            <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

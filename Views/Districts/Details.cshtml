@@ -1,0 +1,66 @@
+﻿@model ERP.Models.District
+@{
+    ViewData["Title"] = "تفاصيل الحي/المركز";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">@ViewData["Title"]</h2>
+
+    @* عرض تفاصيل السجل في جدول بسيط *@
+    <div class="table-responsive">
+        <table class="table table-bordered align-middle">
+            <tbody>
+                <tr>
+                    <th style="width:220px;">المعرّف</th>
+                    <td>@Model.DistrictId</td>
+                </tr>
+                <tr>
+                    <th>اسم الحي/المركز</th>
+                    <td>@Model.DistrictName</td>
+                </tr>
+                <tr>
+                    <th>المحافظة</th>
+                    <td>@Model.Governorate?.GovernorateName</td>
+                </tr>
+                <tr>
+                    <th>النوع</th>
+                    <td>
+                        @(Model.DistrictType == 1 ? "مركز" :
+                                                Model.DistrictType == 0 ? "حي" : "—")
+                    </td>
+                </tr>
+                <tr>
+                    <th>الحالة</th>
+                    <td>
+                        @if (Model.IsActive)
+                        {
+                            <span class="badge bg-success">نشط</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">موقوف</span>
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <th>ملاحظات</th>
+                    <td>@(string.IsNullOrWhiteSpace(Model.Notes) ? "—" : Model.Notes)</td>
+                </tr>
+                <tr>
+                    <th>تاريخ الإنشاء</th>
+                    <td>@(Model.CreatedAt?.ToString("yyyy/MM/dd HH:mm") ?? "—")</td>
+                </tr>
+                <tr>
+                    <th>تاريخ آخر تعديل</th>
+                    <td>@(Model.UpdatedAt?.ToString("yyyy/MM/dd HH:mm") ?? "—")</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    @* أزرار الإجراءات *@
+    <div class="mt-3 d-flex" style="gap:.5rem;">
+        <a class="btn btn-primary" asp-action="Edit" asp-route-id="@Model.DistrictId">تعديل</a>
+        <a class="btn btn-outline-secondary" asp-action="Index">عودة</a>
+    </div>
+</div>

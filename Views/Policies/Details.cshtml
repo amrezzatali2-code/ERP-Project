@@ -1,0 +1,59 @@
+﻿@model ERP.Models.Policy
+
+@{
+    ViewData["Title"] = "تفاصيل سياسة";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">تفاصيل سياسة — @Model.PolicyId</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">كود السياسة</dt>
+                <dd class="col-sm-9">@Model.PolicyId</dd>
+
+                <dt class="col-sm-3">اسم السياسة</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">
+                    @if (string.IsNullOrWhiteSpace(Model.Description))
+                    {
+                        <span class="text-muted">لا يوجد وصف.</span>
+                    }
+                    else
+                    {
+                        @Model.Description
+                    }
+                </dd>
+
+                <dt class="col-sm-3">مفعّلة؟</dt>
+                <dd class="col-sm-9">@(Model.IsActive ? "نعم" : "لا")</dd>
+
+                <dt class="col-sm-3">تاريخ الإنشاء</dt>
+                <dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+
+                <dt class="col-sm-3">آخر تعديل</dt>
+                <dd class="col-sm-9">
+                    @(Model.UpdatedAt.HasValue
+                                        ? Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                        : "-")
+                </dd>
+            </dl>
+
+            <div class="d-flex gap-2 mt-3">
+                <a asp-action="Edit"
+                   asp-route-id="@Model.PolicyId"
+                   class="btn btn-erp btn-erp-primary">
+                    تعديل
+                </a>
+
+                <a asp-action="Index"
+                   class="btn btn-erp btn-erp-secondary">
+                    رجوع للقائمة
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,114 @@
+﻿@model ERP.Models.User
+
+@{
+    ViewData["Title"] = "تفاصيل مستخدم";
+}
+
+<div class="container-fluid" dir="rtl">
+    <h2 class="mt-3 mb-3">
+        تفاصيل المستخدم — @Model.UserName
+    </h2>
+
+    <div class="card p-3">
+        <dl class="row mb-0">
+
+            @* رقم المستخدم *@
+            <dt class="col-sm-3">رقم المستخدم</dt>
+            <dd class="col-sm-9">
+                @Model.UserId
+            </dd>
+
+            @* اسم الدخول (الاسم الوحيد المعتمد) *@
+            <dt class="col-sm-3">اسم الدخول</dt>
+            <dd class="col-sm-9">
+                @Model.UserName
+            </dd>
+
+            @* البريد الإلكتروني *@
+            <dt class="col-sm-3">البريد الإلكتروني</dt>
+            <dd class="col-sm-9">
+                @(string.IsNullOrWhiteSpace(Model.Email) ? "-" : Model.Email)
+            </dd>
+
+            @* أدمن؟ *@
+            <dt class="col-sm-3">أدمن؟</dt>
+            <dd class="col-sm-9">
+                @(Model.IsAdmin ? "نعم (مدير نظام)" : "لا")
+            </dd>
+
+            @* نشط؟ *@
+            <dt class="col-sm-3">نشط؟</dt>
+            <dd class="col-sm-9">
+                @(Model.IsActive ? "نشط" : "موقوف")
+            </dd>
+
+            @* كود الطرف المرتبط (لو مربوط بعميل/موظف/مورد...) *@
+            <dt class="col-sm-3">كود الطرف المرتبط</dt>
+            <dd class="col-sm-9">
+                @(Model.CustomerId.HasValue? Model.CustomerId.ToString() : "-")
+            </dd>
+
+            @* اسم الطرف المرتبط من جدول العملاء (اختياري) *@
+            <dt class="col-sm-3">اسم الطرف المرتبط</dt>
+            <dd class="col-sm-9">
+                @(Model.Customer != null
+                                ? Model.Customer.CustomerName
+                                : "لا يوجد طرف مرتبط")
+            </dd>
+
+            @* ملخّص الأدوار *@
+            <dt class="col-sm-3">الأدوار</dt>
+            <dd class="col-sm-9">
+                @(
+                                !string.IsNullOrWhiteSpace(Model.RolesSummary)
+                                ? Model.RolesSummary
+                                : "لا يوجد دور مرتبط بهذا المستخدم"
+                                )
+            </dd>
+
+            @* أنشئ بواسطة *@
+            <dt class="col-sm-3">أُنشئ بواسطة</dt>
+            <dd class="col-sm-9">
+                @(string.IsNullOrWhiteSpace(Model.CreatedBy) ? "-" : Model.CreatedBy)
+            </dd>
+
+            @* تاريخ الإنشاء *@
+            <dt class="col-sm-3">تاريخ الإنشاء</dt>
+            <dd class="col-sm-9">
+                @Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+            </dd>
+
+            @* آخر تعديل *@
+            <dt class="col-sm-3">آخر تعديل</dt>
+            <dd class="col-sm-9">
+                @(Model.UpdatedAt.HasValue
+                                ? Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                : "-")
+            </dd>
+
+            @* آخر تسجيل دخول *@
+            <dt class="col-sm-3">آخر تسجيل دخول</dt>
+            <dd class="col-sm-9">
+                @(Model.LastLoginAt.HasValue
+                                ? Model.LastLoginAt.Value.ToString("yyyy-MM-dd HH:mm")
+                                : "لم يسجّل دخول بعد")
+            </dd>
+
+            @* ملحوظة: لا نعرض كلمة المرور أو الـ Hash لأسباب أمان *@
+
+        </dl>
+
+        <div class="d-flex gap-2 mt-3">
+            <a asp-action="Edit"
+               asp-route-id="@Model.UserId"
+               class="btn btn-primary">
+                تعديل
+            </a>
+
+            <a asp-action="Index"
+               class="btn btn-secondary">
+                رجوع للقائمة
+            </a>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,188 @@
+﻿@model ERP.Models.SalesInvoice
+@{
+    ViewData["Title"] = $"تعديل فاتورة مبيعات رقم {Model.SIId}";
+
+    var paymentMethods = ViewBag.PaymentMethods as string[] ?? Array.Empty<string>();
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تعديل فاتورة مبيعات رقم @Model.SIId</h2>
+
+    <div class="text-danger">
+        @Html.ValidationSummary(excludePropertyErrors: true)
+    </div>
+
+    <form asp-action="Edit" method="post">
+        @Html.AntiForgeryToken()
+
+        @* لازم نبعت كود الفاتورة و RowVersion مع الفورم *@
+        <input type="hidden" asp-for="SIId" />
+        <input type="hidden" asp-for="RowVersion" />
+
+        <div class="card">
+            <div class="card-body">
+
+                @* سطر يوضح رقم الفاتورة فقط (عرض بدون تعديل) *@
+                <div class="mb-3">
+                    <label class="form-label fw-bold">رقم الفاتورة</label>
+                    <input class="form-control" value="@Model.SIId" readonly />
+                </div>
+
+                @* بيانات أساسية *@
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label asp-for="SIDate" class="form-label"></label>
+                        <input asp-for="SIDate" class="form-control" type="date" />
+                        <span asp-validation-for="SIDate" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="SITime" class="form-label"></label>
+                        <input asp-for="SITime" class="form-control" type="time" />
+                        <span asp-validation-for="SITime" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="CustomerId" class="form-label"></label>
+                        <input asp-for="CustomerId" class="form-control" />
+                        <span asp-validation-for="CustomerId" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="WarehouseId" class="form-label"></label>
+                        <input asp-for="WarehouseId" class="form-control" />
+                        <span asp-validation-for="WarehouseId" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="PaymentMethod" class="form-label"></label>
+                        <select asp-for="PaymentMethod" class="form-select">
+                            <option value="">-- اختر طريقة الدفع --</option>
+                            @foreach (var pm in paymentMethods)
+                            {
+                                <option value="@pm" selected="@(Model.PaymentMethod == pm ? "selected" : null)">
+                                    @pm
+                                </option>
+                            }
+                        </select>
+                        <span asp-validation-for="PaymentMethod" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="Status" class="form-label"></label>
+                        <input asp-for="Status" class="form-control" />
+                        <span asp-validation-for="Status" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <hr />
+
+                @* خصم الهيدر *@
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label asp-for="HeaderDiscountPercent" class="form-label"></label>
+                        <input asp-for="HeaderDiscountPercent" class="form-control" />
+                        <span asp-validation-for="HeaderDiscountPercent" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label asp-for="HeaderDiscountValue" class="form-label"></label>
+                        <input asp-for="HeaderDiscountValue" class="form-control" />
+                        <span asp-validation-for="HeaderDiscountValue" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <hr />
+
+                @* ملخصات الفاتورة *@
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label asp-for="TotalBeforeDiscount" class="form-label"></label>
+                        <input asp-for="TotalBeforeDiscount" class="form-control" />
+                        <span asp-validation-for="TotalBeforeDiscount" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label asp-for="TotalAfterDiscountBeforeTax" class="form-label"></label>
+                        <input asp-for="TotalAfterDiscountBeforeTax" class="form-control" />
+                        <span asp-validation-for="TotalAfterDiscountBeforeTax" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label asp-for="TaxAmount" class="form-label"></label>
+                        <input asp-for="TaxAmount" class="form-control" />
+                        <span asp-validation-for="TaxAmount" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label asp-for="NetTotal" class="form-label"></label>
+                        <input asp-for="NetTotal" class="form-control" />
+                        <span asp-validation-for="NetTotal" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <hr />
+
+                @* بيانات الترحيل *@
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <div class="form-check mt-4">
+                            <input asp-for="IsPosted" class="form-check-input" />
+                            <label asp-for="IsPosted" class="form-check-label"></label>
+                        </div>
+                        <span asp-validation-for="IsPosted" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="PostedAt" class="form-label"></label>
+                        <input asp-for="PostedAt" class="form-control" type="datetime-local" />
+                        <span asp-validation-for="PostedAt" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-5">
+                        <label asp-for="PostedBy" class="form-label"></label>
+                        <input asp-for="PostedBy" class="form-control" />
+                        <span asp-validation-for="PostedBy" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <hr />
+
+                @* بيانات التتبع *@
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label asp-for="CreatedBy" class="form-label"></label>
+                        <input asp-for="CreatedBy" class="form-control" readonly />
+                        <span asp-validation-for="CreatedBy" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="CreatedAt" class="form-label"></label>
+                        <input asp-for="CreatedAt" class="form-control" type="datetime-local" readonly />
+                        <span asp-validation-for="CreatedAt" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="UpdatedAt" class="form-label"></label>
+                        <input asp-for="UpdatedAt" class="form-control" type="datetime-local" />
+                        <span asp-validation-for="UpdatedAt" class="text-danger"></span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="card-footer d-flex justify-content-between">
+                <a asp-action="Index" class="btn btn-secondary">
+                    رجوع إلى قائمة الفواتير
+                </a>
+                <button type="submit" class="btn btn-primary">
+                    حفظ التعديلات
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
+}

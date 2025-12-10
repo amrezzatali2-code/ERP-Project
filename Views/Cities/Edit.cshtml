@@ -1,0 +1,53 @@
+﻿@model ERP.Models.City
+@{
+    ViewData["Title"] = "تعديل مدينة";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">@ViewData["Title"]</h2>
+
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <form asp-action="Edit" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="CityId" />
+
+        <div class="row g-3">
+            <!-- اسم المدينة -->
+            <div class="col-12 col-md-6">
+                <label asp-for="CityName" class="form-label">اسم المدينة</label>
+                <input asp-for="CityName" class="form-control" />
+                <span asp-validation-for="CityName" class="text-danger"></span>
+            </div>
+
+            <!-- المحافظة -->
+            <div class="col-12 col-md-6">
+                <label class="form-label">المحافظة</label>
+                @Html.DropDownList("GovernorateId", (SelectList)ViewBag.GovernorateId, "-- اختر المحافظة --", new { @class = "form-select" })
+                <span asp-validation-for="GovernorateId" class="text-danger"></span>
+            </div>
+
+            <!-- الحالة -->
+            <div class="col-12 col-md-6 d-flex align-items-center" style="gap:.5rem;">
+                <input class="form-check-input" asp-for="IsActive" />
+                <label asp-for="IsActive" class="form-check-label">نشط</label>
+            </div>
+
+            <!-- ملاحظات -->
+            <div class="col-12">
+                <label asp-for="Notes" class="form-label">ملاحظات</label>
+                <textarea asp-for="Notes" class="form-control" rows="3"></textarea>
+                <span asp-validation-for="Notes" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="mt-3 d-flex" style="gap:.5rem;">
+            <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
+            <a asp-action="Index" class="btn btn-outline-secondary">عودة</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

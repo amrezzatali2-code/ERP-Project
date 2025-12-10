@@ -1,0 +1,83 @@
+﻿@model ERP.Models.Permission
+
+@{
+    ViewData["Title"] = "صلاحية جديدة";
+}
+
+<div class="container mt-3" dir="rtl">
+
+    @* عنوان الشاشة *@
+    <h2 class="mb-3">إضافة صلاحية جديدة</h2>
+
+    @* رسالة نجاح/خطأ من TempData (لو حبيت تستخدمها لاحقًا) *@
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    @* كارت يحتوى على نموذج الإدخال *@
+    <div class="card">
+        <div class="card-body">
+
+            @* ملخص أخطاء التحقق من الصحة *@
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+            @* فورم إنشاء صلاحية جديدة *@
+            <form asp-action="Create" asp-controller="Permissions" method="post">
+
+                @* كود الصلاحية *@
+                <div class="mb-3">
+                    <label asp-for="Code" class="form-label"></label>
+                    <input asp-for="Code" class="form-control" />
+                    <span asp-validation-for="Code" class="text-danger"></span>
+                    @* متغير Code: كود الصلاحية الفريد (مثال: Sales.Invoice.View) *@
+                </div>
+
+                @* اسم الصلاحية بالعربي *@
+                <div class="mb-3">
+                    <label asp-for="NameAr" class="form-label"></label>
+                    <input asp-for="NameAr" class="form-control" />
+                    <span asp-validation-for="NameAr" class="text-danger"></span>
+                    @* متغير NameAr: الاسم العربي الظاهر في الشاشات *@
+                </div>
+
+                @* الموديول (Sales / Purchasing / Inventory...) *@
+                <div class="mb-3">
+                    <label asp-for="Module" class="form-label"></label>
+                    <input asp-for="Module" class="form-control" />
+                    <span asp-validation-for="Module" class="text-danger"></span>
+                    @* متغير Module: لتجميع الصلاحيات حسب الموديول *@
+                </div>
+
+                @* الوصف المختصر *@
+                <div class="mb-3">
+                    <label asp-for="Description" class="form-label"></label>
+                    <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                    <span asp-validation-for="Description" class="text-danger"></span>
+                    @* متغير Description: شرح مختصر لمعنى الصلاحية *@
+                </div>
+
+                @* أزرار الحفظ والرجوع *@
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-primary">
+                        حفظ
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        رجوع للقائمة
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @* سكريبتات تحقق الـ client-side *@
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

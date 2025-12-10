@@ -1,0 +1,70 @@
+﻿@model ERP.Models.StockTransfer
+
+@{
+    ViewData["Title"] = "إضافة تحويل مخزني";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">إضافة تحويل مخزني جديد</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+
+                <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+                <div class="mb-3">
+                    <label asp-for="TransferDate" class="form-label fw-semibold"></label>
+                    <input asp-for="TransferDate" type="datetime-local" class="form-control" />
+                    <span asp-validation-for="TransferDate" class="text-danger"></span>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label asp-for="FromWarehouseId" class="form-label fw-semibold"></label>
+                        <select asp-for="FromWarehouseId"
+                                asp-items="@(ViewData["FromWarehouseId"] as SelectList)"
+                                class="form-select">
+                            <option value="">-- اختر المخزن المصدر --</option>
+                        </select>
+                        <span asp-validation-for="FromWarehouseId" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="ToWarehouseId" class="form-label fw-semibold"></label>
+                        <select asp-for="ToWarehouseId"
+                                asp-items="@(ViewData["ToWarehouseId"] as SelectList)"
+                                class="form-select">
+                            <option value="">-- اختر المخزن الوجهة --</option>
+                        </select>
+                        <span asp-validation-for="ToWarehouseId" class="text-danger"></span>
+                    </div>
+                </div>
+
+                <div class="mb-3 mt-3">
+                    <label asp-for="UserId" class="form-label fw-semibold">المستخدم (اختياري)</label>
+                    <input asp-for="UserId" class="form-control" type="number" />
+                    <span asp-validation-for="UserId" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Note" class="form-label fw-semibold"></label>
+                    <textarea asp-for="Note" class="form-control" rows="3"></textarea>
+                    <span asp-validation-for="Note" class="text-danger"></span>
+                </div>
+
+                <div class="mt-3 d-flex justify-content-between">
+                    <a asp-action="Index" class="btn btn-secondary">رجوع إلى القائمة</a>
+                    <button type="submit" class="btn btn-primary">حفظ التحويل</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

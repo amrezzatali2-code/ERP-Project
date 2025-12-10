@@ -1,0 +1,70 @@
+﻿@{
+    ViewData["Title"] = "استيراد الأصناف من ملف Excel";
+}
+
+<div class="container-fluid mt-3" dir="rtl">
+
+    @* رسائل النجاح/الخطأ *@
+    @if (ViewBag.Error != null)
+    {
+        <div class="alert alert-danger">
+            @ViewBag.Error
+        </div>
+    }
+
+    @if (ViewBag.Success != null)
+    {
+        <div class="alert alert-success">
+            @ViewBag.Success
+        </div>
+    }
+
+    <div class="card mb-3">
+        <div class="card-body">
+
+            <form asp-action="Import"
+                  asp-controller="Products"
+                  method="post"
+                  enctype="multipart/form-data"
+                  class="row g-3 align-items-end">
+
+                @Html.AntiForgeryToken()
+
+                <div class="col-md-6">
+                    <label class="form-label">ملف الأصناف (Excel)</label>
+                    <input type="file"
+                           name="excelFile" @* مهم: نفس اسم براميتر الأكشن *@
+                           class="form-control" />
+                    <small class="text-muted">
+                        يجب أن يحتوي الملف على الأعمدة بالترتيب أو بالاسم:
+                        <strong>
+                            ProdName, PriceRetail, GenericName, Company,
+                            Description, DosageForm, Barcode, Imported
+                        </strong>.
+                    </small>
+                </div>
+
+                <div class="col-md-3 d-grid">
+                    <button type="submit"
+                            class="btn btn-erp btn-erp-primary">
+                        استيراد الأصناف
+                    </button>
+                </div>
+
+                <div class="col-md-3 d-grid">
+                    <a asp-action="Index"
+                       asp-controller="Products"
+                       class="btn btn-erp btn-erp-secondary">
+                        رجوع لقائمة الأصناف
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="alert alert-warning">
+        بعد انتهاء التجارب، يمكنك مسح كل الأصناف التجريبية من جدول
+        <strong>Products</strong>
+        وإعادة الاستيراد من جديد قبل تشغيل البرنامج في الشركة.
+    </div>
+</div>

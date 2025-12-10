@@ -1,0 +1,46 @@
+﻿@model ERP.Models.ProductGroup
+
+@{
+    ViewData["Title"] = "حذف مجموعة أصناف";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3 text-danger">حذف مجموعة أصناف — @Model.ProductGroupId</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد أنك تريد حذف هذه المجموعة؟
+        لو في جداول تانية مرتبطة بها (سياسات / أصناف)،
+        راجع الاعتمادات قبل الحذف.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">كود المجموعة</dt>
+                <dd class="col-sm-9">@Model.ProductGroupId</dd>
+
+                <dt class="col-sm-3">اسم المجموعة</dt>
+                <dd class="col-sm-9">@Model.Name</dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">@Model.Description</dd>
+
+                <dt class="col-sm-3">مفعّلة؟</dt>
+                <dd class="col-sm-9">@((Model.IsActive) ? "نعم" : "لا")</dd>
+            </dl>
+
+            <form asp-action="Delete" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="ProductGroupId" />
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-danger">
+                        تأكيد الحذف
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        إلغاء
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>

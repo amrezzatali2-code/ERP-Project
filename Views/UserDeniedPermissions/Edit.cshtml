@@ -1,0 +1,60 @@
+﻿@model ERP.Models.UserDeniedPermission
+
+@{
+    ViewData["Title"] = "تعديل استثناء صلاحية";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تعديل استثناء صلاحية — @Model.Id</h2>
+
+    <form asp-action="Edit" method="post" class="card">
+        <div class="card-body">
+
+            <input type="hidden" asp-for="Id" />
+            <input type="hidden" asp-for="CreatedAt" />
+
+            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
+
+            <div class="mb-3">
+                <label asp-for="UserId" class="form-label"></label>
+                <select asp-for="UserId"
+                        asp-items="ViewBag.UserId"
+                        class="form-select">
+                </select>
+                <span asp-validation-for="UserId" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3">
+                <label asp-for="PermissionId" class="form-label"></label>
+                <select asp-for="PermissionId"
+                        asp-items="ViewBag.PermissionId"
+                        class="form-select">
+                </select>
+                <span asp-validation-for="PermissionId" class="text-danger"></span>
+            </div>
+
+            <div class="mb-3 form-check">
+                <input asp-for="IsAllowed" class="form-check-input ms-2" />
+                <label asp-for="IsAllowed" class="form-check-label"></label>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">تاريخ الإضافة</label>
+                <input class="form-control"
+                       value="@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")"
+                       readonly />
+            </div>
+
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

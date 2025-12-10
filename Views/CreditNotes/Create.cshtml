@@ -1,0 +1,89 @@
+﻿@model ERP.Models.CreditNote
+
+@{
+    ViewData["Title"] = "إضافة إشعار إضافة";
+}
+
+<h2 class="mb-3 text-center" dir="rtl">إضافة إشعار إضافة</h2>
+
+<div class="row justify-content-center" dir="rtl">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-body">
+
+                <form asp-action="Create" method="post">
+                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label asp-for="NoteNumber" class="form-label"></label>
+                            <input asp-for="NoteNumber" class="form-control" />
+                            <span asp-validation-for="NoteNumber" class="text-danger"></span>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label asp-for="NoteDate" class="form-label"></label>
+                            <input asp-for="NoteDate" type="date" class="form-control" />
+                            <span asp-validation-for="NoteDate" class="text-danger"></span>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label asp-for="CustomerId" class="form-label"></label>
+                            <select asp-for="CustomerId" class="form-select" asp-items="ViewBag.CustomerId">
+                                <option value="">-- بدون تحديد --</option>
+                            </select>
+                            <span asp-validation-for="CustomerId" class="text-danger"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="AccountId" class="form-label"></label>
+                            <select asp-for="AccountId" class="form-select" asp-items="ViewBag.AccountId">
+                                <option value="">-- اختر حساب الطرف --</option>
+                            </select>
+                            <span asp-validation-for="AccountId" class="text-danger"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="OffsetAccountId" class="form-label"></label>
+                            <select asp-for="OffsetAccountId" class="form-select" asp-items="ViewBag.OffsetAccountId">
+                                <option value="">-- بدون حساب مقابل --</option>
+                            </select>
+                            <span asp-validation-for="OffsetAccountId" class="text-danger"></span>
+                        </div>
+
+                        <div class="col-md-4">
+                            <label asp-for="Amount" class="form-label"></label>
+                            <input asp-for="Amount" class="form-control" />
+                            <span asp-validation-for="Amount" class="text-danger"></span>
+                        </div>
+
+                        <div class="col-md-8">
+                            <label asp-for="Reason" class="form-label"></label>
+                            <input asp-for="Reason" class="form-control" />
+                            <span asp-validation-for="Reason" class="text-danger"></span>
+                        </div>
+
+                        <div class="col-12">
+                            <label asp-for="Description" class="form-label"></label>
+                            <textarea asp-for="Description" class="form-control" rows="3"></textarea>
+                            <span asp-validation-for="Description" class="text-danger"></span>
+                        </div>
+                    </div>
+
+                    <hr />
+                    <div class="d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+                        <button type="submit" class="btn btn-primary">حفظ</button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

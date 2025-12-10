@@ -1,0 +1,76 @@
+﻿@model ERP.Models.StockAdjustment
+
+@{
+    ViewData["Title"] = "تعديل تسوية جرد";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mt-3 mb-3">تعديل تسوية — @Model.Id</h2>
+
+    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <form asp-action="Edit" method="post">
+                @Html.AntiForgeryToken()
+                <input type="hidden" asp-for="Id" />
+
+                <div class="mb-3">
+                    <label asp-for="AdjustmentDate" class="form-label">تاريخ التسوية</label>
+                    <input asp-for="AdjustmentDate" class="form-control" type="date" />
+                    <span asp-validation-for="AdjustmentDate" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="WarehouseId" class="form-label">كود المخزن</label>
+                    <input asp-for="WarehouseId" class="form-control" />
+                    <span asp-validation-for="WarehouseId" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="ReferenceNo" class="form-label">رقم مرجعي</label>
+                    <input asp-for="ReferenceNo" class="form-control" />
+                    <span asp-validation-for="ReferenceNo" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Reason" class="form-label">السبب / ملاحظات عامة</label>
+                    <textarea asp-for="Reason" class="form-control" rows="3"></textarea>
+                    <span asp-validation-for="Reason" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">تاريخ الإنشاء</label>
+                    <input class="form-control"
+                           value="@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")"
+                           disabled />
+                </div>
+
+                @if (Model.UpdatedAt.HasValue)
+                {
+                    <div class="mb-3">
+                        <label class="form-label">آخر تعديل</label>
+                        <input class="form-control"
+                               value="@Model.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")"
+                               disabled />
+                    </div>
+                }
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-primary">
+                        حفظ التغييرات
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        رجوع للقائمة
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

@@ -1,0 +1,58 @@
+﻿@model ERP.Models.UserActivityLog
+
+@{
+    ViewData["Title"] = "تفاصيل سجل النشاط";
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3">تفاصيل سجل النشاط — @Model.Id</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <dl class="row">
+
+                <dt class="col-sm-3">المعرّف</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">المستخدم</dt>
+                <dd class="col-sm-9">@Model.User?.UserName</dd>
+
+                <dt class="col-sm-3">نوع العملية</dt>
+                <dd class="col-sm-9">@Model.ActionType</dd>
+
+                <dt class="col-sm-3">اسم الكيان</dt>
+                <dd class="col-sm-9">@Model.EntityName</dd>
+
+                <dt class="col-sm-3">رقم السجل</dt>
+                <dd class="col-sm-9">@Model.EntityId</dd>
+
+                <dt class="col-sm-3">وقت العملية</dt>
+                <dd class="col-sm-9">@Model.ActionTime.ToString("yyyy-MM-dd HH:mm:ss")</dd>
+
+                <dt class="col-sm-3">الوصف</dt>
+                <dd class="col-sm-9">@Model.Description</dd>
+
+                <dt class="col-sm-3">عنوان IP</dt>
+                <dd class="col-sm-9">@Model.IpAddress</dd>
+
+                <dt class="col-sm-3">المتصفح / الجهاز</dt>
+                <dd class="col-sm-9">@Model.UserAgent</dd>
+
+                <dt class="col-sm-3">القيم القديمة (JSON)</dt>
+                <dd class="col-sm-9">
+                    <pre class="small bg-light p-2">@Model.OldValues</pre>
+                </dd>
+
+                <dt class="col-sm-3">القيم الجديدة (JSON)</dt>
+                <dd class="col-sm-9">
+                    <pre class="small bg-light p-2">@Model.NewValues</pre>
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a asp-action="Index" class="btn btn-erp btn-erp-secondary">رجوع للقائمة</a>
+        <a asp-action="Delete" asp-route-id="@Model.Id" class="btn btn-erp btn-erp-danger">حذف هذا السجل</a>
+    </div>
+</div>

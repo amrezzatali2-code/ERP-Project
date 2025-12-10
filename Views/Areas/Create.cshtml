@@ -1,0 +1,71 @@
+﻿@model ERP.Models.Area
+
+@{
+    ViewData["Title"] = "إضافة منطقة";
+}
+
+<div class="container-fluid" dir="rtl">
+    <h2 class="mt-3 mb-3">@ViewData["Title"]</h2>
+
+    @* نموذج إضافة منطقة جديدة *@
+    <form asp-action="Create" method="post" class="row g-3">
+        @Html.AntiForgeryToken()
+
+        @* عرض كل رسائل الخطأ مرة واحدة أعلى الفورم *@
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        @* المحافظة *@
+        <div class="col-12 col-md-6">
+            <label class="form-label">المحافظة</label>
+            @Html.DropDownListFor(m => m.GovernorateId,
+            (SelectList)ViewBag.GovernorateId,
+                        "-- اختر المحافظة --",
+                        new { @class = "form-select" })
+            <span asp-validation-for="GovernorateId" class="text-danger"></span>
+        </div>
+
+        @* الحي/المركز (يتأثر بالمحافظة المختارة) *@
+        <div class="col-12 col-md-6">
+            <label class="form-label">الحي / المركز</label>
+            @Html.DropDownListFor(m => m.DistrictId,
+                        (SelectList)ViewBag.DistrictId,
+                        "-- اختر الحي/المركز --",
+                        new { @class = "form-select" })
+            <span asp-validation-for="DistrictId" class="text-danger"></span>
+        </div>
+
+        @* اسم المنطقة *@
+        <div class="col-12">
+            <label asp-for="AreaName" class="form-label">اسم المنطقة</label>
+            <input asp-for="AreaName" class="form-control" />
+            <span asp-validation-for="AreaName" class="text-danger"></span>
+        </div>
+
+        @* ملاحظات *@
+        <div class="col-12">
+            <label asp-for="Notes" class="form-label">ملاحظات</label>
+            <textarea asp-for="Notes" class="form-control" rows="3"></textarea>
+            <span asp-validation-for="Notes" class="text-danger"></span>
+        </div>
+
+        @* الحالة (نشط/موقوف) *@
+        <div class="col-12">
+            <div class="form-check form-switch">
+                <input asp-for="IsActive" class="form-check-input" />
+                <label asp-for="IsActive" class="form-check-label">نشط؟</label>
+            </div>
+        </div>
+
+        @* أزرار الحفظ والرجوع *@
+        <div class="col-12 d-flex" style="gap:.5rem;">
+            <button type="submit" class="btn btn-success">حفظ</button>
+            <a class="btn btn-outline-secondary" asp-action="Index">إلغاء</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

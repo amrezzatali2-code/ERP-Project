@@ -1,0 +1,25 @@
+﻿@model ERP.Models.PurchaseReturn
+@{
+    ViewData["Title"] = "حذف مرتجع شراء";
+}
+
+<h2 class="mb-3">حذف مرتجع شراء</h2>
+
+<div class="alert alert-warning" dir="rtl">
+    <strong>تنبيه:</strong> حذف هذا المرتجع سيؤدي إلى حذف <u>كل سطور المرتجع</u> المرتبطة به نهائيًا (Cascade).
+</div>
+
+<table class="table" dir="rtl">
+    <tr><th>رقم المرتجع</th>    <td>@Model.PRetId</td></tr>             @* رقم المرتجع *@
+    <tr><th>التاريخ</th>        <td>@Model.PRetDate.ToString("yyyy-MM-dd")</td></tr> @* تاريخ المرتجع *@
+    <tr><th>العميل</th>        <td>@Model.CustomerId</td></tr>            @* معرف العميل *@
+    <tr><th>المخزن</th>        <td>@Model.WarehouseId</td></tr>         @* معرف المخزن *@
+    <tr><th>مرجع الفاتورة</th> <td>@Model.RefPIId</td></tr>             @* لو مربوطة بفاتورة شراء *@
+    <tr><th>الحالة</th>        <td>@Model.Status</td></tr>              @* حالة المرتجع *@
+</table>
+
+<form method="post" asp-action="Delete" asp-route-id="@Model.PRetId">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+    <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+</form>

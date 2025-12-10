@@ -1,0 +1,56 @@
+﻿@model ERP.Models.StockTransferLine
+
+@{
+    ViewData["Title"] = "إضافة سطر تحويل جديد";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">إضافة سطر تحويل بين المخازن</h2>
+
+    <div class="card">
+        <div class="card-body">
+            <form asp-action="Create" method="post">
+                @Html.AntiForgeryToken()
+
+                <div class="mb-3">
+                    <label asp-for="StockTransferId" class="form-label"></label>
+                    <input asp-for="StockTransferId" class="form-control" />
+                    <span asp-validation-for="StockTransferId" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="ProductId" class="form-label"></label>
+                    <input asp-for="ProductId" class="form-control" />
+                    <span asp-validation-for="ProductId" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Qty" class="form-label"></label>
+                    <input asp-for="Qty" class="form-control" />
+                    <span asp-validation-for="Qty" class="text-danger"></span>
+                </div>
+
+                <div class="mb-3">
+                    <label asp-for="Note" class="form-label"></label>
+                    <textarea asp-for="Note" class="form-control"></textarea>
+                    <span asp-validation-for="Note" class="text-danger"></span>
+                </div>
+
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-erp btn-erp-primary">
+                        حفظ
+                    </button>
+                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                        رجوع للقائمة
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    @{
+        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    }
+}

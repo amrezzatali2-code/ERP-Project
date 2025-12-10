@@ -1,0 +1,58 @@
+﻿@model ERP.Models.StockTransfer
+
+@{
+    ViewData["Title"] = "حذف تحويل مخزني";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف تحويل مخزني — @Model.Id</h2>
+
+    <div class="alert alert-warning">
+        <strong>تحذير:</strong>
+        هل أنت متأكد أنك تريد حذف هذا التحويل؟
+        سيتم حذف رأس التحويل وكل السطور التابعة له ولا يمكن التراجع عن هذه العملية.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم التحويل</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">تاريخ التحويل</dt>
+                <dd class="col-sm-9">
+                    @Model.TransferDate.ToString("yyyy-MM-dd HH:mm")
+                </dd>
+
+                <dt class="col-sm-3">من مخزن</dt>
+                <dd class="col-sm-9">
+                    @Model.FromWarehouseId
+                </dd>
+
+                <dt class="col-sm-3">إلى مخزن</dt>
+                <dd class="col-sm-9">
+                    @Model.ToWarehouseId
+                </dd>
+
+                <dt class="col-sm-3">الملاحظات</dt>
+                <dd class="col-sm-9">
+                    @(string.IsNullOrWhiteSpace(Model.Note) ? "-" : Model.Note)
+                </dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+
+        <div class="d-flex justify-content-between mt-3">
+            <a asp-action="Index" class="btn btn-secondary">
+                إلغاء والرجوع للقائمة
+            </a>
+            <button type="submit" class="btn btn-danger">
+                تأكيد الحذف
+            </button>
+        </div>
+    </form>
+</div>

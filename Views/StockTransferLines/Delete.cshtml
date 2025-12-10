@@ -1,0 +1,44 @@
+﻿@model ERP.Models.StockTransferLine
+
+@{
+    ViewData["Title"] = "حذف سطر التحويل";
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3 text-danger">هل تريد حذف هذا السطر؟</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">رقم السطر</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">رقم التحويل</dt>
+                <dd class="col-sm-9">@Model.StockTransferId</dd>
+
+                <dt class="col-sm-3">كود الصنف</dt>
+                <dd class="col-sm-9">@Model.ProductId</dd>
+
+                <dt class="col-sm-3">الكمية</dt>
+                <dd class="col-sm-9">@Model.Qty</dd>
+
+                <dt class="col-sm-3">ملاحظات السطر</dt>
+                <dd class="col-sm-9">@Model.Note</dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" method="post">
+        @Html.AntiForgeryToken()
+        <input type="hidden" asp-for="Id" />
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-erp btn-erp-danger">
+                تأكيد الحذف
+            </button>
+            <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
+                إلغاء
+            </a>
+        </div>
+    </form>
+</div>

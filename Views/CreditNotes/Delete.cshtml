@@ -1,0 +1,55 @@
+﻿@model ERP.Models.CreditNote
+
+@{
+    ViewData["Title"] = "حذف إشعار إضافة";
+}
+
+<h2 class="mb-3 text-center text-danger" dir="rtl">حذف إشعار إضافة</h2>
+
+<div class="row justify-content-center" dir="rtl">
+    <div class="col-md-8">
+        <div class="card border-danger">
+            <div class="card-body">
+
+                <p class="text-danger fw-bold">
+                    هل أنت متأكد من حذف هذا الإشعار؟ لا يمكن التراجع عن هذه العملية بعد الحفظ.
+                </p>
+
+                @* عرض أهم بيانات الإشعار قبل الحذف *@
+                <table class="table table-bordered" dir="rtl">
+                    <tr>
+                        <th>رقم المستند</th>
+                        <td>@Model.NoteNumber</td>
+                    </tr>
+                    <tr>
+                        <th>تاريخ الإشعار</th>
+                        <td>@Model.NoteDate.ToString("yyyy-MM-dd")</td>
+                    </tr>
+                    <tr>
+                        <th>الطرف</th>
+                        <td>@Model.Customer?.CustomerName</td>
+                    </tr>
+                    <tr>
+                        <th>المبلغ</th>
+                        <td>@Model.Amount.ToString("N2")</td>
+                    </tr>
+                    <tr>
+                        <th>السبب</th>
+                        <td>@Model.Reason</td>
+                    </tr>
+                </table>
+
+                @* نموذج تأكيد الحذف *@
+                <form asp-action="Delete" method="post">
+                    <input type="hidden" asp-for="CreditNoteId" />
+
+                    <div class="d-flex justify-content-between">
+                        <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+                        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+                    </div>
+                </form>
+
+            </div>
+        </div>
+    </div>
+</div>

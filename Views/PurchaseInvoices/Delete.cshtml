@@ -1,0 +1,25 @@
+﻿@model ERP.Models.PurchaseInvoice
+@{
+    ViewData["Title"] = "حذف فاتورة شراء";
+}
+
+<h2 class="mb-3">حذف فاتورة شراء</h2>
+
+<div class="alert alert-warning" dir="rtl">
+    <strong>تنبيه:</strong> حذف هذه الفاتورة سيؤدي إلى حذف <u>كل سطور الفاتورة</u> المرتبطة بها نهائيًا (Cascade).
+</div>
+
+<table class="table" dir="rtl">
+    <tr><th>رقم الفاتورة</th>   <td>@Model.PIId</td></tr>               @* رقم الفاتورة *@
+    <tr><th>التاريخ</th>        <td>@Model.PIDate.ToString("yyyy-MM-dd")</td></tr> @* تاريخ الفاتورة *@
+    <tr><th>العميل</th>        <td>@Model.CustomerId</td></tr>            @* معرف العميل *@
+    <tr><th>المخزن</th>        <td>@Model.WarehouseId</td></tr>         @* معرف المخزن *@
+    <tr><th>مرجع الطلب</th>    <td>@Model.RefPRId</td></tr>             @* لو مربوطة بطلب *@
+    <tr><th>الحالة</th>        <td>@Model.Status</td></tr>              @* حالة الفاتورة *@
+</table>
+
+<form method="post" asp-action="Delete" asp-route-id="@Model.PIId">
+    @Html.AntiForgeryToken()
+    <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+    <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+</form>

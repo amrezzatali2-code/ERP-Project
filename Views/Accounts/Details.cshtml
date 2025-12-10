@@ -1,0 +1,57 @@
+﻿@model ERP.Models.Account
+@using ERP.Models
+
+@{
+    ViewData["Title"] = "تفاصيل حساب";
+}
+
+@functions {
+    public static string GetAccountTypeArabic(AccountType type)
+    {
+        switch (type)
+        {
+            case AccountType.Asset: return "أصل";
+            case AccountType.Liability: return "التزام";
+            case AccountType.Equity: return "حقوق ملكية";
+            case AccountType.Revenue: return "إيراد";
+            case AccountType.Expense: return "مصروف";
+            default: return type.ToString();
+        }
+    }
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3">تفاصيل حساب</h2>
+
+    <dl class="row">
+        <dt class="col-sm-3">الرقم الداخلي</dt>
+        <dd class="col-sm-9">@Model.AccountId</dd>
+
+        <dt class="col-sm-3">كود الحساب</dt>
+        <dd class="col-sm-9">@Model.AccountCode</dd>
+
+        <dt class="col-sm-3">اسم الحساب</dt>
+        <dd class="col-sm-9">@Model.AccountName</dd>
+
+        <dt class="col-sm-3">نوع الحساب</dt>
+        <dd class="col-sm-9">@GetAccountTypeArabic(Model.AccountType)</dd>
+
+        <dt class="col-sm-3">المستوى في الشجرة</dt>
+        <dd class="col-sm-9">@Model.Level</dd>
+
+        <dt class="col-sm-3">حساب طرف؟</dt>
+        <dd class="col-sm-9">@((Model.IsLeaf) ? "نعم - حساب طرف" : "لا - حساب تجميعي")</dd>
+
+        <dt class="col-sm-3">الحساب الأب</dt>
+        <dd class="col-sm-9">@((Model.ParentAccount != null) ? Model.ParentAccount.AccountName : "-")</dd>
+
+        <dt class="col-sm-3">الحالة</dt>
+        <dd class="col-sm-9">@((Model.IsActive) ? "نشط" : "موقوف")</dd>
+
+        <dt class="col-sm-3">ملاحظات</dt>
+        <dd class="col-sm-9">@Model.Notes</dd>
+    </dl>
+
+    <a asp-action="Edit" asp-route-id="@Model.AccountId" class="btn btn-warning">تعديل</a>
+    <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+</div>

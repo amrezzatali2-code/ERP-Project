@@ -1,0 +1,567 @@
+﻿using DocumentFormat.OpenXml.InkML;
+using ERP.Data;                        // سياق قاعدة البيانات AppDbContext
+using ERP.Infrastructure;              // PagedResult + ApplySearchSort
+using ERP.Models;                      // الموديل SalesReturn
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Linq.Expressions;
+using System.Text;                     // علشان StringBuilder فى التصدير
+using System.Threading.Tasks;
+
+namespace ERP.Controllers
+{
+    /// <summary>
+    /// كنترولر هيدر مرتجع البيع:
+    /// - عرض قائمة مرتجعات البيع مع بحث / ترتيب / ترقيم.
+    /// - عرض تفاصيل مرتجع واحد مع سطوره.
+    /// - حذف مرتجع (مع حذف السطور بالكاسكيد).
+    /// - حذف مجموعة مرتجعات / حذف الكل غير المُرحّل.
+    /// - تصدير قائمة المرتجعات (Excel/CSV).
+    /// </summary>
+    public class SalesReturnsController : Controller
+    {
+        // كائن الاتصال بقاعدة البيانات
+        private readonly AppDbContext context;
+
+        public SalesReturnsController(AppDbContext ctx) => context = ctx;
+
+
+
+
+
+
+
+        // =========================
+        // دالة مساعدة: تحميل العملاء + المخازن للـ ViewBag
+        // =========================
+        private async Task PopulateDropDownsAsync(int? selectedCustomerId = null, int? selectedWarehouseId = null)
+        {
+            // قائمة العملاء للأوتوكومبليت في الهيدر
+            // هنا بنرجّع نفس الشكل المستخدم في فاتورة البيع:
+            // Name / Id / PolicyName / UserName / Phone / Address / CreditLimit
+            var customers = await context.Customers
+                .OrderBy(c => c.CustomerName)
+                .Select(c => new
+                {
+                    Id = c.CustomerId,                 // كود العميل
+                    Name = c.CustomerName,             // اسم العميل
+                    PolicyName = "",                   // ممكن تربطها بسياسة العميل لاحقاً
+                    UserName = "",                     // ممكن تربطها بالمستخدم المسئول عن العميل
+                    Phone = c.Phone1,                  // التليفون
+                    Address = c.Address,               // العنوان
+                    CreditLimit = c.CreditLimit        // الحد الائتماني (لو موجود)
+                })
+                .ToListAsync();
+
+            ViewBag.Customers = customers;
+
+            // قائمة المخازن للدروب داون
+            var warehouses = await context.Warehouses
+                .OrderBy(w => w.WarehouseName)
+                .ToListAsync();
+
+            ViewBag.Warehouses = new SelectList(
+                warehouses,
+                "WarehouseId",          // اسم عمود المفتاح في جدول المخازن
+                "WarehouseName",        // اسم المخزن المعروض
+                selectedWarehouseId     // المخزن المختار (لو موجود)
+            );
+        }
+
+
+
+
+
+
+
+
+        // =========================
+        // GET: /SalesReturns/Create
+        // فتح شاشة "مرتجع بيع جديد"
+        // ممكن تيجي:
+        // - بدون بارامتر (مرتجع مستقل)
+        // - أو مع SalesInvoiceId لعمل مرتجع من فاتورة بيع
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> Create(int? salesInvoiceId)
+        {
+            // متغير: نموذج المرتجع اللي هنبعته للفيو
+            var model = new SalesReturn
+            {
+                // التاريخ والوقت الفعليين (مش هيظهروا في الشاشة إلا بعد الحفظ
+                // لأن الفيو بيختبر SRId > 0 قبل ما يعرضهم)
+                SRDate = DateTime.Today,
+                SRTime = DateTime.Now.TimeOfDay,
+
+                Status = "Draft",                           // مسودة
+                IsPosted = false,                           // لسه مش مترحّل
+                CreatedAt = DateTime.UtcNow,                // وقت الإنشاء
+                CreatedBy = User?.Identity?.Name ?? "system"
+            };
+
+            // لو جاي من فاتورة بيع: ننسخ العميل والمخزن والـ Id المرجعي
+            if (salesInvoiceId.HasValue)
+            {
+                var invoice = await context.SalesInvoices
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(si => si.SIId == salesInvoiceId.Value);
+
+                if (invoice == null)
+                {
+                    return NotFound(); // فاتورة البيع مش موجودة
+                }
+
+                model.SalesInvoiceId = invoice.SIId;    // ربط المرتجع بالفاتورة الأصلية
+                model.CustomerId = invoice.CustomerId;  // نفس العميل
+                model.WarehouseId = invoice.WarehouseId; // نفس المخزن
+            }
+
+            // تحميل العملاء والمخازن للواجهة
+            await PopulateDropDownsAsync(model.CustomerId, model.WarehouseId);
+
+            // نعرض نفس شاشة الـ Show (زي ما عملنا في المشتريات / المبيعات)
+            return View("Show", model);
+        }
+
+
+
+
+
+
+        // =========================
+        // Edit — GET: فتح مرتجع بيع قديم للعرض/التعديل
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> Edit(int id)
+        {
+            // تحقق من رقم المرتجع
+            if (id <= 0)
+                return BadRequest("رقم مرتجع البيع غير صالح.");
+
+            // قراءة هيدر المرتجع + العميل + الفاتورة الأصلية (لو موجودة) + السطور
+            var model = await context.SalesReturns
+                .Include(sr => sr.Customer)        // بيانات العميل
+                .Include(sr => sr.SalesInvoice)    // الفاتورة الأصلية لو فيه ربط
+                .Include(sr => sr.Lines)           // سطور المرتجع
+                .AsNoTracking()                    // قراءة فقط بدون تتبّع
+                .FirstOrDefaultAsync(sr => sr.SRId == id);
+
+            if (model == null)
+                return NotFound();                 // المرتجع غير موجود
+
+            // تعبئة القوائم المنسدلة (العملاء + المخازن + ... )
+            await PopulateDropDownsAsync();
+
+            // فتح شاشة المرتجع (Edit = شاشة عرض + أزرار فتح/ترحيل/طباعة)
+            return View(model);
+        }
+
+
+
+        // =========================
+        // Edit — POST: حفظ تعديل هيدر مرتجع البيع مع RowVersion
+        // =========================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Edit(int id, SalesReturn salesReturn)
+        {
+            // تأكد أن رقم المرتجع في الرابط هو نفس الموجود في الموديل
+            if (id != salesReturn.SRId)
+                return NotFound();
+
+            // تحقق إضافي على نسبة خصم الهيدر (0..100)
+            if (salesReturn.HeaderDiscountPercent < 0 || salesReturn.HeaderDiscountPercent > 100)
+            {
+                ModelState.AddModelError(
+                    nameof(SalesReturn.HeaderDiscountPercent),
+                    "نسبة خصم الهيدر يجب أن تكون بين 0 و 100");
+            }
+
+            // لو فيه أخطاء تحقق نرجع لنفس الفورم
+            if (!ModelState.IsValid)
+            {
+                await PopulateDropDownsAsync();
+                return View(salesReturn);
+            }
+
+            try
+            {
+                // تحديث وقت آخر تعديل
+                salesReturn.UpdatedAt = DateTime.Now;
+
+                // إعداد RowVersion الأصلي للتعامل مع التعارض (Concurrency)
+                context.Entry(salesReturn)
+                        .Property(x => x.RowVersion)
+                        .OriginalValue = salesReturn.RowVersion;
+
+                // تحديث الكيان في الـ DbContext
+                context.Update(salesReturn);
+
+                // حفظ التغييرات فعلياً في SQL Server
+                await context.SaveChangesAsync();
+
+                TempData["Msg"] = "تم تعديل مرتجع البيع بنجاح.";
+                return RedirectToAction(nameof(Index));
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // لو المرتجع اختفى أثناء الحفظ (اتحذف مثلاً)
+                bool exists = await context.SalesReturns.AnyAsync(e => e.SRId == id);
+                if (!exists)
+                    return NotFound();
+
+                // تعارض حقيقي: حد تاني عدّل نفس المرتجع في نفس الوقت
+                ModelState.AddModelError(
+                    string.Empty,
+                    "تعذّر حفظ التعديلات بسبب تعديل متزامن على نفس مرتجع البيع. أعد تحميل الصفحة وحاول مرة أخرى.");
+
+                await PopulateDropDownsAsync();
+                return View(salesReturn);
+            }
+        }
+
+
+
+
+
+
+        // =========================================================
+        // دالة مساعدة: تبنى الاستعلام الأساسى مع البحث والترتيب
+        // =========================================================
+        private IQueryable<SalesReturn> BuildQuery(
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir)
+        {
+            // استعلام أساسى بدون تتبع لسرعة التقارير
+            IQueryable<SalesReturn> q = context.SalesReturns.AsNoTracking();
+
+            // الحقول النصية للبحث كسلسلة نصية
+            var stringFields =
+                new Dictionary<string, Expression<Func<SalesReturn, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["status"] = x => x.Status,     // حالة المستند
+                    ["createdby"] = x => x.CreatedBy   // المستخدم الذى أنشأ المرتجع
+                };
+
+            // الحقول الرقمية (int) للبحث العددى
+            var intFields =
+                new Dictionary<string, Expression<Func<SalesReturn, int>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["id"] = x => x.SRId,         // رقم المرتجع
+                    ["customer"] = x => x.CustomerId,   // كود العميل
+                    ["warehouse"] = x => x.WarehouseId   // كود المخزن
+                };
+
+            // حقول الترتيب
+            var orderFields =
+                new Dictionary<string, Expression<Func<SalesReturn, object>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["SRDate"] = x => x.SRDate,                       // التاريخ
+                    ["SRId"] = x => x.SRId,                         // رقم المرتجع
+                    ["CustomerId"] = x => x.CustomerId,                   // العميل
+                    ["WarehouseId"] = x => x.WarehouseId,                  // المخزن
+                    ["NetTotal"] = x => x.NetTotal,                     // الصافى
+                    ["Status"] = x => x.Status ?? string.Empty,       // الحالة
+                    ["CreatedAt"] = x => x.CreatedAt                     // تاريخ الإنشاء
+                };
+
+            // تطبيق إكستنشن البحث + الترتيب الموحد
+            q = q.ApplySearchSort(
+                search: search,
+                searchBy: searchBy,
+                sort: sort,
+                dir: dir,
+                stringFields: stringFields,
+                intFields: intFields,
+                orderFields: orderFields,
+                defaultSearchBy: "all",
+                defaultSortBy: "SRDate");
+
+            return q;
+        }
+
+        // =========================================================
+        // GET: /SalesReturns
+        // عرض قائمة مرتجعات البيع مع البحث / الترتيب / الترقيم
+        // =========================================================
+        public async Task<IActionResult> Index(
+            string? search,                // نص البحث
+            string? searchBy = "all",      // all | id | customer | warehouse | status | createdby
+            string? sort = "SRDate",       // عمود الترتيب
+            string? dir = "desc",          // asc | desc
+            int page = 1,                  // رقم الصفحة
+            int pageSize = 50)             // حجم الصفحة
+        {
+            // (1) بناء الاستعلام حسب الفلاتر
+            var q = BuildQuery(search, searchBy, sort, dir);
+
+            // (2) إنشاء PagedResult جاهز للفيو
+            var model = await PagedResult<SalesReturn>.CreateAsync(q, page, pageSize);
+
+            // (3) إعداد خيارات البحث للبارشال _IndexFilters
+            ViewBag.SearchOptions = new List<SelectListItem>
+            {
+                new("الكل",          "all")       { Selected = (searchBy ?? "all")
+                                                        .Equals("all", StringComparison.OrdinalIgnoreCase) },
+                new("رقم المرتجع",   "id")        { Selected = searchBy == "id" },
+                new("العميل",        "customer")  { Selected = searchBy == "customer" },
+                new("المخزن",        "warehouse") { Selected = searchBy == "warehouse" },
+                new("الحالة",        "status")    { Selected = searchBy == "status" },
+                new("أنشأه",         "createdby") { Selected = searchBy == "createdby" },
+            };
+
+            // خيارات الترتيب
+            ViewBag.SortOptions = new List<SelectListItem>
+            {
+                new("التاريخ",       "SRDate")     { Selected = sort == "SRDate" },
+                new("رقم المرتجع",   "SRId")       { Selected = sort == "SRId" },
+                new("العميل",        "CustomerId") { Selected = sort == "CustomerId" },
+                new("المخزن",        "WarehouseId"){ Selected = sort == "WarehouseId" },
+                new("الصافي",        "NetTotal")   { Selected = sort == "NetTotal" },
+                new("الحالة",        "Status")     { Selected = sort == "Status" },
+                new("أُنشئ في",      "CreatedAt")  { Selected = sort == "CreatedAt" },
+            };
+
+            // (4) تخزين حالة الفلاتر فى ViewBag ليستعملها الفيو
+            ViewBag.Search = search ?? "";
+            ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.Sort = sort ?? "SRDate";
+            ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
+
+            // قيم الترقيم (لو احتجناها فى الفيو أو البارشال)
+            ViewBag.Page = model.PageNumber;
+            ViewBag.PageSize = model.PageSize;
+            ViewBag.TotalPages = model.TotalPages;
+            ViewBag.RangeStart = model.TotalCount == 0
+                                 ? 0
+                                 : ((model.PageNumber - 1) * model.PageSize) + 1;
+            ViewBag.RangeEnd = Math.Min(model.PageNumber * model.PageSize, model.TotalCount);
+            ViewBag.TotalRows = model.TotalCount;
+
+            // نرجع الموديل الكامل PagedResult لسطر الفيو
+            return View(model);
+        }
+
+    
+     
+
+
+
+
+
+
+        // =========================================================
+        // GET: /SalesReturns/Delete/{id}
+        // صفحة تأكيد الحذف (تعرض ملخص المستند وعدد السطور)
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> Delete(int id)   // رقم المرتجع المطلوب حذفه
+        {
+            if (id <= 0) return NotFound();
+
+            // جلب أقل بيانات نحتاجها لعرضها فى صفحة التأكيد
+            var m = await context.SalesReturns
+                .AsNoTracking()
+                .Where(x => x.SRId == id)
+                .Select(x => new SalesReturn
+                {
+                    SRId = x.SRId,
+                    SRDate = x.SRDate,
+                    SRTime = x.SRTime,
+                    CustomerId = x.CustomerId,
+                    WarehouseId = x.WarehouseId,
+                    NetTotal = x.NetTotal,
+                    Status = x.Status,
+                    IsPosted = x.IsPosted,
+                    CreatedBy = x.CreatedBy,
+                    CreatedAt = x.CreatedAt
+                })
+                .FirstOrDefaultAsync();
+
+            if (m == null) return NotFound();
+
+            // عدد السطور لإظهارها فقط فى صفحة التأكيد
+            ViewBag.LinesCount = await context.SalesReturnLines
+                .Where(l => l.SRId == id)
+                .CountAsync();
+
+            return View(m);
+        }
+
+        // =========================================================
+        // POST: /SalesReturns/Delete/{id}
+        // ينفّذ الحذف فعلياً (مع حذف السطور بالكاسكيد)
+        // =========================================================
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            if (id <= 0) return NotFound();
+
+            // التحقق: لا نحذف لو المستند مُرحّل
+            var header = await context.SalesReturns
+                .AsNoTracking()
+                .Where(x => x.SRId == id)
+                .Select(x => new { x.SRId, x.IsPosted })
+                .FirstOrDefaultAsync();
+
+            if (header == null) return NotFound();
+
+            if (header.IsPosted)
+            {
+                TempData["error"] = "لا يمكن حذف مرتجع مُرحّل.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // حذف بالـ Key فقط — الكاسكيد فى الـ FK يتكفّل بحذف السطور
+            context.Entry(new SalesReturn { SRId = id }).State = EntityState.Deleted;
+
+            try
+            {
+                await context.SaveChangesAsync();
+                TempData["ok"] = $"تم حذف المرتجع {id} وكافة سطوره.";
+            }
+            catch (DbUpdateException)
+            {
+                TempData["error"] = "تعذّر الحذف بسبب علاقة بيانات أخرى. تأكد من عدم وجود مراجع مرتبطة.";
+            }
+
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // POST: /SalesReturns/BulkDelete
+        // حذف مجموعة مرتجعات غير مُرحّلة (من الشيك بوكس فى الجدول)
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> BulkDelete(string selectedIds)
+        {
+            // selectedIds: نص بالشكل "1,5,7,10"
+            if (string.IsNullOrWhiteSpace(selectedIds))
+            {
+                TempData["error"] = "من فضلك اختر على الأقل مرتجعاً واحداً للحذف.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // تحويل النص إلى قائمة أرقام صحيحة
+            var ids = selectedIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.TryParse(s, out var n) ? (int?)n : null)
+                .Where(n => n.HasValue)
+                .Select(n => n!.Value)
+                .ToList();
+
+            if (ids.Count == 0)
+            {
+                TempData["error"] = "لم يتم التعرف على أى أرقام مرتجعات صحيحة.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // جلب المرتجعات غير المُرحّلة فقط
+            var returns = await context.SalesReturns
+                .Where(sr => ids.Contains(sr.SRId) && !sr.IsPosted)
+                .ToListAsync();
+
+            if (returns.Count == 0)
+            {
+                TempData["error"] = "لا توجد مرتجعات غير مُرحّلة يمكن حذفها.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // الحذف (مع حذف السطور بالكاسكيد)
+            context.SalesReturns.RemoveRange(returns);
+            await context.SaveChangesAsync();
+
+            TempData["ok"] = $"تم حذف {returns.Count} مرتجع (مع السطور التابعة لها).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // POST: /SalesReturns/DeleteAll
+        // حذف كل المرتجعات غير المُرحّلة
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteAll()
+        {
+            // نجلب فقط غير المُرحّل
+            var returns = await context.SalesReturns
+                .Where(sr => !sr.IsPosted)
+                .ToListAsync();
+
+            if (returns.Count == 0)
+            {
+                TempData["error"] = "لا توجد مرتجعات غير مُرحّلة يمكن حذفها.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            context.SalesReturns.RemoveRange(returns);
+            await context.SaveChangesAsync();
+
+            TempData["ok"] = $"تم حذف {returns.Count} مرتجع (مع السطور التابعة لها).";
+            return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // GET: /SalesReturns/Export
+        // تصدير قائمة مرتجعات البيع (Excel/CSV) بنفس فلاتر البحث
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> Export(
+            string? search,
+            string? searchBy = "all",
+            string? sort = "SRDate",
+            string? dir = "desc",
+            string? format = "excel")
+        {
+            // نفس منطق الفلاتر المستخدم فى Index
+            var q = BuildQuery(search, searchBy, sort, dir);
+
+            var list = await q
+                .OrderBy(sr => sr.SRDate)
+                .ThenBy(sr => sr.SRId)
+                .ToListAsync();
+
+            var sb = new StringBuilder();
+
+            // العناوين
+            sb.AppendLine("ReturnId,Date,Time,CustomerId,WarehouseId,SalesInvoiceId,NetTotal,Status,IsPosted");
+
+            // الصفوف
+            foreach (var x in list)
+            {
+                // وقت المرتجع فى شكل hh:mm
+                var timeStr = x.SRTime.ToString(@"hh\:mm");
+
+                var line = string.Join(",",
+                    x.SRId,
+                    x.SRDate.ToString("yyyy-MM-dd"),
+                    timeStr,
+                    x.CustomerId,
+                    x.WarehouseId,
+                    x.SalesInvoiceId?.ToString() ?? "",
+                    x.NetTotal.ToString("0.00"),
+                    (x.Status ?? "").Replace(",", " "),
+                    x.IsPosted ? "Yes" : "No"
+                );
+
+                sb.AppendLine(line);
+            }
+
+            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+
+            // حالياً بنصدر CSV حتى لو المستخدم اختار Excel (نفس الفكرة اللى عملناها فى فواتير البيع)
+            var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv";
+            var fileName = $"SalesReturns_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+
+            return File(bytes, "text/csv", fileName);
+        }
+    }
+}

@@ -1,0 +1,103 @@
+﻿@{
+    ViewData["Title"] = "إضافة صلاحية إضافية لمستخدم";
+    var rows = ViewBag.Permissions as IEnumerable<dynamic>;
+}
+
+<form asp-action="Create" method="post" class="card">
+    <div class="card-body">
+
+        @* كومبو المستخدم مع بحث *@
+        <div class="mb-3">
+            <label class="form-label fw-semibold">المستخدم</label>
+            <select id="UserId"
+                    name="userId"
+                    asp-items="ViewBag.UserId"
+                    class="form-select selectpicker"
+                    data-live-search="true">
+                <option value="">-- اختر مستخدم --</option>
+            </select>
+        </div>
+
+        <div class="mb-2 text-muted">
+            @ViewBag.UserRolesText   @* أدوار المستخدم: ... *@
+        </div>
+
+        @* مربع بحث داخل الصلاحيات *@
+        <div class="mb-3">
+            <input type="text"
+                   id="permSearch"
+                   class="form-control"
+                   placeholder="بحث في الكود أو الموديول أو اسم الصلاحية..." />
+        </div>
+
+        <div class="table-responsive" style="max-height:500px">
+            <table id="permissionsTable" class="table table-striped table-hover">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">إضافية؟</th>
+                        <th class="text-center">في الأدوار؟</th>
+                        <th>الصلاحية</th>
+                        <th>الموديول</th>
+                        <th>الكود</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (rows != null)
+                    {
+                        foreach (var p in rows)
+                        {
+                            <tr>
+                                <td class="text-center">
+                                    <input type="checkbox"
+                                           name="selectedPermissionIds"
+                                           value="@p.Id"
+                                           @(p.IsExtra ? "checked" : "") />
+                                </td>
+
+                                <td class="text-center">
+                                    @if (p.IsFromRole)
+                                    {
+                                        <span class="text-success fw-bold">✔</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">✖</span>
+                                    }
+                                </td>
+
+                                <td>@p.NameAr</td>
+                                <td>@p.Module</td>
+                                <td>@p.Code</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="card-footer d-flex justify-content-between">
+        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+        <button type="submit" class="btn btn-primary">حفظ</button>
+    </div>
+</form>
+
+@section Scripts {
+    <script>
+        // تغيير المستخدم -> يعيد فتح الصفحة لنفس شاشة Create مع userId جديد
+        document.getElementById("UserId").addEventListener("change", function () {
+            const userId = this.value;
+            if (!userId) return;
+            const url = '@Url.Action("Create", "UserExtraPermissions")' + '?userId=' + userId;
+            window.location.href = url;
+        });
+
+        // بحث داخل جدول الصلاحيات
+        document.getElementById("permSearch").addEventListener("input", function () {
+            const value = this.value.toLowerCase();
+            document.querySelectorAll("#permissionsTable tbody tr").forEach(tr => {
+                tr.style.display = tr.innerText.toLowerCase().includes(value) ? "" : "none";
+            });
+        });
+    </script>
+}

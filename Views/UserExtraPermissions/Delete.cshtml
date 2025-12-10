@@ -1,0 +1,46 @@
+﻿@model ERP.Models.UserExtraPermissions
+
+@{
+    ViewData["Title"] = "حذف صلاحية إضافية";
+    var userName = Model.User?.DisplayName ?? Model.User?.UserName ?? "";
+}
+
+<div class="container mt-3" dir="rtl">
+    <h2 class="mb-3 text-danger">حذف صلاحية إضافية — @userName</h2>
+
+    <div class="alert alert-warning">
+        هل أنت متأكد من حذف هذه الصلاحية الإضافية من المستخدم؟ هذه العملية لا يمكن التراجع عنها.
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">المعرّف</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">المستخدم</dt>
+                <dd class="col-sm-9">@userName (@Model.UserId)</dd>
+
+                <dt class="col-sm-3">الصلاحية</dt>
+                <dd class="col-sm-9">@Model.Permission?.NameAr (@Model.PermissionId)</dd>
+
+                <dt class="col-sm-3">كود الصلاحية</dt>
+                <dd class="col-sm-9">@Model.Permission?.Code</dd>
+
+                <dt class="col-sm-3">تاريخ الإضافة</dt>
+                <dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+            </dl>
+        </div>
+    </div>
+
+    <form asp-action="Delete" asp-controller="UserExtraPermissions" method="post">
+        <input type="hidden" asp-for="Id" />
+
+        <button type="submit" class="btn btn-danger">
+            تأكيد الحذف
+        </button>
+        <a asp-action="Index" class="btn btn-secondary">
+            إلغاء والرجوع للقائمة
+        </a>
+    </form>
+</div>

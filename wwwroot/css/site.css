@@ -1,0 +1,426 @@
+/* ================== إعدادات عامة للـ HTML والـ BODY ================== */
+
+html {
+    font-size: 10px; /* تصغير الـ base font للموبايل */
+}
+
+@media (min-width: 768px) {
+    html {
+        font-size: 16px; /* على الشاشات المتوسطة فما فوق نرجّع الحجم الطبيعي */
+    }
+}
+
+/* شكل الـ focus لعناصر الفورم والأزرار */
+.btn:focus,
+.btn:active:focus,
+.btn-link.nav-link:focus,
+.form-control:focus,
+.form-check-input:focus {
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+}
+
+html {
+    position: relative;
+    min-height: 100%;
+}
+
+body {
+    margin-bottom: 60px; /* مساحة تحت للفوتر */
+}
+
+/* نحدد ارتفاع الناف بار مرة واحدة ونستخدمه في الباقي + متغيرات أزرار النظام */
+:root {
+    --erp-navbar-height: 56px; /* لو حسيت إن الارتفاع أكبر/أصغر عدّل الرقم */
+    /* ألوان موحّدة لأزرار نظام الـ ERP */
+    --erp-primary: #2563eb; /* أزرق للعمليات الأساسية (بحث، حفظ، تطبيق) */
+    --erp-success: #16a34a; /* أخضر لعمليات الإضافة والنجاح */
+    --erp-danger: #dc2626; /* أحمر للحذف والتحذير */
+    --erp-secondary: #6b7280; /* رمادي للأزرار الثانوية مثل اختيار الأعمدة */
+    --erp-light: #f3f4f6; /* لون خلفيات فاتحة للأزرار الخفيفة */
+    --erp-radius: .5rem; /* درجة تدوير حواف الأزرار */
+    --erp-shadow-sm: 0 1px 2px rgba(15, 23, 42, .12); /* ظل خفيف تحت الزر */
+}
+
+/* ================== تنسيق الأزرار الموحدة لنظام ERP ================== */
+
+/* هذا الكلاس الأساسي نضيفه مع كل زر في النظام: btn btn-erp + النوع */
+.btn-erp {
+    border-radius: var(--erp-radius); /* حواف مدورة */
+    font-weight: 500; /* خط أوضح */
+    padding: .4rem 1rem; /* ارتفاع/عرض مريح */
+    display: inline-flex; /* عشان الأيقونة والنص يبقوا في خط واحد */
+    align-items: center; /* توسيط رأسي */
+    justify-content: center; /* توسيط أفقي */
+    gap: .35rem; /* مسافة بين الأيقونة والنص إن وُجدت */
+    box-shadow: var(--erp-shadow-sm); /* ظل بسيط */
+    border-width: 1px;
+    border-style: solid;
+    font-size: .9rem; /* حجم خط موحد */
+}
+
+/* نسخة صغيرة من الأزرار للتحكمات الكثيرة (toolbar, actions) */
+.btn-erp-sm {
+    padding: .25rem .75rem;
+    font-size: .8rem;
+}
+
+/* زر أساسي أزرق (بحث، حفظ، تطبيق، تصدير...) */
+.btn-erp-primary {
+    background-color: var(--erp-primary);
+    border-color: var(--erp-primary);
+    color: #fff;
+}
+
+    .btn-erp-primary:hover {
+        background-color: #1d4ed8;
+        border-color: #1d4ed8;
+    }
+
+/* زر نجاح أخضر (إضافة محافظة، إضافة سجل جديد...) */
+.btn-erp-success {
+    background-color: var(--erp-success);
+    border-color: var(--erp-success);
+    color: #fff;
+}
+
+    .btn-erp-success:hover {
+        background-color: #15803d;
+        border-color: #15803d;
+    }
+
+/* زر تحذير/حذف أحمر */
+.btn-erp-danger {
+    background-color: var(--erp-danger);
+    border-color: var(--erp-danger);
+    color: #fff;
+}
+
+    .btn-erp-danger:hover {
+        background-color: #b91c1c;
+        border-color: #b91c1c;
+    }
+
+/* زر ثانوي رمادي (اختيار الأعمدة، طباعة، أزرار ثانوية) */
+.btn-erp-secondary {
+    background-color: #ffffff;
+    border-color: var(--erp-secondary);
+    color: var(--erp-secondary);
+}
+
+    .btn-erp-secondary:hover {
+        background-color: #f9fafb;
+    }
+
+/* زر خفيف/شبح (مسح الفلاتر، إلغاء...) */
+.btn-erp-ghost {
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--erp-secondary);
+    box-shadow: none;
+}
+
+    .btn-erp-ghost:hover {
+        background-color: var(--erp-light);
+        border-color: transparent;
+    }
+
+/* زر أيقونة فقط لو احتجته بعدين */
+.btn-erp-icon-only {
+    padding-inline: .5rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    justify-content: center;
+}
+
+/* شريط أدوات أعلى الجدول: يلم كل الأزرار في سطر منسق */
+.erp-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+    margin-bottom: .25rem;
+}
+
+/* كلاس مساعد لعدم لفّ النص في Label حجم الصفحة (لو لم يكن معرفاً من قبل) */
+.nowrap {
+    white-space: nowrap;
+}
+
+/* ================== تنسيق الفلاتر (Filters) ================== */
+
+/* مسافة أفقية صغيرة بين عناصر الفلاتر داخل كل input-group */
+.filters .gapped > * + * {
+    margin-inline-start: .5rem; /* زوّدها إلى 1rem لو عايز مسافة أكبر */
+}
+
+/* تكبير بسيط لحجم حقول البحث والترتيب في شريط الفلاتر */
+.filters .form-control,
+.filters .form-select,
+.filters .btn {
+    font-size: 0.95rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+/* جعل نص الأزرار في منتصف الزر */
+.filters .btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* موبايل: نزّل العناصر تحت بعض بمسافة لطيفة */
+@media (max-width: 576px) {
+    .filters .gapped > * {
+        margin-block-end: .5rem;
+    }
+
+        .filters .gapped > *:last-child {
+            margin-block-end: 0;
+        }
+}
+
+/* ================== تنسيق شريط القوائم العلوي (الناف بار) ================== */
+
+/* لون وحجم نص الروابط + اسم النظام في الناف بار */
+.navbar .navbar-brand,
+.navbar .navbar-nav .nav-link {
+    color: #ffffff !important; /* يخلي لون الكلام أبيض */
+    font-size: 0.85rem; /* تصغير بسيط لحجم الخط */
+}
+
+/* تثبيت الناف بار أعلى الصفحة */
+.navbar {
+    position: sticky;
+    top: 0;
+    z-index: 1050; /* رقم كبير عشان يفضل فوق الباقي */
+}
+
+    /* لون عند المرور بالماوس أو الفوكس على الرابط */
+    .navbar .navbar-nav .nav-link:hover,
+    .navbar .navbar-nav .nav-link:focus {
+        color: #f8f9fa !important; /* درجة بياض مختلفة بسيطة عند الهوفر */
+    }
+
+    /* تصغير حجم قوائم الـ dropdown داخل الناف بار */
+    .navbar .dropdown-menu .dropdown-item {
+        font-size: 0.9rem; /* حجم خط عناصر القائمة المنسدلة */
+        padding: 0.35rem 1rem; /* تصغير ارتفاع السطر */
+    }
+
+        /* تأثير بسيط عند الوقوف على العنصر */
+        .navbar .dropdown-menu .dropdown-item:hover,
+        .navbar .dropdown-menu .dropdown-item:focus {
+            background-color: #aca8aa; /* لون خفيف عند المرور بالماوس */
+            text-align: right;
+        }
+
+    /* جعل القوائم المنسدلة عربية (من اليمين لليسار) */
+    .navbar .dropdown-menu {
+        direction: rtl; /* اتجاه النص والعناصر من اليمين لليسار */
+        text-align: right; /* محاذاة الكلام داخل القائمة ناحية اليمين */
+        right: 0; /* يلصق القائمة من ناحية اليمين تحت الزر */
+        left: auto; /* يلغي المحاذاة الافتراضية من اليسار في Bootstrap */
+    }
+
+/* ================== تخطيط عام للـ ERP (شبيه ببرامج الديسكتوب) ================== */
+
+/* الحاوية الرئيسية: Sidebar يمين + محتوى يسار */
+.app-shell {
+    display: flex;
+    flex-direction: row-reverse; /* القائمة في اليمين */
+    min-height: calc(100vh - var(--erp-navbar-height)); /* ارتفاع الشاشة ناقص الناف بار */
+}
+
+/* القائمة الجانبية */
+.app-sidebar {
+    width: 230px; /* عرض السايدبار */
+    border-left: 1px solid #eee;
+    background-color: #ffffff;
+    padding: 1rem 0.75rem;
+    font-size: 0.95rem;
+}
+
+    /* شكل عناصر القائمة في السايدبار */
+    .app-sidebar .nav-link {
+        color: #333;
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.5rem;
+        margin-bottom: 0.2rem;
+    }
+
+        .app-sidebar .nav-link:hover {
+            background-color: #f3f4f6;
+        }
+
+/* منطقة التابات + المحتوى */
+.app-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0rem 0rem;
+}
+
+/* شريط التابات أعلى المحتوى */
+.app-tabs-bar {
+    display: flex;
+    flex-direction: row-reverse; /* أول تاب ناحية اليمين */
+    gap: 0.4rem;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.25rem 0;
+    margin-bottom: 0.5rem;
+    overflow-x: auto;
+    /* جعل شريط التابات ثابت تحت الناف بار مباشرة */
+    position: sticky;
+    top: var(--erp-navbar-height); /* نفس ارتفاع الناف بار */
+    z-index: 1040;
+    background-color: #f9fafb; /* خلفية ثابتة عشان ما تختلطش مع اللي تحتها */
+}
+
+/* زر التاب */
+.app-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 999px; /* شكل حبوبه */
+    padding-inline: 0.75rem;
+    white-space: nowrap;
+    border: 1px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+    /* التاب النشط */
+    .app-tab.active {
+        background-color: #0d6efd;
+        color: #ffffff;
+        border-color: #0d6efd;
+    }
+
+/* عنوان التاب */
+.app-tab-title {
+    font-size: 0.85rem;
+}
+
+/* زر الإغلاق × */
+.app-tab-close {
+    order: -1; /* على يمين النص في RTL */
+    font-size: 1.25rem; /* تكبير حجم علامة × */
+    margin-right: .35rem; /* مسافة من حافة التاب اليمينية */
+    margin-left: .35rem; /* مسافة بين الكلمة وعلامة × */
+    line-height: 1; /* ضبط الارتفاع علشان ما يزودش ارتفاع التاب */
+    cursor: pointer;
+}
+
+/* منطقة الإطارات (المحتوى) */
+.app-tabs-container {
+    flex: 1;
+    position: relative;
+}
+
+/* iframe لكل شاشة */
+.app-tab-frame {
+    position: absolute;
+    inset: 0; /* يملى المساحة كلها */
+    width: 100%;
+    height: 100%;
+    border: none;
+    background-color: #ffffff;
+}
+
+/* رسالة "اختر شاشة" */
+.app-tab-placeholder {
+    padding: 2rem;
+    font-size: 0.95rem;
+}
+
+/* ================== تنسيق جداول الـ ERP (هيدر ثابت + شكل موحد) ================== */
+
+/* الغلاف الخارجي للجدول - هو اللي فيه Scroll */
+.erp-table-wrapper {
+    max-height: 500px; /* ارتفاع الجدول، غيّره حسب احتياج الشاشة */
+    overflow-y: auto; /* سكرول رأسي للصفوف فقط */
+    border: 1px solid #dee2e6; /* برواز خفيف حول الجدول */
+    border-radius: .5rem; /* زوايا مدوّرة بسيطة */
+    background-color: #fff; /* خلفية بيضاء */
+    direction: rtl; /* الجدول من اليمين لليسار */
+}
+
+    /* منع مسافة تحت الجدول جوة الـ wrapper */
+    .erp-table-wrapper table {
+        margin-bottom: 0;
+    }
+
+/* تثبيت رأس الجدول */
+.erp-table thead th {
+    position: sticky; /* الرأس يبقى ثابت */
+    top: 0; /* ملتصق بأعلى الـ wrapper */
+    z-index: 2; /* فوق الصفوف */
+    background-color: #f8f9fa; /* لون ثابت للهيدر */
+}
+
+/* تحسين شكل جدول ERP الموحّد */
+.erp-table {
+    font-size: 0.9rem;
+    vertical-align: middle;
+}
+
+/* الأعمدة القابلة للترتيب */
+.erp-table-sortable thead th a {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    text-decoration: none;
+    color: inherit;
+}
+
+    /* عند المرور على عنوان العمود */
+    .erp-table-sortable thead th a:hover {
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
+/* أيقونة السهم الصغير للترتيب */
+.erp-sort-icon {
+    font-size: 0.75rem;
+}
+
+/* ===================== طباعة القوائم ===================== */
+@media print {
+    /* إخفاء كل ما عليه no-print */
+    .no-print {
+        display: none !important;
+    }
+
+    /* إخفاء الأزرار داخل الجدول (تفاصيل/تعديل/حذف) وأي زر آخر */
+    .erp-print-area .btn,
+    .erp-print-area input[type="checkbox"] {
+        display: none !important;
+    }
+
+    /* التأكد أن منطقة الجدول فقط هي التي تظهر في الصفحة */
+    body * {
+        visibility: hidden;
+    }
+
+    .erp-print-area,
+    .erp-print-area * {
+        visibility: visible;
+    }
+
+    .erp-print-area {
+        position: absolute;
+        inset: 0;
+        margin: 0;
+    }
+
+
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+
+        .erp-print-area {
+            margin-top: 0;
+        }
+    }
+}

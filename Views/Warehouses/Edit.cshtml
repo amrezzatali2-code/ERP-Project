@@ -1,0 +1,22 @@
+﻿@model ERP.Models.Branch
+@{
+    ViewData["Title"] = "تعديل فرع";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تعديل فرع</h2>
+    <form asp-action="Edit" method="post" class="row g-3">
+        <div class="col-md-4">
+            <label class="form-label">معرّف الفرع</label>
+            <input asp-for="BranchId" class="form-control" readonly />
+        </div>
+        <div class="col-md-8">
+            <label class="form-label">اسم الفرع</label>
+            <input asp-for="BranchName" class="form-control" />
+            <span asp-validation-for="BranchName" class="text-danger"></span>
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button class="btn btn-primary">تعديل</button>
+            <a asp-action="Index" class="btn btn-secondary">رجوع</a>
+        </div>
+    </form>
+</div>

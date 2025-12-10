@@ -1,0 +1,90 @@
+﻿@using Microsoft.AspNetCore.Mvc.Rendering
+
+@{
+    var action = Convert.ToString(ViewContext.RouteData.Values["action"]) ?? "Index";
+    var controller = Convert.ToString(ViewContext.RouteData.Values["controller"]) ?? "Home";
+
+    string search = ViewBag.Search as string ?? "";
+    string searchBy = ViewBag.SearchBy as string ?? "name";
+    string sort = ViewBag.Sort as string ?? "id";
+    string dir = ViewBag.Dir as string ?? "asc";
+
+    // لو الكنترولر بعت Options نستخدمها، لو لا نحط قيم افتراضية (الاسم/الكود)
+    IEnumerable<SelectListItem>? searchOptions = ViewBag.SearchOptions as IEnumerable<SelectListItem>;
+    IEnumerable<SelectListItem>? sortOptions = ViewBag.SortOptions as IEnumerable<SelectListItem>;
+
+    searchOptions ??= new[]
+    {
+        new SelectListItem("الاسم", "name", searchBy == "name"),
+        new SelectListItem("الكود", "id",   searchBy == "id")
+    };
+
+    sortOptions ??= new[]
+    {
+        new SelectListItem("الاسم", "name", sort == "name"),
+        new SelectListItem("الكود", "id",   sort == "id")
+    };
+
+    var dirOptions = new[]
+    {
+        new SelectListItem("تصاعدي", "asc", dir != "desc"),
+        new SelectListItem("تنازلي", "desc", dir == "desc")
+    };
+}
+
+<form method="get" asp-action="@action" asp-controller="@controller" class="filters mb-3">
+    <div class="row g-2 align-items-end">
+
+        <!-- عمود البحث -->
+        <div class="col-md-6 col-lg-5 text-end">
+            <label class="form-label">بحث</label>
+            <div class="input-group gapped">
+                <input type="text"
+                       name="search"
+                       value="@search"
+                       class="form-control"
+                       placeholder="اكتب نص البحث..." />
+
+                <select name="searchBy" class="form-select">
+                    @foreach (var opt in searchOptions)
+                    {
+                        <option value="@opt.Value" selected="@(opt.Selected ? "selected" : null)">
+                            @opt.Text
+                        </option>
+                    }
+                </select>
+
+                <button type="submit" class="btn btn-primary">بحث</button>
+                <a class="btn btn-outline-secondary"
+                   asp-action="@action"
+                   asp-controller="@controller">إلغاء</a>
+            </div>
+        </div>
+
+        <!-- عمود الترتيب -->
+        <div class="col-md-6 col-lg-5 text-end">
+            <label class="form-label">الترتيب</label>
+            <div class="input-group gapped">
+                <select name="sort" class="form-select">
+                    @foreach (var opt in sortOptions)
+                    {
+                        <option value="@opt.Value" selected="@(opt.Selected ? "selected" : null)">
+                            @opt.Text
+                        </option>
+                    }
+                </select>
+
+                <select name="dir" class="form-select">
+                    @foreach (var opt in dirOptions)
+                    {
+                        <option value="@opt.Value" selected="@(opt.Selected ? "selected" : null)">
+                            @opt.Text
+                        </option>
+                    }
+                </select>
+
+                <button type="submit" class="btn btn-dark">ترتيب</button>
+            </div>
+        </div>
+    </div>
+</form>

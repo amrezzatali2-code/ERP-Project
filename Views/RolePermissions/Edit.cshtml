@@ -1,0 +1,114 @@
+﻿@model ERP.Models.RolePermission   
+                                    @* موديل بسيط فيه RoleId *@
+
+@{
+    ViewData["Title"] = "تعديل صلاحيات دور";
+
+    // اسم الدور
+    string roleName = ViewBag.RoleName as string ?? "";
+
+    // قائمة كل الصلاحيات
+    var permissions = ViewBag.Permissions as List<ERP.Models.Permission>
+                      ?? new List<ERP.Models.Permission>();
+
+    // الصلاحيات الحالية للدور (IDs)
+    var selectedIds = ViewBag.SelectedPermissionIds as HashSet<int>
+                      ?? new HashSet<int>();
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">
+        تعديل صلاحيات دور — @roleName (@Model.RoleId)
+    </h2>
+
+    <form asp-action="Edit" method="post" class="card">
+        <div class="card-body">
+
+            @* نبعث RoleId مع الفورم *@
+            <input type="hidden" name="roleId" value="@Model.RoleId" />
+
+            @* البحث فى الصلاحيات *@
+            <div class="mb-3">
+                <label class="form-label fw-semibold">بحث فى الصلاحيات</label>
+                <input type="text"
+                       id="permSearch"
+                       class="form-control form-control-sm"
+                       placeholder="اكتب جزء من اسم الصلاحية أو الموديول..." />
+            </div>
+
+            @* جدول الصلاحيات *@
+            <div class="table-responsive" style="max-height: 500px; overflow:auto;">
+                <table class="table table-sm table-hover table-striped">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:60px;" class="text-center">
+                                <input type="checkbox" id="chkAll" />
+                            </th>
+                            <th>الصلاحية</th>
+                            <th>الموديول</th>
+                            <th>الكود</th>
+                        </tr>
+                    </thead>
+                    <tbody id="permTableBody">
+                    @foreach (var p in permissions)
+                    {
+                        // هل هذه الصلاحية مضافة فعلاً لهذا الدور؟
+                            bool isChecked = selectedIds.Contains(p.PermissionId);
+
+                        <tr>
+                            <td class="text-center">
+                                <input type="checkbox"
+                                       name="selectedPermissionIds"
+                                           value="@p.PermissionId"
+                                       class="perm-checkbox"
+                                       @(isChecked ? "checked=\"checked\"" : "") />
+                            </td>
+                            <td>@p.NameAr</td>
+                            <td>@p.Module</td>
+                            <td>@p.Code</td>
+                        </tr>
+                    }
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary">
+                رجوع للقائمة
+            </a>
+            <button type="submit" class="btn btn-primary">
+                حفظ التعديلات
+            </button>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    @* سكربت صغير لتحديد الكل والبحث *@
+    <script>
+        // ✅ تحديد / إلغاء تحديد كل الصلاحيات
+        const chkAll = document.getElementById('chkAll');
+        if (chkAll) {
+            chkAll.addEventListener('change', function () {
+                const checked = this.checked;
+                document.querySelectorAll('.perm-checkbox')
+                    .forEach(cb => cb.checked = checked);
+            });
+        }
+
+        // 🔍 فلترة الصفوف حسب البحث
+        const searchInput = document.getElementById('permSearch');
+        if (searchInput) {
+            searchInput.addEventListener('input', function () {
+                const term = this.value.toLowerCase();
+                document.querySelectorAll('#permTableBody tr')
+                    .forEach(tr => {
+                        const text = tr.innerText.toLowerCase();
+                        tr.style.display = text.includes(term) ? '' : 'none';
+                    });
+            });
+        }
+    </script>
+}
