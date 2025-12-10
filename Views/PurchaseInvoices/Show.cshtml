@@ -1332,22 +1332,22 @@
                 });
             }
 
-            // ---------------------------------------------
+                     // ---------------------------------------------
             // التابات: حركة الصنف + تعديل بياناته
             // ---------------------------------------------
-           const btnProdMovement = document.getElementById('btnOpenProductMovement'); // زر حركة الصنف
+            const btnProdMovement = document.getElementById('btnOpenProductMovement'); // زر حركة الصنف
             const btnProdEdit     = document.getElementById('btnOpenProductEdit');     // زر تعديل بيانات الصنف
 
             // دالة: جلب كود الصنف الحالي من البوكسات
             function getCurrentProdId() {
-                // أولاً: نحاول من خانة كود الصنف الظاهرة
-                if (prodCodeInput && prodCodeInput.value.trim() !== '') {
-                    return prodCodeInput.value.trim();
-                }
-
-                // ثانياً: من الهيدن (لو متخزّن فيه)
+                // أولاً: من الهيدن (المعرّف الداخلى للصنف) ← ده الأضمن
                 if (prodHiddenId && prodHiddenId.value.trim() !== '') {
                     return prodHiddenId.value.trim();
+                }
+
+                // ثانياً: من بوكس كود الصنف الظاهر (لو المستخدم كتبه يدويًا)
+                if (prodCodeInput && prodCodeInput.value.trim() !== '') {
+                    return prodCodeInput.value.trim();
                 }
 
                 return '';
@@ -1379,61 +1379,77 @@
                 }
             }
 
-            // عناوين الأساس من السيرفر مع frame=1 لعرض الصفحة بدون Layout مزدوج
-            const editBaseUrl     = '@Url.Action("Edit", "Products", new { frame = 1 })';
-            const movementBaseUrl = '@Url.Action("Show", "Products", new { frame = 1 })';
+            // عناوين الأساس من السيرفر (من غير frame ولا باراميترات)
+            const editBaseUrl     = '@Url.Action("Edit", "Products")';   // مثال: /Products/Edit
+            const movementBaseUrl = '@Url.Action("Show", "Products")';   // مثال: /Products/Show
+
+            // دالة: بناء رابط تعديل الصنف مع id + frame=1
+            function buildEditUrl(id) {
+                // نتأكد إن مفيش "/" زيادة في آخر الرابط
+                const base = editBaseUrl.replace(/\/$/, '');
+                const params = new URLSearchParams();
+                params.set('frame', '1'); // نعرض بدون Layout مزدوج
+                return base + '/' + encodeURIComponent(id) + '?' + params.toString();
+            }
+
+            // دالة: بناء رابط حركة الصنف مع prodId + frame=1
+            function buildMovementUrl(id) {
+                const base = movementBaseUrl; // /Products/Show
+                const params = new URLSearchParams();
+                params.set('prodId', id);
+                params.set('frame', '1');
+                const sep = base.includes('?') ? '&' : '?';
+                return base + sep + params.toString();
+            }
 
             // زر "تعديل بيانات الصنف"
-                  if (btnProdEdit) {
-            btnProdEdit.addEventListener('click', function (e) {
-                e.preventDefault(); // منع السلوك العادي للزر
+            if (btnProdEdit) {
+                btnProdEdit.addEventListener('click', function (e) {
+                    e.preventDefault(); // منع السلوك العادي للزر
 
-                const id = getCurrentProdId(); // متغير: كود الصنف الحالي
-                if (!id) {
-                    alert('من فضلك اختر صنفاً أولاً.');
-                    if (prodNameInput) {
-                        prodNameInput.focus();
-                        prodNameInput.select();
+                    const id = getCurrentProdId(); // متغير: كود الصنف الحالي
+                    if (!id) {
+                        alert('من فضلك اختر صنفاً أولاً.');
+                        if (prodNameInput) {
+                            prodNameInput.focus();
+                            prodNameInput.select();
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                // متغير: رابط شاشة تعديل الصنف (نفس اللى كان عندك)
-                const url = editBaseUrl + '/' + encodeURIComponent(id);
+                    // متغير: رابط شاشة تعديل الصنف
+                    const url = buildEditUrl(id);
 
-                // فتح التاب بدون اسم الصنف
-                openTabFromFrame(url, 'prod-edit-' + id, 'تعديل الصنف');
-            });
-        }
-
+                    // فتح التاب بعنوان ثابت بدون اسم الصنف
+                    openTabFromFrame(url, 'prod-edit-' + id, 'تعديل الصنف');
+                });
+            }
 
             // زر "حركة الصنف"
-                 if (btnProdMovement) {
-            btnProdMovement.addEventListener('click', function (e) {
-                e.preventDefault(); // منع السلوك العادي للزر
+            if (btnProdMovement) {
+                btnProdMovement.addEventListener('click', function (e) {
+                    e.preventDefault(); // منع السلوك العادي للزر
 
-                const id = getCurrentProdId(); // متغير: كود الصنف الحالي
-                if (!id) {
-                    alert('من فضلك اختر صنفاً أولاً.');
-                    if (prodNameInput) {
-                        prodNameInput.focus();
-                        prodNameInput.select();
+                    const id = getCurrentProdId(); // متغير: كود الصنف الحالي
+                    if (!id) {
+                        alert('من فضلك اختر صنفاً أولاً.');
+                        if (prodNameInput) {
+                            prodNameInput.focus();
+                            prodNameInput.select();
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                // متغير: رابط شاشة حركة الصنف (نفس اللى كان عندك)
-                const url = movementBaseUrl + '?prodId=' + encodeURIComponent(id);
+                    // متغير: رابط شاشة حركة الصنف
+                    const url = buildMovementUrl(id);
 
-                // فتح التاب بدون اسم الصنف
-                openTabFromFrame(url, 'prod-move-' + id, 'حركة الصنف');
-            });
-        }
-
+                    // فتح التاب بعنوان ثابت بدون اسم الصنف
+                    openTabFromFrame(url, 'prod-move-' + id, 'حركة الصنف');
+                });
+            }
 
             // ---------------------------------------------
             // تهيئة مبدئية لو في فاتورة موجودة وبها صنف بالفعل
-            // (هذا الجزء كان موجود عندك، نتركه كما هو)
             // ---------------------------------------------
             if (prodHiddenId && prodHiddenId.value) {
                 const opt = findProductByCode(prodHiddenId.value);
@@ -1442,6 +1458,7 @@
                 }
             }
 
-        })();
+        })(); // ← نهاية IIFE الخاصة بالأصناف
+
     </script>
 }
