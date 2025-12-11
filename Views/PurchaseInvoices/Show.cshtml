@@ -1520,7 +1520,7 @@
         })();
 
 
-          // =========================================================
+         // =========================================================
         // منطق زر "حفظ الفاتورة"
         // يحفظ هيدر الفاتورة (المورد + المخزن) ويرجع رقم PIId
         // =========================================================
@@ -1600,7 +1600,9 @@
                         return;
                     }
 
-                    // لو النجاح true ⇒ نحدّث رقم الفاتورة في الواجهة
+                    // =============================
+                    // تحديث رقم الفاتورة في الواجهة
+                    // =============================
                     const newId = data.piId || 0;
 
                     if (newId > 0) {
@@ -1612,17 +1614,48 @@
                         // تحديث بوكس رقم الفاتورة الظاهر
                         const invoiceNumberDisplay = document.getElementById('InvoiceNumberDisplay');
                         if (invoiceNumberDisplay) {
-                            invoiceNumberDisplay.value = newId.toString();
+                            // لو السيرفر رجّع invoiceNumber نستخدمه، وإلا نستخدم newId
+                            invoiceNumberDisplay.value = data.invoiceNumber || newId.toString();
                         }
                     }
 
-                    // تحديث حالة الفاتورة في الحقل المخفي (لو موجود)
+                    // =============================
+                    // تحديث التاريخ والوقت على الشاشة
+                    // =============================
+
+                    const invoiceDateDisplay = document.getElementById('InvoiceDateDisplay');
+                    if (invoiceDateDisplay && data.invoiceDate) {
+                        invoiceDateDisplay.value = data.invoiceDate;
+                    }
+
+                    const invoiceTimeDisplay = document.getElementById('InvoiceTimeDisplay');
+                    if (invoiceTimeDisplay && data.invoiceTime) {
+                        invoiceTimeDisplay.value = data.invoiceTime;
+                    }
+
+                    // =============================
+                    // تحديث حالة الفاتورة والترحيل وكاتبها
+                    // =============================
+
+                    // حالة الفاتورة النصية (Draft / Posted ...)
                     const statusHidden = document.getElementById('InvoiceStatusHidden');
                     if (statusHidden && data.status) {
                         statusHidden.value = data.status;
                     }
 
-                    // مفيش رسائل نجاح صغيرة هنا؛ فقط لو في خطأ بنستخدم alert
+                    // هل الفاتورة مُرحّلة؟ (نعم / لا)
+                    const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
+                    if (isPostedDisplay && typeof data.isPosted === 'boolean') {
+                        isPostedDisplay.value = data.isPosted ? 'نعم' : 'لا';
+                    }
+
+                    // كاتب الفاتورة
+                    const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');
+                    if (createdByDisplay && data.createdBy) {
+                        createdByDisplay.value = data.createdBy;
+                    }
+
+                    // هنا مفيش رسالة نجاح، لو حابب نضيف Toast أو Alert نعمله بعدين
 
                 } catch (err) {
                     console.error(err);
