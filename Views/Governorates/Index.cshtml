@@ -490,14 +490,14 @@
                 <div class="card-body py-2">
                     <div class="d-grid gap-1">
                         @* زر إضافة محافظة *@
-                        <a class="btn btn-erp btn-erp-outline-success"
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
                            asp-action="Create">
                             + إضافة محافظة
                         </a>
 
                         @* زر فلترة بالتاريخ/الوقت (يفتح المودال) *@
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-secondary"
+                                class="btn btn-erp btn-erp-secondary btn-erp-lg" 
                                 data-bs-toggle="modal"
                                 data-bs-target="#dateFilterModal">
                             فلترة بالتاريخ/الوقت
@@ -505,7 +505,7 @@
 
                         @* زر اختيار الأعمدة *@
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-secondary"
+                                class="btn btn-erp btn-erp-secondary btn-erp-lg" "
                                 data-bs-toggle="modal"
                                 data-bs-target="#columnsModalGov">
                             اختيار الأعمدة
@@ -520,7 +520,7 @@
                             <input type="hidden" name="selectedIds" id="selectedIdsInput" />
                             <button type="button"
                                     id="btnDeleteSelected"
-                                    class="btn btn-erp btn-erp-outline-danger">
+                                    class="btn btn-erp btn-erp-secondary btn-erp-lg">
                                 حذف المحدد
                             </button>
                         </form>
@@ -533,7 +533,7 @@
                             @Html.AntiForgeryToken()
                             <button type="button"
                                     id="btnDeleteAll"
-                                    class="btn btn-erp btn-erp-outline-danger">
+                                    class="btn btn-erp btn-erp-secondary btn-erp-lg">
                                 حذف جميع المحافظات
                             </button>
                         </form>
@@ -541,7 +541,7 @@
                         @* زر طباعة *@
                         <button type="button"
                                 id="btnPrint"
-                                class="btn btn-erp btn-erp-outline-secondary">
+                                class="btn btn-erp btn-erp-secondary btn-erp-lg">
                             🖨️ طباعة
                         </button>
 
@@ -587,13 +587,13 @@
 
                             <select name="format"
                                     class="form-select"
-                                    style="width:90px;font-size:.9rem;">
+                                    style="width:150px;font-size:.9rem;">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
                             </select>
 
                             <button type="submit"
-                                    class="btn btn-erp btn-erp-success flex-grow-1">
+                                    class="btn btn-erp btn-erp-secondary btn-erp-lg">
                                 تصدير
                             </button>
                         </form>
@@ -611,7 +611,7 @@
 
 
     @* ===== جدول المحافظات (هو الوحيد اللي يتطبع) ===== *@
-    <div class="erp-table-wrapper mt-3 erp-print-area">
+    <div class="erp-table-wrapper  erp-print-area">
         <table id="govTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light">
                 <tr>
@@ -1051,5 +1051,73 @@
                 window.location.href = buildUrl("", "");
             });
         })();
+
+
+          // تعليق: عند تحميل الصفحة نشغّل منطق تحريك عرض الأعمدة لهذا الجدول فقط
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // 1) نجيب الـ wrapper الخاص بجدول المحافظات
+            var wrapper = document.querySelector('.erp-table-wrapper');
+            if (!wrapper) return; // لو مش موجود نخرج بهدوء
+
+            // 2) نجيب الجدول نفسه من داخل الـ wrapper
+            var table = wrapper.querySelector('table.erp-table');
+            if (!table) return;
+
+            // 3) نجيب كل عناوين الأعمدة (th) من رأس الجدول
+            var ths = table.querySelectorAll('thead th');
+
+            ths.forEach(function (th) {
+
+                // تعليق: نخلي الـ th position: relative عشان نقدر نحط جوّاه المقبض
+                th.style.position = 'relative';
+
+                // إنشاء عنصر المقبض
+                var handle = document.createElement('div');
+                handle.className = 'erp-col-resize-handle'; // الكلاس اللي في الـ CSS
+
+                // نضيف المقبض داخل رأس العمود
+                th.appendChild(handle);
+
+                // متغيرات لحفظ نقطة البداية
+                var startX;      // مكان الماوس في البداية
+                var startWidth;  // عرض العمود في البداية
+
+                // حدث الضغط بالموس على المقبض
+                handle.addEventListener('mousedown', function (e) {
+                    e.preventDefault(); // منع تحديد النصوص أو السحب العادي
+
+                    // حفظ وضع البداية
+                    startX = e.pageX;           // مكان الماوس على محور X
+                    startWidth = th.offsetWidth; // عرض العمود الحالي
+
+                    // دالة: تتحرك مع الماوس وتغيّر عرض العمود
+                    function onMouseMove(eMove) {
+                        // فرق الحركة في الاتجاه الأفقي
+                        var diffX = eMove.pageX - startX;
+
+                        // في RTL: المستخدم هيجر المقبض ناحية اليمين لتكبير العمود
+                        var newWidth = startWidth + diffX;
+
+                        // حد أدنى للعرض عشان العمود ما يختفيش
+                        if (newWidth < 50) newWidth = 50;
+
+                        // تطبيق العرض الجديد على الـ th
+                        th.style.width = newWidth + 'px';
+                    }
+
+                    // دالة: عند رفع الماوس نوقف المتابعة
+                    function onMouseUp() {
+                        document.removeEventListener('mousemove', onMouseMove);
+                        document.removeEventListener('mouseup', onMouseUp);
+                    }
+
+                    // ربط الأحداث على مستوى المستند كله
+                    document.addEventListener('mousemove', onMouseMove);
+                    document.addEventListener('mouseup', onMouseUp);
+                });
+            });
+        });
+
     </script>
 }

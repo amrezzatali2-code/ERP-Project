@@ -2,3 +2,7 @@ git status          # تشوف إيه اتغير
 git add .           # تضيف التغييرات
 git commit -m "وصف التغيير"
 git push            # ترفع التعديلات على نفس الفرع
+
+
+
+cd /d "D:\Courses\Courses to study\ASP.NET\ERP"

@@ -1,7 +1,6 @@
 ﻿// ===============================
-// نظام التابات للـ ERP (نسخة محدثة)
+// نظام التابات للـ ERP (نسخة IFRAME + زر تحديث)
 // ===============================
-
 (function () {
 
     // ===============================
@@ -16,8 +15,8 @@
 
     // ===============================
     // 1) وضع "داخل iframe"
-    //    هنا كل الفكرة: لما أضغط على app-menu-link جوّه التاب،
-    //    ما يتنقلش جوّه نفس التاب، لكن يبعت طلب للـ parent يفتح/يُفعِّل التاب المطلوب
+    //    لو أنا جوّه التاب، أى لينك من نوع app-menu-link
+    //    هيبعت رسالة للنافذة الأم تفتح/تفعّل التاب المطلوب
     // ===============================
     if (inFrame) {
 
@@ -49,9 +48,9 @@
     // 2) من هنا الكود يعمل في الصفحة الرئيسية فقط (Layout الرئيسي)
     // ===============================
 
-    var tabsBar = document.getElementById('appTabsBar');          // شريط التابات
-    var tabsContainer = document.getElementById('appTabsContainer');    // حاوية الإطارات
-    var homeContent = document.getElementById('homeContent');         // محتوى الصفحة الرئيسية
+    var tabsBar = document.getElementById('appTabsBar');            // شريط التابات (الأزرار)
+    var tabsContainer = document.getElementById('appTabsContainer'); // حاوية الإطارات (iframes)
+    var homeContent = document.getElementById('homeContent');       // محتوى الصفحة الرئيسية
 
     if (!tabsBar || !tabsContainer) {
         return; // لا يوجد تابات فى هذا الـLayout
@@ -59,19 +58,18 @@
 
     // ===== مساعدات لتشغيل/إيقاف "وضع التابات" =====
 
+    // تفعيل وضع التابات: إخفاء الصفحة الرئيسية وإظهار منطقة التابات
     function enableTabsMode() {
-        // تعليق: إضافة كلاس لرفع ارتفاع منطقة الإطارات
         if (!document.body.classList.contains('has-tabs')) {
             document.body.classList.add('has-tabs');
         }
-        // إخفاء محتوى الصفحة الرئيسية مع وجود تابات
         if (homeContent) {
             homeContent.style.display = 'none';
         }
     }
 
+    // لو مفيش ولا تاب مفتوح نرجع كل شيء كما كان
     function disableTabsModeIfNoTabs() {
-        // لو مفيش ولا تاب مفتوح نرجع كل شيء كما كان
         var count = tabsBar.querySelectorAll('.app-tab').length;
         if (count === 0) {
             document.body.classList.remove('has-tabs');
@@ -86,7 +84,7 @@
     // ===============================
     function openTab(tabId, url, title) {
 
-        // تعليق: حماية بسيطة لو مفيش tabId
+        // حماية بسيطة لو مفيش tabId
         if (!tabId || tabId.trim() === '') {
             tabId = 'tab-' + Math.random().toString(36).substring(2);
         }
@@ -96,7 +94,7 @@
         if (existingTab) {
             var existingFrame = tabsContainer.querySelector('.app-tab-frame[data-tab-id="' + tabId + '"]');
 
-            // تعليق: لو نفس التاب لكن URL جديد (مثلاً Show لعميل آخر) نحدث الـ src
+            // لو نفس التاب لكن URL جديد (مثلاً Show لسجل آخر) نحدث الـ src
             if (existingFrame && existingFrame.src !== url) {
                 existingFrame.src = url;
             }
@@ -133,76 +131,12 @@
         activateTab(tabId);
     }
 
-
-
-    // دالة: تحديث (ريفريش) التاب النشِط حالياً
-    function refreshCurrentTab() {
-        // نجيب الـ div الخاص بالتاب الحالي (المحتوى النشِط)
-        var activePane = document.querySelector("#erpTabsContent .tab-pane.active");
-        if (!activePane) return;   // لو مفيش تاب نشِط نخرج بهدوء
-
-        // نقرأ رابط الصفحة المخزن في data-url
-        var url = activePane.getAttribute("data-url");
-        if (!url) return;          // لو مفيش URL نخرج
-
-        // نجيب عنوان التاب من اللينك النشط (للاستخدام لاحقاً لو حبيت تظهر لودر)
-        var activeLink = document.querySelector("#erpTabsNav .nav-link.active");
-
-        // نقدر نحط لودر بسيط لو حابب
-        if (activePane) {
-            activePane.innerHTML = "<div class='p-3 text-center text-muted'>جاري تحديث التاب...</div>";
-        }
-
-        // طلب الصفحة من السيرفر مرة أخرى
-        fetch(url, {
-            headers: {
-                "X-Requested-With": "XMLHttpRequest" // اختيارى لو حابب تفرق في السيرفر
-            }
-        })
-            .then(function (response) {
-                return response.text();
-            })
-            .then(function (html) {
-                // استبدال محتوى التاب بالمحتوى الجديد
-                activePane.innerHTML = html;
-            })
-            .catch(function (error) {
-                console.error("خطأ أثناء تحديث التاب:", error);
-                activePane.innerHTML = "<div class='p-3 text-danger text-center'>حدث خطأ أثناء التحديث.</div>";
-            });
-    }
-
-    // في آخر الملف حيث يتم تصدير الدوال عالمياً:
-    window.erpTabs = {
-        openTab: openTab,         // فتح تاب جديد
-        activateTab: activateTab, // تفعيل تاب موجود
-        closeTab: closeTab,       // إغلاق تاب
-        refreshCurrentTab: refreshCurrentTab // ✅ تحديث التاب الحالي
-    };
-
-
-
-
-    document.addEventListener("DOMContentLoaded", function () {
-        var btnRefresh = document.getElementById("btnRefreshTab");
-        if (btnRefresh) {
-            btnRefresh.addEventListener("click", function (e) {
-                e.preventDefault();  // منع أي سلوك افتراضي للزر
-                if (window.erpTabs && typeof window.erpTabs.refreshCurrentTab === "function") {
-                    window.erpTabs.refreshCurrentTab();  // تحديث التاب الحالي فقط
-                }
-            });
-        }
-    });
-
-
-
     // ===============================
     // تنشيط تبويب معيّن
     // ===============================
     function activateTab(tabId) {
 
-        // 1) الأزرار
+        // 1) الأزرار (التابات في الشريط العلوي)
         var allTabs = tabsBar.querySelectorAll('.app-tab');
         allTabs.forEach(function (tab) {
             var isActive = tab.getAttribute('data-tab-id') === tabId;
@@ -213,7 +147,7 @@
             }
         });
 
-        // 2) الإطارات
+        // 2) الإطارات (iframes)
         var allFrames = tabsContainer.querySelectorAll('.app-tab-frame');
         allFrames.forEach(function (frame) {
             var isActive = frame.getAttribute('data-tab-id') === tabId;
@@ -236,7 +170,7 @@
         var wasActive = tab.classList.contains('active');
         tab.remove();
 
-        var frame = tabsContainer.querySelector('[data-tab-id="' + tabId + '"]');
+        var frame = tabsContainer.querySelector('.app-tab-frame[data-tab-id="' + tabId + '"]');
         if (frame) {
             frame.remove();
         }
@@ -252,6 +186,19 @@
 
         // لو مفيش تابات → أرجع الصفحة الرئيسية
         disableTabsModeIfNoTabs();
+    }
+
+    // ===============================
+    // تحديث (ريفريش) التاب النشط حاليًا (IFRAME)
+    // ===============================
+    function refreshCurrentTab() {
+        // نجيب الـ iframe الظاهر حاليًا (اللى مش عليه d-none)
+        var activeFrame = tabsContainer.querySelector('.app-tab-frame:not(.d-none)');
+        if (!activeFrame) return;
+
+        // طريقة بسيطة: إعادة تعيين الـ src لنفسه → Reload
+        var currentSrc = activeFrame.src;
+        activeFrame.src = currentSrc;
     }
 
     // ===============================
@@ -280,7 +227,6 @@
 
     // ===============================
     // ربط روابط القائمة العلوية بنظام التابات
-    // (يشتغل في الـ Layout الرئيسي فقط)
     // ===============================
     var menuLinks = document.querySelectorAll('.app-menu-link');
 
@@ -313,75 +259,27 @@
         openTab(tabId, url, title);
     });
 
-
-
-
-    // دالة: تحديث (ريفريش) التاب النشِط حالياً بدون إغلاقه
-    function refreshActiveTab() {
-        // نجيب اللينك النشِط في شريط التابات
-        var activeLink = document.querySelector("#erpTabsNav .nav-link.active");
-        // ونجيب الـ div الخاص بمحتوى التاب النشِط
-        var activePane = document.querySelector("#erpTabsContent .tab-pane.active");
-
-        if (!activeLink || !activePane) {
-            return; // لو مفيش تاب نشِط نخرج بهدوء
-        }
-
-        // نحاول نقرأ رابط الصفحة من data-url أو href
-        var url =
-            activeLink.getAttribute("data-url") ||
-            activePane.getAttribute("data-url") ||
-            activeLink.getAttribute("href");
-
-        if (!url) {
-            return; // لو مش لاقيين URL مش هنعمل حاجة
-        }
-
-        // نتأكد إن باراميتر frame=1 موجود (لو انت بتستخدمه لعرض الصفحة داخل التاب)
-        if (!url.includes("frame=1")) {
-            var sep = url.indexOf("?") >= 0 ? "&" : "?";
-            url = url + sep + "frame=1";
-        }
-
-        // نعرض رسالة بسيطة أثناء التحميل
-        activePane.innerHTML =
-            "<div class='p-3 text-center text-muted'>جاري تحديث التاب...</div>";
-
-        // نطلب نفس الصفحة من السيرفر مرة أخرى
-        fetch(url, {
-            headers: {
-                "X-Requested-With": "XMLHttpRequest" // اختيارى
-            }
-        })
-            .then(function (response) {
-                return response.text();
-            })
-            .then(function (html) {
-                // نحقن الـ HTML الجديد داخل نفس التاب
-                activePane.innerHTML = html;
-            })
-            .catch(function (error) {
-                console.error("خطأ أثناء تحديث التاب:", error);
-                activePane.innerHTML =
-                    "<div class='p-3 text-danger text-center'>حدث خطأ أثناء التحديث.</div>";
+    // ===============================
+    // زر "تحديث التاب" في الـ Layout الرئيسي (لو موجود)
+    // ===============================
+    document.addEventListener('DOMContentLoaded', function () {
+        var btnRefresh = document.getElementById('btnRefreshTab');
+        if (btnRefresh) {
+            btnRefresh.addEventListener('click', function (e) {
+                e.preventDefault();
+                refreshCurrentTab(); // تحديث التاب النشط فقط
             });
-    }
+        }
+    });
 
-
-
-
-
-
-
-
+    // ===============================
     // إتاحة الدوال عالميًا لو احتجناها لاحقاً
+    // ===============================
     window.erpTabs = {
-        openTab: openTab,             // فتح تاب جديد
-        activateTab: activateTab,     // تفعيل تاب موجود
-        closeTab: closeTab,           // إغلاق تاب
-        refreshActiveTab: refreshActiveTab // ✅ تحديث التاب الحالي بدون إغلاقه
+        openTab: openTab,               // فتح تاب جديد
+        activateTab: activateTab,       // تفعيل تاب موجود
+        closeTab: closeTab,             // إغلاق تاب
+        refreshCurrentTab: refreshCurrentTab // تحديث التاب الحالي (IFRAME)
     };
-
-
 
 })();

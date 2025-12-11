@@ -138,61 +138,58 @@
                     }
 
                     <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        @* الجزء الأيسر: عنوان الفاتورة + المستخدم *@
+                        @* الجزء الأيسر: عنوان الفاتورة + كاتب الفاتورة *@
                         <div>
-                            <h5 class="mb-1">
-                                @if (isNewInvoice)
-                                {
-                                    @:فاتورة مشتريات
-                                }
-                                else
-                                {
-                                    @:فاتورة مشتريات
-                                    <span class="small opacity-100">رقم @Model.PIId</span>
-                                }
-                            </h5>
+                            <h5 class="mb-1">فاتورة مشتريات</h5>
 
-                            @if (!isNewInvoice && !string.IsNullOrWhiteSpace(Model.CreatedBy))
-                            {
-                                <div class="small opacity-100">
-                                    أُنشئت بواسطة:
-                                    <span class="fw-semibold">@Model.CreatedBy</span>
-                                </div>
-                            }
+                            <div class="small opacity-100">
+                                كاتب الفاتورة:
+                                <span class="fw-semibold">
+                                    @(
+                                                                        !string.IsNullOrWhiteSpace(Model.CreatedBy)
+                                                                        ? Model.CreatedBy
+                                                                        : "غير محدد"
+                                                                        )
+                                </span>
+                            </div>
                         </div>
 
-                        @* الجزء الأيمن: حالة الفاتورة *@
+                        @* الجزء الأيمن: رسالة بسيطة حسب الحالة (جديدة / قديمة) *@
                         <div class="text-end">
                             @if (isNewInvoice)
                             {
                                 <span class="text-white fw-semibold">
-                                    اضغط على "فاتورة جديدة".
-                                </span>
-                            }
-                            else if (string.Equals(Model.Status, "Posted", StringComparison.OrdinalIgnoreCase))
-                            {
-                                <span class="text-white fw-semibold">
-                                    فاتورة مرحّلة
-                                </span>
-                            }
-                            else if (string.Equals(Model.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
-                            {
-                                <span class="text-white fw-semibold">
-                                    فاتورة ملغاة
+                                    اضغط على فاتورة جديدة  .
                                 </span>
                             }
                             else
                             {
                                 <span class="text-white fw-semibold">
-                                    فاتورة مسودة
+                                    فاتورة مشتريات مسجَّلة
                                 </span>
                             }
                         </div>
                     </div>
 
+
                     <div class="card-body">
 
                         <div class="row g-3 align-items-end">
+
+
+                            @* كود المورد *@
+                            <div class="col-lg-2 col-md-3">
+                                <label class="form-label form-label-sm">كود المورد</label>
+
+                                <!-- تعديل: شيل readonly وخليه يقبل كتابة -->
+                                <input id="CustomerCodeDisplay"
+                                       class="form-control form-control-sm text-center invoice-small-input"
+                                       type="number"         <!-- ممكن تخليها text لو حابب -->
+                                <!-- هذا هو الحقل الفعلي الذي يُحفظ في الفاتورة -->
+                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                            </div>
+
+
 
                             @* اسم المورد + أوتوكومبليت *@
                             <div class="col-lg-4 col-md-6">
@@ -230,29 +227,20 @@
                             </div>
 
 
-                            @* كود المورد *@
-                            <div class="col-lg-2 col-md-3">
-                                <label class="form-label form-label-sm">كود المورد</label>
+                            @* رقم الفاتورة - يظهر في الصف الأول بدلاً من المخزن *@
+                            <div class="col-lg-3 col-md-2">
+                                <label class="form-label form-label-sm">رقم الفاتورة</label>
 
-                                <!-- تعديل: شيل readonly وخليه يقبل كتابة -->
-                                <input id="CustomerCodeDisplay"
-                                       class="form-control form-control-sm text-center invoice-small-input"
-                                       type="number"         <!-- ممكن تخليها text لو حابب -->
-                               
+                                @* حقل مخفي يحتفظ برقم الفاتورة لاستخدامه لاحقاً في الجافاسكربت *@
+                                <input type="hidden"
+                                       id="InvoiceId" @* متغير: رقم الفاتورة الداخلي (0 = فاتورة جديدة) *@
+                                       value="@(Model?.PIId ?? 0)" />
 
-                                <!-- هذا هو الحقل الفعلي الذي يُحفظ في الفاتورة -->
-                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
-                            </div>
-
-
-                            @* المخزن *@
-                            <div class="col-lg-3 col-md-3">
-                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
-                                <select asp-for="WarehouseId"
-                                        asp-items="ViewBag.Warehouses"
-                                        class="form-select form-select-sm">
-                                    <option value="">اختر المخزن</option>
-                                </select>
+                                @* بوكس للعرض فقط (ReadOnly) لرقم الفاتورة *@
+                                <input id="InvoiceNumberDisplay" @* متغير: يعرض رقم الفاتورة للمستخدم *@
+                                       class="form-control form-control-sm text-center"
+                                       value="@(Model != null && Model.PIId > 0 ? Model.PIId.ToString() : "")"
+                                       readonly />
                             </div>
 
                             @* التاريخ والوقت *@
@@ -275,40 +263,60 @@
                                 </div>
                             </div>
 
-
+                                                  
                         </div>
 
                         <br />
 
-                        <div class="row g-3">
+@* حقل مخفي: حالة الفاتورة النصية (Draft / Posted / Cancelled ...)
+   يخص منطق الموديل فقط ولا يظهر للمستخدم *@
 
+<input type="hidden"
+       asp-for="Status"
+       id="InvoiceStatusHidden" />
 
+<div class="row g-3">
 
-                                          @* حقل مخفي: حالة الفاتورة النصية (Draft / Posted / Cancelled ...)
-                                          يخص منطق الموديل فقط ولا يظهر للمستخدم *@
-                                      <input type="hidden"
-                                       asp-for="Status"
-                                         id="InvoiceStatusHidden" />
+    @* بوكس واحد فقط لعرض هل الفاتورة مُرحَّلة أم لا *@
 
-                                      @* بوكس واحد فقط لعرض هل الفاتورة مُرحَّلة أم لا *@
-                              <div class="col-lg-4 col-md-4">
-                                  <label class="form-label form-label-sm">مُرحَّلة؟</label>
-                                  <input id="InvoiceIsPostedDisplay"               @* متغير: يعرض نعم/لا حسب الترحيل *@
-                                    class="form-control form-control-sm text-center"
-                                   value="@(Model.IsPosted ? "نعم" : "لا")"
-                                  readonly />
+    <div class="col-lg-3 col-md-6 col-sm-12">
+        <label class="form-label form-label-sm">مُرحَّلة؟</label>
+        <input id="InvoiceIsPostedDisplay"   @* متغير: يعرض نعم/لا حسب الترحيل *@
+               class="form-control form-control-sm text-center"
+               value="@(Model.IsPosted ? "نعم" : "لا")"
+               readonly />
+    </div>
+
+    @* طلب الشراء المرجعي *@
+
+    <div class="col-lg-3 col-md-6 col-sm-12">
+        <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
+        <input class="form-control form-control-sm text-center"
+               value="@(Model.RefPRId?.ToString() ?? "")"
+               readonly />
+    </div>
+
+    @* المخزن *@
+    <div class="col-lg-3 col-md-6 col-sm-12">
+        <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+        <select asp-for="WarehouseId"
+                asp-items="ViewBag.Warehouses"
+                class="form-select form-select-sm">
+            <option value="">اختر المخزن</option>
+        </select>
+    </div>
+
+    @* كاتب الفاتورة *@
+                            <div class="col-lg-3 col-md-6 col-sm-12">
+                                <label class="form-label form-label-sm">كاتب الفاتورة</label>
+                                <input id="InvoiceCreatedByDisplay"
+                                       class="form-control form-control-sm text-center"
+                                       value="@Model.CreatedBy"
+                                       readonly />
                             </div>
 
-                                  @* طلب الشراء المرجعي كما هو *@
-                             <div class="col-lg-4 col-md-4">
-                                       <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
-                                      <input class="form-control form-control-sm text-center"
-                                      value="@(Model.RefPRId?.ToString() ?? "")"
-                                      readonly />
-                              </div>
+</div>
 
-    
-                         </div>
 
 
                       
@@ -788,6 +796,13 @@
                             @* متغير: زر فتح فاتورة جديدة على الواجهة *@
                             ➕ فاتورة جديدة
                         </a>
+
+                        @* زر حفظ الفاتورة في جدول الهيدر *@
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnSaveInvoiceHeader">
+                            💾 حفظ الفاتورة
+                        </button>
 
 
                         <button type="button"
@@ -1505,7 +1520,117 @@
         })();
 
 
+          // =========================================================
+        // منطق زر "حفظ الفاتورة"
+        // يحفظ هيدر الفاتورة (المورد + المخزن) ويرجع رقم PIId
+        // =========================================================
+        (function () {
 
+            // متغير: زر الحفظ
+            const saveBtn = document.getElementById('btnSaveInvoiceHeader');
+            if (!saveBtn) {
+                return; // لو الزر مش موجود، نخرج بهدوء
+            }
+
+            saveBtn.addEventListener('click', async function (e) {
+                e.preventDefault(); // منع أي submit افتراضي
+
+                // متغير: رقم الفاتورة الحالي (0 = فاتورة جديدة)
+                const invoiceIdInput = document.getElementById('InvoiceId');
+                const invoiceId = invoiceIdInput
+                    ? parseInt(invoiceIdInput.value || '0', 10)
+                    : 0;
+
+                // متغير: كود المورد من الحقل المخفي
+                const customerIdInput = document.getElementById('CustomerId');
+                const customerId = customerIdInput
+                    ? parseInt(customerIdInput.value || '0', 10)
+                    : 0;
+
+                // متغير: كود المخزن من الكومبو
+                const warehouseSelect = document.getElementById('WarehouseId');
+                const warehouseId = warehouseSelect
+                    ? parseInt(warehouseSelect.value || '0', 10)
+                    : 0;
+
+                // لو حابب ناخد RefPRId من حقل معين فيما بعد، جاهز:
+                let refPrId = null; // مبدئياً مفيش طلب شراء مرجعي
+                const refPrInput = document.getElementById('RefPRId');
+                if (refPrInput && refPrInput.value.trim() !== '') {
+                    const parsed = parseInt(refPrInput.value.trim(), 10);
+                    if (!isNaN(parsed)) {
+                        refPrId = parsed;
+                    }
+                }
+
+                // تحقق بسيط: لازم المورد والمخزن
+                if (!customerId || !warehouseId) {
+                    alert('من فضلك اختر المورد والمخزن أولاً قبل حفظ الفاتورة.');
+                    return;
+                }
+
+                // كائن البيانات المبعوته للكنترولر (DTO)
+                const dto = {
+                    piId: invoiceId,
+                    customerId: customerId,
+                    warehouseId: warehouseId,
+                    refPrId: refPrId
+                };
+
+                try {
+                    // استدعاء الأكشن SaveHeader في PurchaseInvoicesController
+                    const response = await fetch('@Url.Action("SaveHeader", "PurchaseInvoices")', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(dto)
+                    });
+
+                    if (!response.ok) {
+                        alert('حدث خطأ غير متوقع أثناء حفظ الفاتورة.');
+                        return;
+                    }
+
+                    const data = await response.json();
+
+                    if (!data.success) {
+                        // في حالة وجود رسالة خطأ من السيرفر
+                        alert(data.message || 'تعذر حفظ الفاتورة.');
+                        return;
+                    }
+
+                    // لو النجاح true ⇒ نحدّث رقم الفاتورة في الواجهة
+                    const newId = data.piId || 0;
+
+                    if (newId > 0) {
+                        // تحديث الحقل المخفي
+                        if (invoiceIdInput) {
+                            invoiceIdInput.value = newId.toString();
+                        }
+
+                        // تحديث بوكس رقم الفاتورة الظاهر
+                        const invoiceNumberDisplay = document.getElementById('InvoiceNumberDisplay');
+                        if (invoiceNumberDisplay) {
+                            invoiceNumberDisplay.value = newId.toString();
+                        }
+                    }
+
+                    // تحديث حالة الفاتورة في الحقل المخفي (لو موجود)
+                    const statusHidden = document.getElementById('InvoiceStatusHidden');
+                    if (statusHidden && data.status) {
+                        statusHidden.value = data.status;
+                    }
+
+                    // مفيش رسائل نجاح صغيرة هنا؛ فقط لو في خطأ بنستخدم alert
+
+                } catch (err) {
+                    console.error(err);
+                    alert('تعذر الاتصال بالخادم لحفظ الفاتورة.');
+                }
+            });
+
+        })();
 
 
 

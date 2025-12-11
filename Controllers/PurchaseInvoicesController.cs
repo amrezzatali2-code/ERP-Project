@@ -1,6 +1,7 @@
 ﻿using ERP.Data;                                 // AppDbContext
 using ERP.Infrastructure;                       // كلاس PagedResult لتقسيم الصفحات
 using ERP.Models;                               // الموديل PurchaseInvoice
+using ERP.Services;
 using Microsoft.AspNetCore.Mvc;                 // أساس الكنترولر و IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;       // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;            // Include / AsNoTracking / ToListAsync
@@ -9,7 +10,8 @@ using System.Collections.Generic;               // القوائم List
 using System.Linq;                              // LINQ: Where / OrderBy / Any
 using System.Text;                              // لبناء ملف CSV
 using System.Threading.Tasks;                   // async / await
-using ERP.Services;
+using ERP.ViewModels;   // علشان نقدر نستعمل PurchaseInvoiceHeaderDto
+
 
 
 namespace ERP.Controllers
@@ -294,26 +296,44 @@ namespace ERP.Controllers
 
 
 
-
         /// <summary>
         /// شاشة إنشاء فاتورة مشتريات جديدة.
         /// </summary>
         // GET: PurchaseInvoices/Create
         public async Task<IActionResult> Create()
         {
+            // متغير: موديل الفاتورة الجديدة بالقيم الافتراضية
             var model = new PurchaseInvoice
             {
-                PIDate = DateTime.Today,
-                CreatedAt = DateTime.UtcNow,
-                Status = "Draft",
-                IsPosted = false
+                PIDate = DateTime.Today,      // تاريخ الفاتورة الافتراضي: تاريخ اليوم
+                CreatedAt = DateTime.UtcNow,    // وقت إنشاء السجل في قاعدة البيانات (UTC)
+                Status = "Draft",             // الحالة الافتراضية = مسودة
+                IsPosted = false                // الفاتورة غير مُرحّلة عند الإنشاء
             };
 
-            await PopulateDropDownsAsync();          // تجهيز الموردين + المخازن
-            await LoadProductsForAutoCompleteAsync(); // دالة تجهيز الاصناف
+            // ==============================
+            // تعيين المخزن الافتراضي للفاتورة
+            // ==============================
+            // متغير: رقم المخزن الافتراضي (الدواء أو أول مخزن)
+            var defaultWarehouseId = await GetDefaultWarehouseIdAsync();
 
-            return View("Show", model);              // Create يفتح Show
+            // لو أكبر من صفر → يعني عندنا مخزن فعلاً
+            if (defaultWarehouseId > 0)
+            {
+                model.WarehouseId = defaultWarehouseId;  // تعيين المخزن الافتراضي للفاتورة الجديدة
+            }
+
+            // تجهيز القوائم المنسدلة (الموردين + المخازن) مع تمرير المورد والمخزن المختارين
+            await PopulateDropDownsAsync(model.CustomerId, model.WarehouseId);
+
+            // تجهيز الأصناف للأوتوكومبليت فى سطور الفاتورة
+            await LoadProductsForAutoCompleteAsync();
+
+            // نفس الموديل Show إظهار شاشة 
+            // Create يفتح View "Show" علشان نتعامل مع شاشة موحدة
+            return View("Show", model);
         }
+
 
 
 
@@ -514,6 +534,11 @@ namespace ERP.Controllers
         }
 
 
+
+
+
+
+
         #endregion
 
         #region Delete / DeleteConfirmed (حذف فاتورة واحدة)
@@ -647,9 +672,179 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        #endregion
 
-        #region Export (تصدير فواتير المشتريات)
+
+
+
+        // Controllers/PurchaseInvoicesController.cs
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken] // تعليق: نتجاهل AntiForgery فى هذا الأكشن لأنه يُستدعى عبر AJAX
+        public async Task<IActionResult> SaveHeader([FromBody] PurchaseInvoiceHeaderDto dto)
+        {
+            // ================================
+            // 1) فحص البيانات القادمة من الشاشة
+            // ================================
+
+            if (dto == null)
+            {
+                // تعليق: لو مفيش بيانات جاية أصلاً من الجافاسكربت
+                return BadRequest("حدث خطأ فى البيانات المرسلة.");
+            }
+
+            // تعليق: يجب اختيار المورد
+            if (dto.CustomerId <= 0)
+            {
+                return BadRequest("يجب اختيار المورد قبل حفظ الفاتورة.");
+            }
+
+            // تعليق: يجب اختيار المخزن
+            if (dto.WarehouseId <= 0)
+            {
+                return BadRequest("يجب اختيار المخزن قبل حفظ الفاتورة.");
+            }
+
+            // متغير: الوقت الحالي (هنستخدمه في التاريخ والإنشاء/التعديل)
+            var now = DateTime.Now;
+
+            // ================================
+            // 2) فاتورة جديدة (PIId = 0)
+            // ================================
+            if (dto.PIId == 0)
+            {
+                // تعليق: إنشاء كائن فاتورة جديدة
+                var invoice = new PurchaseInvoice
+                {
+                    // تعليق: تاريخ الفاتورة = تاريخ اليوم (يمكن تعديله لاحقاً لو حبيت)
+                    PIDate = now.Date,
+
+                    // تعليق: ربط الفاتورة بالمورد والمخزن
+                    CustomerId = dto.CustomerId,
+                    WarehouseId = dto.WarehouseId,
+
+                    // تعليق: مرجع طلب الشراء (اختياري)
+                    RefPRId = dto.RefPRId,
+
+                    // تعليق: الحالة الافتراضية = مسودة
+                    Status = "Draft",
+                    IsPosted = false,
+
+                    // تعليق: بيانات الإنشاء
+                    CreatedAt = now,
+                    CreatedBy = User?.Identity?.Name ?? "System"
+                };
+
+                // تعليق: إضافة الفاتورة لقاعدة البيانات
+                _context.PurchaseInvoices.Add(invoice);
+                await _context.SaveChangesAsync();
+
+                // تعليق: تجهيز البيانات اللى هنرجعها للجافاسكربت
+                var response = new
+                {
+                    success = true,
+
+                    // رقم الفاتورة الجديد (Identity)
+                    invoiceId = invoice.PIId,
+                    invoiceNumberText = invoice.PIId.ToString(),
+
+                    // نصوص التاريخ والوقت لملىء البوكسات
+                    invoiceDateText = invoice.PIDate.ToString("yyyy/MM/dd"),
+                    invoiceTimeText = invoice.CreatedAt.ToString("HH:mm"),
+
+                    // كاتب الفاتورة
+                    createdBy = invoice.CreatedBy,
+
+                    // حالة الفاتورة / الترحيل
+                    status = invoice.Status,
+                    isPosted = invoice.IsPosted
+                };
+
+                return Json(response);
+            }
+
+            // ================================
+            // 3) تعديل هيدر فاتورة موجودة (PIId > 0)
+            // ================================
+            // تعليق: نحاول نجد الفاتورة من قاعدة البيانات
+            var existing = await _context.PurchaseInvoices
+                                         .FirstOrDefaultAsync(p => p.PIId == dto.PIId);
+
+            if (existing == null)
+            {
+                return NotFound("لم يتم العثور على الفاتورة المطلوبة.");
+            }
+
+            // تعليق: لو الفاتورة مُرحّلة لا نسمح بتعديل الهيدر
+            if (existing.IsPosted)
+            {
+                return BadRequest("لا يمكن تعديل فاتورة تم ترحيلها.");
+            }
+
+            // تعليق: تحديث المورد والمخزن وطلب الشراء
+            existing.CustomerId = dto.CustomerId;
+            existing.WarehouseId = dto.WarehouseId;
+            existing.RefPRId = dto.RefPRId;
+
+            // تعليق: تحديث تاريخ آخر تعديل
+            existing.UpdatedAt = now;
+
+            await _context.SaveChangesAsync();
+
+            // تعليق: تجهيز الرد للجافاسكربت
+            var updateResponse = new
+            {
+                success = true,
+                invoiceId = existing.PIId,
+                invoiceNumberText = existing.PIId.ToString(),
+                invoiceDateText = existing.PIDate.ToString("yyyy/MM/dd"),
+                invoiceTimeText = (existing.CreatedAt == default ? now : existing.CreatedAt).ToString("HH:mm"),
+                createdBy = existing.CreatedBy,
+                status = existing.Status,
+                isPosted = existing.IsPosted
+            };
+
+            return Json(updateResponse);
+        }
+
+
+
+
+
+
+
+
+
+        // دالة مساعدة: تجيب رقم المخزن الافتراضي للفاتورة
+        // المنطق:
+        // 1) نحاول نلاقي مخزن اسمه "الدواء" (المخزن الرئيسي).
+        // 2) لو مش موجود، ناخد أول مخزن في الجدول.
+        // 3) لو مفيش مخازن خالص → ترجع 0.
+        private async Task<int> GetDefaultWarehouseIdAsync()
+        {
+            // متغير: نحاول نجيب رقم مخزن اسمه "الدواء"
+            var id = await _context.Warehouses
+                .Where(w => w.WarehouseName == "الدواء")   // 🔹 غيّر WarehouseName لو اسم الخاصية مختلف
+                .Select(w => w.WarehouseId)                // متغير: رقم المخزن
+                .FirstOrDefaultAsync();                    // لو مش لاقي → هترجع 0
+
+            // لو لقينا مخزن اسمه "الدواء" فعلاً
+            if (id != 0)
+                return id;
+
+            // لو مفيش مخزن اسمه "الدواء" → نجيب أول مخزن في الجدول
+            id = await _context.Warehouses
+                .OrderBy(w => w.WarehouseId)               // ترتيب علشان ناخد أول واحد ثابت
+                .Select(w => w.WarehouseId)
+                .FirstOrDefaultAsync();                    // برضه لو الجدول فاضي → 0
+
+            // لو 0 يبقى مفيش مخازن خالص، وده هنكشفه فى الفاليديشن بعدين
+            return id;
+        }
+
+
+
+
+    
 
         /// <summary>
         /// تصدير فواتير المشتريات (بعد تطبيق نفس فلاتر Index) إلى ملف CSV.

@@ -364,6 +364,40 @@ body {
     vertical-align: middle;
 }
 
+/* ================== مقبض تحريك عرض الأعمدة ================== */
+
+/* عنصر صغير نمسكه بالماوس لتغيير عرض العمود
+   (هينضاف ديناميك من الجافاسكربت داخل كل <th>) */
+.erp-col-resize-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    /* الجدول RTL: لو حابب المقبض على يمين العمود بدّل left بـ right */
+    right: 0;
+    width: 4px;
+    cursor: col-resize;
+    user-select: none;
+}
+
+    /* خط رفيع يبان في الهيدر عند المرور بالماوس */
+    .erp-col-resize-handle::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-right: 1px solid transparent; /* الخط الافتراضي شفاف */
+    }
+
+/* لما أقف بالماوس على رأس العمود يبان الخط الخفيف */
+.erp-table thead th:hover .erp-col-resize-handle::before {
+    border-right-color: #cbd5f5; /* لون هادي */
+}
+
+/* وعند الوقوف على المقبض نفسه يبان أوضح شوية */
+.erp-col-resize-handle:hover::before {
+    border-right-color: #60a5fa; /* لون أزرق أوضح */
+}
+
+
 /* الأعمدة القابلة للترتيب */
 .erp-table-sortable thead th a {
     display: inline-flex;
@@ -386,22 +420,24 @@ body {
 
 /* ===================== طباعة القوائم ===================== */
 @media print {
-    /* إخفاء كل ما عليه no-print */
+
+    /* إخفاء كل ما عليه no-print (الأزرار، شريط التابات، التولبار...) */
     .no-print {
         display: none !important;
     }
 
-    /* إخفاء الأزرار داخل الجدول (تفاصيل/تعديل/حذف) وأي زر آخر */
+    /* إخفاء الأزرار داخل منطقة الطباعة + الشيك بوكس */
     .erp-print-area .btn,
     .erp-print-area input[type="checkbox"] {
         display: none !important;
     }
 
-    /* التأكد أن منطقة الجدول فقط هي التي تظهر في الصفحة */
+    /* إخفاء كل شيء في الصفحة */
     body * {
         visibility: hidden;
     }
 
+    /* إظهار منطقة الطباعة فقط (الجدول/التقرير) */
     .erp-print-area,
     .erp-print-area * {
         visibility: visible;
@@ -411,16 +447,6 @@ body {
         position: absolute;
         inset: 0;
         margin: 0;
-    }
-
-
-    @media print {
-        .no-print {
-            display: none !important;
-        }
-
-        .erp-print-area {
-            margin-top: 0;
-        }
+        padding: 0;
     }
 }
