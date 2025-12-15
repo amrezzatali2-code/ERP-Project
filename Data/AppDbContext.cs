@@ -946,51 +946,61 @@ namespace ERP.Data
 
 
 
-
             // ===== PurchaseInvoice =====
-
-
             mb.Entity<PurchaseInvoice>(e =>
             {
                 e.ToTable("PurchaseInvoices");
 
-                // 🔹 المفتاح الأساسي
-                e.HasKey(x => x.PIId);
+                // =========================================================
+                // (1) المفتاح الأساسي
+                // =========================================================
+                e.HasKey(x => x.PIId); // متغير: PK رقم فاتورة المشتريات
 
-                // 🔹 الخصائص الأساسية
                 e.Property(x => x.PIId)
+                    .ValueGeneratedOnAdd(); // تعليق: Identity (يتولد تلقائيًا)
 
-                    .IsRequired();
-
+                // =========================================================
+                // (2) الخصائص الأساسية
+                // =========================================================
                 e.Property(x => x.WarehouseId)
-
-                    .IsRequired();
+                    .IsRequired(); // متغير: كود المخزن
 
                 e.Property(x => x.CustomerId)
-
-                    .IsRequired();
+                    .IsRequired(); // متغير: كود المورد
 
                 e.Property(x => x.Status)
                     .HasMaxLength(20)
-                    .HasDefaultValue("Draft");
+                    .HasDefaultValue("Draft"); // متغير: حالة الفاتورة
 
-                // مرجع طلب الشراء (اختياري) – نفس طول PRId
-                e.Property(x => x.RefPRId);
+                e.Property(x => x.RefPRId); // متغير: مرجع طلب شراء (اختياري)
 
+                // =========================================================
+                // (3) العلاقة: PurchaseInvoice (Header) -> PILines (Lines)
+                // ✅ حذف الفاتورة يمسح سطورها فقط
+                // =========================================================
+                e.HasMany(x => x.Lines)                    // متغير: سطور الفاتورة
+                 .WithOne()                                // تعليق: مفيش Navigation في PILine عندك حاليًا
+                 .HasForeignKey(l => l.PIId)               // متغير: FK في السطور
+                 .OnDelete(DeleteBehavior.Cascade);        // ✅ Cascade للسطور فقط
 
-                // 🔹 علاقة 1..N مع سطور الفاتورة + حذف تتابعي
-                e.HasMany(x => x.Lines)
-                 .WithOne()                          // لا يوجد Navigation في PILine حتى الآن
-                 .HasForeignKey(l => l.PIId)
-                 .OnDelete(DeleteBehavior.Cascade);  // حذف الفاتورة يمسح السطور
-
-                // 🔹 علاقة فاتورة الشراء مع العميل (Customer)
-                // مورد واحد -> له العديد من فواتير الشراء
-                e.HasOne(x => x.Customer)
-                 .WithMany(v => v.PurchaseInvoices)  // ICollection<PurchaseInvoice> داخل Customer
+                // =========================================================
+                // (4) العلاقة مع Customer (المورد)
+                // ✅ لا نحذف الفواتير عند حذف المورد
+                // =========================================================
+                e.HasOne(x => x.Customer)                  // متغير: المورد
+                 .WithMany(v => v.PurchaseInvoices)        // متغير: فواتير المورد داخل Customer
                  .HasForeignKey(x => x.CustomerId)
-                 .OnDelete(DeleteBehavior.Restrict); // لا نحذف الفواتير عند حذف العميل
+                 .OnDelete(DeleteBehavior.Restrict);       // ✅ Restrict
 
+                // =========================================================
+                // (5) العلاقة Warehouse (المخزن)
+                // ✅ لا نحذف الفواتير عند حذف المخزن
+                // ✅ شراء الفاتورة مرتبط بمخزن (FK = WarehouseId)
+                // =========================================================
+                e.HasOne<Warehouse>()                 // تعليق: PurchaseInvoice لا يحتوي Navigation اسمها Warehouse
+                 .WithMany()                          // تعليق: لو Warehouse مفيهوش ICollection<PurchaseInvoice>
+                 .HasForeignKey(x => x.WarehouseId)   // متغير: FK للمخزن داخل PurchaseInvoice
+                 .OnDelete(DeleteBehavior.Restrict);  // ✅ Restrict
 
             });
 
@@ -998,9 +1008,9 @@ namespace ERP.Data
 
 
 
+
+
             // ===== PILine =====
-
-
             mb.Entity<PILine>(e =>
             {
                 // اسم الجدول في قاعدة البيانات
@@ -1009,7 +1019,7 @@ namespace ERP.Data
                 // المفتاح الأساسي المركب: رقم الفاتورة + رقم السطر
                 e.HasKey(x => new { x.PIId, x.LineNo });
 
-                // الصنف إلزامي
+                // الصنف إلزامي (لازم يكون موجود كرقم)
                 e.Property(x => x.ProdId)
                  .IsRequired();
 
@@ -1023,10 +1033,20 @@ namespace ERP.Data
                  .HasForeignKey(x => x.PIId)         // المفتاح الأجنبي على السطر هو PIId
                  .OnDelete(DeleteBehavior.Cascade);  // عند حذف الفاتورة تُحذف السطور تلقائيًا
 
+                // ==========================================================
+                // ربط سطر فاتورة الشراء بالصنف (Product) عبر ProdId
+                // الهدف: نقدر نكتب في Show: line.Product.ProdName
+                // ==========================================================
+                e.HasOne(x => x.Product)                 // كل سطر مرتبط بصنف واحد
+                 .WithMany()                             // (بدون Collection داخل Product حالياً)
+                 .HasForeignKey(x => x.ProdId)           // المفتاح الأجنبي: ProdId داخل PILine
+                 .OnDelete(DeleteBehavior.Restrict);     // منع حذف صنف عليه سطور شراء
+
                 // ===== الفهارس الشائعة: حسب الصنف أو التشغيلة أو الصلاحية =====
-                e.HasIndex(x => x.ProdId);
-                e.HasIndex(x => new { x.ProdId, x.BatchNo, x.Expiry });
+                e.HasIndex(x => x.ProdId);                                // فهرس: البحث بكود الصنف
+                e.HasIndex(x => new { x.ProdId, x.BatchNo, x.Expiry });   // فهرس: صنف + باتش + صلاحية
             });
+
 
 
 
@@ -1937,6 +1957,10 @@ namespace ERP.Data
                         "([QtyIn] = 0 AND [RemainingQty] IS NULL) OR ([QtyIn] > 0 AND [RemainingQty] >= 0)");
                 });
             });
+
+
+
+
 
             // ===== StockFifoMap =====
             mb.Entity<StockFifoMap>(e =>

@@ -368,12 +368,14 @@
                             <td data-col="posted">@(pi.IsPosted ? "نعم" : "لا")</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                               
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@pi.PIId">
-                                    تعديل
+                                <a class="btn btn-primary btn-sm open-tab"
+                                   data-tab-id="purchaseinvoices-show"
+                                   data-tab-title="فاتورة مشتريات"
+                                   href="@Url.Action("Show", "PurchaseInvoices", new { id = pi.PIId })">
+                                    عرض الفاتورة
                                 </a>
+
+
                                 <a class="btn btn-erp btn-erp-danger btn-erp-sm"
                                    asp-action="Delete"
                                    asp-route-id="@pi.PIId">

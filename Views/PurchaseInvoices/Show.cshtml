@@ -10,6 +10,21 @@
 
 @section Styles {
     <style>
+
+/* =========================================================
+   إخفاء أسهم الـ Number Inputs (علشان الشكل ما يتلخبطش)
+   - مهم عند فك readonly لأن الأسهم بتظهر وتغيّر شكل السطر
+   ========================================================= */
+.pi-input[type="number"]::-webkit-outer-spin-button,
+.pi-input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+.pi-input[type="number"] {
+    -moz-appearance: textfield;
+}
+
+
         /* خلفية عامة للصفحة */
         .invoice-page {
             background-color: #f3f6fb; /* لون خفيف مريح للعين */
@@ -110,278 +125,385 @@
 
 <div class="invoice-page" dir="rtl">
     <div class="container-fluid pt-3">
+        @* فورم مخفي لتوليد Anti-Forgery Token لاستخدامه في نداءات AJAX *@
+        <form id="__AntiForgeryForm" method="post" style="display:none">
+            @Html.AntiForgeryToken()
+        </form>
+
+
+
+             @* =========================
+               العمود الجانبي (أزرار الحركة)
+               ========================= *@
+        <div class="d-flex flex-wrap gap-2 justify-content-end mb-3">
+            
+
+                    <a class="btn btn-erp btn-erp-outline-success btn-erp-sm"
+                       asp-action="Create" @* هنسيب اللينك كـ fallback *@
+                       id="btnNewInvoice">
+                        @* متغير: زر فتح فاتورة جديدة على الواجهة *@
+                        ➕ فاتورة جديدة
+                    </a>
+
+                    @* زر حفظ الفاتورة في جدول الهيدر *@
+                    <button type="button"
+                            class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                            id="btnSaveInvoiceHeader">
+                        💾 حفظ الفاتورة
+                    </button>
+
+
+                    <button type="button"
+                            class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
+                            id="btnClearInvoiceLines"
+                            data-invoice-id="@Model.PIId">
+                        🗑️ مسح كل أصناف الفاتورة
+                    </button>
+
+                    <button type="button"
+                            class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                        ⏪ فتح الفاتورة
+                    </button>
+
+                    <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                       asp-action="Edit"
+                       asp-route-id="@Model.PIId">
+                        ✏️ تعديل الفاتورة
+                    </a>
+
+                    <button type="button"
+                            class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                        📤 ترحيل الفاتورة
+                    </button>
+
+                    <button type="button"
+                            class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                            onclick="window.print();">
+                        🖨️ طباعة الفاتورة
+                    </button>
+
+                </div>   @* card-body *@
+
+
+            </div>   @* col-lg-2 *@
 
         <div class="row g-3">
 
-            @* =========================
-               العمود الرئيسي (الهيدر + المورد + الأصناف + الإجماليات)
-               ========================= *@
-            <div class="col-lg-10">
 
-                @* ====================================================
-                   1) كارت بيانات فاتورة المشتريات + المورد + المخزن
-                   ==================================================== *@
-                <div class="card shadow-sm mb-2 invoice-header-card">
+          
 
-                    @{
-                        bool isNewInvoice = Model == null || Model.PIId == 0;
-                        bool hasInvoice = !isNewInvoice;
 
-                        string invoiceDateText = hasInvoice
-                        ? Model.PIDate.ToString("yyyy/MM/dd")
-                        : "";
+                        @* =========================
+                         العمود الرئيسي (الهيدر + المورد + الأصناف + الإجماليات)
+                             ========================= *@
+            <div class="col-lg-12">
 
-                        // نستخدم CreatedAt لعرض وقت إنشاء الفاتورة
-                        string invoiceTimeText = hasInvoice
-                        ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
-                        : "";
-                    }
 
-                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        @* الجزء الأيسر: عنوان الفاتورة + كاتب الفاتورة *@
-                        <div>
-                            <h5 class="mb-1">فاتورة مشتريات</h5>
 
-                            <div class="small opacity-100">
-                                كاتب الفاتورة:
-                                <span class="fw-semibold">
-                                    @(
-                                                                        !string.IsNullOrWhiteSpace(Model.CreatedBy)
-                                                                        ? Model.CreatedBy
-                                                                        : "غير محدد"
-                                                                        )
-                                </span>
-                            </div>
+            <div class="row g-3">
+                @* الكارت الأول: بيانات الفاتورة *@
+                <div class="col-12 col-lg-6">
+                    <div class="card shadow-sm">
+                        <!-- هنا محتوى الكارت الأول بالكامل كما هو بدون تغيير -->
+                    </div>
+                </div>
+
+                  @* الكارت الثاني: بيانات الصنف *@
+                <div class="col-12 col-lg-6">
+                     <div class="card shadow-sm">
+                    <!-- هنا محتوى الكارت الثاني بالكامل كما هو بدون تغيير -->
+                     </div>
+                </div>
+
+
+            </div>
+
+
+                         @* ====================================================
+                          1) كارت بيانات فاتورة المشتريات + المورد + المخزن
+                             ==================================================== *@
+               <div class="card shadow-sm mb-2 invoice-header-card">
+
+    @{
+        bool isNewInvoice = Model == null || Model.PIId == 0;
+        bool hasInvoice = !isNewInvoice;
+
+        string invoiceDateText = hasInvoice
+        ? Model.PIDate.ToString("yyyy/MM/dd")
+        : "";
+
+        // نستخدم CreatedAt لعرض وقت إنشاء الفاتورة
+        string invoiceTimeText = hasInvoice
+        ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
+        : "";
+    }
+
+    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+
+        @* الجزء الأيسر: عنوان الفاتورة + كاتب الفاتورة *@
+        <div>
+            <h5 class="mb-1">فاتورة مشتريات</h5>
+
+            <div class="small opacity-100">
+                كاتب الفاتورة:
+                <span class="fw-semibold">
+                    @(
+                        !string.IsNullOrWhiteSpace(Model.CreatedBy)
+                        ? Model.CreatedBy
+                        : "غير محدد"
+                    )
+                </span>
+            </div>
+        </div>
+
+        @* الجزء الأيمن: رسالة بسيطة حسب الحالة + زر الطي *@
+        <div class="d-flex align-items-center gap-2">
+
+            <div class="text-end">
+                @if (isNewInvoice)
+                {
+                    @* فاضي كما هو *@
+                }
+                else
+                {
+                    <span class="text-white fw-semibold">
+                        فاتورة مشتريات مسجَّلة
+                    </span>
+                }
+            </div>
+
+            @* زر سهم: طي/فتح جسم الكارت (نفس ستايل الزر الأول) *@
+            <button type="button"
+                    class="btn btn-sm btn-light"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#InvoiceHeaderCardCollapse"
+                    aria-expanded="true"
+                    aria-controls="InvoiceHeaderCardCollapse"
+                    title="طي/فتح">
+                <span id="InvoiceHeaderCardArrow">▾</span>
+            </button>
+
+        </div>
+    </div>
+
+    @* جسم الكارت الذي سيتم طيه *@
+    <div id="InvoiceHeaderCardCollapse" class="collapse show">
+
+        <div class="card-body">
+
+            <div class="row g-3 align-items-end">
+
+                @* كود المورد *@
+                <div class="col-lg-2 col-md-3">
+                    <label class="form-label form-label-sm">كود المورد</label>
+
+                    @* ملاحظة: هذا البوكس للعرض/البحث فقط (نملأه من الـ datalist).
+                       الكود الحقيقي الذي يُحفظ في الفاتورة موجود في الحقل المخفي CustomerId *@
+                    <input id="CustomerCodeDisplay"
+                           class="form-control form-control-sm text-center invoice-small-input"
+                           type="number" />
+
+                    @* هذا هو الحقل الفعلي الذي يُحفظ في الفاتورة *@
+                    <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                </div>
+
+                @* اسم المورد + أوتوكومبليت *@
+                <div class="col-lg-4 col-md-6">
+                    <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
+
+                    @* بوكس اسم المورد مع أوتوكومبليت من الـ datalist *@
+                    <input id="CustomerNameInput"
+                           name="CustomerNameInput" @* متغير: يستخدمه الجافاسكربت فقط، غير مربوط بالموديل *@
+                           class="form-control form-control-sm"
+                           placeholder="اكتب اسم المورد ثم اختره من القائمة"
+                           list="customersList"
+                           autocomplete="off"
+                           value="@ViewBag.SelectedCustomerName" />
+
+                    @* قائمة العملاء/الموردين لأوتوكومبليت اسم المورد *@
+                    <datalist id="customersList">
+                        @if (ViewBag.Customers != null)
+                        {
+                            foreach (var c in ViewBag.Customers)
+                            {
+                                <option value="@c.Name"
+                                        data-id="@c.Id"
+                                        data-phone="@c.Phone"
+                                        data-address="@c.Address"
+                                        data-gov="@c.Gov"
+                                        data-district="@c.District"
+                                        data-area="@c.Area"
+                                        data-credit="@c.Credit">
+                                </option>
+                            }
+                        }
+                    </datalist>
+                </div>
+
+                @* رقم الفاتورة - يظهر في الصف الأول بدلاً من المخزن *@
+                <div class="col-lg-3 col-md-2">
+                    <label class="form-label form-label-sm">رقم الفاتورة</label>
+
+                    @* حقل مخفي يحتفظ برقم الفاتورة لاستخدامه لاحقاً في الجافاسكربت *@
+                    <input type="hidden"
+                           id="InvoiceId" @* متغير: رقم الفاتورة الداخلي (0 = فاتورة جديدة) *@
+                           value="@(Model?.PIId ?? 0)" />
+
+                    @* بوكس للعرض فقط (ReadOnly) لرقم الفاتورة *@
+                    <input id="InvoiceNumberDisplay" @* متغير: يعرض رقم الفاتورة للمستخدم *@
+                           class="form-control form-control-sm text-center"
+                           value="@(Model != null && Model.PIId > 0 ? Model.PIId.ToString() : "")"
+                           readonly />
+                </div>
+
+                @* التاريخ والوقت *@
+                <div class="col-lg-3 col-md-6">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">تاريخ الفاتورة</label>
+                            <input id="InvoiceDateDisplay" @* متغير: يعرض تاريخ الفاتورة *@
+                                   class="form-control form-control-sm text-center"
+                                   value="@invoiceDateText"
+                                   readonly />
                         </div>
-
-                        @* الجزء الأيمن: رسالة بسيطة حسب الحالة (جديدة / قديمة) *@
-                        <div class="text-end">
-                            @if (isNewInvoice)
-                            {
-                                <span class="text-white fw-semibold">
-                                    اضغط على فاتورة جديدة  .
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="text-white fw-semibold">
-                                    فاتورة مشتريات مسجَّلة
-                                </span>
-                            }
+                        <div class="col-6">
+                            <label class="form-label form-label-sm">وقت الإنشاء</label>
+                            <input id="InvoiceTimeDisplay" @* متغير: يعرض وقت إنشاء الفاتورة *@
+                                   class="form-control form-control-sm text-center"
+                                   value="@invoiceTimeText"
+                                   readonly />
                         </div>
                     </div>
+                </div>
 
+            </div>
 
-                    <div class="card-body">
+            <br />
 
-                        <div class="row g-3 align-items-end">
+            @* حقل مخفي: حالة الفاتورة النصية (Draft / Posted / Cancelled ...)
+               يخص منطق الموديل فقط ولا يظهر للمستخدم *@
+            <input type="hidden"
+                   asp-for="Status"
+                   id="InvoiceStatusHidden" />
 
+            <div class="row g-3">
 
-                            @* كود المورد *@
-                            <div class="col-lg-2 col-md-3">
-                                <label class="form-label form-label-sm">كود المورد</label>
+                @* بوكس واحد فقط لعرض هل الفاتورة مُرحَّلة أم لا *@
+                <div class="col-lg-3 col-md-6 col-sm-12">
+                    <label class="form-label form-label-sm">مُرحَّلة؟</label>
+                    <input id="InvoiceIsPostedDisplay" @* متغير: يعرض نعم/لا حسب الترحيل *@
+                           class="form-control form-control-sm text-center"
+                           value="@(Model.IsPosted ? "نعم" : "لا")"
+                           readonly />
+                </div>
 
-                                <!-- تعديل: شيل readonly وخليه يقبل كتابة -->
-                                <input id="CustomerCodeDisplay"
-                                       class="form-control form-control-sm text-center invoice-small-input"
-                                       type="number"         <!-- ممكن تخليها text لو حابب -->
-                                <!-- هذا هو الحقل الفعلي الذي يُحفظ في الفاتورة -->
-                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
-                            </div>
+                @* طلب الشراء المرجعي *@
+                <div class="col-lg-3 col-md-6 col-sm-12">
+                    <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
+                    <input class="form-control form-control-sm text-center"
+                           value="@(Model.RefPRId?.ToString() ?? "")"
+                           readonly />
+                </div>
 
+                @* المخزن *@
+                <div class="col-lg-3 col-md-6 col-sm-12">
+                    <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+                    <select asp-for="WarehouseId"
+                            asp-items="ViewBag.Warehouses"
+                            class="form-select form-select-sm">
+                        <option value="">اختر المخزن</option>
+                    </select>
+                </div>
 
+                @* كاتب الفاتورة *@
+                <div class="col-lg-3 col-md-6 col-sm-12">
+                    <label class="form-label form-label-sm">كاتب الفاتورة</label>
+                    <input id="InvoiceCreatedByDisplay"
+                           class="form-control form-control-sm text-center"
+                           value="@Model.CreatedBy"
+                           readonly />
+                </div>
 
-                            @* اسم المورد + أوتوكومبليت *@
-                            <div class="col-lg-4 col-md-6">
-                                <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
+            </div>
 
-                                @* بوكس اسم المورد مع أوتوكومبليت من الـ datalist *@
-                                <input id="CustomerNameInput"
-                                       name="CustomerNameInput" @* متغير: يستخدمه الجافاسكربت فقط، غير مربوط بالموديل *@
-                                       class="form-control form-control-sm"
-                                       placeholder="اكتب اسم المورد ثم اختره من القائمة"
-                                       list="customersList"
-                                       autocomplete="off" 
-                                       value="@ViewBag.SelectedCustomerName" />
+            <div class="row g-4">
+                <div class="col-lg-3 col-md-3">
+                    <label class="form-label form-label-sm">الهاتف</label>
+                    <input id="CustomerPhone"
+                           class="form-control form-control-sm"
+                           readonly />
+                </div>
 
-                                @* قائمة العملاء/الموردين لأوتوكومبليت اسم المورد *@
-                                <datalist id="customersList">
-                                    @if (ViewBag.Customers != null)
-                                    {
-                                        foreach (var c in ViewBag.Customers)
-                                        {
-                                            <option value="@c.Name"
-                                                    data-id="@c.Id"
-                                                    data-phone="@c.Phone"
-                                                    data-address="@c.Address"
-                                                    data-gov="@c.Gov"
-                                                    data-district="@c.District"
-                                                    data-area="@c.Area"
-                                                    data-credit="@c.Credit">
-                                            </option>
-                                        }
-                                    }
-                                </datalist>
+                <div class="col-lg-3 col-md-3">
+                    <label class="form-label form-label-sm">المحافظة</label>
+                    <input id="CustomerGovernorate"
+                           class="form-control form-control-sm"
+                           readonly />
+                </div>
 
+                <div class="col-lg-3 col-md-3">
+                    <label class="form-label form-label-sm">الحي</label>
+                    <input id="CustomerDistrict"
+                           class="form-control form-control-sm"
+                           readonly />
+                </div>
 
-                            </div>
+                <div class="col-lg-3 col-md-3">
+                    <label class="form-label form-label-sm">المنطقة</label>
+                    <input id="CustomerArea"
+                           class="form-control form-control-sm"
+                           readonly />
+                </div>
+            </div>
 
+            <div class="row g-3">
 
-                            @* رقم الفاتورة - يظهر في الصف الأول بدلاً من المخزن *@
-                            <div class="col-lg-3 col-md-2">
-                                <label class="form-label form-label-sm">رقم الفاتورة</label>
+                <div class="col-lg-8 col-md-6">
+                    <label class="form-label form-label-sm">العنوان</label>
+                    <input id="CustomerAddress"
+                           class="form-control form-control-sm"
+                           readonly />
+                </div>
 
-                                @* حقل مخفي يحتفظ برقم الفاتورة لاستخدامه لاحقاً في الجافاسكربت *@
-                                <input type="hidden"
-                                       id="InvoiceId" @* متغير: رقم الفاتورة الداخلي (0 = فاتورة جديدة) *@
-                                       value="@(Model?.PIId ?? 0)" />
+                <div class="col-lg-4 col-md-2">
+                    <label class="form-label form-label-sm">الحد الإتماني</label>
+                    <input id="CustomerCredit"
+                           class="form-control form-control-sm"
+                           readonly />
+                </div>
+            </div>
 
-                                @* بوكس للعرض فقط (ReadOnly) لرقم الفاتورة *@
-                                <input id="InvoiceNumberDisplay" @* متغير: يعرض رقم الفاتورة للمستخدم *@
-                                       class="form-control form-control-sm text-center"
-                                       value="@(Model != null && Model.PIId > 0 ? Model.PIId.ToString() : "")"
-                                       readonly />
-                            </div>
+        </div> @* نهاية card-body *@
 
-                            @* التاريخ والوقت *@
-                            <div class="col-lg-3 col-md-6">
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <label class="form-label form-label-sm">تاريخ الفاتورة</label>
-                                        <input id="InvoiceDateDisplay" @* متغير: يعرض تاريخ الفاتورة *@
-                                               class="form-control form-control-sm text-center"
-                                               value="@invoiceDateText"
-                                               readonly />
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                        <input id="InvoiceTimeDisplay" @* متغير: يعرض وقت إنشاء الفاتورة *@
-                                               class="form-control form-control-sm text-center"
-                                               value="@invoiceTimeText"
-                                               readonly />
-                                    </div>
-                                </div>
-                            </div>
-
-                                                  
-                        </div>
-
-                        <br />
-
-@* حقل مخفي: حالة الفاتورة النصية (Draft / Posted / Cancelled ...)
-   يخص منطق الموديل فقط ولا يظهر للمستخدم *@
-
-<input type="hidden"
-       asp-for="Status"
-       id="InvoiceStatusHidden" />
-
-<div class="row g-3">
-
-    @* بوكس واحد فقط لعرض هل الفاتورة مُرحَّلة أم لا *@
-
-    <div class="col-lg-3 col-md-6 col-sm-12">
-        <label class="form-label form-label-sm">مُرحَّلة؟</label>
-        <input id="InvoiceIsPostedDisplay"   @* متغير: يعرض نعم/لا حسب الترحيل *@
-               class="form-control form-control-sm text-center"
-               value="@(Model.IsPosted ? "نعم" : "لا")"
-               readonly />
-    </div>
-
-    @* طلب الشراء المرجعي *@
-
-    <div class="col-lg-3 col-md-6 col-sm-12">
-        <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
-        <input class="form-control form-control-sm text-center"
-               value="@(Model.RefPRId?.ToString() ?? "")"
-               readonly />
-    </div>
-
-    @* المخزن *@
-    <div class="col-lg-3 col-md-6 col-sm-12">
-        <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
-        <select asp-for="WarehouseId"
-                asp-items="ViewBag.Warehouses"
-                class="form-select form-select-sm">
-            <option value="">اختر المخزن</option>
-        </select>
-    </div>
-
-    @* كاتب الفاتورة *@
-                            <div class="col-lg-3 col-md-6 col-sm-12">
-                                <label class="form-label form-label-sm">كاتب الفاتورة</label>
-                                <input id="InvoiceCreatedByDisplay"
-                                       class="form-control form-control-sm text-center"
-                                       value="@Model.CreatedBy"
-                                       readonly />
-                            </div>
+    </div> @* نهاية collapse *@
 
 </div>
 
 
 
-                      
-                        <div class="row g-4">
-                            <div class="col-lg-3 col-md-3">
-                                <label class="form-label form-label-sm">الهاتف</label>
-                                <input id="CustomerPhone"
-                                       class="form-control form-control-sm"
-                                       readonly />
-                            </div>
 
-                            <div class="col-lg-3 col-md-3">
-                                <label class="form-label form-label-sm">المحافظة</label>
-                                <input id="CustomerGovernorate"
-                                       class="form-control form-control-sm"
-                                       readonly />
-                            </div>
-                            <div class="col-lg-3 col-md-3">
-                                <label class="form-label form-label-sm">الحي</label>
-                                <input id="CustomerDistrict"
-                                       class="form-control form-control-sm"
-                                       readonly />
-                            </div>
-                            <div class="col-lg-3 col-md-3">
-                                <label class="form-label form-label-sm">المنطقة</label>
-                                <input id="CustomerArea"
-                                       class="form-control form-control-sm"
-                                       readonly />
-                            </div>
-                        </div>
+                             @* =====================================================
+                                 2) كارت بيانات الصنف من المخزون + سياسة شراء
+                             ===================================================== *@
+            <div class="card shadow-sm mb-3 invoice-product-card">
 
-                            <div class="row g-3">
-                               
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0">بيانات الصنف</h6>
 
-                                <div class="col-lg-8 col-md-6">
-                                    <label class="form-label form-label-sm">العنوان</label>
-                                    <input id="CustomerAddress"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-                                <div class="col-lg-4 col-md-2">
-                                    <label class="form-label form-label-sm">الحد الإتماني</label>
-                                    <input id="CustomerCredit"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-                            </div>
-                        @* </div> *@
-
-
-                    </div>
+                    @* زر سهم: طي/فتح جسم الكارت *@
+                    <button type="button"
+                            class="btn btn-sm btn-light"
+                            data-bs-toggle="collapse"
+                            data-bs-target="#ProductCardCollapse"
+                            aria-expanded="true"
+                            aria-controls="ProductCardCollapse"
+                            title="طي/فتح">
+                        <span id="ProductCardArrow">▾</span>
+                    </button>
                 </div>
 
-               
-
-                @* =====================================================
-                     3) كارت بيانات الصنف من المخزون + سياسة شراء
-                  ===================================================== *@
-                <div class="card shadow-sm mb-3 invoice-product-card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">بيانات الصنف</h6>
-                        @* ممكن نضيف وصف بسيط لو حبيت بعدين *@
-                        @* <small class="text-muted">هذه البيانات تخص الصنف الحالي في كارت "إضافة صنف للفاتورة".</small> *@
-                    </div>
-
+                @* جسم الكارت الذي سيتم طيه *@
+                <div id="ProductCardCollapse" class="collapse show">
                     <div class="card-body">
 
                         @* الصف العلوي: أرقام سريعة عن مخزون الصنف *@
@@ -435,20 +557,20 @@
                                 <select id="AlternativeProducts" @* متغير: قائمة البدائل للصنف الحالي *@
                                         class="form-select form-select-sm">
                                     @* <option value="">
-                                        اختر بديل للصنف (الاسم - الشركة - سعر الجمهور - الخصم المرجّح)
-                                    </option> *@
+                            اختر بديل للصنف (الاسم - الشركة - سعر الجمهور - الخصم المرجّح)
+                        </option> *@
                                     @* لاحقًا: يتم تحميل البدائل من جدول Products
-                       بشرط تطابق "الاسم العلمي" مع الصنف الحالي،
-                       والسعر/الشركة من Products، والخصم المرجّح من سياسة الشراء أو حركة المخزون *@
+                           بشرط تطابق "الاسم العلمي" مع الصنف الحالي،
+                           والسعر/الشركة من Products، والخصم المرجّح من سياسة الشراء أو حركة المخزون *@
                                 </select>
                             </div>
                         </div>
 
-                      
-
-
                     </div> @* نهاية card-body *@
-                </div>      @* نهاية الكارت بالكامل *@
+                </div> @* نهاية collapse *@
+
+            </div>
+            @* نهاية الكارت بالكامل *@
 
 
                 @* =====================================================
@@ -509,22 +631,22 @@
                                 @* الحقل الفعلي لحفظ كود الصنف في السطر *@
                                 <input type="hidden" id="ProdId" />
 
-                                
-                                </div>
 
-                                @* أزرار الحركة وتعديل بيانات الصنف *@
-                                <div class="d-flex gap-2 mb-2">
-                                    <button type="button"
-                                            id="btnOpenProductMovement"
-                                            class="btn btn-outline-secondary btn-sm">
-                                        حركة الصنف
-                                    </button>
+                            </div>
 
-                                    <button type="button"
-                                            id="btnOpenProductEdit"
-                                            class="btn btn-outline-primary btn-sm">
-                                        تعديل بيانات الصنف
-                                    </button>
+                            @* أزرار الحركة وتعديل بيانات الصنف *@
+                            <div class="d-flex gap-2 mb-2">
+                                <button type="button"
+                                        id="btnOpenProductMovement"
+                                        class="btn btn-outline-secondary btn-sm">
+                                    حركة الصنف
+                                </button>
+
+                                <button type="button"
+                                        id="btnOpenProductEdit"
+                                        class="btn btn-outline-primary btn-sm">
+                                    تعديل بيانات الصنف
+                                </button>
                             </div>
                         </div>
 
@@ -557,15 +679,15 @@
                             @* خصم 1 % *@
                             <div class="col-lg-2 col-md-4">
                                 <label id="ProdDisc1Label" class="form-label form-label-sm">
-                                    خصم %1
-                                    <small id="ProdDisc1LockState" class="text-muted">(مغلق)</small>
+                                    الخصم
+                                    
                                 </label>
 
                                 <input type="number"
                                        id="ProdDisc1Input"
-                                       class="form-control form-control-sm text-center pi-input bg-light text-muted"
+                                       class="form-control form-control-sm text-center pi-input"
                                        value="0"
-                                       readonly />   @* مقفول مبدئياً *@
+                                        />   
                             </div>
 
 
@@ -590,53 +712,148 @@
                             @* زر إضافة الصنف للسطر *@
                             <div class="col-lg-2 col-md-4 d-grid">
                                 <label class="form-label form-label-sm">&nbsp;</label>
-                                <button type="button"
-                                        id="btnAddInvoiceLine" @* متغير: زر إضافة الصنف لسطور الفاتورة *@
+
+                                <button type="button" @* متغير: زر إضافة الصنف لسطور الفاتورة *@
+                                        id="btnAddInvoiceLine"
                                         class="btn btn-primary btn-sm w-100">
                                     إضافة
                                 </button>
                             </div>
+
                         </div>
 
                     </div>
                 </div>
 
 
-                @* ==========================================
-                   5) جدول سطور فاتورة المشتريات
-                   ========================================== *@
-                <div class="card shadow-sm mb-3 invoice-lines-card">
-                    <div class="card-header py-2 invoice-lines-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="fw-semibold">
-                                سطور فاتورة المشتريات
-                            </span>
-                        </div>
+            @* ==========================================
+   5) جدول سطور فاتورة المشتريات
+   (جروبنج حسب الصنف لو له أكثر من تشغيلة)
+   ========================================== *@
+            <div class="card shadow-sm mb-3 invoice-lines-card">
+                <div class="card-header py-2 invoice-lines-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold">
+                            سطور فاتورة المشتريات
+                        </span>
                     </div>
-                    <div class="card-body p-0">
-                        <div class="erp-table-wrapper mb-0">
-                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                                <thead>
+                </div>
+
+                <div class="card-body p-0">
+                    <div class="erp-table-wrapper mb-0">
+                        <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                            <thead>
+                                <tr>
+                                    <th class="text-center">#</th>
+                                    <th>اسم الصنف</th>
+                                    <th class="text-center">التشغيلة</th>
+                                    <th class="text-center">الصلاحية</th>
+                                    <th class="text-center">الكمية</th>
+                                    <th class="text-center">سعر الجمهور</th>
+                                    <th class="text-center">خصم الشراء %</th>
+                                    <th class="text-center">قيمة السطر</th>
+                                    <th class="text-center">مسح</th>
+                                </tr>
+                            </thead>
+
+                            @* ✅ tbody واحدة فقط وبـ id واضح للـ JS *@
+                            <tbody id="PILinesTbody">
+                                @{
+                                    // قائمة السطور مرتبة
+                                    var linesList = Model.Lines?.OrderBy(l => l.LineNo).ToList()
+                                    ?? new List<ERP.Models.PILine>();
+
+                                    // جروبنج حسب الصنف (ProdId) + اسم الصنف (لو موجود من الـ Navigation)
+                                    var groups = linesList
+                                    .GroupBy(l => new
+                                    {
+                                        l.ProdId,
+                                        ProdName = l.Product?.ProdName ?? ("صنف #" + l.ProdId)
+                                    })
+                                    .OrderBy(g => g.Key.ProdName);
+                                }
+
+                                @* لا يوجد سطور *@
+                                @if (!groups.Any())
+                                {
                                     <tr>
-                                        <th class="text-center">#</th>
-                                        <th>اسم الصنف</th>
-                                        <th class="text-center">الكمية</th>
-                                        <th class="text-center">سعر الجمهور</th>
-                                        <th class="text-center">خصم الشراء %</th>
-                                        <th class="text-center">قيمة السطر</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">
-                                            لا توجد سطور مسجَّلة لهذه الفاتورة في هذه المرحلة.
+                                        <td colspan="8" class="text-center text-muted py-3">
+                                            لا يوجد سطور داخل الفاتورة حتى الآن.
                                         </td>
                                     </tr>
-                                </tbody>
-                            </table>
-                        </div>
+                                }
+                                else
+                                {
+                                    foreach (var g in groups)
+                                    {
+                                        @* =====================================================
+                               سطر عنوان المجموعة (الصنف)
+                               الهدف: يظهر اسم الصنف داخل عمود "اسم الصنف" فعليًا
+                               ===================================================== *@
+                                        <tr class="table-light pi-group-row" data-prodid="@g.Key.ProdId">
+                                            <td class="text-center">—</td>
+
+                                            <td>
+                                                <strong>@g.Key.ProdName</strong>
+                                                <span class="text-muted small"> | كود: @g.Key.ProdId</span>
+                                            </td>
+
+                                            <td class="text-center text-muted small">
+                                                تشغيلات: @g.Count()
+                                            </td>
+
+                                            <td class="text-center"></td>
+                                            <td class="text-center"></td>
+                                            <td class="text-center"></td>
+                                            <td class="text-center"></td>
+
+                                            <td class="text-center">
+                                                <button type="button"
+                                                        class="btn btn-danger btn-sm btnRemoveProductFromInvoice"
+                                                        data-prodid="@g.Key.ProdId">
+                                                    مسح الصنف
+                                                </button>
+                                            </td>
+                                        </tr>
+
+                                        @* =====================================================
+                               سطور التشغيلات التابعة للصنف
+                               ===================================================== *@
+                                        foreach (var line in g)
+                                        {
+                                            // متغير: قيمة السطر بعد خصم الشراء (كمية × سعر الجمهور × (1 - الخصم))
+                                            decimal lineValue =
+                                            line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountPct / 100m));
+
+                                            <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                <td class="text-center">@line.LineNo</td>
+
+                                                @* عمود اسم الصنف في سطر التشغيل: نضع علامة توضح أنه تابع للمجموعة *@
+                                                <td class="text-muted small">↳</td>
+
+                                                <td class="text-center">@line.BatchNo</td>
+
+                                                <td class="text-center">
+                                                    @(line.Expiry.HasValue? line.Expiry.Value.ToString("yyyy-MM-dd") : "")
+                                                </td>
+
+                                                <td class="text-center">@line.Qty</td>
+
+                                                <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
+
+                                                <td class="text-center">@line.PurchaseDiscountPct.ToString("0.##")</td>
+
+                                                <td class="text-center">@lineValue.ToString("0.00")</td>
+                                            </tr>
+                                        }
+                                    }
+                                }
+                            </tbody>
+                        </table>
                     </div>
                 </div>
+            </div>
+
 
                 @* ====================================
                    6) ملخص الفاتورة
@@ -695,7 +912,7 @@
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span id="TotalLinesBadge" class="small text-muted">عدد السطور</span>
-                                    <span class="badge bg-light text-dark summary-badge">
+                                    <span id="TotalLinesValue" class="badge bg-light text-dark summary-badge">
                                         @totalLines
                                     </span>
                                 </div>
@@ -704,7 +921,7 @@
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span id="TotalItemsBadge" class="small text-muted">عدد الأصناف</span>
-                                    <span class="badge bg-light text-dark summary-badge">
+                                    <span id="TotalItemsValue" class="badge bg-light text-dark summary-badge">
                                         @totalItems
                                     </span>
                                 </div>
@@ -713,7 +930,7 @@
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span id="TotalQtyBadge" class="small text-muted">إجمالي الكمية</span>
-                                    <span class="badge bg-light text-dark summary-badge">
+                                    <span id="TotalQtyValue" class="badge bg-light text-dark summary-badge">
                                         @totalQty
                                     </span>
                                 </div>
@@ -722,7 +939,7 @@
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span id="TotalRetailBadge" class="small text-muted">إجمالي سعر الجمهور</span>
-                                    <span class="badge bg-light text-dark summary-badge">
+                                    <span id="TotalRetailValue" class="badge bg-light text-dark summary-badge">
                                         @totalRetail.ToString("0.00")
                                     </span>
                                 </div>
@@ -731,33 +948,35 @@
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span id="TotalAfterDiscountBadge" class="small text-muted">الإجمالي بعد الخصم</span>
-                                    <span class="badge bg-light text-dark summary-badge">
+                                    <span id="TotalAfterDiscountValue" class="badge bg-light text-dark summary-badge">
                                         @totalAfterDiscount.ToString("0.00")
                                     </span>
                                 </div>
                             </div>
 
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span id="TaxAmountBadge" class="small text-muted">قيمة الضريبة</span>
-                                    <span class="badge bg-info text-dark summary-badge">
-                                        @taxAmount.ToString("0.00")
-                                    </span>
-                                </div>
+                            <div class="col-md-2 col-sm-6">
+                                <label class="form-label form-label-sm">قيمة الضريبة</label>
+                                <input type="number"
+                                       step="0.01"
+                                       id="TaxAmountInput"
+                                       class="form-control form-control-sm text-center pi-input"
+                                       value="@taxAmount" />
                             </div>
-                        </div>
+
 
                         <hr class="my-3" />
 
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
                                 <span id="TotalAfterDiscountAndTaxBadge" class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
-                                <h5 class="mb-1">
+                                <h5 id="TotalAfterDiscountAndTaxValue" class="mb-1">
+                                    
                                     @totalAfterDiscountAndTax.ToString("0.00")
                                 </h5>
 
                                 <span id="NetTotalBadge" class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
-                                <h3 class="mb-0 text-success">
+                                <h3 id="NetTotalValue" class="mb-0 text-success">
+                                    
                                     @netTotal.ToString("0.00")
                                 </h3>
                             </div>
@@ -780,103 +999,46 @@
             </div>  @* نهاية العمود الرئيسي *@
 
 
-            @* =========================
-               العمود الجانبي (أزرار الحركة)
-               ========================= *@
-            <div class="col-lg-2">
-                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
-                    <div class="card-header py-2 text-center">
-                        <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
-                    </div>
-                    <div class="card-body d-grid">
+           
+                </div>   @* card *@
 
-                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm"
-                           asp-action="Create" @* هنسيب اللينك كـ fallback *@
-                           id="btnNewInvoice">
-                            @* متغير: زر فتح فاتورة جديدة على الواجهة *@
-                            ➕ فاتورة جديدة
-                        </a>
-
-                        @* زر حفظ الفاتورة في جدول الهيدر *@
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                id="btnSaveInvoiceHeader">
-                            💾 حفظ الفاتورة
-                        </button>
-
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
-                                id="btnClearInvoiceLines"
-                                data-invoice-id="@Model.PIId">
-                            🗑️ مسح كل أصناف الفاتورة
-                        </button>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
-                            ⏪ فتح الفاتورة
-                        </button>
-
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                           asp-action="Edit"
-                           asp-route-id="@Model.PIId">
-                            ✏️ تعديل الفاتورة
-                        </a>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
-                            📤 ترحيل الفاتورة
-                        </button>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                onclick="window.print()">
-                            🖨️ طباعة الفاتورة
-                        </button>
-
-                        <hr />
-
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                           asp-action="Index">
-                            ⬅️ الرجوع لقائمة فواتير المشتريات
-                        </a>
-                    </div>
-                </div>
-            </div>
-
-        </div>
-
+         
+        </div>   @* row *@
+    </div>   @* container *@
     </div>
 </div>
+
+
+
+
+
 @section Scripts {
     <script>
         // =========================================================
-        // أولاً: أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
+        // (A) أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
         // =========================================================
         (function () {
 
             // بوكسات بيانات المورد
-            const custNameInput      = document.getElementById('CustomerNameInput');    // اسم المورد
-            const custCodeInput      = document.getElementById('CustomerCodeDisplay');  // كود المورد الظاهر
-            const custPhoneInput     = document.getElementById('CustomerPhone');        // الهاتف
-            const custGovInput       = document.getElementById('CustomerGovernorate');  // المحافظة
-            const custDistrictInput  = document.getElementById('CustomerDistrict');     // الحي
-            const custAreaInput      = document.getElementById('CustomerArea');         // المنطقة
-            const custAddressInput   = document.getElementById('CustomerAddress');      // العنوان
-            const custCreditInput    = document.getElementById('CustomerCredit');       // الحد الائتماني
-            const custHiddenId       = document.getElementById('CustomerId');           // CustomerId (مخفي في الموديل)
+            const custNameInput      = document.getElementById('CustomerNameInput');    // متغير: اسم المورد
+            const custCodeInput      = document.getElementById('CustomerCodeDisplay');  // متغير: كود المورد الظاهر
+            const custPhoneInput     = document.getElementById('CustomerPhone');        // متغير: الهاتف
+            const custGovInput       = document.getElementById('CustomerGovernorate');  // متغير: المحافظة
+            const custDistrictInput  = document.getElementById('CustomerDistrict');     // متغير: الحي
+            const custAreaInput      = document.getElementById('CustomerArea');         // متغير: المنطقة
+            const custAddressInput   = document.getElementById('CustomerAddress');      // متغير: العنوان
+            const custCreditInput    = document.getElementById('CustomerCredit');       // متغير: الحد الائتماني
+            const custHiddenId       = document.getElementById('CustomerId');           // متغير: CustomerId (مخفي)
 
             // الـ datalist الخاصة بالموردين
-            const custDataList = custNameInput && custNameInput.list
-                ? custNameInput.list
-                : null;
+            const custDataList = custNameInput && custNameInput.list ? custNameInput.list : null;
 
             if (!custDataList) {
-                console.warn('Supplier datalist not found for CustomerNameInput');
+                console.warn('⚠️ Supplier datalist not found for CustomerNameInput');
                 return; // نخرج من جزء المورد فقط
             }
 
-            // توحيد نص المورد (وتجاهل الألف في أول الكلمة)
+            // دالة: توحيد نص المورد (وتجاهل الألف في أول الكلمة)
             function normalizeSupplierText(txt) {
                 return (txt || '')
                     .trim()
@@ -885,36 +1047,32 @@
                     .replace(/\s+/g, ' ');
             }
 
-            // البحث عن مورد بالاسم
+            // دالة: البحث عن مورد بالاسم (تطابق كامل)
             function findSupplierByName(name) {
                 const search = normalizeSupplierText(name);
                 if (!search) return null;
 
                 const opts = custDataList.options;
                 for (let i = 0; i < opts.length; i++) {
-                    const optValue = normalizeSupplierText(opts[i].value);
-                    if (optValue === search) {
-                        return opts[i]; // تطابق كامل
-                    }
+                    if (normalizeSupplierText(opts[i].value) === search) return opts[i];
                 }
                 return null;
             }
 
-            // البحث عن مورد بالكود (data-id)
+            // دالة: البحث عن مورد بالكود (data-id)
             function findSupplierByCode(code) {
-                if (!code) return null;
+                const search = (code || '').toString().trim();
+                if (!search) return null;
 
                 const opts = custDataList.options;
                 for (let i = 0; i < opts.length; i++) {
-                    const optId = opts[i].getAttribute('data-id');
-                    if (optId == code) {
-                        return opts[i];
-                    }
+                    const optId = (opts[i].getAttribute('data-id') || '').toString();
+                    if (optId === search) return opts[i];
                 }
                 return null;
             }
 
-            // تعبئة كل بوكسات المورد من <option> واحد
+            // دالة: تعبئة كل بوكسات المورد من <option> واحد
             function fillSupplierFromOption(opt) {
 
                 // لو مفيش مورد مطابق → نفرّغ
@@ -932,20 +1090,18 @@
                 }
 
                 // قراءة البيانات من الـ option
-                const id       = opt.getAttribute('data-id')       || '';
-                const name     = opt.value                         || '';
-                const phone    = opt.getAttribute('data-phone')    || '';
-                const address  = opt.getAttribute('data-address')  || '';
-                const gov      = opt.getAttribute('data-gov')      || '';
-                const district = opt.getAttribute('data-district') || opt.getAttribute('data-District') || '';
-                const area     = opt.getAttribute('data-area')     || opt.getAttribute('data-Area')     || '';
-                const credit   = opt.getAttribute('data-credit')   || opt.getAttribute('data-Credit')   || '';
+                const id       = opt.getAttribute('data-id')       || ''; // متغير: كود المورد الحقيقي
+                const name     = opt.value                         || ''; // متغير: اسم المورد
+                const phone    = opt.getAttribute('data-phone')    || ''; // متغير: الهاتف
+                const address  = opt.getAttribute('data-address')  || ''; // متغير: العنوان
+                const gov      = opt.getAttribute('data-gov')      || ''; // متغير: المحافظة
+                const district = opt.getAttribute('data-district') || opt.getAttribute('data-District') || ''; // متغير: الحي
+                const area     = opt.getAttribute('data-area')     || opt.getAttribute('data-Area')     || ''; // متغير: المنطقة
+                const credit   = opt.getAttribute('data-credit')   || opt.getAttribute('data-Credit')   || ''; // متغير: الحد الائتماني
 
-                // حفظ الكود الحقيقي وإظهاره
                 if (custHiddenId)  custHiddenId.value  = id;
                 if (custCodeInput) custCodeInput.value = id;
 
-                // باقي البيانات
                 if (custNameInput)     custNameInput.value     = name;
                 if (custPhoneInput)    custPhoneInput.value    = phone;
                 if (custGovInput)      custGovInput.value      = gov;
@@ -955,96 +1111,101 @@
                 if (custCreditInput)   custCreditInput.value   = credit;
             }
 
-            // التعامل مع اسم المورد
+            // اسم المورد: change + Enter
             if (custNameInput) {
-                custNameInput.addEventListener('change', function () {
-                    const opt = findSupplierByName(custNameInput.value);
-                    fillSupplierFromOption(opt);
+                custNameInput.addEventListener('change', () => {
+                    fillSupplierFromOption(findSupplierByName(custNameInput.value));
                 });
 
-                custNameInput.addEventListener('keydown', function (e) {
+                custNameInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        const opt = findSupplierByName(custNameInput.value);
-                        fillSupplierFromOption(opt);
+                        fillSupplierFromOption(findSupplierByName(custNameInput.value));
                     }
                 });
             }
 
-            // التعامل مع كود المورد
+            // كود المورد: change + Enter
             if (custCodeInput) {
-                custCodeInput.addEventListener('change', function () {
-                    const opt = findSupplierByCode(custCodeInput.value);
-                    fillSupplierFromOption(opt);
+                custCodeInput.addEventListener('change', () => {
+                    fillSupplierFromOption(findSupplierByCode(custCodeInput.value));
                 });
 
-                custCodeInput.addEventListener('keydown', function (e) {
+                custCodeInput.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        const opt = findSupplierByCode(custCodeInput.value);
-                        fillSupplierFromOption(opt);
+                        fillSupplierFromOption(findSupplierByCode(custCodeInput.value));
                     }
                 });
             }
 
-            // عند فتح فاتورة قديمة (CustomerId موجود في الهيدر)
+            // عند فتح فاتورة قديمة: CustomerId موجود → املأ البيانات
             if (custHiddenId && custHiddenId.value) {
-                const opt = findSupplierByCode(custHiddenId.value);
-                fillSupplierFromOption(opt);
+                fillSupplierFromOption(findSupplierByCode(custHiddenId.value));
             }
 
         })();
 
         // =========================================================
-        // ثانياً: أوتوكومبليت الصنف + كارت بياناته + التابات
+        // (B) أوتوكومبليت الصنف + كارت بياناته + التابات + إضافة سطر
         // =========================================================
         (function () {
 
             // 1) عناصر سطر الصنف في الفاتورة
-            const prodCodeInput   = document.getElementById('ProdCodeInput');    // كود الصنف للبحث
-            const prodNameInput   = document.getElementById('ProdNameInput');    // اسم الصنف (أوتوكومبليت)
-            const prodPriceInput  = document.getElementById('ProdPriceInput');   // سعر الجمهور
-            const prodQtyInput    = document.getElementById('ProdQtyInput');     // الكمية
-            const prodDisc1Input  = document.getElementById('ProdDisc1Input');   // خصم 1
-            const prodBatchInput  = document.getElementById('ProdBatchInput');   // الباتش
-            const prodExpiryInput = document.getElementById('ProdExpiryInput');  // تاريخ الصلاحية
-            const prodHiddenId    = document.getElementById('ProdId');           // المعرّف الداخلي للصنف (يُستخدم في الحفظ)
-            const btnAddLine      = document.getElementById('btnAddInvoiceLine');// زر إضافة السطر
+            const prodCodeInput   = document.getElementById('ProdCodeInput');     // متغير: كود الصنف للبحث
+            const prodNameInput   = document.getElementById('ProdNameInput');     // متغير: اسم الصنف (أوتوكومبليت)
+            const prodPriceInput  = document.getElementById('ProdPriceInput');    // متغير: سعر الجمهور
+            const prodQtyInput    = document.getElementById('ProdQtyInput');      // متغير: الكمية
+            const prodDisc1Input  = document.getElementById('ProdDisc1Input');    // متغير: خصم الشراء %
+            const prodBatchInput  = document.getElementById('ProdBatchInput');    // متغير: الباتش
+            const prodExpiryInput = document.getElementById('ProdExpiryInput');   // متغير: تاريخ الصلاحية
+            const prodHiddenId    = document.getElementById('ProdId');            // متغير: المعرّف الداخلي للصنف
+            const btnAddLine      = document.getElementById('btnAddInvoiceLine'); // متغير: زر إضافة السطر
 
-            // 2) عناصر كارت بيانات الصنف (ملخص المخزون + الكوتة + الخصم المرجّح + البدائل)
-            const prodQtyWarehouse = document.getElementById('ProdQtyCurrentWarehouse'); // الكمية في هذا المخزن
-            const prodQtyAll       = document.getElementById('ProdQtyAllWarehouses');   // إجمالي الكمية في كل المخازن
-            const prodQuotaText    = document.getElementById('ProdQuotaText');          // نص يوضح هل له كوتة أم لا
-            const prodWeightedDisc = document.getElementById('ProdWeightedDiscount');   // الخصم المرجّح
-            const prodAltSelect    = document.getElementById('AlternativeProducts');    // قائمة البدائل
+            // 2) عناصر كارت بيانات الصنف
+            const prodQtyWarehouse = document.getElementById('ProdQtyCurrentWarehouse'); // متغير: كمية هذا المخزن
+            const prodQtyAll       = document.getElementById('ProdQtyAllWarehouses');   // متغير: إجمالي الكمية
+            const prodQuotaText    = document.getElementById('ProdQuotaText');          // متغير: هل له كوتة؟
+            const prodWeightedDisc = document.getElementById('ProdWeightedDiscount');   // متغير: الخصم المرجّح
+            const prodAltSelect    = document.getElementById('AlternativeProducts');    // متغير: قائمة البدائل
 
-            // 3) قائمة الأصناف المرتبطة بحقل اسم الصنف (datalist)
-            const prodDataList = (prodNameInput && prodNameInput.list)
-                ? prodNameInput.list
-                : null;
+            // 3) datalist الخاصة بالأصناف
+            const prodDataList = (prodNameInput && prodNameInput.list) ? prodNameInput.list : null;
 
             if (!prodDataList) {
                 console.warn('⚠️ لم يتم العثور على قائمة الأصناف (datalist) المرتبطة بـ ProdNameInput.');
-                return; // نخرج من جزء الأصناف فقط، باقي سكربت الصفحة لا يتأثر
+                return;
             }
 
-            // ---------------------------------------------
-            // دالة مساعدة لتوحيد النص (وتجاهل الألف في أول الكلمة)
-            // ---------------------------------------------
+            // =========================================================
+            // دوال مساعدة (أرقام + توحيد نص)
+            // =========================================================
+
+            // دالة: توحيد النص (تجاهل الألف + إزالة مسافات مكررة)
             function normalizeText(txt) {
                 return (txt || '')
                     .trim()
                     .toLowerCase()
                     .replace(/^[اأإآ]/, '')
-                    .replace(/\s+/g, ' ');  // إزالة المسافات المكررة
+                    .replace(/\s+/g, ' ');
             }
 
-            // ---------------------------------------------
-            // البحث باسم الصنف داخل الـ datalist
-            // 1) تطابق تام
-            // 2) يبدأ بـ
-            // 3) يحتوي على
-            // ---------------------------------------------
+            // دالة: تحويل النص لرقم (decimal) بأمان
+            function parseDecimalSafe(val) {
+                const s = (val || '').toString().trim().replace(',', '.');
+                const n = parseFloat(s);
+                return isNaN(n) ? 0 : n;
+            }
+
+            // دالة: تنسيق رقم (رقمين عشريين)
+            function fmt2(val) {
+                return parseDecimalSafe(val).toFixed(2);
+            }
+
+            // =========================================================
+            // البحث عن صنف بالاسم / بالكود داخل datalist
+            // =========================================================
+
             function findProductByName(name) {
                 const search = normalizeText(name);
                 if (!search) return null;
@@ -1053,31 +1214,22 @@
 
                 // 1) تطابق تام
                 for (let i = 0; i < opts.length; i++) {
-                    if (normalizeText(opts[i].value) === search) {
-                        return opts[i];
-                    }
+                    if (normalizeText(opts[i].value) === search) return opts[i];
                 }
 
                 // 2) يبدأ بـ
                 for (let i = 0; i < opts.length; i++) {
-                    if (normalizeText(opts[i].value).startsWith(search)) {
-                        return opts[i];
-                    }
+                    if (normalizeText(opts[i].value).startsWith(search)) return opts[i];
                 }
 
                 // 3) يحتوي على
                 for (let i = 0; i < opts.length; i++) {
-                    if (normalizeText(opts[i].value).includes(search)) {
-                        return opts[i];
-                    }
+                    if (normalizeText(opts[i].value).includes(search)) return opts[i];
                 }
 
                 return null;
             }
 
-            // ---------------------------------------------
-            // البحث بالكود (ProdId) داخل الـ datalist
-            // ---------------------------------------------
             function findProductByCode(code) {
                 const search = (code || '').toString().trim();
                 if (!search) return null;
@@ -1086,20 +1238,17 @@
                 for (let i = 0; i < opts.length; i++) {
                     const idAttr   = (opts[i].getAttribute('data-id')   || '').toString();
                     const codeAttr = (opts[i].getAttribute('data-code') || '').toString();
-
-                    if (idAttr === search || codeAttr === search) {
-                        return opts[i];
-                    }
+                    if (idAttr === search || codeAttr === search) return opts[i];
                 }
                 return null;
             }
 
-            // ---------------------------------------------
-            // تعبئة بيانات الصنف من <option> واحد
-            // ---------------------------------------------
+            // =========================================================
+            // تعبئة بيانات الصنف من <option>
+            // =========================================================
             function fillProductFromOption(opt) {
 
-                // لو مفيش صنف مطابق → نفرّغ الحقول
+                // لو مفيش صنف مطابق → نفرّغ
                 if (!opt) {
                     if (prodHiddenId)    prodHiddenId.value    = '';
                     if (prodCodeInput)   prodCodeInput.value   = '';
@@ -1118,38 +1267,34 @@
                     return;
                 }
 
-                // قراءة البيانات من data-* على الـ option
-                const id       = opt.getAttribute('data-id')      || '';
-                const code     = opt.getAttribute('data-code')    || id;
-                const name     = opt.value                        || '';
-                let priceRaw   = opt.getAttribute('data-price')   || '0';
-                const generic  = opt.getAttribute('data-generic') || '';
-                const hasQuota = (opt.getAttribute('data-hasquota') === 'true');
+                // قراءة البيانات من data-*
+                const id       = opt.getAttribute('data-id')      || ''; // متغير: ProdId
+                const code     = opt.getAttribute('data-code')    || id; // متغير: كود ظاهر (قد يساوي id)
+                const name     = opt.value                        || ''; // متغير: اسم الصنف
+                const generic  = opt.getAttribute('data-generic') || ''; // متغير: الاسم العلمي
+                const hasQuota = (opt.getAttribute('data-hasquota') === 'true'); // متغير: هل له كوتة؟
+                let priceRaw   = opt.getAttribute('data-price')   || '0'; // متغير: السعر كنص
 
-                // معالجة السعر وتحويله لرقم
+                // معالجة السعر
                 priceRaw = priceRaw.toString().replace(',', '.');
                 let price = parseFloat(priceRaw);
                 if (isNaN(price)) price = 0;
 
-                // حفظ المعرّف الداخلي للصنف
                 if (prodHiddenId)  prodHiddenId.value  = id;
-
-                // إظهار الكود والاسم والسعر في البوكسات
-                if (prodCodeInput)  prodCodeInput.value  = code;
-                if (prodNameInput)  prodNameInput.value  = name;
+                if (prodCodeInput) prodCodeInput.value = code;
+                if (prodNameInput) prodNameInput.value = name;
                 if (prodPriceInput) prodPriceInput.value = price.toFixed(2);
 
-                // تحديث كارت بيانات الصنف
                 if (prodQuotaText) {
                     prodQuotaText.value = hasQuota ? 'له كوتة' : 'بدون كوتة';
                 }
 
-                // في المرحلة الحالية: الخصم المرجّح = 0 (هنربطه بسياسة الشراء لاحقاً)
+                // حالياً: الخصم المرجّح = 0 (هنربطه بالسياسات لاحقاً)
                 if (prodWeightedDisc) {
                     prodWeightedDisc.value = '0';
                 }
 
-                // تحميل بدائل الصنف حسب الاسم العلمي
+                // بدائل الصنف حسب الاسم العلمي
                 if (prodAltSelect && generic) {
                     loadAlternativeProducts(id);
                 } else if (prodAltSelect) {
@@ -1157,9 +1302,9 @@
                 }
             }
 
-            // ---------------------------------------------
-            // تحميل بدائل الصنف من الكنترولر
-            // ---------------------------------------------
+            // =========================================================
+            // تحميل البدائل من الكنترولر
+            // =========================================================
             function loadAlternativeProducts(prodId) {
                 if (!prodId || !prodAltSelect) return;
 
@@ -1193,65 +1338,57 @@
                     });
             }
 
-            // ---------------------------------------------
-            // التعامل مع اسم الصنف (أوتوكومبليت)
-            // ---------------------------------------------
+            // =========================================================
+            // Events: اسم الصنف / كود الصنف
+            // =========================================================
             if (prodNameInput) {
-
                 prodNameInput.addEventListener('change', function () {
-                    const opt = findProductByName(this.value);
-                    fillProductFromOption(opt);
+                    fillProductFromOption(findProductByName(this.value));
                 });
 
                 prodNameInput.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        const opt = findProductByName(this.value);
-                        fillProductFromOption(opt);
+                        fillProductFromOption(findProductByName(this.value));
 
+                        // بعد اختيار الاسم → ننتقل للسعر (لو مفتوح)
                         if (prodPriceInput) {
                             prodPriceInput.focus();
-                            prodPriceInput.select();
+                            prodPriceInput.select?.();
                         }
                     }
                 });
 
                 prodNameInput.addEventListener('blur', function () {
-                    const opt = findProductByName(this.value);
-                    fillProductFromOption(opt);
+                    fillProductFromOption(findProductByName(this.value));
                 });
             }
 
-            // ---------------------------------------------
-            // التعامل مع كود الصنف
-            // ---------------------------------------------
             if (prodCodeInput) {
-
                 prodCodeInput.addEventListener('change', function () {
-                    const opt = findProductByCode(this.value);
-                    fillProductFromOption(opt);
+                    fillProductFromOption(findProductByCode(this.value));
                 });
 
                 prodCodeInput.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
                         e.preventDefault();
-                        const opt = findProductByCode(this.value);
-                        fillProductFromOption(opt);
+                        fillProductFromOption(findProductByCode(this.value));
 
+                        // بعد اختيار الكود → ننتقل للاسم
                         if (prodNameInput) {
                             prodNameInput.focus();
-                            prodNameInput.select();
+                            prodNameInput.select?.();
                         }
                     }
                 });
             }
 
-            // ---------------------------------------------
-            // قفل / فتح سعر الجمهور
-            // ---------------------------------------------
-            const priceLabel     = document.getElementById('ProdPriceLabel');
-            const priceLockState = document.getElementById('ProdPriceLockState');
-            let priceLocked = true; // مبدئياً: مقفول
+            // =========================================================
+            // قفل / فتح سعر الجمهور (بالضغط على اللابل)
+            // =========================================================
+            const priceLabel     = document.getElementById('ProdPriceLabel');       // متغير: Label السعر
+            const priceLockState = document.getElementById('ProdPriceLockState');   // متغير: (مغلق/مفتوح)
+            let priceLocked = true; // متغير: حالة قفل السعر
 
             function applyPriceLockUI() {
                 if (!prodPriceInput) return;
@@ -1277,12 +1414,12 @@
                 });
             }
 
-            // ---------------------------------------------
-            // قفل / فتح خصم 1
-            // ---------------------------------------------
-            const disc1Label     = document.getElementById('ProdDisc1Label');
-            const disc1LockState = document.getElementById('ProdDisc1LockState');
-            let disc1Locked = true; // مبدئياً: مقفول
+            // =========================================================
+            // قفل / فتح خصم الشراء (بالضغط على اللابل)
+            // =========================================================
+            const disc1Label     = document.getElementById('ProdDisc1Label');      // متغير: Label الخصم
+            const disc1LockState = document.getElementById('ProdDisc1LockState');  // متغير: (مغلق/مفتوح)
+            let disc1Locked = false; // متغير: حالة قفل الخصم
 
             function applyDisc1LockUI() {
                 if (!prodDisc1Input) return;
@@ -1308,9 +1445,9 @@
                 });
             }
 
-            // ---------------------------------------------
-            // التنقل بالإنتر + فوكس كامل على بوكسات سطر الصنف
-            // ---------------------------------------------
+            // =========================================================
+            // التنقل بالإنتر (داخل كارت إضافة الصنف)
+            // =========================================================
             const lineInputs = [
                 prodCodeInput,
                 prodNameInput,
@@ -1323,37 +1460,40 @@
 
             lineInputs.forEach((input, index) => {
 
-                // أول ما يدخل الفوكس على الخانة → يحدد كل المحتوى
+                // أول ما يدخل الفوكس → تحديد النص
                 input.addEventListener('focus', function () {
                     if (typeof this.select === 'function') {
                         setTimeout(() => this.select(), 0);
                     }
                 });
 
-                // التنقل بالإنتر
+                // Enter → يروح للحقل اللي بعده
                 input.addEventListener('keydown', function (e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
+                    if (e.key !== 'Enter') return;
 
-                        if (input === prodNameInput) {
-                            const opt = findProductByName(prodNameInput.value);
-                            fillProductFromOption(opt);
-                        }
+                    e.preventDefault();
 
-                        const next = lineInputs[index + 1];
+                    // لو المستخدم داخل اسم الصنف → نحاول نثبّت الصنف
+                    if (input === prodNameInput) {
+                        fillProductFromOption(findProductByName(prodNameInput.value));
+                    }
 
-                        if (next) {
-                            next.focus();
-                            if (typeof next.select === 'function') {
-                                next.select();
-                            }
-                        } else if (btnAddLine) {
-                            btnAddLine.focus();
-                        }
+                    // لو المستخدم داخل كود الصنف → نحاول نثبّت الصنف
+                    if (input === prodCodeInput) {
+                        fillProductFromOption(findProductByCode(prodCodeInput.value));
+                    }
+
+                    const next = lineInputs[index + 1];
+                    if (next) {
+                        next.focus();
+                        next.select?.();
+                    } else if (btnAddLine) {
+                        btnAddLine.focus();
                     }
                 });
             });
 
+            // زر الإضافة: Enter يعمل Click
             if (btnAddLine) {
                 btnAddLine.addEventListener('keydown', function (e) {
                     if (e.key === 'Enter') {
@@ -1363,46 +1503,556 @@
                 });
             }
 
-                     // ---------------------------------------------
+
+
+
+
+
+
+
+        // ===============================
+        // رسم جدول السطور (هجين)
+        // - لو الصنف غير مكرر: سطر واحد + بيانات + زر مسح
+        // - لو الصنف مكرر (تشغيلات): سطر عنوان للصنف + سطور تشغيلات (بيانات + مسح لكل تشغيلة)
+        // ===============================
+        function renderGroupedLines(lines) {
+
+            // متغير: tbody الخاص بجدول السطور
+            const tbody = document.getElementById('PILinesTbody');
+            if (!tbody) return;
+
+            // تفريغ الجدول قبل الرسم
+            tbody.innerHTML = '';
+
+            // لو مفيش بيانات
+            if (!Array.isArray(lines) || lines.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-3">لا توجد سطور</td></tr>`;
+                return;
+            }
+
+            // ===============================
+            // 1) تجميع السطور حسب prodId + prodName
+            // ===============================
+            const map = new Map(); // متغير: Map لتجميع السطور
+
+            lines.forEach(l => {
+                const prodId = Number(l.prodId || 0); // متغير: كود الصنف
+                const prodName = (l.prodName || (`صنف #${prodId}`)).toString(); // متغير: اسم الصنف
+                const key = `${prodId}||${prodName}`; // متغير: مفتاح التجميع
+
+                if (!map.has(key)) {
+                    map.set(key, { prodId, prodName, lines: [] });
+                }
+                map.get(key).lines.push(l);
+            });
+
+            // ترتيب المجموعات بالاسم
+            const groups = Array.from(map.values())
+                .sort((a, b) => (a.prodName || '').localeCompare(b.prodName || '', 'ar'));
+
+            // ===============================
+            // 2) رسم كل مجموعة حسب عدد التشغيلات
+            // ===============================
+            groups.forEach(g => {
+
+                // ترتيب تشغيلات الصنف حسب lineNo
+                const sortedLines = (g.lines || [])
+                    .slice()
+                    .sort((x, y) => (Number(x.lineNo || 0) - Number(y.lineNo || 0)));
+
+                const isMultiBatch = sortedLines.length > 1; // متغير: هل الصنف له أكثر من تشغيلة؟
+
+                // =========================================================
+                // الحالة (1): الصنف غير مكرر => سطر واحد فقط (اسم + بيانات + مسح)
+                // =========================================================
+                if (!isMultiBatch) {
+
+                    const line = sortedLines[0];
+
+                    const lineNo = line.lineNo ?? ''; // متغير: رقم السطر
+                    const batchNo = line.batchNo ?? ''; // متغير: التشغيلة
+
+                    const expiryText = line.expiryText
+                        ? line.expiryText
+                        : (line.expiry ? formatDateYMD(line.expiry) : ''); // متغير: الصلاحية
+
+                    const qty = Number(line.qty || 0); // متغير: الكمية
+                    const priceRetail = Number(line.priceRetail || 0); // متغير: سعر الجمهور
+
+                    const discPct = (line.purchaseDiscountPct != null)
+                        ? Number(line.purchaseDiscountPct)
+                        : Number(line.discPct || 0); // متغير: الخصم %
+
+                    const lineValue = (line.lineValue != null)
+                        ? Number(line.lineValue)
+                        : (qty * priceRetail * (1 - (discPct / 100))); // متغير: قيمة السطر
+
+                    const tr = document.createElement('tr');
+                    tr.setAttribute('data-line-no', lineNo);
+                    tr.setAttribute('data-prodid', g.prodId);
+
+                    tr.innerHTML = `
+                        <td class="text-center">${lineNo}</td>
+
+                        <td>
+                            <strong>${escapeHtml(g.prodName)}</strong>
+                            <span class="text-muted small"> | كود: ${g.prodId}</span>
+                        </td>
+
+                        <td class="text-center">${escapeHtml(batchNo)}</td>
+                        <td class="text-center">${escapeHtml(expiryText)}</td>
+                        <td class="text-center">${qty}</td>
+                        <td class="text-center">${fmt2(priceRetail)}</td>
+                        <td class="text-center">${fmt2(discPct)}</td>
+
+                        <td class="text-center">${fmt2(lineValue)}</td>
+
+                        <td class="text-center">
+                            <button type="button"
+                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
+                                    data-line-no="${lineNo}">
+                                مسح
+                            </button>
+                        </td>
+                    `;
+
+                    tbody.appendChild(tr);
+                    return;
+                }
+
+                // =========================================================
+                // الحالة (2): الصنف مكرر => سطر عنوان للصنف + سطور تشغيلات تحته
+                // =========================================================
+
+                // (أ) سطر عنوان الصنف فقط (بدون بيانات وبدون زر مسح)
+                const grpRow = document.createElement('tr');
+                grpRow.className = 'table-light pi-group-row';
+                grpRow.setAttribute('data-prodid', g.prodId);
+
+                grpRow.innerHTML = `
+                    <td class="text-center">—</td>
+
+                    <td>
+                        <strong>${escapeHtml(g.prodName)}</strong>
+                        <span class="text-muted small"> | كود: ${g.prodId}</span>
+                    </td>
+
+                    <td class="text-center text-muted small">تشغيلات: ${sortedLines.length}</td>
+                    <td class="text-center"></td>
+                    <td class="text-center"></td>
+                    <td class="text-center"></td>
+                    <td class="text-center"></td>
+                    <td class="text-center"></td>
+                    <td class="text-center"></td>
+                `;
+
+                tbody.appendChild(grpRow);
+
+                // (ب) سطور التشغيلات (كل تشغيلة = سطر بيانات + زر مسح)
+                sortedLines.forEach(line => {
+
+                    const lineNo = line.lineNo ?? ''; // متغير: رقم السطر
+                    const batchNo = line.batchNo ?? ''; // متغير: التشغيلة
+
+                    const expiryText = line.expiryText
+                        ? line.expiryText
+                        : (line.expiry ? formatDateYMD(line.expiry) : ''); // متغير: الصلاحية
+
+                    const qty = Number(line.qty || 0); // متغير: الكمية
+                    const priceRetail = Number(line.priceRetail || 0); // متغير: سعر الجمهور
+
+                    const discPct = (line.purchaseDiscountPct != null)
+                        ? Number(line.purchaseDiscountPct)
+                        : Number(line.discPct || 0); // متغير: الخصم %
+
+                    const lineValue = (line.lineValue != null)
+                        ? Number(line.lineValue)
+                        : (qty * priceRetail * (1 - (discPct / 100))); // متغير: قيمة السطر
+
+                    const tr = document.createElement('tr');
+                    tr.setAttribute('data-line-no', lineNo);
+                    tr.setAttribute('data-prodid', g.prodId);
+
+                    tr.innerHTML = `
+                        <td class="text-center">${lineNo}</td>
+
+                        <td class="text-muted small">↳</td>
+
+                        <td class="text-center">${escapeHtml(batchNo)}</td>
+                        <td class="text-center">${escapeHtml(expiryText)}</td>
+                        <td class="text-center">${qty}</td>
+                        <td class="text-center">${fmt2(priceRetail)}</td>
+                        <td class="text-center">${fmt2(discPct)}</td>
+
+                        <td class="text-center">${fmt2(lineValue)}</td>
+
+                        <td class="text-center">
+                            <button type="button"
+                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
+                                    data-line-no="${lineNo}">
+                                مسح
+                            </button>
+                        </td>
+                    `;
+
+                    tbody.appendChild(tr);
+                });
+            });
+        }
+
+
+
+        // ===============================
+        // Helper: تنسيق تاريخ yyyy-MM-dd
+        // ===============================
+        function formatDateYMD(value) {
+            try {
+                const d = new Date(value);
+                if (isNaN(d.getTime())) return '';
+                const yyyy = d.getFullYear();
+                const mm = String(d.getMonth() + 1).padStart(2, '0');
+                const dd = String(d.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            } catch {
+                return '';
+            }
+        }
+
+
+                // ===============================
+        // دالة: تحديث ملخص الفاتورة (البادجات)
+        // ===============================
+        function updateSummaryBadges(totals) {
+
+            if (!totals) return;
+
+            // دالة صغيرة: كتابة نص داخل عنصر لو موجود
+            const setText = (id, value) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = value;
+            };
+
+            // =====================================
+            // 1) قراءات مرنة من totals (اختلاف أسماء مفاتيح)
+            // =====================================
+            const totalLines = totals.totalLines ?? totals.linesCount ?? 0;     // متغير: عدد السطور
+            const totalItems = totals.totalItems ?? totals.itemsCount ?? 0;     // متغير: عدد الأصناف
+            const totalQty = totals.totalQty ?? totals.qtyTotal ?? 0;           // متغير: إجمالي الكمية
+            const totalRetail = totals.totalRetail ?? totals.retailTotal ?? 0;  // متغير: إجمالي سعر الجمهور
+
+            // متغير: إجمالي الخصم (لو السيرفر بيرجعه totalDiscount)
+            const totalDiscount = totals.totalDiscount ?? totals.discountTotal ?? 0;
+
+            // =====================================
+            // 2) حساب الإجمالي بعد الخصم لو مش موجود
+            // =====================================
+            let totalAfterDiscount = totals.totalAfterDiscount;
+            if (totalAfterDiscount == null) {
+                totalAfterDiscount = Number(totalRetail || 0) - Number(totalDiscount || 0);
+            }
+
+            // =====================================
+            // 3) الضريبة لو مش موجودة نخليها 0 (لحين ربطها لاحقاً)
+            // =====================================
+            let taxAmount = totals.taxAmount;
+            if (taxAmount == null) taxAmount = 0;
+
+            // =====================================
+            // 4) الإجمالي بعد الخصم والضريبة + الصافي
+            // =====================================
+            let totalAfterDiscountAndTax = totals.totalAfterDiscountAndTax;
+            if (totalAfterDiscountAndTax == null) {
+                totalAfterDiscountAndTax = Number(totalAfterDiscount || 0) + Number(taxAmount || 0);
+            }
+
+            let netTotal = totals.netTotal;
+            if (netTotal == null) {
+                // حالياً الصافي = الإجمالي بعد الخصم والضريبة
+                netTotal = Number(totalAfterDiscountAndTax || 0);
+            }
+
+            // =====================================
+            // 5) تحديث العناصر على الصفحة (IDs كما هي)
+            // =====================================
+            setText('TotalLinesValue', totalLines);
+            setText('TotalItemsValue', totalItems);
+            setText('TotalQtyValue', totalQty);
+
+            setText('TotalRetailValue', fmt2(totalRetail));
+            setText('TotalAfterDiscountValue', fmt2(totalAfterDiscount));
+            setText('TaxAmountValue', fmt2(taxAmount));
+
+            setText('TotalAfterDiscountAndTaxValue', fmt2(totalAfterDiscountAndTax));
+            setText('NetTotalValue', fmt2(netTotal));
+        }
+
+
+
+
+                // =========================================================
+        // Helpers عامة (Global) — علشان أي دالة تقدر تستخدمها بدون Errors
+        // =========================================================
+
+        // متغير/دالة: تحويل النص لرقم Decimal بأمان
+        window.parseDecimalSafe = window.parseDecimalSafe || function (val) {
+            const s = (val || '').toString().trim().replace(',', '.');
+            const n = parseFloat(s);
+            return isNaN(n) ? 0 : n;
+        };
+
+        // متغير/دالة: تنسيق رقم لرقمين عشريين
+        window.fmt2 = window.fmt2 || function (val) {
+            return window.parseDecimalSafe(val).toFixed(2);
+        };
+
+        // متغير/دالة: حماية النص قبل إدخاله في innerHTML
+        window.escapeHtml = window.escapeHtml || function (text) {
+            return (text ?? '').toString()
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+        };
+
+
+
+
+
+
+                // =========================================================
+        // تثبيت الدالة في الـ Global Scope (حل نهائي لخطأ not defined)
+        // =========================================================
+        window.getAntiForgeryToken = window.getAntiForgeryToken || function () {
+
+            // متغير: input الخاص بتوكن الحماية لو موجود في الصفحة
+            const inp1 = document.querySelector('input[name="__RequestVerificationToken"]');
+            if (inp1 && inp1.value) return inp1.value;
+
+            // متغير: فورم التوكن المخفي (لو انت عامل فورم مخصص)
+            const frm = document.getElementById('__AntiForgeryForm');
+            if (!frm) return '';
+
+            // متغير: input داخل الفورم المخفي
+            const inp2 = frm.querySelector('input[name="__RequestVerificationToken"]');
+            return inp2 ? (inp2.value || '') : '';
+        };
+
+        // =========================================================
+        // Cache بسيط للسطور (علشان لو السيرفر رجّع line فقط)
+        // =========================================================
+        window.__piLinesCache = window.__piLinesCache || []; // متغير: آخر سطور مرسومة
+
+        // =========================================================
+        // دالة: فوكس بعد الإضافة على "اسم الصنف" (المطلوب منك)
+        // =========================================================
+        function focusOnProductName() {
+            // متغير: حقل اسم الصنف
+            const inp = document.getElementById('ProdNameInput');
+            if (!inp) return;
+
+            inp.focus();
+            if (typeof inp.select === 'function') inp.select();
+        }
+
+             // =========================================================
+        // إضافة سطر (AJAX) — مع حماية من أخطاء الدوال غير المعرفة
+        // =========================================================
+        async function addLineAjax() {
+
+            // 1) لازم يكون عندنا رقم فاتورة محفوظ
+            const invoiceIdInput = document.getElementById('InvoiceId'); // متغير: Hidden رقم الفاتورة
+            const invoiceId = invoiceIdInput ? parseInt(invoiceIdInput.value || '0', 10) : 0;
+
+            if (!invoiceId || invoiceId <= 0) {
+                alert('لا يمكن إضافة أصناف قبل حفظ الفاتورة. اضغط "حفظ الفاتورة" أولاً.');
+                document.getElementById('btnSaveInvoiceHeader')?.focus(); // متغير: زر حفظ الهيدر
+                return;
+            }
+
+            // 2) قراءة بيانات السطر
+            const prodId = prodHiddenId ? parseInt(prodHiddenId.value || '0', 10) : 0; // متغير: ProdId
+            const qty = prodQtyInput ? parseInt(prodQtyInput.value || '0', 10) : 0;     // متغير: الكمية
+
+            const priceRetail = prodPriceInput ? parseDecimalSafe(prodPriceInput.value) : 0; // متغير: سعر الجمهور
+            const purchaseDiscountPct = prodDisc1Input ? parseDecimalSafe(prodDisc1Input.value) : 0; // متغير: خصم الشراء %
+
+            const batchNo = prodBatchInput ? (prodBatchInput.value || '').trim() : '';       // متغير: التشغيلة
+            const expiryText = prodExpiryInput ? (prodExpiryInput.value || '').trim() : '';  // متغير: الصلاحية
+
+            // 3) تحقق قبل الإرسال
+            if (!prodId || prodId <= 0) {
+                alert('من فضلك اختر صنفاً صحيحاً من القائمة.');
+                prodNameInput?.focus();
+                prodNameInput?.select?.();
+                return;
+            }
+
+            if (!qty || qty <= 0) {
+                alert('الكمية يجب أن تكون أكبر من صفر.');
+                prodQtyInput?.focus();
+                prodQtyInput?.select?.();
+                return;
+            }
+
+            // 4) تجهيز DTO
+            const dto = {
+                id: invoiceId,
+                piId: invoiceId,
+                invoiceId: invoiceId,
+
+                prodId: prodId,
+                qty: qty,
+
+                unitCost: priceRetail,
+                priceRetail: priceRetail,
+                purchaseDiscountPct: purchaseDiscountPct,
+
+                batchNo: batchNo,
+                expiryText: expiryText
+            };
+
+            // 5) استدعاء السيرفر
+            const token = getAntiForgeryToken();
+
+            if (btnAddLine) btnAddLine.disabled = true; // تعليق: منع الضغط المتكرر
+
+            try {
+
+                const resp = await fetch('@Url.Action("AddLineJson", "PurchaseInvoices")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify(dto)
+                });
+
+                // لو السيرفر رجّع خطأ HTTP
+                if (!resp.ok) {
+                    const errTxt = await resp.text().catch(() => '');
+                    console.error('AddLineJson HTTP Error:', resp.status, errTxt);
+                    alert('حدث خطأ أثناء إضافة السطر (HTTP). راجع Console لمعرفة السبب.');
+                    return;
+                }
+
+                // نقرأ الرد كنص ثم JSON (أكثر أماناً)
+                const raw = await resp.text();
+                const rawTrim = (raw || '').trim();
+
+                if (rawTrim.startsWith('<')) {
+                    console.error('AddLineJson رجّع HTML بدل JSON:', rawTrim.substring(0, 300));
+                    alert('السيرفر رجّع HTML بدل JSON. راجع AddLineJson في الكنترولر.');
+                    return;
+                }
+
+                let data = null; // متغير: بيانات الرد
+                try {
+                    data = rawTrim ? JSON.parse(rawTrim) : null;
+                } catch (e) {
+                    console.error('فشل تحويل الرد إلى JSON:', e, rawTrim.substring(0, 300));
+                    alert('الرد من السيرفر ليس JSON.');
+                    return;
+                }
+
+                // نجاح قد يكون ok أو success حسب السيرفر
+                const isOk = !!(data && (data.ok === true || data.success === true));
+                if (!isOk) {
+                    alert((data && data.message) ? data.message : 'تعذر إضافة السطر.');
+                    return;
+                }
+
+                // =========================================================
+                // 6) تحديث الجدول + الملخص (بدون ما نكسر الكود لو دالة ناقصة)
+                // =========================================================
+                try {
+
+                    // السيرفر عندك بيرجع lines غالباً
+                    if (Array.isArray(data.lines)) {
+                        window.__piLinesCache = data.lines; // متغير: حفظ آخر سطور
+                        if (typeof renderGroupedLines === 'function') {
+                            renderGroupedLines(data.lines);
+                        } else {
+                            console.warn('renderGroupedLines غير معرفة وقت التنفيذ.');
+                        }
+                    } else if (data.line) {
+                        window.__piLinesCache = window.__piLinesCache || [];
+                        window.__piLinesCache.push(data.line);
+                        if (typeof renderGroupedLines === 'function') {
+                            renderGroupedLines(window.__piLinesCache);
+                        }
+                    }
+
+                    if (data.totals && typeof updateSummaryBadges === 'function') {
+                        updateSummaryBadges(data.totals);
+                    }
+
+                } catch (uiErr) {
+                    // تعليق: لو حصل خطأ في تحديث الواجهة، ما نعتبره مشكلة سيرفر
+                    console.error('UI Update Error after AddLineJson:', uiErr);
+                    alert('تمت الإضافة في السيرفر، لكن حدث خطأ أثناء تحديث الجدول في الصفحة. راجع Console.');
+                }
+
+                // =========================================================
+                // 7) تنظيف الخانات + فوكس على اسم الصنف
+                // =========================================================
+                if (prodQtyInput) prodQtyInput.value = '';
+                if (prodBatchInput) prodBatchInput.value = '';
+                if (prodExpiryInput) prodExpiryInput.value = '';
+
+                // فوكس على اسم الصنف (مش الكود)
+                document.getElementById('ProdNameInput')?.focus();
+                document.getElementById('ProdNameInput')?.select?.();
+
+            } catch (err) {
+                // ✅ هنا هنطلع السبب الحقيقي بدل رسالة عامة
+                console.error('AddLineAjax Exception:', err);
+                alert('حدث خطأ داخل الجافاسكربت أثناء الإضافة: ' + (err?.message || err));
+            } finally {
+                if (btnAddLine) btnAddLine.disabled = false;
+            }
+        }
+
+        // ✅ ربط زر "إضافة" مرة واحدة فقط
+        if (btnAddLine && !btnAddLine.dataset.boundAddLine) {
+            btnAddLine.dataset.boundAddLine = '1';
+            btnAddLine.type = 'button';
+            btnAddLine.addEventListener('click', function (e) {
+                e.preventDefault();
+                addLineAjax();
+            });
+        }
+
+
+
+
+            // =========================================================
             // التابات: حركة الصنف + تعديل بياناته
-            // ---------------------------------------------
-            const btnProdMovement = document.getElementById('btnOpenProductMovement'); // زر حركة الصنف
-            const btnProdEdit     = document.getElementById('btnOpenProductEdit');     // زر تعديل بيانات الصنف
+            // =========================================================
+            const btnProdMovement = document.getElementById('btnOpenProductMovement'); // متغير: زر حركة الصنف
+            const btnProdEdit     = document.getElementById('btnOpenProductEdit');     // متغير: زر تعديل بيانات الصنف
 
-            // دالة: جلب كود الصنف الحالي من البوكسات
             function getCurrentProdId() {
-                // أولاً: من الهيدن (المعرّف الداخلى للصنف) ← ده الأضمن
-                if (prodHiddenId && prodHiddenId.value.trim() !== '') {
-                    return prodHiddenId.value.trim();
-                }
-
-                // ثانياً: من بوكس كود الصنف الظاهر (لو المستخدم كتبه يدويًا)
-                if (prodCodeInput && prodCodeInput.value.trim() !== '') {
-                    return prodCodeInput.value.trim();
-                }
-
+                if (prodHiddenId && prodHiddenId.value.trim() !== '') return prodHiddenId.value.trim();
+                if (prodCodeInput && prodCodeInput.value.trim() !== '') return prodCodeInput.value.trim();
                 return '';
             }
 
-            // دالة: فتح تاب جديد من داخل IFRAME
             function openTabFromFrame(url, tabId, title) {
-
                 try {
-                    // لو الصفحة فعلاً جوّه IFRAME → نبعت رسالة للـ Layout الرئيسي
                     if (window.top && window.top !== window) {
                         window.top.postMessage({
-                            type: 'erp-open-tab',   // نفس النوع اللي بيسمعه site.js
+                            type: 'erp-open-tab',
                             tabId: tabId || '',
                             title: title || '',
                             url: url
                         }, '*');
-                        return; // خلّصنا
+                        return;
                     }
                 } catch (e) {
                     console.error('خطأ أثناء استخدام postMessage:', e);
                 }
 
-                // فول باك: لو مش جوّه IFRAME لسبب ما
                 if (window.erpTabs && typeof window.erpTabs.openTab === 'function') {
                     window.erpTabs.openTab(tabId, url, title);
                 } else {
@@ -1410,22 +2060,18 @@
                 }
             }
 
-            // عناوين الأساس من السيرفر (من غير frame ولا باراميترات)
-            const editBaseUrl     = '@Url.Action("Edit", "Products")';   // مثال: /Products/Edit
-            const movementBaseUrl = '@Url.Action("Show", "Products")';   // مثال: /Products/Show
+            const editBaseUrl     = '@Url.Action("Edit", "Products")'; // متغير: /Products/Edit
+            const movementBaseUrl = '@Url.Action("Show", "Products")'; // متغير: /Products/Show
 
-            // دالة: بناء رابط تعديل الصنف مع id + frame=1
             function buildEditUrl(id) {
-                // نتأكد إن مفيش "/" زيادة في آخر الرابط
                 const base = editBaseUrl.replace(/\/$/, '');
                 const params = new URLSearchParams();
-                params.set('frame', '1'); // نعرض بدون Layout مزدوج
+                params.set('frame', '1');
                 return base + '/' + encodeURIComponent(id) + '?' + params.toString();
             }
 
-            // دالة: بناء رابط حركة الصنف مع prodId + frame=1
             function buildMovementUrl(id) {
-                const base = movementBaseUrl; // /Products/Show
+                const base = movementBaseUrl;
                 const params = new URLSearchParams();
                 params.set('prodId', id);
                 params.set('frame', '1');
@@ -1433,237 +2079,263 @@
                 return base + sep + params.toString();
             }
 
-            // زر "تعديل بيانات الصنف"
-            if (btnProdEdit) {
+            if (btnProdEdit && !btnProdEdit.dataset.boundProdEdit) {
+                btnProdEdit.dataset.boundProdEdit = '1';
                 btnProdEdit.addEventListener('click', function (e) {
-                    e.preventDefault(); // منع السلوك العادي للزر
+                    e.preventDefault();
 
-                    const id = getCurrentProdId(); // متغير: كود الصنف الحالي
+                    const id = getCurrentProdId();
                     if (!id) {
                         alert('من فضلك اختر صنفاً أولاً.');
-                        if (prodNameInput) {
-                            prodNameInput.focus();
-                            prodNameInput.select();
-                        }
+                        prodNameInput?.focus();
+                        prodNameInput?.select?.();
                         return;
                     }
 
-                    // متغير: رابط شاشة تعديل الصنف
-                    const url = buildEditUrl(id);
-
-                    // فتح التاب بعنوان ثابت بدون اسم الصنف
-                    openTabFromFrame(url, 'prod-edit-' + id, 'تعديل الصنف');
+                    openTabFromFrame(buildEditUrl(id), 'prod-edit-' + id, 'تعديل الصنف');
                 });
             }
 
-            // زر "حركة الصنف"
-            if (btnProdMovement) {
+            if (btnProdMovement && !btnProdMovement.dataset.boundProdMove) {
+                btnProdMovement.dataset.boundProdMove = '1';
                 btnProdMovement.addEventListener('click', function (e) {
-                    e.preventDefault(); // منع السلوك العادي للزر
+                    e.preventDefault();
 
-                    const id = getCurrentProdId(); // متغير: كود الصنف الحالي
+                    const id = getCurrentProdId();
                     if (!id) {
                         alert('من فضلك اختر صنفاً أولاً.');
-                        if (prodNameInput) {
-                            prodNameInput.focus();
-                            prodNameInput.select();
-                        }
+                        prodNameInput?.focus();
+                        prodNameInput?.select?.();
                         return;
                     }
 
-                    // متغير: رابط شاشة حركة الصنف
-                    const url = buildMovementUrl(id);
-
-                    // فتح التاب بعنوان ثابت بدون اسم الصنف
-                    openTabFromFrame(url, 'prod-move-' + id, 'حركة الصنف');
+                    openTabFromFrame(buildMovementUrl(id), 'prod-move-' + id, 'حركة الصنف');
                 });
             }
 
-            // ---------------------------------------------
-            // تهيئة مبدئية لو في فاتورة موجودة وبها صنف بالفعل
-            // ---------------------------------------------
+            // تهيئة: لو في صنف موجود بالفعل في الهيدر (نادر)
             if (prodHiddenId && prodHiddenId.value) {
                 const opt = findProductByCode(prodHiddenId.value);
-                if (opt) {
-                    fillProductFromOption(opt);
-                }
+                if (opt) fillProductFromOption(opt);
             }
 
-        })(); // ← نهاية IIFE الخاصة بالأصناف
-
-
+        })(); // نهاية IIFE الأصناف
 
         // =========================================================
-        // ثالثاً: منطق "فاتورة جديدة" (فوكس على المورد فقط)
+        // (C) فوكس + حفظ الهيدر (AJAX) — بدون تكرار
         // =========================================================
-        (function () {
+        document.addEventListener('DOMContentLoaded', () => {
 
-            // متغير: هل هذه فاتورة جديدة؟ (PIId = 0)
-            const isNewInvoice = @(Model == null || Model.PIId == 0 ? "true" : "false");
-
-            // لو مش فاتورة جديدة (يعني فاتورة قديمة) → لا نعمل شيء
-            if (!isNewInvoice) {
-                return;
+            // ==========================
+            // 1) فوكس على المورد لو فاتورة جديدة
+            // ==========================
+            const isNewInvoice = @(Model == null || Model.PIId == 0 ? "true" : "false"); // متغير: هل فاتورة جديدة؟
+            if (isNewInvoice) {
+                const custNameInput = document.getElementById('CustomerNameInput'); // متغير: اسم المورد
+                setTimeout(() => {
+                    custNameInput?.focus();
+                    custNameInput?.select?.();
+                }, 250);
             }
 
-            // فوكس على اسم المورد بعد فتح الفاتورة الجديدة
-            const custNameInput = document.getElementById('CustomerNameInput'); // حقل: اسم المورد
-            if (custNameInput) {
-                setTimeout(function () {
-                    custNameInput.focus();
-                    if (typeof custNameInput.select === 'function') {
-                        custNameInput.select();    // تحديد النص بالكامل ليسهّل الكتابة فوقه
-                    }
-                }, 300);
-            }
+            // ==========================
+            // 2) زر حفظ الهيدر (SaveHeader)
+            // ==========================
+            const saveBtn = document.getElementById('btnSaveInvoiceHeader'); // متغير: زر حفظ الفاتورة
+            if (!saveBtn) return;
 
-        })();
+            // ✅ ربط مرة واحدة
+            if (saveBtn.dataset.boundSaveHeader) return;
+            saveBtn.dataset.boundSaveHeader = '1';
 
+            saveBtn.type = 'button'; // تعليق: منع submit الافتراضي
 
-         // =========================================================
-        // منطق زر "حفظ الفاتورة"
-        // يحفظ هيدر الفاتورة (المورد + المخزن) ويرجع رقم PIId
-        // =========================================================
-        (function () {
+            let busy = false; // متغير: يمنع الضغط المتكرر
 
-            // متغير: زر الحفظ
-            const saveBtn = document.getElementById('btnSaveInvoiceHeader');
-            if (!saveBtn) {
-                return; // لو الزر مش موجود، نخرج بهدوء
-            }
+            saveBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                if (busy) return;
+                busy = true;
+                saveBtn.disabled = true;
 
-            saveBtn.addEventListener('click', async function (e) {
-                e.preventDefault(); // منع أي submit افتراضي
+                // متغير: رقم الفاتورة الحالي (0 لو جديدة)
+                const invoiceId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
 
-                // متغير: رقم الفاتورة الحالي (0 = فاتورة جديدة)
-                const invoiceIdInput = document.getElementById('InvoiceId');
-                const invoiceId = invoiceIdInput
-                    ? parseInt(invoiceIdInput.value || '0', 10)
-                    : 0;
+                // متغير: كود المورد
+                const customerId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
 
-                // متغير: كود المورد من الحقل المخفي
-                const customerIdInput = document.getElementById('CustomerId');
-                const customerId = customerIdInput
-                    ? parseInt(customerIdInput.value || '0', 10)
-                    : 0;
+                // متغير: كود المخزن
+                const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
 
-                // متغير: كود المخزن من الكومبو
-                const warehouseSelect = document.getElementById('WarehouseId');
-                const warehouseId = warehouseSelect
-                    ? parseInt(warehouseSelect.value || '0', 10)
-                    : 0;
-
-                // لو حابب ناخد RefPRId من حقل معين فيما بعد، جاهز:
-                let refPrId = null; // مبدئياً مفيش طلب شراء مرجعي
-                const refPrInput = document.getElementById('RefPRId');
+                // متغير: طلب شراء مرجعي (اختياري)
+                let refPrId = null;
+                const refPrInput = document.getElementById('RefPRId'); // متغير: حقل طلب الشراء
                 if (refPrInput && refPrInput.value.trim() !== '') {
                     const parsed = parseInt(refPrInput.value.trim(), 10);
-                    if (!isNaN(parsed)) {
-                        refPrId = parsed;
-                    }
+                    if (!isNaN(parsed)) refPrId = parsed;
                 }
 
-                // تحقق بسيط: لازم المورد والمخزن
+                // تحقق: لازم المورد والمخزن
                 if (!customerId || !warehouseId) {
                     alert('من فضلك اختر المورد والمخزن أولاً قبل حفظ الفاتورة.');
+                    busy = false;
+                    saveBtn.disabled = false;
                     return;
                 }
 
-                // كائن البيانات المبعوته للكنترولر (DTO)
                 const dto = {
-                    piId: invoiceId,
-                    customerId: customerId,
-                    warehouseId: warehouseId,
-                    refPrId: refPrId
+                    piId: invoiceId,          // متغير: رقم الفاتورة
+                    customerId: customerId,   // متغير: رقم المورد
+                    warehouseId: warehouseId, // متغير: رقم المخزن
+                    refPrId: refPrId          // متغير: طلب شراء مرجعي
                 };
 
                 try {
-                    // استدعاء الأكشن SaveHeader في PurchaseInvoicesController
+
                     const response = await fetch('@Url.Action("SaveHeader", "PurchaseInvoices")', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify(dto)
                     });
 
                     if (!response.ok) {
+                        const txt = await response.text().catch(() => '');
+                        console.error('SaveHeader HTTP Error:', response.status, txt);
                         alert('حدث خطأ غير متوقع أثناء حفظ الفاتورة.');
                         return;
                     }
 
-                    const data = await response.json();
+                    const data = await response.json().catch(() => null);
 
-                    if (!data.success) {
-                        // في حالة وجود رسالة خطأ من السيرفر
-                        alert(data.message || 'تعذر حفظ الفاتورة.');
+                    if (!data || !data.success) {
+                        alert((data && data.message) ? data.message : 'تعذر حفظ الفاتورة.');
                         return;
                     }
 
-                    // =============================
-                    // تحديث رقم الفاتورة في الواجهة
-                    // =============================
-                    const newId = data.piId || 0;
+                    // تحديث رقم الفاتورة في hidden + display
+                    const newId = data.piId || 0; // متغير: رقم الفاتورة بعد الحفظ
+                    const invoiceIdInput = document.getElementById('InvoiceId');
+                    if (newId > 0 && invoiceIdInput) invoiceIdInput.value = newId.toString();
 
-                    if (newId > 0) {
-                        // تحديث الحقل المخفي
-                        if (invoiceIdInput) {
-                            invoiceIdInput.value = newId.toString();
-                        }
-
-                        // تحديث بوكس رقم الفاتورة الظاهر
-                        const invoiceNumberDisplay = document.getElementById('InvoiceNumberDisplay');
-                        if (invoiceNumberDisplay) {
-                            // لو السيرفر رجّع invoiceNumber نستخدمه، وإلا نستخدم newId
-                            invoiceNumberDisplay.value = data.invoiceNumber || newId.toString();
-                        }
+                    const invoiceNumberDisplay = document.getElementById('InvoiceNumberDisplay');
+                    if (invoiceNumberDisplay) {
+                        invoiceNumberDisplay.value = data.invoiceNumber || (newId > 0 ? newId.toString() : invoiceNumberDisplay.value);
                     }
 
-                    // =============================
-                    // تحديث التاريخ والوقت على الشاشة
-                    // =============================
-
+                    // تحديث التاريخ/الوقت
                     const invoiceDateDisplay = document.getElementById('InvoiceDateDisplay');
-                    if (invoiceDateDisplay && data.invoiceDate) {
-                        invoiceDateDisplay.value = data.invoiceDate;
-                    }
+                    if (invoiceDateDisplay && data.invoiceDate) invoiceDateDisplay.value = data.invoiceDate;
 
                     const invoiceTimeDisplay = document.getElementById('InvoiceTimeDisplay');
-                    if (invoiceTimeDisplay && data.invoiceTime) {
-                        invoiceTimeDisplay.value = data.invoiceTime;
-                    }
+                    if (invoiceTimeDisplay && data.invoiceTime) invoiceTimeDisplay.value = data.invoiceTime;
 
-                    // =============================
-                    // تحديث حالة الفاتورة والترحيل وكاتبها
-                    // =============================
-
-                    // حالة الفاتورة النصية (Draft / Posted ...)
+                    // تحديث حالة الفاتورة
                     const statusHidden = document.getElementById('InvoiceStatusHidden');
-                    if (statusHidden && data.status) {
-                        statusHidden.value = data.status;
-                    }
+                    if (statusHidden && data.status) statusHidden.value = data.status;
 
-                    // هل الفاتورة مُرحّلة؟ (نعم / لا)
                     const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
                     if (isPostedDisplay && typeof data.isPosted === 'boolean') {
                         isPostedDisplay.value = data.isPosted ? 'نعم' : 'لا';
                     }
 
-                    // كاتب الفاتورة
                     const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');
-                    if (createdByDisplay && data.createdBy) {
-                        createdByDisplay.value = data.createdBy;
-                    }
+                    if (createdByDisplay && data.createdBy) createdByDisplay.value = data.createdBy;
 
-                    // هنا مفيش رسالة نجاح، لو حابب نضيف Toast أو Alert نعمله بعدين
+                    // ✅ المطلوب: بعد الحفظ فوكس على الصنف
+                                            const ProdNameInput = document.getElementById('ProdNameInput');
+                    ProdNameInput?.focus();
+                    ProdNameInput?.select?.();
 
                 } catch (err) {
                     console.error(err);
                     alert('تعذر الاتصال بالخادم لحفظ الفاتورة.');
+                } finally {
+                    busy = false;
+                    saveBtn.disabled = false;
                 }
             });
 
-        })();
+        });
+
+
+
+        //زر “مسح الصنف
+
+        document.addEventListener('click', async function (e) {
+
+    const btn = e.target.closest('.btnRemoveProductFromInvoice');
+    if (!btn) return;
+
+    const prodId = parseInt(btn.getAttribute('data-prodid') || '0', 10);
+    if (!prodId) return;
+
+    if (!confirm('هل تريد مسح هذا الصنف بكل تشغيلاته من الفاتورة؟')) return;
+
+    const token = getAntiForgeryToken();
+    const invoiceId = parseInt('@(Model.PIId)', 10);
+
+    const res = await fetch('@Url.Action("RemoveProductLinesJson", "PurchaseInvoices")', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'RequestVerificationToken': token
+        },
+        body: JSON.stringify({ PIId: invoiceId, prodId: prodId })
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+        alert(data.message || 'حدث خطأ أثناء مسح الصنف.');
+        return;
+    }
+
+    if (data.lines) renderGroupedLines(data.lines);
+    if (data.totals) updateSummaryBadges(data.totals);
+});
+
+
+
+//حفظ الضريبة (Enter أو Blur)
+
+async function saveTaxAjax() {
+
+    const token = getAntiForgeryToken();
+    const invoiceId = parseInt('@(Model.PIId)', 10);
+
+    const taxInput = document.getElementById('TaxAmountInput');
+    const taxVal = parseFloat(taxInput?.value || '0') || 0;
+
+    const res = await fetch('@Url.Action("SaveTaxJson", "PurchaseInvoices")', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'RequestVerificationToken': token
+        },
+        body: JSON.stringify({ PIId: invoiceId, taxTotal: taxVal })
+    });
+
+    const data = await res.json();
+
+    if (!data.ok) {
+        alert(data.message || 'تعذر حفظ الضريبة.');
+        return;
+    }
+
+    if (data.totals) updateSummaryBadges(data.totals);
+}
+
+document.getElementById('TaxAmountInput')?.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        saveTaxAjax();
+    }
+});
+
+document.getElementById('TaxAmountInput')?.addEventListener('blur', function () {
+    saveTaxAjax();
+});
+
 
 
 

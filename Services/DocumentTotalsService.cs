@@ -82,46 +82,50 @@ namespace ERP.Services
         // ============================================================
 
         /// <summary>
-        /// يعيد حساب إجماليات فاتورة الشراء:
-        /// - ItemsTotal      = مجموع (الكمية × تكلفة الوحدة)
-        /// - DiscountTotal   = مجموع خصم الشراء على السطور
-        /// - TaxTotal        = حالياً 0 (لحد ما نضيف ضريبة فى السطور)
+        /// يعيد حساب إجماليات فاتورة الشراء (حسب واجهتك الحالية):
+        /// - ItemsTotal      = مجموع (الكمية × سعر الجمهور PriceRetail)
+        /// - DiscountTotal   = مجموع (الكمية × سعر الجمهور × خصم الشراء %)
+        /// - TaxTotal        = قيمة الضريبة المخزنة في الهيدر (لا يتم تصفيرها هنا)
         /// - NetTotal        = ItemsTotal - DiscountTotal + TaxTotal
         /// </summary>
         public async Task RecalcPurchaseInvoiceTotalsAsync(int piId)
         {
+            // متغير: الهيدر
             var header = await _context.PurchaseInvoices
                 .FirstOrDefaultAsync(p => p.PIId == piId);
 
             if (header == null)
                 return;
 
+            // متغير: سطور الفاتورة
             var lines = await _context.PILines
                 .Where(l => l.PIId == piId)
                 .ToListAsync();
+
+            // متغير: الضريبة الحالية (من الهيدر) — مهم ما نصفرهاش
+            var taxTotal = header.TaxTotal;
 
             if (!lines.Any())
             {
                 header.ItemsTotal = 0m;
                 header.DiscountTotal = 0m;
-                header.TaxTotal = 0m;
-                header.NetTotal = 0m;
+
+                // الضريبة تفضل زي ما هي (علشان لو المستخدم كتبها قبل إضافة سطور)
+                header.NetTotal = 0m - 0m + taxTotal;
             }
             else
             {
-                // إجمالي قيمة السطور = Qty × UnitCost
-                var itemsTotal = lines.Sum(l => l.Qty * l.UnitCost);
+                // إجمالي سعر الجمهور = مجموع (Qty × PriceRetail)
+                var itemsTotal = lines.Sum(l => l.Qty * l.PriceRetail);
 
-                // إجمالي الخصم = Qty × UnitCost × (خصم الشراء %)
+                // إجمالي خصم الشراء = مجموع (Qty × PriceRetail × Disc%)
                 var discountTotal = lines.Sum(l =>
-                    l.Qty * l.UnitCost * (l.PurchaseDiscountPct / 100m));
+                    l.Qty * l.PriceRetail * (l.PurchaseDiscountPct / 100m));
 
-                var taxTotal = 0m; // حالياً لا نحسب ضريبة على الشراء
                 var netTotal = itemsTotal - discountTotal + taxTotal;
 
                 header.ItemsTotal = itemsTotal;
                 header.DiscountTotal = discountTotal;
-                header.TaxTotal = taxTotal;
                 header.NetTotal = netTotal;
             }
 
@@ -250,23 +254,14 @@ namespace ERP.Services
             }
             else
             {
-                // إجمالي قبل الخصم = مجموع (الكمية × سعر الجمهور)
                 var totalBefore = lines.Sum(l => l.Qty * l.PriceRetail);
-
-                // إجمالي بعد خصومات السطور (قبل خصم الهيدر)
                 var linesAfterDiscount = lines.Sum(l => l.LineTotalAfterDiscount);
-
-                // خصم الهيدر (قيمة مدخلة فى الهيدر)
                 var headerDisc = header.HeaderDiscountValue;
 
-                // إجمالي بعد كل الخصومات وقبل الضريبة
                 var totalAfterBeforeTax = linesAfterDiscount - headerDisc;
                 if (totalAfterBeforeTax < 0) totalAfterBeforeTax = 0m;
 
-                // إجمالي الضريبة
                 var taxAmount = lines.Sum(l => l.TaxValue);
-
-                // الصافي = بعد الخصم + الضريبة
                 var netTotal = totalAfterBeforeTax + taxAmount;
 
                 header.TotalBeforeDiscount = totalBefore;

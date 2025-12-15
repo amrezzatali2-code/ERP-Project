@@ -1,0 +1,225 @@
+﻿using System.Linq;
+using System.Security.Claims;                        // الـ Claims الخاصة بالمستخدم
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.Tasks;
+using ERP.Data;                                     // AppDbContext
+using ERP.Models;                                   // User, UserActivityLog, UserActionType
+using ERP.ViewModels;                               // LoginViewModel
+using Microsoft.AspNetCore.Authentication;          // SignInAsync / SignOutAsync
+using Microsoft.AspNetCore.Authentication.Cookies;  // CookieAuthenticationDefaults
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;                // FirstOrDefaultAsync
+using Microsoft.AspNetCore.Authorization;           // AllowAnonymous / Authorize
+
+namespace ERP.Controllers
+{
+    /// <summary>
+    /// كنترولر مسئول عن شاشة تسجيل الدخول والخروج.
+    /// </summary>
+    [AllowAnonymous]   // تعليق: هذا الكنترولر مستثنى من سياسة التوثيق العامة
+    public class LoginController : Controller
+    {
+        private readonly AppDbContext _db;  // متغير: سياق قاعدة البيانات
+
+        public LoginController(AppDbContext db)
+        {
+            _db = db;
+        }
+
+        // ================================================================
+        // GET: /Login
+        // عرض شاشة تسجيل الدخول
+        // ================================================================
+        [HttpGet]
+        public IActionResult Index(string? returnUrl = null)
+        {
+            // متغير: موديل شاشة الدخول
+            var model = new LoginViewModel
+            {
+                ReturnUrl = returnUrl     // تعليق: يتم حفظ الصفحة المطلوب الرجوع لها بعد الـ Login
+            };
+
+            return View("Index", model);   // تعليق: نرجع View باسم Index.cshtml
+        }
+
+        // ================================================================
+        // POST: /Login
+        // استقبال بيانات تسجيل الدخول والتحقق من المستخدم
+        // ================================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Index(LoginViewModel model)
+        {
+            // تحقق من صحة البيانات في الفورم
+            if (!ModelState.IsValid)
+            {
+                return View("Index", model);   // تعليق: إعادة عرض الشاشة مع رسائل الخطأ
+            }
+
+            // متغير: اسم المستخدم بعد إزالة الفراغات الزائدة
+            var userName = model.UserName.Trim();
+
+            // البحث عن المستخدم في قاعدة البيانات (يكون نشط)
+            var user = await _db.Users
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+                .FirstOrDefaultAsync(u =>
+                    u.UserName == userName &&
+                    u.IsActive);
+
+            if (user == null)
+            {
+                // لو لم نجد مستخدم بهذا الاسم
+                ModelState.AddModelError(string.Empty, "اسم المستخدم أو كلمة المرور غير صحيحة.");
+                return View("Index", model);
+            }
+
+            // التحقق من كلمة المرور
+            if (!VerifyPassword(model.Password, user.PasswordHash))
+            {
+                ModelState.AddModelError(string.Empty, "اسم المستخدم أو كلمة المرور غير صحيحة.");
+                return View("Index", model);
+            }
+
+            // تحديث آخر وقت دخول
+            user.LastLoginAt = DateTime.UtcNow;
+
+            // إنشاء سجل نشاط (Login)
+            var log = new UserActivityLog
+            {
+                UserId = user.UserId,                       // تعليق: رقم المستخدم الذي قام بالدخول
+                ActionType = UserActionType.Login,          // تعليق: نوع العملية = Login
+                EntityName = "User",                        // تعليق: الكيان هو User
+                EntityId = user.UserId,
+                Description = $"تسجيل دخول المستخدم {user.UserName}",
+                ActionTime = DateTime.UtcNow,
+                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                UserAgent = Request.Headers["User-Agent"].ToString()
+            };
+
+            _db.UserActivityLogs.Add(log);
+            await _db.SaveChangesAsync();                   // تعليق: حفظ LastLoginAt + سجل النشاط
+
+            // تجهيز الـ Claims الخاصة بالمستخدم
+            var claims = new[]
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),       // رقم المستخدم
+                new Claim(ClaimTypes.Name, user.UserName),                          // اسم الدخول
+                new Claim("DisplayName", user.DisplayName ?? user.UserName),        // الاسم المعروض
+                new Claim("IsAdmin", user.IsAdmin ? "true" : "false"),              // هل أدمن؟
+            }
+            .Concat(
+                // إضافة أسماء الأدوار فى الـ Claims
+                user.UserRoles
+                    .Where(ur => ur.Role != null)
+                    .Select(ur => new Claim(ClaimTypes.Role, ur.Role!.Name))
+            );
+
+            // متغير: هوية المستخدم
+            var identity = new ClaimsIdentity(
+                claims,
+                CookieAuthenticationDefaults.AuthenticationScheme
+            );
+
+            // متغير: كائن المستخدم الكامل
+            var principal = new ClaimsPrincipal(identity);
+
+            // إعدادات الكوكيز
+            var authProps = new AuthenticationProperties
+            {
+                // متغير: الكوكي سيشن فقط ⇒ تنتهى عند غلق المتصفح
+                IsPersistent = false
+                // لا نحدد ExpiresUtc علشان ما تبقاش Persistent Cookie
+            };
+
+            // تنفيذ عملية تسجيل الدخول
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                principal,
+                authProps);
+
+
+            // لو فيه ReturnUrl نرجع له، وإلا نذهب للصفحة الرئيسية
+            if (!string.IsNullOrWhiteSpace(model.ReturnUrl) &&
+                Url.IsLocalUrl(model.ReturnUrl))
+            {
+                return Redirect(model.ReturnUrl);
+            }
+
+            // هنا ممكن توجهه لقائمة فواتير المشتريات مثلاً (الآن إلى Home/Index)
+            return RedirectToAction("Index", "Home");
+        }
+
+        // ================================================================
+        // POST: /Login/Logout
+        // تسجيل خروج المستخدم الحالى
+        // ================================================================
+        [Authorize]                         // تعليق: لازم يكون مسجّل دخول علشان يخرج
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Logout()
+        {
+            // محاولة قراءة رقم المستخدم الحالي من الـ Claims
+            int? userId = null;
+            if (User.Identity?.IsAuthenticated == true)
+            {
+                var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (int.TryParse(idClaim, out var parsedId))
+                {
+                    userId = parsedId;
+                }
+            }
+
+            // تسجيل حدث الخروج فى سجل النشاط
+            if (userId.HasValue)
+            {
+                var log = new UserActivityLog
+                {
+                    UserId = userId.Value,
+                    ActionType = UserActionType.Logout,
+                    EntityName = "User",
+                    EntityId = userId.Value,
+                    Description = $"تسجيل خروج المستخدم رقم {userId.Value}",
+                    ActionTime = DateTime.UtcNow,
+                    IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                    UserAgent = Request.Headers["User-Agent"].ToString()
+                };
+
+                _db.UserActivityLogs.Add(log);
+                await _db.SaveChangesAsync();
+            }
+
+            // عمل SignOut من الكوكيز
+            await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+            // الرجوع لشاشة الدخول
+            return RedirectToAction("Index", "Login");
+        }
+
+        // ================================================================
+        // دالة مساعدة: التحقق من كلمة المرور
+        // ================================================================
+        private bool VerifyPassword(string inputPassword, string storedHash)
+        {
+            if (string.IsNullOrEmpty(storedHash))
+                return false;
+
+            // حساب SHA256 للنص الذي كتبه المستخدم
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(inputPassword);     // متغير: البايتات الداخلة للتشفير
+            var hashBytes = sha.ComputeHash(bytes);                // متغير: نتيجة التشفير
+            var inputHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
+
+            // مقارنة: لو مخزّن كهاش
+            if (string.Equals(storedHash, inputHash, StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // مقارنة إضافية: لو كلمة المرور مخزنة كنص عادي (لبيانات قديمة)
+            if (string.Equals(storedHash, inputPassword))
+                return true;
+
+            return false;
+        }
+    }
+}

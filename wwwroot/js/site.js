@@ -22,7 +22,9 @@
 
         // تعليق عربي: حدث كليك عام على الصفحة داخل الـ iframe
         document.addEventListener('click', function (event) {
-            var link = event.target.closest('a.app-menu-link');
+            // نلتقط روابط القائمة + روابط فتح التابات داخل الصفحات (مثل: عرض الفاتورة)
+            var link = event.target.closest('a.app-menu-link, a.open-tab');
+
             if (!link) return; // لو مش رابط من نوع app-menu-link نخرج
 
             event.preventDefault(); // منع التنقل العادي داخل نفس التاب

@@ -27,12 +27,15 @@ namespace ERP.Models
         public string? BatchNo { get; set; }    // رقم التشغيلة
         public DateTime? Expiry { get; set; }   // تاريخ الصلاحية
 
-        // ===== Navigation Property =====
+        // =========================
+        // Navigation Properties
+        // =========================
 
         public virtual PurchaseInvoice PurchaseInvoice { get; set; } = null!;
-        // سطر واحد يتبع فاتورة شراء واحدة (رأس الفاتورة)
-        // ومقابلها في PurchaseInvoice: ICollection<PILine> Lines
+        // متغير: السطر يتبع فاتورة شراء واحدة
 
-        // مفتاح مركب: (PIId + LineNo)
+        public virtual Product? Product { get; set; }
+        // متغير: الصنف المرتبط بالسطر (علشان نعرض الاسم في Show)
+        // ملاحظة: الربط هيكون على ProdId
     }
 }

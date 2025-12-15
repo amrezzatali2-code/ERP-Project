@@ -6,3 +6,11 @@ git push            # ترفع التعديلات على نفس الفرع
 
 
 cd /d "D:\Courses\Courses to study\ASP.NET\ERP"
+
+
+
+ازاي تعمل ZIP بسرعة من داخل Visual Studio؟
+
+
+
+Compress-Archive -Path ".\Controllers\PurchaseInvoicesController.cs", ".\Views\PurchaseInvoices\Show.cshtml" -DestinationPath ".\PurchaseInvoice_Patch.zip" -Force

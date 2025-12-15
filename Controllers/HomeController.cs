@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using ERP.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;   // ✅ علشان نستخدم AllowAnonymous
 
 namespace ERP.Controllers
 {
@@ -13,11 +14,15 @@ namespace ERP.Controllers
             _logger = logger;
         }
 
+        // هنا مفيش [AllowAnonymous] ⇒ الصفحة الرئيسية هتحتاج Login
+
+       
         public IActionResult Index()
         {
             return View();
         }
 
+        // نفس الكلام: صفحة Privacy للمستخدمين المسجّلين فقط
         public IActionResult Privacy()
         {
             return View();
@@ -26,7 +31,18 @@ namespace ERP.Controllers
         [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
         public IActionResult Error()
         {
-            return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+            return View(new ErrorViewModel
+            {
+                RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier
+            });
+        }
+
+        // ✅ صفحة "لا تملك صلاحية" – لازم نسمح للجميع يدخلها
+        [AllowAnonymous]
+        public IActionResult AccessDenied()
+        {
+            // هتقرأ View: Views/Home/AccessDenied.cshtml
+            return View();
         }
     }
 }

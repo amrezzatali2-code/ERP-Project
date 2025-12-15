@@ -11,6 +11,11 @@ using System.Collections.Generic;               // القوائم List
 using System.Linq;                              // LINQ: Where / OrderBy / Any
 using System.Text;                              // لبناء ملف CSV
 using System.Threading.Tasks;                   // async / await
+using System.Security.Claims;   // متغير: للوصول للـ Claims بتاعة اليوزر
+using System.Text.RegularExpressions;
+
+
+
 
 
 
@@ -27,16 +32,155 @@ namespace ERP.Controllers
     /// </summary>
     public class PurchaseInvoicesController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _context;
-        private readonly DocumentTotalsService _docTotals;      // متغير: خدمة إجماليات المستندات
+        // بعد ✅
+        private readonly AppDbContext _context;               // سياق قاعدة البيانات
+        private readonly DocumentTotalsService _docTotals;    // خدمة إجماليات المستندات
+        private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
 
         public PurchaseInvoicesController(AppDbContext context,
-                                      DocumentTotalsService docTotals)
+                                          DocumentTotalsService docTotals,
+                                          IUserActivityLogger activityLogger)
         {
             _context = context;
             _docTotals = docTotals;
+            _activityLogger = activityLogger;
         }
+
+
+
+
+
+
+        // دالة خاصة: تحديث أو إنشاء الباتش + تسجيل تغيير السعر فى ProductPriceHistory
+        private async Task UpdateBatchPriceAndHistoryAsync(
+            int prodId,                 // كود الصنف
+            int customerId,             // كود المورد (من الهيدر)
+            string? batchNo,            // رقم التشغيلة من الفورم
+            DateTime? expiry,           // تاريخ الصلاحية من الفورم
+            decimal newPublicPrice,     // سعر الجمهور اللى كتبته فى شاشة الفاتورة
+            decimal unitCost)           // تكلفة الشراء (من سطر الفاتورة)
+        {
+            // لو مفيش باتش أو صلاحية → مش هنعمل حاجة
+            if (string.IsNullOrWhiteSpace(batchNo) || !expiry.HasValue)
+                return;
+
+            // 1) قراءة الصنف من الجدول (عشان نجيب السعر الأساسى)
+            var product = await _context.Products
+                .FirstOrDefaultAsync(p => p.ProdId == prodId);
+
+            if (product == null)
+                return; // حماية إضافية
+
+            // 2) البحث عن باتش بنفس (الصنف + رقم التشغيلة + الصلاحية)
+            var batch = await _context.Batches
+                .FirstOrDefaultAsync(b =>
+                    b.ProdId == prodId &&
+                    b.BatchNo == batchNo &&
+                    b.Expiry == expiry.Value);
+
+            decimal oldPrice;   // متغير: هنحفظ فيه السعر القديم للمقارنة
+
+            if (batch == null)
+            {
+                // لا يوجد باتش بهذه البيانات ⇒ إنشائه جديد
+                oldPrice = product.PriceRetail;   // نعتبر السعر القديم هو سعر الصنف الأساسى
+
+                batch = new Batch
+                {
+                    ProdId = prodId,
+                    BatchNo = batchNo!,
+                    Expiry = expiry.Value,
+                    CustomerId = customerId,
+                    PriceRetailBatch = newPublicPrice,
+                    UnitCostDefault = unitCost,
+                    EntryDate = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow,
+                    IsActive = true
+                };
+
+                _context.Batches.Add(batch);
+            }
+            else
+            {
+                // يوجد باتش بالفعل ⇒ نحدّث سعره وتكلفته
+                oldPrice = batch.PriceRetailBatch ?? product.PriceRetail;
+
+                batch.PriceRetailBatch = newPublicPrice;
+                batch.UnitCostDefault = unitCost;
+                batch.UpdatedAt = DateTime.UtcNow;
+
+                // لو CustomerId فاضى نملأه بأول مورد معروف
+                if (!batch.CustomerId.HasValue)
+                    batch.CustomerId = customerId;
+            }
+
+            // 3) لو السعر اتغيّر فعلاً ⇒ نسجل فى ProductPriceHistory
+            if (oldPrice != newPublicPrice)
+            {
+                var history = new ProductPriceHistory
+                {
+                    ProdId = prodId,
+                    OldPrice = oldPrice,
+                    NewPrice = newPublicPrice,
+                    ChangeDate = DateTime.UtcNow,
+                    ChangedBy = GetCurrentUserDisplayName(),  // اسم اليوزر الحالى
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                _context.ProductPriceHistories.Add(history);
+
+                // نحدّث خانة آخر تغيير سعر فى جدول الأصناف كعلامة فقط
+                product.LastPriceChangeDate = DateTime.UtcNow;
+                _context.Products.Update(product);
+            }
+
+            // مفيش SaveChanges هنا → اللى ينده الدالة هو اللى ينفذ SaveChangesAsync
+        }
+
+
+
+
+
+        // دالة مساعدة: تجيب اسم اليوزر الحالى من الـ Claims
+        private string GetCurrentUserDisplayName()
+        {
+            // لو فيه يوزر عامل تسجيل دخول
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                // نحاول الأول نجيب DisplayName (اسم الموظف الظاهر فى التقارير)
+                var displayName = User.FindFirst("DisplayName")?.Value;
+                if (!string.IsNullOrWhiteSpace(displayName))
+                    return displayName;
+
+                // لو مفيش DisplayName نرجع لاسم الدخول العادى (UserName)
+                if (!string.IsNullOrWhiteSpace(User.Identity!.Name))
+                    return User.Identity.Name!;
+            }
+
+            // فى الحالات الاستثنائية (مثلاً أثناء Seed أو لو مفيش Login)
+            return "System";
+        }
+
+
+
+
+
+        // دالة مساعدة اختيارية: تجيب رقم اليوزر من الـ Claims
+        private int? GetCurrentUserId()
+        {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                var idStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value; // متغير: قيمة الـ Claim
+                if (int.TryParse(idStr, out var id))
+                    return id;
+            }
+
+            return null; // مفيش يوزر حالي
+        }
+
+
+
+
 
         #region Index (قائمة فواتير المشتريات)
 
@@ -290,6 +434,597 @@ namespace ERP.Controllers
 
 
 
+        // ================================================================
+        // DTO: بيانات إضافة سطر (جاية من AJAX)
+        // ================================================================
+        public class AddLineJsonDto
+        {
+            public int PIId { get; set; }                    // متغير: رقم فاتورة الشراء
+            public int prodId { get; set; }                  // متغير: كود الصنف
+            public int qty { get; set; }                     // متغير: الكمية
+            public decimal unitCost { get; set; }            // متغير: تكلفة الشراء للوحدة
+            public decimal priceRetail { get; set; }         // متغير: سعر الجمهور
+            public decimal purchaseDiscountPct { get; set; } // متغير: خصم الشراء %
+            public string? BatchNo { get; set; }             // متغير: رقم التشغيلة
+            public string? expiryText { get; set; }          // متغير: الصلاحية كنص MM/YYYY
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
+        {
+            try
+            {
+                // =========================
+                // 0) فحص سريع للمدخلات
+                // =========================
+                if (dto == null)
+                    return BadRequest(new { ok = false, message = "لم يتم إرسال بيانات." });
+
+                // ✅ هنا كانت المشكلة: dto.id (غير موجود) — الصح dto.PIId
+                if (dto.PIId <= 0 || dto.prodId <= 0)
+                    return BadRequest(new { ok = false, message = "بيانات الفاتورة/الصنف غير صحيحة." });
+
+                if (dto.qty <= 0)
+                    return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
+
+                if (dto.unitCost < 0 || dto.priceRetail < 0)
+                    return BadRequest(new { ok = false, message = "الأسعار لا يمكن أن تكون سالبة." });
+
+                // =========================
+                // 1) تحويل expiryText إلى DateTime? (MM/YYYY)
+                // =========================
+                DateTime? expiry = null; // متغير: تاريخ الصلاحية
+                if (!string.IsNullOrWhiteSpace(dto.expiryText))
+                {
+                    var parts = dto.expiryText.Trim().Split('/');
+                    if (parts.Length == 2 &&
+                        int.TryParse(parts[0], out int mm) &&
+                        int.TryParse(parts[1], out int yyyy) &&
+                        mm >= 1 && mm <= 12)
+                    {
+                        expiry = new DateTime(yyyy, mm, 1);
+                    }
+                }
+
+                // متغير: التشغيلة بعد تنظيف المسافات
+                var batchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
+
+                // متغير: الصلاحية كـ Date فقط (نثبتها لتفادي اختلاف الوقت)
+                DateTime? expDate = expiry?.Date;
+
+                // =========================
+                // 2) تحميل الفاتورة + السطور
+                // =========================
+                var invoice = await _context.PurchaseInvoices
+                    .Include(p => p.Lines)
+                    .FirstOrDefaultAsync(p => p.PIId == dto.PIId);
+
+                if (invoice == null)
+                    return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+                if (invoice.WarehouseId <= 0)
+                    return BadRequest(new { ok = false, message = "يجب اختيار مخزن قبل إضافة سطور." });
+
+                // =========================
+                // 3) التأكد أن الصنف موجود
+                // =========================
+                var product = await _context.Products
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.ProdId == dto.prodId);
+
+                if (product == null)
+                    return BadRequest(new { ok = false, message = "الصنف غير موجود." });
+
+                // =========================
+                // 4) Merge: لو نفس الصنف + نفس التشغيلة + نفس الصلاحية + نفس الأسعار + نفس الخصم
+                // =========================
+                var existingLine = await _context.PILines.FirstOrDefaultAsync(x =>
+                    x.PIId == dto.PIId &&
+                    x.ProdId == dto.prodId &&
+                    (x.BatchNo ?? "").Trim() == (batchNo ?? "") &&
+                    ((x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null) == expDate) &&
+                    x.UnitCost == dto.unitCost &&
+                    x.PriceRetail == dto.priceRetail &&
+                    x.PurchaseDiscountPct == dto.purchaseDiscountPct
+                );
+
+                PILine affectedLine; // متغير: السطر الذي تأثر (قديم أو جديد)
+                int qtyDelta;         // متغير: الزيادة التي ستدخل المخزن
+
+                if (existingLine != null)
+                {
+                    qtyDelta = dto.qty;
+                    existingLine.Qty += dto.qty;
+
+                    // (اختياري) تثبيت نفس البيانات - هنا مش هتتغير لأننا اشترطنا تطابقها
+                    existingLine.BatchNo = batchNo;
+                    existingLine.Expiry = expDate;
+
+                    affectedLine = existingLine;
+                }
+                else
+                {
+                    var nextLineNo = (invoice.Lines.Any() ? invoice.Lines.Max(l => l.LineNo) : 0) + 1;
+
+                    affectedLine = new PILine
+                    {
+                        PIId = invoice.PIId,
+                        LineNo = nextLineNo,
+                        ProdId = dto.prodId,
+                        Qty = dto.qty,
+                        UnitCost = dto.unitCost,
+                        PriceRetail = dto.priceRetail,
+                        PurchaseDiscountPct = dto.purchaseDiscountPct,
+                        BatchNo = batchNo,
+                        Expiry = expDate
+                    };
+
+                    qtyDelta = dto.qty;
+                    _context.PILines.Add(affectedLine);
+                }
+
+                // =========================
+                // 5) Upsert Batch (لو التشغيلة + الصلاحية موجودين)
+                // =========================
+                Batch? batch = null;
+                if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                {
+                    var exp = expDate.Value;
+
+                    batch = await _context.Set<Batch>()
+                        .FirstOrDefaultAsync(b => b.ProdId == dto.prodId && b.BatchNo == batchNo && b.Expiry == exp);
+
+                    if (batch == null)
+                    {
+                        batch = new Batch
+                        {
+                            ProdId = dto.prodId,
+                            BatchNo = batchNo,
+                            Expiry = exp,
+                            PriceRetailBatch = dto.priceRetail,
+                            UnitCostDefault = dto.unitCost,
+                            CustomerId = invoice.CustomerId,
+                            EntryDate = DateTime.UtcNow,
+                            IsActive = true
+                        };
+                        _context.Set<Batch>().Add(batch);
+                    }
+                    else
+                    {
+                        batch.PriceRetailBatch = dto.priceRetail;
+                        batch.UnitCostDefault = dto.unitCost;
+                        batch.UpdatedAt = DateTime.UtcNow;
+                    }
+                }
+
+                // =========================
+                // 6) StockLedger دخول (للزيادة فقط)
+                // =========================
+                var ledger = new StockLedger
+                {
+                    TranDate = DateTime.UtcNow,
+                    WarehouseId = invoice.WarehouseId,
+                    ProdId = dto.prodId,
+                    BatchNo = batchNo,
+                    Expiry = expDate,
+                    BatchId = null,             // هنربطها بعد SaveChanges لو اتولد BatchId
+                    QtyIn = qtyDelta,
+                    QtyOut = 0,
+                    UnitCost = dto.unitCost,
+                    RemainingQty = qtyDelta,
+                    SourceType = "Purchase",
+                    SourceId = invoice.PIId,
+                    SourceLine = affectedLine.LineNo,
+                    Note = $"Purchase Line: {product.ProdName}"
+                };
+                _context.StockLedger.Add(ledger);
+
+                await _context.SaveChangesAsync();
+
+                // ربط BatchId بعد الحفظ (لو اتولد)
+                if (batch != null && ledger.BatchId == null)
+                {
+                    ledger.BatchId = batch.BatchId;
+                    await _context.SaveChangesAsync();
+                }
+
+                // =========================
+                // 7) LogActivity (اختياري لكن مهم عشان تقول “رجع يشتغل”)
+                // =========================
+                await _activityLogger.LogAsync(
+                    existingLine != null ? UserActionType.Edit : UserActionType.Create,
+                    "PILine",
+                    affectedLine.PIId,
+                    $"PIId={invoice.PIId} | ProdId={dto.prodId} | QtyDelta={qtyDelta}"
+                );
+
+                // =========================
+                // 8) رجّع السطور + الإجماليات
+                // =========================
+                var linesNow = await _context.PILines
+                    .Where(l => l.PIId == invoice.PIId)
+                    .OrderBy(l => l.LineNo)
+                    .ToListAsync();
+
+                var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+                var prodMap = await _context.Products
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .Select(p => new { p.ProdId, p.ProdName })
+                    .ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+                int totalLines = linesNow.Count;
+                int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
+                int totalQty = linesNow.Sum(x => x.Qty);
+
+                decimal totalRetail = linesNow.Sum(x => x.Qty * x.PriceRetail);
+                decimal totalDiscount = linesNow.Sum(x => (x.Qty * x.PriceRetail) * (x.PurchaseDiscountPct / 100m));
+                decimal totalAfterDiscount = totalRetail - totalDiscount;
+
+                var linesDto = linesNow.Select(l =>
+                {
+                    var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                    var lineValue = (l.Qty * l.PriceRetail) * (1 - (l.PurchaseDiscountPct / 100m));
+
+                    return new
+                    {
+                        lineNo = l.LineNo,
+                        prodId = l.ProdId,
+                        prodName = name,
+                        qty = l.Qty,
+                        priceRetail = l.PriceRetail,
+                        discPct = l.PurchaseDiscountPct,
+                        batchNo = l.BatchNo,
+                        expiry = l.Expiry?.ToString("yyyy-MM-dd"),
+                        lineValue
+                    };
+                }).ToList();
+
+                return Json(new
+                {
+                    ok = true,
+                    message = existingLine != null ? "تم تعديل السطر (زيادة الكمية)." : "تم إضافة السطر بنجاح.",
+                    lines = linesDto,
+                    totals = new { totalLines, totalItems, totalQty, totalRetail, totalDiscount, totalAfterDiscount }
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { ok = false, message = ex.Message });
+            }
+        }
+
+
+
+        public class SaveTaxJsonDto
+        {
+            public int PIId { get; set; }            // متغير: رقم الفاتورة
+            public decimal taxTotal { get; set; }    // متغير: قيمة الضريبة
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveTaxJson([FromBody] SaveTaxJsonDto dto)
+        {
+            if (dto == null || dto.PIId <= 0)
+                return BadRequest(new { ok = false, message = "بيانات الضريبة غير صحيحة." });
+
+            var invoice = await _context.PurchaseInvoices
+                .FirstOrDefaultAsync(p => p.PIId == dto.PIId);
+
+            if (invoice == null)
+                return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+            // متغير: تحديث الضريبة
+            invoice.TaxTotal = dto.taxTotal;
+            invoice.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            // ✅ تشغيل خدمة الإجماليات
+            await _docTotals.RecalcPurchaseInvoiceTotalsAsync(dto.PIId);
+
+            // متغير: إجماليات الهيدر بعد الحساب
+            var headerTotals = await _context.PurchaseInvoices.AsNoTracking()
+                .Where(p => p.PIId == dto.PIId)
+                .Select(p => new { p.ItemsTotal, p.DiscountTotal, p.TaxTotal, p.NetTotal })
+                .FirstAsync();
+
+            return Json(new
+            {
+                ok = true,
+                totals = new
+                {
+                    totalRetail = headerTotals.ItemsTotal,
+                    totalDiscount = headerTotals.DiscountTotal,
+                    taxAmount = headerTotals.TaxTotal,
+                    netTotal = headerTotals.NetTotal
+                }
+            });
+        }
+
+
+
+        public class RemoveProductLinesJsonDto
+        {
+            public int PIId { get; set; }     // متغير: رقم الفاتورة
+            public int prodId { get; set; }   // متغير: كود الصنف
+        }
+
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveProductLinesJson([FromBody] RemoveProductLinesJsonDto dto)
+        {
+            if (dto == null || dto.PIId <= 0 || dto.prodId <= 0)
+                return BadRequest(new { ok = false, message = "بيانات الحذف غير صحيحة." });
+
+            // متغير: سطور الصنف داخل الفاتورة
+            var linesToDelete = await _context.PILines
+                .Where(l => l.PIId == dto.PIId && l.ProdId == dto.prodId)
+                .ToListAsync();
+
+            if (linesToDelete.Count == 0)
+                return Json(new { ok = true, message = "لا يوجد سطور لهذا الصنف." });
+
+            // متغير: أرقام السطور (للربط مع SourceLine في المخزن)
+            var lineNos = linesToDelete.Select(l => l.LineNo).ToList();
+
+            // متغير: حذف قيود المخزن المرتبطة (دخول مشتريات)
+            var ledgerToDelete = await _context.StockLedger
+                .Where(s =>
+                    s.SourceType == "Purchase" &&
+                    s.SourceId == dto.PIId &&
+                    s.ProdId == dto.prodId &&
+                    lineNos.Contains(s.SourceLine))
+                .ToListAsync();
+
+            _context.StockLedger.RemoveRange(ledgerToDelete);
+
+            // حذف السطور
+            _context.PILines.RemoveRange(linesToDelete);
+
+            await _context.SaveChangesAsync();
+
+            // LogActivity (اختياري)
+            await _activityLogger.LogAsync(
+                UserActionType.Delete,
+                "PILine",
+                dto.prodId,
+                $"حذف كل سطور الصنف ProdId={dto.prodId} من فاتورة مشتريات PIId={dto.PIId}"
+            );
+
+            // ✅ إعادة حساب الإجماليات
+            await _docTotals.RecalcPurchaseInvoiceTotalsAsync(dto.PIId);
+
+            // تجهيز الداتا المحدثة للواجهة
+            var linesNow = await _context.PILines.AsNoTracking()
+                .Where(l => l.PIId == dto.PIId)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+
+            var prodMap = await _context.Products.AsNoTracking()
+                .Where(p => prodIds.Contains(p.ProdId))
+                .Select(p => new { p.ProdId, p.ProdName })
+                .ToListAsync();
+
+            var nameMap = prodMap.ToDictionary(x => x.ProdId, x => x.ProdName);
+
+            var linesDto = linesNow.Select(l => new
+            {
+                lineNo = l.LineNo,
+                prodId = l.ProdId,
+                prodName = nameMap.TryGetValue(l.ProdId, out var n) ? n : "",
+                batchNo = l.BatchNo,
+                expiryText = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                qty = l.Qty,
+                priceRetail = l.PriceRetail,
+                purchaseDiscountPct = l.PurchaseDiscountPct,
+                lineValue = (decimal)l.Qty * l.PriceRetail * (1m - (l.PurchaseDiscountPct / 100m))
+            }).ToList();
+
+            var headerTotals = await _context.PurchaseInvoices.AsNoTracking()
+                .Where(p => p.PIId == dto.PIId)
+                .Select(p => new { p.ItemsTotal, p.DiscountTotal, p.TaxTotal, p.NetTotal })
+                .FirstAsync();
+
+            return Json(new
+            {
+                ok = true,
+                lines = linesDto,
+                totals = new
+                {
+                    totalLines = linesNow.Count,
+                    totalItems = linesNow.Select(x => x.ProdId).Distinct().Count(),
+                    totalQty = linesNow.Sum(x => x.Qty),
+                    totalRetail = headerTotals.ItemsTotal,
+                    totalDiscount = headerTotals.DiscountTotal,
+                    totalAfterDiscount = headerTotals.ItemsTotal - headerTotals.DiscountTotal,
+                    taxAmount = headerTotals.TaxTotal,
+                    totalAfterDiscountAndTax = (headerTotals.ItemsTotal - headerTotals.DiscountTotal) + headerTotals.TaxTotal,
+                    netTotal = headerTotals.NetTotal
+                }
+            });
+        }
+
+
+
+        // =========================================================
+        // DTO: بيانات طلب مسح صنف من الفاتورة (كل تشغيلاته)
+        // =========================================================
+        public class DeleteProductLinesJsonDto
+        {
+            public int PIId { get; set; }     // متغير: رقم فاتورة المشتريات
+            public int prodId { get; set; }   // متغير: كود الصنف المراد مسحه
+        }
+
+
+
+
+
+        // =========================================================
+        // POST: مسح كل سطور صنف (كل تشغيلاته) + مسح StockLedger
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteProductLinesJson([FromBody] DeleteProductLinesJsonDto dto)
+        {
+            if (dto == null || dto.PIId <= 0 || dto.prodId <= 0)
+                return BadRequest(new { ok = false, message = "بيانات غير صحيحة." });
+
+            // متغير: تحميل الهيدر (علشان WarehouseId)
+            var invoice = await _context.PurchaseInvoices
+                .FirstOrDefaultAsync(x => x.PIId == dto.PIId);
+
+            if (invoice == null)
+                return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+            // Transaction علشان الحذف يكون “متزامن” (سطور + ليدجر + إجماليات)
+            using var tx = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // 1) نجيب سطور الصنف داخل الفاتورة
+                var linesToDelete = await _context.PILines
+                    .Where(l => l.PIId == dto.PIId && l.ProdId == dto.prodId)
+                    .ToListAsync();
+
+                if (!linesToDelete.Any())
+                {
+                    // حتى لو مفيش سطور، نرجّع الإجماليات الحالية
+                    await _docTotals.RecalcPurchaseInvoiceTotalsAsync(dto.PIId);
+
+                    var header0 = await _context.PurchaseInvoices.AsNoTracking()
+                        .FirstOrDefaultAsync(x => x.PIId == dto.PIId);
+
+                    return Ok(new
+                    {
+                        ok = true,
+                        message = "لا توجد سطور لهذا الصنف.",
+                        totals = BuildTotalsForUi(header0),
+                        lines = await LoadInvoiceLinesForUiAsync(dto.PIId)
+                    });
+                }
+
+                // 2) نجمع أرقام السطور (LineNo) علشان نمسح StockLedger لنفس السطور
+                var lineNos = linesToDelete.Select(x => x.LineNo).ToList();
+
+                // 3) مسح سطور الفاتورة
+                _context.PILines.RemoveRange(linesToDelete);
+
+                // 4) مسح قيود المخزون التي اتكتبت عند إضافة السطر
+                //    (نربطها بـ SourceType=Purchase و SourceId=PIId و SourceLine = LineNo)
+                var ledgersToDelete = await _context.StockLedger
+                    .Where(s =>
+                        s.SourceType == "Purchase" &&
+                        s.SourceId == dto.PIId &&
+                        lineNos.Contains(s.SourceLine) &&
+                        s.WarehouseId == invoice.WarehouseId)
+                    .ToListAsync();
+
+                if (ledgersToDelete.Any())
+                    _context.StockLedger.RemoveRange(ledgersToDelete);
+
+                await _context.SaveChangesAsync();
+
+                // 5) LogActivity (بدون PILineId لأنه غير موجود)
+                await _activityLogger.LogAsync(
+                    UserActionType.Delete,
+                    "PILine",
+                    dto.PIId,
+                    $"PIId={dto.PIId} | ProdId={dto.prodId} | DeletedLines={linesToDelete.Count}"
+                );
+
+                // 6) إعادة حساب الإجماليات بعد الحذف
+                await _docTotals.RecalcPurchaseInvoiceTotalsAsync(dto.PIId);
+
+                var header = await _context.PurchaseInvoices.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.PIId == dto.PIId);
+
+                await tx.CommitAsync();
+
+                return Ok(new
+                {
+                    ok = true,
+                    message = "تم مسح الصنف وجميع تشغيلاته من الفاتورة.",
+                    totals = BuildTotalsForUi(header),
+                    lines = await LoadInvoiceLinesForUiAsync(dto.PIId)
+                });
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return BadRequest(new { ok = false, message = "حصل خطأ أثناء مسح الصنف.", error = ex.Message });
+            }
+        }
+
+
+
+        // =========================================================
+        // دالة مساعدة: تجهيز Totals للواجهة (Badges)
+        // =========================================================
+        private static object BuildTotalsForUi(PurchaseInvoice? header)
+        {
+            if (header == null)
+            {
+                return new
+                {
+                    totalLines = 0,
+                    totalItems = 0,
+                    totalQty = 0,
+                    totalRetail = 0m,
+                    totalAfterDiscount = 0m,
+                    taxAmount = 0m,
+                    totalAfterDiscountAndTax = 0m,
+                    netTotal = 0m
+                };
+            }
+
+            var totalAfterDiscount = header.ItemsTotal - header.DiscountTotal;
+            var totalAfterDiscountAndTax = totalAfterDiscount + header.TaxTotal;
+
+            return new
+            {
+                // ملاحظة: totalLines/Items/Qty هنجيبهم من LoadInvoiceLinesForUiAsync في الواجهة
+                totalRetail = header.ItemsTotal,
+                totalAfterDiscount = totalAfterDiscount,
+                taxAmount = header.TaxTotal,
+                totalAfterDiscountAndTax = totalAfterDiscountAndTax,
+                netTotal = header.NetTotal
+            };
+        }
+
+        // =========================================================
+        // دالة مساعدة: تحميل سطور الفاتورة للواجهة (مع اسم الصنف)
+        // =========================================================
+        private async Task<object[]> LoadInvoiceLinesForUiAsync(int piId)
+        {
+            // بنرجع بيانات كفاية للعرض والجروبنج في الـ JS
+            var data = await (
+                from l in _context.PILines.AsNoTracking()
+                join p in _context.Products.AsNoTracking()
+                    on l.ProdId equals p.ProdId
+                where l.PIId == piId
+                orderby p.ProdName, l.LineNo
+                select new
+                {
+                    lineNo = l.LineNo,
+                    prodId = l.ProdId,
+                    prodName = p.ProdName,
+                    batchNo = l.BatchNo,
+                    expiryText = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                    qty = l.Qty,
+                    priceRetail = l.PriceRetail,
+                    purchaseDiscountPct = l.PurchaseDiscountPct,
+                    lineValue = ((decimal)l.Qty * l.PriceRetail) * (1m - (l.PurchaseDiscountPct / 100m))
+
+                }
+            ).ToArrayAsync();
+
+            return data.Cast<object>().ToArray();
+        }
+
 
 
 
@@ -302,37 +1037,71 @@ namespace ERP.Controllers
         // GET: PurchaseInvoices/Create
         public async Task<IActionResult> Create()
         {
-            // متغير: موديل الفاتورة الجديدة بالقيم الافتراضية
+            // ==============================
+            // 0) قراءة اسم المستخدم الحالى من الـ Claims
+            // ==============================
+            // متغير: الاسم المعروض للمستخدم (DisplayName) لو موجود
+            var currentUserDisplayName = User.FindFirst("DisplayName")?.Value;
+
+            // لو مش موجود نرجع لاسم الدخول العادى أو System كافتراضى
+            if (string.IsNullOrWhiteSpace(currentUserDisplayName))
+            {
+                // متغير: اسم الدخول (UserName) من الـ Identity
+                var loginName = User.Identity?.Name;
+
+                currentUserDisplayName = string.IsNullOrWhiteSpace(loginName)
+                    ? "System"          // لو مفيش يوزر (حالات نادرة)
+                    : loginName;        // استخدم اسم الدخول
+            }
+
+            // ==============================
+            // 1) تجهيز موديل الفاتورة الجديدة بالقيم الافتراضية
+            // ==============================
             var model = new PurchaseInvoice
             {
-                PIDate = DateTime.Today,      // تاريخ الفاتورة الافتراضي: تاريخ اليوم
-                CreatedAt = DateTime.UtcNow,    // وقت إنشاء السجل في قاعدة البيانات (UTC)
-                Status = "Draft",             // الحالة الافتراضية = مسودة
-                IsPosted = false                // الفاتورة غير مُرحّلة عند الإنشاء
+                PIDate = DateTime.Today,      // متغير: تاريخ الفاتورة الافتراضى = تاريخ اليوم
+                CreatedAt = DateTime.UtcNow,     // متغير: وقت إنشاء السجل (UTC)               
+                Status = "Draft",             // متغير: حالة الفاتورة = مسودة
+                IsPosted = false,                // متغير: الفاتورة غير مُرحّلة عند الإنشاء
+                CreatedBy = GetCurrentUserDisplayName()   // متغير: اسم كاتب الفاتورة من اليوزر الحالي
             };
 
             // ==============================
-            // تعيين المخزن الافتراضي للفاتورة
+            // 2) تعيين المخزن الافتراضى للفاتورة
             // ==============================
-            // متغير: رقم المخزن الافتراضي (الدواء أو أول مخزن)
+            // متغير: رقم المخزن الافتراضى (مثلاً مخزن "الدواء" أو أول مخزن فى الجدول)
             var defaultWarehouseId = await GetDefaultWarehouseIdAsync();
 
-            // لو أكبر من صفر → يعني عندنا مخزن فعلاً
+            // لو أكبر من صفر ⇒ عندنا مخزن فعلاً
             if (defaultWarehouseId > 0)
             {
-                model.WarehouseId = defaultWarehouseId;  // تعيين المخزن الافتراضي للفاتورة الجديدة
+                model.WarehouseId = defaultWarehouseId;  // متغير: تعيين المخزن الافتراضى للفاتورة الجديدة
             }
 
-            // تجهيز القوائم المنسدلة (الموردين + المخازن) مع تمرير المورد والمخزن المختارين
+            // ==============================
+            // 3) تجهيز القوائم المنسدلة والأوتوكومبليت
+            // ==============================
+
+            // متغير: تحميل الموردين + المخازن مع تمرير المخزن/المورد المختارين (حتى لو 0 عادى)
             await PopulateDropDownsAsync(model.CustomerId, model.WarehouseId);
 
-            // تجهيز الأصناف للأوتوكومبليت فى سطور الفاتورة
+            // متغير: تحميل الأصناف للأوتوكومبليت فى سطور الفاتورة
             await LoadProductsForAutoCompleteAsync();
 
-            // نفس الموديل Show إظهار شاشة 
-            // Create يفتح View "Show" علشان نتعامل مع شاشة موحدة
+            // تسجيل حركة "فتح شاشة فاتورة مشتريات جديدة" فى سجل النشاط
+            await _activityLogger.LogAsync(
+                UserActionType.View,                 // نوع العملية: فتح/عرض
+                "PurchaseInvoice",                   // اسم الكيان
+                null,                                // مفيش رقم فاتورة محفوظ لسه
+                $"فتح شاشة إنشاء فاتورة مشتريات جديدة بواسطة {GetCurrentUserDisplayName()}"
+            );
+
+            // ==============================
+            // 4) فتح شاشة Show بنفس الموديل (نظام شاشة موحدة للإنشاء/التعديل)
+            // ==============================
             return View("Show", model);
         }
+
 
 
 
@@ -500,7 +1269,27 @@ namespace ERP.Controllers
 
 
 
+        [HttpGet]
+        public async Task<IActionResult> Show(int id)
+        {
+            var invoice = await _context.PurchaseInvoices
+                .Include(p => p.Customer)
+                .Include(p => p.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PIId == id);
 
+            if (invoice == null) return NotFound();
+
+            await PopulateDropDownsAsync(invoice.CustomerId, invoice.WarehouseId);
+            await LoadProductsForAutoCompleteAsync();
+
+            // متغير: هل الفاتورة مقفولة (حسب منطقك)
+            // مثال: لو IsPosted = true أو Status = "Posted/Closed"
+            ViewBag.IsLocked = invoice.IsPosted || invoice.Status == "Posted" || invoice.Status == "Closed";
+
+            return View("Show", invoice);
+        }
 
 
 
@@ -511,10 +1300,12 @@ namespace ERP.Controllers
         /// </summary>
         public async Task<IActionResult> Details(int id)
         {
-            // متغير: جلب الفاتورة المطلوبة من قاعدة البيانات
+            // متغير: جلب الفاتورة المطلوبة من قاعدة البيانات (الهيدر + السطور + الصنف لكل سطر)
             var invoice = await _context.PurchaseInvoices
-                .Include(p => p.Customer)       // لو حابب تعرض اسم المورد فى الهيدر
-                .AsNoTracking()                 // قراءة فقط بدون تتبع
+                .Include(p => p.Customer)                 // متغير: بيانات المورد في الهيدر
+                .Include(p => p.Lines)                    // متغير: تحميل سطور الفاتورة
+                    .ThenInclude(l => l.Product)          // متغير: تحميل بيانات الصنف لكل سطر (ProdName)
+                .AsNoTracking()                           // متغير: قراءة فقط بدون تتبع
                 .FirstOrDefaultAsync(p => p.PIId == id);
 
             // لو الفاتورة غير موجودة نرجّع 404
@@ -522,15 +1313,14 @@ namespace ERP.Controllers
                 return NotFound();
 
             // تجهيز الموردين والمخازن للـ datalist و الـ select
-            // نمرر المورد والمخزن الحاليين عشان يظهروا مختارين فى الفورم
             await PopulateDropDownsAsync(invoice.CustomerId, invoice.WarehouseId);
 
             // تجهيز قائمة الأصناف للأوتوكومبليت فى سطور الفاتورة
             await LoadProductsForAutoCompleteAsync();
 
-            // عرض شاشة تفاصيل الفاتورة
-            // هيستخدم View باسم Details.cshtml تلقائياً
-            return View(invoice);
+            // ✅ مهم: لو أنت شغال على Show.cshtml (اللي بتعدّله دلوقتي)
+            // يبقى نعرض نفس الصفحة بدل Details.cshtml
+            return View("Show", invoice);
         }
 
 
@@ -712,7 +1502,7 @@ namespace ERP.Controllers
                 IsPosted = false,
 
                 CreatedAt = now,                          // وقت الإنشاء
-                CreatedBy = User?.Identity?.Name ?? "System"
+                CreatedBy   = GetCurrentUserDisplayName() 
             };
 
             _context.PurchaseInvoices.Add(invoice);

@@ -4,6 +4,7 @@ using ERP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ERP.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251212212858_update-PILINE_table")]
+    partial class updatePILINE_table
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1349,8 +1352,6 @@ namespace ERP.Migrations
                     b.HasIndex("CustomerId");
 
                     b.HasIndex("RefPRId");
-
-                    b.HasIndex("WarehouseId");
 
                     b.ToTable("PurchaseInvoices", (string)null);
                 });
@@ -3077,12 +3078,6 @@ namespace ERP.Migrations
                         .WithMany("PurchaseInvoices")
                         .HasForeignKey("RefPRId")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("ERP.Models.Warehouse", null)
-                        .WithMany()
-                        .HasForeignKey("WarehouseId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
 
                     b.Navigation("Customer");
 

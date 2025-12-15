@@ -16,6 +16,8 @@ using System.IO;                        // MemoryStream
 using System.Linq;
 using System.Text;                      // StringBuilder + Encoding للـ CSV
 using System.Threading.Tasks;
+using System.Linq.Expressions; // عشان Expression<Func<...>>
+
 
 namespace ERP.Controllers
 {
@@ -28,6 +30,17 @@ namespace ERP.Controllers
         private readonly AppDbContext _db;
 
         public ProductsController(AppDbContext db) => _db = db;
+
+
+
+
+
+
+
+
+
+
+
 
         // =========================================================
         // 1) قائمة الأصناف  (نظام القوائم الموحد)
@@ -289,6 +302,12 @@ namespace ERP.Controllers
             return View(model);
         }
 
+
+
+
+
+
+
         // =========================================================
         // 2) تفاصيل صنف واحد
         // =========================================================
@@ -301,6 +320,12 @@ namespace ERP.Controllers
 
             return View(product);
         }
+
+
+
+
+
+
 
         // =========================================================
         // 3) إضافة صنف جديد
@@ -326,6 +351,12 @@ namespace ERP.Controllers
 
             return View(m);
         }
+
+
+
+
+
+
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -356,6 +387,12 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+
+
+
+
+
+
         // =========================================================
         // 4) تعديل صنف
         // =========================================================
@@ -374,6 +411,12 @@ namespace ERP.Controllers
 
             return View(m);
         }
+
+
+
+
+
+
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -416,6 +459,12 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+
+
+
+
+
+
         // =========================================================
         // 5) حذف صنف واحد (النموذج التقليدي)
         // =========================================================
@@ -444,6 +493,13 @@ namespace ERP.Controllers
 
             return RedirectToAction(nameof(Index));
         }
+
+
+
+
+
+
+
 
         // =========================================================
         // 6) حذف متعدد من شاشة القائمة (BulkDelete)
@@ -489,6 +545,15 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+
+
+
+
+
+
+
+
+
         // =========================================================
         // 7) حذف جميع الأصناف (DeleteAll) — استخدمه بحذر وبصلاحيات
         // =========================================================
@@ -510,6 +575,14 @@ namespace ERP.Controllers
             TempData["Msg"] = $"تم حذف جميع الأصناف ({allProducts.Count}) بنجاح.";
             return RedirectToAction(nameof(Index));
         }
+
+
+
+
+
+
+
+
 
         // =========================
         // Export — تصدير قائمة الأصناف (Excel أو CSV)
@@ -789,6 +862,14 @@ namespace ERP.Controllers
             return s;
         }
 
+
+
+
+
+
+
+
+
         // =========================================================
         // بحث Ajax عن الأصناف بالاسم (يُستخدم فى أوتوكمبليت حركة الصنف)
         // =========================================================
@@ -819,6 +900,14 @@ namespace ERP.Controllers
             // نرجّع النتيجة كـ JSON علشان الجافاسكربت تستخدمها
             return Json(results);
         }
+
+
+
+
+
+
+
+
 
         // =========================================================
         // بحث Ajax عن الأصناف بالكود أو الباركود
@@ -852,6 +941,14 @@ namespace ERP.Controllers
 
             return Json(results);
         }
+
+
+
+
+
+
+
+
 
         // =========================================================
         // بحث Ajax عن العملاء / الأطراف بالاسم (فلتر اختيارى فى حركة الصنف)
