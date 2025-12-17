@@ -1696,6 +1696,9 @@
                     `;
 
                     tbody.appendChild(tr);
+
+                    // ✅ نخلي الدالة Global عشان أي جزء في الصفحة يقدر ينادي عليها
+                    window.renderGroupedLines = renderGroupedLines;
                 });
             });
         }
@@ -1904,7 +1907,7 @@
                 prodId: prodId,
                 qty: qty,
 
-                unitCost: priceRetail,
+                unitCost: 0,
                 priceRetail: priceRetail,
                 purchaseDiscountPct: purchaseDiscountPct,
 

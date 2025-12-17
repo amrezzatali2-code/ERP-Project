@@ -90,48 +90,89 @@ namespace ERP.Services
         /// </summary>
         public async Task RecalcPurchaseInvoiceTotalsAsync(int piId)
         {
-            // متغير: الهيدر
+            // =========================
+            // 1) الهيدر
+            // =========================
             var header = await _context.PurchaseInvoices
                 .FirstOrDefaultAsync(p => p.PIId == piId);
 
             if (header == null)
                 return;
 
-            // متغير: سطور الفاتورة
+            // =========================
+            // 2) سطور الفاتورة (Tracking)
+            // =========================
             var lines = await _context.PILines
                 .Where(l => l.PIId == piId)
                 .ToListAsync();
 
-            // متغير: الضريبة الحالية (من الهيدر) — مهم ما نصفرهاش
+            // متغير: الضريبة الحالية (لا نصفرها)
             var taxTotal = header.TaxTotal;
 
+            // =========================
+            // 3) لو مفيش سطور
+            // =========================
             if (!lines.Any())
             {
-                header.ItemsTotal = 0m;
-                header.DiscountTotal = 0m;
-
-                // الضريبة تفضل زي ما هي (علشان لو المستخدم كتبها قبل إضافة سطور)
-                header.NetTotal = 0m - 0m + taxTotal;
+                header.ItemsTotal = 0m;       // إجمالي الجمهور قبل الخصم
+                header.DiscountTotal = 0m;    // إجمالي الخصم
+                header.NetTotal = taxTotal;   // الصافي = الضريبة فقط لو موجودة
+                header.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                return;
             }
-            else
+
+            // =========================
+            // 4) تحديث تكلفة الوحدة UnitCost لكل سطر
+            // تكلفة الوحدة = قيمة السطر / الكمية
+            // =========================
+            foreach (var l in lines)
             {
-                // إجمالي سعر الجمهور = مجموع (Qty × PriceRetail)
-                var itemsTotal = lines.Sum(l => l.Qty * l.PriceRetail);
+                // متغير: الكمية
+                var qty = l.Qty;
 
-                // إجمالي خصم الشراء = مجموع (Qty × PriceRetail × Disc%)
-                var discountTotal = lines.Sum(l =>
-                    l.Qty * l.PriceRetail * (l.PurchaseDiscountPct / 100m));
+                // متغير: الخصم بين 0 و 100
+                var disc = l.PurchaseDiscountPct;
+                if (disc < 0) disc = 0;
+                if (disc > 100) disc = 100;
 
-                var netTotal = itemsTotal - discountTotal + taxTotal;
+                // متغير: قيمة السطر بعد الخصم
+                var lineValue = qty * l.PriceRetail * (1m - (disc / 100m));
 
-                header.ItemsTotal = itemsTotal;
-                header.DiscountTotal = discountTotal;
-                header.NetTotal = netTotal;
+                // متغير: تكلفة الوحدة = قيمة السطر / الكمية
+                // (لو الكمية 0 نكتب 0 علشان ما يحصلش قسمة على صفر)
+                l.UnitCost = (qty > 0) ? (lineValue / qty) : 0m;
             }
+
+            // =========================
+            // 5) إجماليات الهيدر
+            // =========================
+
+            // إجمالي سعر الجمهور = مجموع (Qty × PriceRetail)
+            var itemsTotal = lines.Sum(l => l.Qty * l.PriceRetail);
+
+            // إجمالي خصم الشراء = مجموع (Qty × PriceRetail × Disc%)
+            var discountTotal = lines.Sum(l =>
+                l.Qty * l.PriceRetail * (l.PurchaseDiscountPct / 100m));
+
+            // الصافي = بعد الخصم + الضريبة
+            var netTotal = itemsTotal - discountTotal + taxTotal;
+
+            header.ItemsTotal = itemsTotal;
+            header.DiscountTotal = discountTotal;
+            header.NetTotal = netTotal;
 
             header.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
         }
+
+
+
+
+
+
+
+
 
         // ============================================================
         // 3) مرتجع الشراء PurchaseReturn + PurchaseReturnLines

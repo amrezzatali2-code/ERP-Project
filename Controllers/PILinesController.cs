@@ -60,6 +60,7 @@ namespace ERP.Controllers
 
             // نبدأ بالاستعلام من جدول PILines مع تحميل رأس الفاتورة (PurchaseInvoice)
             IQueryable<PILine> query = _context.PILines
+                .Include(l => l.Product)          // اسم الصنف
                 .Include(l => l.PurchaseInvoice)       // تحميل الفاتورة للحصول على التاريخ وغيره
                 .AsNoTracking();
 

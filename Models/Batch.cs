@@ -34,6 +34,10 @@ namespace ERP.Models
         [Display(Name = "سعر الجمهور للتشغيلة")]
         public decimal? PriceRetailBatch { get; set; }   // متغير: سعر الجمهور الخاص بالتشغيلة
 
+        [Precision(18, 2)]
+        [Display(Name = "خصم الشراء للتشغيلة %")]
+        public decimal? PurchaseDiscountPct { get; set; }
+
         // 🔹 التكلفة الافتراضية للعلبة من هذه التشغيلة (4 أرقام عشرية تكفى للتكلفة)
         [Precision(18, 4)]
         [Display(Name = "التكلفة الافتراضية للعلبة")]

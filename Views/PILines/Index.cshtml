@@ -300,21 +300,33 @@
 
                     <th data-col="piid">@sortLink("piid", "رقم الفاتورة")</th>
                     <th data-col="lineno">@sortLink("lineno", "رقم السطر")</th>
+
                     <th data-col="prod">@sortLink("prod", "كود الصنف")</th>
+
+                    @* تعليق عربي: اسم الصنف (محتاج Include(Product)) *@
+                    <th data-col="prodname">@sortLink("prodname", "اسم الصنف")</th>
+
                     <th data-col="qty">@sortLink("qty", "الكمية")</th>
                     <th data-col="unitcost">@sortLink("unitcost", "تكلفة الوحدة")</th>
                     <th data-col="disc">@sortLink("disc", "خصم الشراء %")</th>
                     <th data-col="retail">@sortLink("retail", "سعر الجمهور")</th>
+
+                    @* تعليق عربي: قيمة السطر (محسوبة) *@
+                    <th data-col="linevalue">@sortLink("linevalue", "قيمة السطر")</th>
+
                     <th data-col="batch">@sortLink("batch", "التشغيلة")</th>
                     <th data-col="expiry">@sortLink("expiry", "الصلاحية")</th>
                     <th data-col="date">@sortLink("date", "تاريخ الفاتورة")</th>
+                    <th class="text-center no-print" data-col="actions">إجراءات</th>
+                    <th class="text-center no-print" data-col="actions">إجراءات</th>
                 </tr>
             </thead>
+
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">
+                        <td colspan="13" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -323,11 +335,17 @@
                 {
                     foreach (var l in Model.Items)
                     {
+                        // تعليق عربي: تاريخ الفاتورة من الهيدر
                         var invoiceDate = l.PurchaseInvoice?.PIDate.ToString("yyyy-MM-dd") ?? "";
+
+                        // تعليق عربي: اسم الصنف من جدول Products
+                        var prodName = l.Product?.ProdName ?? "";
+
+                        // تعليق عربي: حساب قيمة السطر = (Qty * PriceRetail) بعد خصم الشراء %
+                        decimal lineValue = (l.Qty * l.PriceRetail) * (1m - (l.PurchaseDiscountPct / 100m));
 
                         <tr>
                             <td class="text-center no-print" data-col="select">
-                                @* القيمة: PIId:LineNo علشان الـ BulkDelete يعرف السطر *@
                                 <input type="checkbox"
                                        class="row-select"
                                        value="@($"{l.PIId}:{l.LineNo}")" />
@@ -335,19 +353,46 @@
 
                             <td data-col="piid">@l.PIId</td>
                             <td data-col="lineno">@l.LineNo</td>
+
                             <td data-col="prod">@l.ProdId</td>
+                            <td data-col="prodname">@prodName</td>
+
                             <td data-col="qty">@l.Qty</td>
-                            <td data-col="unitcost">@l.UnitCost.ToString("0.0000")</td>
+
+                            <td data-col="unitcost">@l.UnitCost.ToString("0.00")</td>
                             <td data-col="disc">@l.PurchaseDiscountPct.ToString("0.00")</td>
                             <td data-col="retail">@l.PriceRetail.ToString("0.00")</td>
+
+                            <td data-col="linevalue">@lineValue.ToString("0.00")</td>
+
                             <td data-col="batch">@l.BatchNo</td>
                             <td data-col="expiry">@l.Expiry?.ToString("yyyy-MM-dd")</td>
                             <td data-col="date">@invoiceDate</td>
+                            <td class="text-center no-print" data-col="actions">
+                                @* زر فتح فاتورة الشراء (داخل تاب) *@
+                                <a class="btn btn-primary btn-sm open-tab"
+                                   data-tab-id="purchaseinvoices-show-@l.PIId"
+                                   data-tab-title="فاتورة مشتريات رقم @l.PIId"
+                                   href="@Url.Action("Show", "PurchaseInvoices", new { id = l.PIId, frame = 1 })">
+                                    الفاتورة
+                                </a>
+                            </td>
+                            <td class="text-center no-print" data-col="actions">
+
+                                @* زر حركة الصنف (داخل تاب) *@
+                                <a class="btn btn-outline-dark btn-sm open-tab"
+                                   data-tab-id="product-movement-@l.ProdId"
+                                   data-tab-title="حركة الصنف @l.ProdId"
+                                   href="@Url.Action("Index", "ProductMovements", new { prodId = l.ProdId, frame = 1 })">
+                                    حركة الصنف
+                                </a>
+                            </td>
                         </tr>
                     }
                 }
             </tbody>
         </table>
+
     </div>
 
     @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة ===== *@
@@ -512,7 +557,7 @@
         <div class="modal-content" dir="rtl">
             <div class="modal-header">
                 <h5 class="modal-title flex-grow-1" id="columnsModalPILLabel">
-                    اختيار الأعمدة الظاهرة
+                    اختيار الأعمدة 
                 </h5>
                 <button type="button"
                         class="btn-close ms-2"

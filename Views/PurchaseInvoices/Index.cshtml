@@ -325,22 +325,44 @@
                         <input type="checkbox" id="chkAllRows" />
                     </th>
 
-                    <th data-col="id">@sortLink("id", "رقم الفاتورة")</th>
-                    <th data-col="date">@sortLink("date", "تاريخ الفاتورة")</th>
-                    <th data-col="vendor">@sortLink("vendor", "المورد")</th>
-                    <th data-col="warehouse">@sortLink("warehouse", "المخزن")</th>
-                    <th data-col="net">@sortLink("net", "الصافي")</th>
+                    @* ===== أعمدة PurchaseInvoice الأساسية ===== *@
+                    <th data-col="piid">@sortLink("id", "رقم الفاتورة")</th>
+                    <th data-col="pidate">@sortLink("date", "تاريخ الفاتورة")</th>
+
+                    <th data-col="customerid">@sortLink("customerid", "كود المورد")</th>
+                    <th data-col="customername">@sortLink("vendor", "المورد")</th>
+
+                    <th data-col="warehouseid">@sortLink("warehouse", "كود المخزن")</th>
+
+                    <th data-col="refprid">@sortLink("refprid", "طلب شراء مرجعي")</th>
+
+                    <th data-col="itemstotal">@sortLink("itemstotal", "إجمالي قبل الخصم")</th>
+                    <th data-col="discounttotal">@sortLink("discounttotal", "إجمالي الخصم")</th>
+                    <th data-col="taxtotal">@sortLink("taxtotal", "إجمالي الضريبة")</th>
+                    <th data-col="nettotal">@sortLink("net", "صافي الفاتورة")</th>
+
                     <th data-col="status">@sortLink("status", "الحالة")</th>
-                    <th data-col="posted">@sortLink("posted", "مرحل؟")</th>
+                    <th data-col="isposted">@sortLink("posted", "مرحل؟")</th>
+
+                    <th data-col="postedat">@sortLink("postedat", "تاريخ الترحيل")</th>
+                    <th data-col="postedby">@sortLink("postedby", "مرحل بواسطة")</th>
+
+                    <th data-col="createdby">@sortLink("createdby", "أنشأها")</th>
+                    <th data-col="createdat">@sortLink("createdat", "تاريخ الإنشاء")</th>
+                    <th data-col="updatedat">@sortLink("updatedat", "آخر تعديل")</th>
+
+                    @* ===== أعمدة محسوبة (ليست أعمدة مباشرة في الموديل كقيمة بسيطة) ===== *@
+                    <th data-col="linescount">@sortLink("linescount", "عدد السطور")</th>
 
                     <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:220px;"></th>
                 </tr>
             </thead>
+
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-4">
+                        <td colspan="20" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -349,29 +371,47 @@
                 {
                     foreach (var pi in Model.Items)
                     {
+                        @* متغيرات مساعدة للعرض *@
+                        var vendorName = pi.Customer != null ? pi.Customer.CustomerName : "";  @* اسم المورد *@
+                        var linesCount = pi.Lines != null ? pi.Lines.Count : 0;               @* عدد السطور *@
+
                         <tr>
                             <td class="text-center no-print" data-col="select">
-                                <input type="checkbox"
-                                       class="row-select"
-                                       value="@pi.PIId" />
+                                <input type="checkbox" class="row-select" value="@pi.PIId" />
                             </td>
 
-                            <td data-col="id">@pi.PIId</td>
-                            <td data-col="date">@pi.PIDate.ToString("yyyy-MM-dd")</td>
+                            <td data-col="piid">@pi.PIId</td>
+                            <td data-col="pidate">@pi.PIDate.ToString("yyyy-MM-dd")</td>
 
-                            @* هنا أنت حر: تعرض كود المورد أو اسمه لو عملت Include/Projection *@
-                            <td data-col="vendor">@pi.CustomerId</td>
+                            <td data-col="customerid">@pi.CustomerId</td>
+                            <td data-col="customername">@vendorName</td>
 
-                            <td data-col="warehouse">@pi.WarehouseId</td>
-                            <td data-col="net">@pi.NetTotal.ToString("0.00")</td>
+                            <td data-col="warehouseid">@pi.WarehouseId</td>
+
+                            <td data-col="refprid">@(pi.RefPRId.HasValue? pi.RefPRId.Value.ToString() : "")</td>
+
+                            <td data-col="itemstotal">@pi.ItemsTotal.ToString("0.00")</td>
+                            <td data-col="discounttotal">@pi.DiscountTotal.ToString("0.00")</td>
+                            <td data-col="taxtotal">@pi.TaxTotal.ToString("0.00")</td>
+                            <td data-col="nettotal">@pi.NetTotal.ToString("0.00")</td>
+
                             <td data-col="status">@pi.Status</td>
-                            <td data-col="posted">@(pi.IsPosted ? "نعم" : "لا")</td>
+                            <td data-col="isposted">@(pi.IsPosted ? "نعم" : "لا")</td>
+
+                            <td data-col="postedat">@(pi.PostedAt.HasValue? pi.PostedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
+                            <td data-col="postedby">@pi.PostedBy</td>
+
+                            <td data-col="createdby">@pi.CreatedBy</td>
+                            <td data-col="createdat">@pi.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                            <td data-col="updatedat">@(pi.UpdatedAt.HasValue? pi.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
+
+                            <td data-col="linescount">@linesCount</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
                                 <a class="btn btn-primary btn-sm open-tab"
                                    data-tab-id="purchaseinvoices-show"
-                                   data-tab-title="فاتورة مشتريات"
-                                   href="@Url.Action("Show", "PurchaseInvoices", new { id = pi.PIId })">
+                                   data-tab-title="فاتورة المشتريات"
+                                   href="@Url.Action("Show", "PurchaseInvoices", new { id = pi.PIId, frame = 1 })">
                                     عرض الفاتورة
                                 </a>
 
@@ -387,6 +427,7 @@
                 }
             </tbody>
         </table>
+
     </div>
 
     @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة ===== *@
