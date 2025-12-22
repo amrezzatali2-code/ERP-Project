@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.ComponentModel.DataAnnotations;          // تعليقات العرض Display + Required
 using System.ComponentModel.DataAnnotations.Schema;   // DatabaseGenerated
 
@@ -50,8 +51,20 @@ namespace ERP.Models
         public int QtyOut { get; set; }                             // متغير: كمية خروج
 
         // تكلفة الوحدة: فى الدخول = تكلفة الشراء/التحويل، فى الخروج = تكلفة الدُفعات المستهلكة
+        [Precision(18, 4)]
         [Display(Name = "تكلفة الوحدة")]
-        public decimal UnitCost { get; set; }                       // متغير: تكلفة الوحدة
+        public decimal UnitCost { get; set; }   // متغير: تكلفة الوحدة (بعد خصم الشراء)
+
+
+        [Precision(18, 2)]
+        [Display(Name = "سعر الجمهور للتشغيلة")]
+        public decimal? PriceRetailBatch { get; set; }
+
+        [Precision(18, 2)]
+        public decimal? TotalCost { get; set; } // إجمالي السطر
+
+        [Precision(18, 4)]
+        public decimal? PurchaseDiscount { get; set; } // خصم الشراء
 
         // المتبقى من الدخلة (يُملأ فقط فى سطور الدخول؛ null فى الخروج)
         [Display(Name = "الكمية المتبقية من الدخلة")]

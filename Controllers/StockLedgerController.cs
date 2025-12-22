@@ -80,7 +80,10 @@ namespace ERP.Controllers
             DateTime? toDate = null)
         {
             // الاستعلام الأساسي
-            IQueryable<StockLedger> q = context.StockLedger.AsNoTracking();
+            IQueryable<StockLedger> q = context.StockLedger
+                .AsNoTracking()
+                .Include(x => x.Product)     // تحميل اسم الصنف
+                .Include(x => x.Batch);      // تحميل بيانات التشغيلة لو موجودة
 
             // تطبيق نظام البحث/الترتيب الموحد
             q = q.ApplySearchSort(
@@ -156,6 +159,14 @@ namespace ERP.Controllers
 
             return View(model);
         }
+
+
+
+
+
+
+
+
 
         // =========================
         // Export — تصدير حسب اختيار المستخدم (Excel أو CSV)

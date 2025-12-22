@@ -396,11 +396,12 @@
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="Products"
                                        asp-action="Show"
-                                       data-tab-id="product-movement" {{-- معرف التاب في الجافاسكربت --}}
-                                       data-tab-title="حركة صنف">
-                                        
-                                        حركة صنف
+                                       asp-route-frame="1"
+                                       data-tab-id="product-movement-tab"
+                                       data-tab-title="حركة الصنف">
+                                        حركة الصنف
                                     </a>
+
                                 </li>
 
                                 <li>
@@ -593,11 +594,14 @@
                                 </li>
                                 <li>
                                     <a class="dropdown-item app-menu-link"
-                                       asp-controller="PurchaseInvoices" asp-action="Create"
-                                       data-tab-id="Purchase Invoice"
+                                       asp-controller="PurchaseInvoices"
+                                       asp-action="Create"
+                                       asp-route-frame="1"
+                                       data-tab-id="pi-show-tab"
                                        data-tab-title="فاتورة المشتريات">
                                         فاتورة مشتريات جديدة
                                     </a>
+
                                 </li>
                                 <li>
                                     <a class="dropdown-item app-menu-link"

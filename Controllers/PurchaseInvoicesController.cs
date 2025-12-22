@@ -438,20 +438,20 @@ namespace ERP.Controllers
 
 
 
-        // ================================================================
-        // DTO: بيانات إضافة سطر (جاية من AJAX)
-        // ================================================================
-        public class AddLineJsonDto
-        {
-            public int PIId { get; set; }                    // متغير: رقم فاتورة الشراء
-            public int prodId { get; set; }                  // متغير: كود الصنف
-            public int qty { get; set; }                     // متغير: الكمية
-            public decimal unitCost { get; set; }            // متغير: تكلفة الشراء للوحدة
-            public decimal priceRetail { get; set; }         // متغير: سعر الجمهور
-            public decimal purchaseDiscountPct { get; set; } // متغير: خصم الشراء %
-            public string? BatchNo { get; set; }             // متغير: رقم التشغيلة
-            public string? expiryText { get; set; }          // متغير: الصلاحية كنص MM/YYYY
-        }
+            // ================================================================
+            // DTO: بيانات إضافة سطر (جاية من AJAX)
+            // ================================================================
+            public class AddLineJsonDto
+            {
+                public int PIId { get; set; }                    // متغير: رقم فاتورة الشراء
+                public int prodId { get; set; }                  // متغير: كود الصنف
+                public int qty { get; set; }                     // متغير: الكمية
+                public decimal unitCost { get; set; }            // متغير: تكلفة الشراء للوحدة
+                public decimal priceRetail { get; set; }         // متغير: سعر الجمهور
+                public decimal purchaseDiscountPct { get; set; } // متغير: خصم الشراء %
+                public string? BatchNo { get; set; }             // متغير: رقم التشغيلة
+                public string? expiryText { get; set; }          // متغير: الصلاحية كنص MM/YYYY
+            }
 
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -465,25 +465,29 @@ namespace ERP.Controllers
                 if (dto == null)
                     return BadRequest(new { ok = false, message = "لم يتم إرسال بيانات." });
 
-                // ✅ هنا كانت المشكلة: dto.id (غير موجود) — الصح dto.PIId
                 if (dto.PIId <= 0 || dto.prodId <= 0)
                     return BadRequest(new { ok = false, message = "بيانات الفاتورة/الصنف غير صحيحة." });
 
                 if (dto.qty <= 0)
                     return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
 
-                if (dto.unitCost < 0 || dto.priceRetail < 0)
-                    return BadRequest(new { ok = false, message = "الأسعار لا يمكن أن تكون سالبة." });
+                if (dto.priceRetail < 0)
+                    return BadRequest(new { ok = false, message = "سعر الجمهور لا يمكن أن يكون سالب." });
 
-                // حساب قيمة السطر
-                var lineValue =
-                    dto.qty * dto.priceRetail * (1m - (dto.purchaseDiscountPct / 100m));
+                // =========================
+                // ✅ 0.1) تنظيف الخصم + حساب تكلفة الوحدة على السيرفر
+                // =========================
+                // متغير: الخصم بين 0 و 100
+                var disc = dto.purchaseDiscountPct;
+                if (disc < 0) disc = 0;
+                if (disc > 100) disc = 100;
 
-                // حساب تكلفة الوحدة
-                var unitCost = lineValue / dto.qty;
+                // متغير: قيمة السطر بعد الخصم
+                var lineValue = dto.qty * dto.priceRetail * (1m - (disc / 100m));
 
-                // تقريب لرقمين عشريين
-                unitCost = Math.Round(unitCost, 2);
+                // متغير: تكلفة الوحدة المحسوبة فعلياً (هي اللي لازم تتسجل في اللين + الليدجر)
+                var computedUnitCost = (dto.qty > 0) ? (lineValue / dto.qty) : 0m;
+                computedUnitCost = Math.Round(computedUnitCost, 2);
 
                 // =========================
                 // 1) تحويل expiryText إلى DateTime? (MM/YYYY)
@@ -531,16 +535,16 @@ namespace ERP.Controllers
                     return BadRequest(new { ok = false, message = "الصنف غير موجود." });
 
                 // =========================
-                // 4) Merge: لو نفس الصنف + نفس التشغيلة + نفس الصلاحية + نفس الأسعار + نفس الخصم
+                // 4) Merge: لو نفس الصنف + نفس التشغيلة + نفس الصلاحية + نفس الأسعار + نفس الخصم + نفس تكلفة الوحدة المحسوبة
                 // =========================
                 var existingLine = await _context.PILines.FirstOrDefaultAsync(x =>
                     x.PIId == dto.PIId &&
                     x.ProdId == dto.prodId &&
                     (x.BatchNo ?? "").Trim() == (batchNo ?? "") &&
                     ((x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null) == expDate) &&
-                    x.UnitCost == dto.unitCost &&
                     x.PriceRetail == dto.priceRetail &&
-                    x.PurchaseDiscountPct == dto.purchaseDiscountPct
+                    x.PurchaseDiscountPct == disc &&
+                    x.UnitCost == computedUnitCost
                 );
 
                 PILine affectedLine; // متغير: السطر الذي تأثر (قديم أو جديد)
@@ -551,9 +555,12 @@ namespace ERP.Controllers
                     qtyDelta = dto.qty;
                     existingLine.Qty += dto.qty;
 
-                    // (اختياري) تثبيت نفس البيانات - هنا مش هتتغير لأننا اشترطنا تطابقها
+                    // تثبيت نفس البيانات
                     existingLine.BatchNo = batchNo;
                     existingLine.Expiry = expDate;
+
+                    // ✅ تثبيت تكلفة الوحدة المحسوبة
+                    existingLine.UnitCost = computedUnitCost;
 
                     affectedLine = existingLine;
                 }
@@ -567,9 +574,12 @@ namespace ERP.Controllers
                         LineNo = nextLineNo,
                         ProdId = dto.prodId,
                         Qty = dto.qty,
-                        UnitCost = dto.unitCost,
+
+                        // ✅ أهم تعديل: نكتب تكلفة الوحدة المحسوبة على السيرفر
+                        UnitCost = computedUnitCost,
+
                         PriceRetail = dto.priceRetail,
-                        PurchaseDiscountPct = dto.purchaseDiscountPct,
+                        PurchaseDiscountPct = disc,
                         BatchNo = batchNo,
                         Expiry = expDate
                     };
@@ -597,7 +607,7 @@ namespace ERP.Controllers
                             BatchNo = batchNo,
                             Expiry = exp,
                             PriceRetailBatch = dto.priceRetail,
-                            UnitCostDefault = dto.unitCost,
+                            UnitCostDefault = computedUnitCost, // ✅ مهم
                             CustomerId = invoice.CustomerId,
                             EntryDate = DateTime.UtcNow,
                             IsActive = true
@@ -607,7 +617,7 @@ namespace ERP.Controllers
                     else
                     {
                         batch.PriceRetailBatch = dto.priceRetail;
-                        batch.UnitCostDefault = dto.unitCost;
+                        batch.UnitCostDefault = computedUnitCost; // ✅ مهم
                         batch.UpdatedAt = DateTime.UtcNow;
                     }
                 }
@@ -622,41 +632,40 @@ namespace ERP.Controllers
                     ProdId = dto.prodId,
                     BatchNo = batchNo,
                     Expiry = expDate,
-                    BatchId = null,             // هنربطها بعد SaveChanges لو اتولد BatchId
+                    BatchId = null,
+
                     QtyIn = qtyDelta,
                     QtyOut = 0,
-                    UnitCost = dto.unitCost,
+
+                    // ✅ أهم تعديل: تسجيل تكلفة الوحدة المحسوبة على السيرفر
+                    UnitCost = computedUnitCost,
+
                     RemainingQty = qtyDelta,
                     SourceType = "Purchase",
                     SourceId = invoice.PIId,
                     SourceLine = affectedLine.LineNo,
                     Note = $"Purchase Line: {product.ProdName}"
                 };
+
+                // ⚠️ لو عندك أعمدة جديدة في StockLedger (زي PriceRetail / PurchaseDiscountPct / LineTotalCost)
+                // اكتبها هنا بنفس الأسلوب، لكن لازم أعرف أسماء الخصائص بالضبط عشان ما نكسرش Build.
+
                 _context.StockLedger.Add(ledger);
-
-
 
                 await _context.SaveChangesAsync();
 
+                // ✅ إعادة حساب إجماليات الهيدر (يظل كما هو)
                 await _docTotals.RecalcPurchaseInvoiceTotalsAsync(dto.PIId);
-
 
                 // ربط BatchId بعد الحفظ (لو اتولد)
                 if (batch != null && ledger.BatchId == null)
                 {
                     ledger.BatchId = batch.BatchId;
                     await _context.SaveChangesAsync();
-                   
-
                 }
 
-
-
-
-
-
                 // =========================
-                // 7) LogActivity (اختياري لكن مهم عشان تقول “رجع يشتغل”)
+                // 7) LogActivity
                 // =========================
                 await _activityLogger.LogAsync(
                     existingLine != null ? UserActionType.Edit : UserActionType.Create,
@@ -690,7 +699,7 @@ namespace ERP.Controllers
                 var linesDto = linesNow.Select(l =>
                 {
                     var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
-                    var lineValue = (l.Qty * l.PriceRetail) * (1 - (l.PurchaseDiscountPct / 100m));
+                    var lv = (l.Qty * l.PriceRetail) * (1 - (l.PurchaseDiscountPct / 100m));
 
                     return new
                     {
@@ -702,7 +711,7 @@ namespace ERP.Controllers
                         discPct = l.PurchaseDiscountPct,
                         batchNo = l.BatchNo,
                         expiry = l.Expiry?.ToString("yyyy-MM-dd"),
-                        lineValue
+                        lineValue = lv
                     };
                 }).ToList();
 
@@ -1344,6 +1353,46 @@ namespace ERP.Controllers
 
             // متغير: علامة للـ View أننا داخل Frame
             ViewBag.Frame = 1;
+
+
+            // =========================================================
+            // (سرعة) نظام التنقل بين الفواتير داخل شاشة Show
+            // - الهدف: أسهم (أول/سابق/التالي/آخر) + بحث سريع برقم الفاتورة
+            // - لا يفتح تابات جديدة: فقط يغير محتوى نفس التاب
+            // =========================================================
+
+            // 1) أول وآخر فاتورة (Query واحد)
+            var minMax = await _context.PurchaseInvoices
+                .AsNoTracking()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    FirstId = g.Min(x => x.PIId),
+                    LastId = g.Max(x => x.PIId)
+                })
+                .FirstOrDefaultAsync();
+
+            // 2) السابقة (أكبر رقم أقل من الحالي)
+            int? prevId = await _context.PurchaseInvoices
+                .AsNoTracking()
+                .Where(x => x.PIId < id)
+                .OrderByDescending(x => x.PIId)
+                .Select(x => (int?)x.PIId)
+                .FirstOrDefaultAsync();
+
+            // 3) التالية (أصغر رقم أكبر من الحالي)
+            int? nextId = await _context.PurchaseInvoices
+                .AsNoTracking()
+                .Where(x => x.PIId > id)
+                .OrderBy(x => x.PIId)
+                .Select(x => (int?)x.PIId)
+                .FirstOrDefaultAsync();
+
+            ViewBag.NavFirstId = minMax?.FirstId;
+            ViewBag.NavLastId = minMax?.LastId;
+            ViewBag.NavPrevId = prevId;
+            ViewBag.NavNextId = nextId;
+
 
             return View("Show", invoice);
         }

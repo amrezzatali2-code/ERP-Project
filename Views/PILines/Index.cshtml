@@ -371,21 +371,23 @@
                             <td class="text-center no-print" data-col="actions">
                                 @* زر فتح فاتورة الشراء (داخل تاب) *@
                                 <a class="btn btn-primary btn-sm open-tab"
-                                   data-tab-id="purchaseinvoices-show-@l.PIId"
-                                   data-tab-title="فاتورة مشتريات رقم @l.PIId"
+                                   data-tab-id="pi-show-tab" @* ثابت: تاب واحد لعرض فواتير المشتريات *@
+                                   data-tab-title="فاتورة المشتريات" @* بدون أرقام *@
                                    href="@Url.Action("Show", "PurchaseInvoices", new { id = l.PIId, frame = 1 })">
-                                    الفاتورة
+                                    عرض الفاتورة
                                 </a>
+
                             </td>
                             <td class="text-center no-print" data-col="actions">
 
                                 @* زر حركة الصنف (داخل تاب) *@
                                 <a class="btn btn-outline-dark btn-sm open-tab"
-                                   data-tab-id="product-movement-@l.ProdId"
-                                   data-tab-title="حركة الصنف @l.ProdId"
-                                   href="@Url.Action("Index", "ProductMovements", new { prodId = l.ProdId, frame = 1 })">
+                                   data-tab-id="product-movement-tab"
+                                   data-tab-title="حركة الصنف"
+                                   href="@Url.Action("Show", "Products", new { prodId = l.ProdId, frame = 1 })">
                                     حركة الصنف
                                 </a>
+
                             </td>
                         </tr>
                     }

@@ -381,18 +381,49 @@
                 <tr>
                     <th style="width:90px;" data-col="entry">@sortLink("EntryId", "رقم القيد")</th>
                     <th style="width:150px;" data-col="tran">@sortLink("TranDate", "التاريخ")</th>
+
                     <th data-col="warehouse">@sortLink("Warehouse", "المخزن")</th>
-                    <th data-col="product">@sortLink("Product", "الصنف")</th>
+
+                    <!-- اسم الصنف -->
+                    <th data-col="productname">@sortLink("ProdName", "اسم الصنف")</th>
+
+                    <!-- كود الصنف (الموجود أصلاً لو محتاجه) -->
+                    <th data-col="product">@sortLink("Product", "كود الصنف")</th>
+
+                    <!-- التشغيلة والصلاحية -->
                     <th data-col="batch">@sortLink("BatchNo", "التشغيلة")</th>
                     <th data-col="expiry">@sortLink("Expiry", "الصلاحية")</th>
+
+                    <!-- سعر الجمهور -->
+                    <th class="text-end" data-col="priceretail">@sortLink("PriceRetail", "سعر الجمهور")</th>
+
+                    <!-- كمية داخلة / خارجة -->
                     <th class="text-end" data-col="qtyin">@sortLink("QtyIn", "كمية داخلة")</th>
                     <th class="text-end" data-col="qtyout">@sortLink("QtyOut", "كمية خارجة")</th>
+
+                    <!-- تكلفة وحدة (كما اتفقنا: TotalCost / QtyIn) -->
                     <th class="text-end" data-col="unitcost">@sortLink("UnitCost", "تكلفة/وحدة")</th>
+
+                    <!-- إجمالي السطر -->
+                    <th class="text-end" data-col="totalcost">@sortLink("TotalCost", "إجمالي السطر")</th>
+
+                    <!-- خصم الشراء -->
+                    <th class="text-end" data-col="purchdisc">@sortLink("PurchaseDiscount", "خصم الشراء")</th>
+
+                   
+
+                    <!-- المتبقي فقط لعمليات الدخول -->
                     <th class="text-end" data-col="rem">@sortLink("RemainingQty", "المتبقي (للـدخول)")</th>
+
+                    <!-- نوع المصدر / الفاتورة / السطر -->
                     <th data-col="source">@sortLink("SourceType", "نوع المصدر")</th>
                     <th data-col="sourceid">@sortLink("SourceId", "رقم الفاتورة")</th>
                     <th data-col="sourceline">@sortLink("SourceLine", "سطر")</th>
+
+                    <th class="text-center no-print" data-col="actions">إجراءات</th>
+                    <th class="text-center no-print" data-col="actions">إجراءات</th>
                 </tr>
+
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
@@ -408,24 +439,89 @@
                     foreach (var x in Model.Items)
                     {
                         <tr>
+                            <!-- رقم القيد -->
                             <td data-col="entry">@x.EntryId</td>
+
+                            <!-- التاريخ والوقت -->
                             <td data-col="tran">@x.TranDate.ToString("yyyy-MM-dd HH:mm")</td>
+
+                            <!-- المخزن -->
                             <td data-col="warehouse">@x.WarehouseId</td>
-                            <td data-col="product">@x.ProdId</td>
+
+                            <!-- اسم الصنف -->
+                            <td data-col="productname">@x.Product?.ProdName</td>
+
+                            <!-- كود الصنف -->
+                            <td data-col="product">@x.Product?.ProdId</td>
+
+                            <!-- التشغيلة -->
                             <td data-col="batch">@x.BatchNo</td>
+
+                            <!-- الصلاحية -->
                             <td data-col="expiry">
                                 @(x.Expiry.HasValue? x.Expiry.Value.ToString("yyyy-MM") : "")
                             </td>
+
+                            <!-- سعر الجمهور -->
+                            <td class="text-end" data-col="priceretail">
+                                @x.Batch?.PriceRetailBatch?.ToString("0.00")
+                            </td>
+
+                            <!-- كمية داخلة -->
                             <td class="text-end" data-col="qtyin">@x.QtyIn</td>
+
+                            <!-- كمية خارجة -->
                             <td class="text-end" data-col="qtyout">@x.QtyOut</td>
-                            <td class="text-end" data-col="unitcost">@x.UnitCost.ToString("0.0000")</td>
+
+                            <!-- تكلفة وحدة -->
+                            <td class="text-end" data-col="unitcost">
+                                @x.UnitCost.ToString("0.00")
+                            </td>
+
+                            <!-- إجمالي السطر -->
+                            <td class="text-end" data-col="totalcost">
+                                @x.TotalCost?.ToString("0.00")
+                            </td>
+
+                            <!-- خصم الشراء -->
+                            <td class="text-end" data-col="purchdisc">
+                                @(x.PurchaseDiscount.HasValue
+                                                        ? x.PurchaseDiscount.Value.ToString("0.##") + "%"
+                                                        : "")
+                            </td>
+
+                     
+
+                            <!-- المتبقي -->
                             <td class="text-end" data-col="rem">
                                 @(x.RemainingQty.HasValue? x.RemainingQty.Value.ToString() : "-")
                             </td>
+
+                            <!-- نوع المصدر -->
                             <td data-col="source">@x.SourceType</td>
+
+                            <!-- رقم الفاتورة -->
                             <td data-col="sourceid">@x.SourceId</td>
+
+                            <!-- رقم السطر -->
                             <td data-col="sourceline">@x.SourceLine</td>
+
+                           
+
+                            <!-- زر فتح الفاتورة -->
+                            <td class="text-center no-print" data-col="actions">
+                                @* زر فتح الفاتورة *@
+                                <a class="btn btn-sm btn-primary open-tab"
+                                   data-tab-id="pi-show-tab"
+                                   data-tab-title="فاتورة المشتريات"
+                                   href="@Url.Action("Show", "PurchaseInvoices", new { id = x.SourceId, frame = 1 })">
+                                    فتح الفاتورة
+                                </a>
+
+                            </td>
                         </tr>
+
+
                     }
 
                     @* صف إجمالي بعد آخر سطر *@
