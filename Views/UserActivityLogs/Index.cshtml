@@ -374,80 +374,155 @@
         </table>
     </div>
 
-    @* شريط أسفل الجدول: عرض X–Y من Z + حجم الصفحة *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
-        <small class="text-muted">
-            عرض @start - @end من @total
-        </small>
 
-        <form method="get"
-              action="@Url.Action(action, controller)"
-              class="d-flex align-items-center gap-2">
-            <input type="hidden" name="search" value="@search" />
-            <input type="hidden" name="searchBy" value="@searchBy" />
-            <input type="hidden" name="sort" value="@sort" />
-            <input type="hidden" name="dir" value="@dir" />
-            <input type="hidden" name="page" value="1" />
-            <input type="hidden" name="dateField" value="@dateField" />
-            <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-            @if (fromDate.HasValue)
-            {
-                <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
-            }
-            @if (toDate.HasValue)
-            {
-                <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
-            }
-            @if (fromCode.HasValue)
-            {
-                <input type="hidden" name="fromCode" value="@fromCode" />
-            }
-            @if (toCode.HasValue)
-            {
-                <input type="hidden" name="toCode" value="@toCode" />
-            }
 
-            <label class="form-label m-0 nowrap">حجم الصفحة</label>
-            <select name="pageSize"
-                    class="form-select form-select-sm"
-                    onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
-            </select>
-        </form>
-    </div>
+@* شريط أسفل الجدول: عرض X–Y من Z + حجم الصفحة *@
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
+    <small class="text-muted">
+        عرض @start - @end من @total
+    </small>
 
-    <div class="no-print">
-        <small class="text-muted d-none d-md-inline">
-            إجمالي السجلات: @total
-        </small>
-    </div>
+    @* =========================================================
+       فورم تغيير حجم الصفحة
+       - مهم: عند تغيير pageSize لازم نرجع الصفحة 1
+       - ونحافظ على كل الباراميترات (بحث/ترتيب/فلاتر)
+       ========================================================= *@
+    <form method="get"
+          action="@Url.Action(action, controller)"
+          class="d-flex align-items-center gap-2">
 
-    @* الترقيم *@
-    <nav aria-label="pagination" class="mt-3 no-print">
-        <ul class="pagination justify-content-center">
-            <li class="page-item @(page == first ? "disabled" : "")">
-                <a class="page-link" href="@Link(first)">الأول</a>
-            </li>
-            <li class="page-item @(Model.HasPrevious ? "" : "disabled")">
-                <a class="page-link" href="@Link(prev)">السابق</a>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">
-                    صفحة @(page) من @(pages)
-                </span>
-            </li>
-            <li class="page-item @(Model.HasNext ? "" : "disabled")">
-                <a class="page-link" href="@Link(next)">التالي</a>
-            </li>
-            <li class="page-item @(page == last ? "disabled" : "")">
-                <a class="page-link" href="@Link(last)">الأخير</a>
-            </li>
-        </ul>
-    </nav>
+        @* ===== باراميترات ثابتة للحفاظ على حالة الفلاتر ===== *@
+        <input type="hidden" name="search" value="@search" />
+        <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="sort" value="@sort" />
+        <input type="hidden" name="dir" value="@dir" />
+
+        @* عند تغيير pageSize هنرجع الصفحة 1 *@
+        <input type="hidden" name="page" id="PageInput" value="1" />
+
+        <input type="hidden" name="dateField" value="@dateField" />
+        <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
+
+        @if (fromDate.HasValue)
+        {
+            <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
+        }
+        @if (toDate.HasValue)
+        {
+            <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
+        }
+        @if (fromCode.HasValue)
+        {
+            <input type="hidden" name="fromCode" value="@fromCode" />
+        }
+        @if (toCode.HasValue)
+        {
+            <input type="hidden" name="toCode" value="@toCode" />
+        }
+
+        <label class="form-label m-0 nowrap">حجم الصفحة</label>
+
+        <select name="pageSize"
+                class="form-select form-select-sm"
+                onchange="document.getElementById('PageInput').value = 1; this.form.submit();">
+
+            <option value="25" @@(ps == 25 ? "selected" : null)>25</option>
+            <option value="50" @@(ps == 50 ? "selected" : null)>50</option>
+            <option value="100" @@(ps == 100 ? "selected" : null)>100</option>
+            <option value="200" @@(ps == 200 ? "selected" : null)>200</option>
+
+        </select>
+    </form>
 </div>
+
+<div class="no-print">
+    <small class="text-muted d-none d-md-inline">
+        إجمالي السجلات: @total
+    </small>
+</div>
+
+@* =========================================================
+   دالة بناء الروابط Link
+   - دي أهم نقطة: لازم الروابط تبعت pageSize + كل الفلاتر
+   - وإلا عند الترتيب/الترقيم هتروح قيم وتطلع صفحة فاضية
+   ========================================================= *@
+@functions {
+    // ملاحظة: بنرجّع string رابط كامل لنفس الأكشن/الكنترولر مع الحفاظ على الحالة
+    string Link(
+        string action,
+        string controller,
+        int page,
+        int pageSize,
+        string? search,
+        string? searchBy,
+        string? sort,
+        string? dir,
+        string? dateField,
+        bool useDateRange,
+        DateTime? fromDate,
+        DateTime? toDate,
+        int? fromCode,
+        int? toCode)
+    {
+        return Url.Action(action, controller, new
+        {
+            search,
+            searchBy,
+            sort,
+            dir,
+            page,
+            pageSize, // ✅ مهم جدًا
+            dateField,
+            useDateRange,
+            fromDate = fromDate?.ToString("o"),
+            toDate = toDate?.ToString("o"),
+            fromCode,
+            toCode
+        }) ?? "#";
+    }
+}
+
+@* الترقيم *@
+<nav aria-label="pagination" class="mt-3 no-print">
+    <ul class="pagination justify-content-center">
+        <li class="page-item @(page == first ? "disabled" : "")">
+            <a class="page-link"
+               href="@@Link(action, controller, first, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+                الأول
+            </a>
+        </li>
+
+        <li class="page-item @(Model.HasPrevious ? "" : "disabled")">
+            <a class="page-link"
+               href="@@Link(action, controller, prev, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+                السابق
+            </a>
+        </li>
+
+        <li class="page-item disabled">
+            <span class="page-link">
+                صفحة @(page) من @(pages)
+            </span>
+        </li>
+
+        <li class="page-item @(Model.HasNext ? "" : "disabled")">
+            <a class="page-link"
+               href="@@Link(action, controller, next, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+                التالي
+            </a>
+        </li>
+
+        <li class="page-item @(page == last ? "disabled" : "")">
+            <a class="page-link"
+               href="@@Link(action, controller, last, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+                الأخير
+            </a>
+        </li>
+    </ul>
+</nav>
+
+
+
 
 @* Modal فلترة التاريخ/الوقت *@
 <div class="modal fade no-print"

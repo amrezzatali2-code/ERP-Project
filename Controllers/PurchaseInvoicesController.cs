@@ -1087,6 +1087,72 @@ namespace ERP.Controllers
 
 
 
+        // =========================================================
+        // دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر)
+        // الهدف: تشتغل الأسهم حتى في الفاتورة الجديدة (PIId = 0)
+        // =========================================================
+        private async Task FillPurchaseInvoiceNavAsync(int currentId)
+        {
+            // ==============================
+            // 1) أول وآخر فاتورة (Query واحد)
+            // ==============================
+            var minMax = await _context.PurchaseInvoices
+                .AsNoTracking()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    FirstId = g.Min(x => x.PIId),
+                    LastId = g.Max(x => x.PIId)
+                })
+                .FirstOrDefaultAsync();
+
+            // ==============================
+            // 2) السابقة/التالية
+            // ملاحظة مهمة:
+            // - لو currentId = 0 (فاتورة جديدة) => السابقة = آخر فاتورة / التالية = أول فاتورة
+            // ==============================
+            int? prevId = null; // متغير: رقم الفاتورة السابقة
+            int? nextId = null; // متغير: رقم الفاتورة التالية
+
+            if (currentId > 0)
+            {
+                // السابقة = أكبر رقم أقل من الحالي
+                prevId = await _context.PurchaseInvoices
+                    .AsNoTracking()
+                    .Where(x => x.PIId < currentId)
+                    .OrderByDescending(x => x.PIId)
+                    .Select(x => (int?)x.PIId)
+                    .FirstOrDefaultAsync();
+
+                // التالية = أصغر رقم أكبر من الحالي
+                nextId = await _context.PurchaseInvoices
+                    .AsNoTracking()
+                    .Where(x => x.PIId > currentId)
+                    .OrderBy(x => x.PIId)
+                    .Select(x => (int?)x.PIId)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                // ✅ فاتورة جديدة: نخلي الأسهم شغالة كبحث سريع
+                prevId = minMax?.LastId;   // السابق يأخذك لآخر فاتورة
+                nextId = minMax?.FirstId;  // التالي يأخذك لأول فاتورة
+            }
+
+            // ==============================
+            // 3) تعبئة ViewBag للـ View
+            // ==============================
+            ViewBag.NavFirstId = minMax?.FirstId;
+            ViewBag.NavLastId = minMax?.LastId;
+            ViewBag.NavPrevId = prevId;
+            ViewBag.NavNextId = nextId;
+        }
+
+
+
+
+
+
 
 
         /// <summary>
@@ -1153,6 +1219,11 @@ namespace ERP.Controllers
                 null,                                // مفيش رقم فاتورة محفوظ لسه
                 $"فتح شاشة إنشاء فاتورة مشتريات جديدة بواسطة {GetCurrentUserDisplayName()}"
             );
+
+
+
+            // ✅ تجهيز الأسهم حتى في الفاتورة الجديدة (PIId = 0)
+            await FillPurchaseInvoiceNavAsync(model.PIId);
 
             // ==============================
             // 4) فتح شاشة Show بنفس الموديل (نظام شاشة موحدة للإنشاء/التعديل)
