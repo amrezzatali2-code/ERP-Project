@@ -404,15 +404,7 @@
                     <!-- تكلفة وحدة (كما اتفقنا: TotalCost / QtyIn) -->
                     <th class="text-end" data-col="unitcost">@sortLink("UnitCost", "تكلفة/وحدة")</th>
 
-                    <!-- إجمالي السطر -->
-                    <th class="text-end" data-col="totalcost">@sortLink("TotalCost", "إجمالي السطر")</th>
-
-                    <!-- خصم الشراء -->
-                    <th class="text-end" data-col="purchdisc">@sortLink("PurchaseDiscount", "خصم الشراء")</th>
-
-                   
-
-                    <!-- المتبقي فقط لعمليات الدخول -->
+                                       <!-- المتبقي فقط لعمليات الدخول -->
                     <th class="text-end" data-col="rem">@sortLink("RemainingQty", "المتبقي (للـدخول)")</th>
 
                     <!-- نوع المصدر / الفاتورة / السطر -->
@@ -421,7 +413,7 @@
                     <th data-col="sourceline">@sortLink("SourceLine", "سطر")</th>
 
                     <th class="text-center no-print" data-col="actions">إجراءات</th>
-                    <th class="text-center no-print" data-col="actions">إجراءات</th>
+                    
                 </tr>
 
             </thead>
@@ -443,7 +435,7 @@
                             <td data-col="entry">@x.EntryId</td>
 
                             <!-- التاريخ والوقت -->
-                            <td data-col="tran">@x.TranDate.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td data-col="tran">@x.TranDate.ToString("dd-MM-yyyy HH:mm")</td>
 
                             <!-- المخزن -->
                             <td data-col="warehouse">@x.WarehouseId</td>
@@ -459,7 +451,7 @@
 
                             <!-- الصلاحية -->
                             <td data-col="expiry">
-                                @(x.Expiry.HasValue? x.Expiry.Value.ToString("yyyy-MM") : "")
+                                @(x.Expiry.HasValue? x.Expiry.Value.ToString("MM-yyyy") : "")
                             </td>
 
                             <!-- سعر الجمهور -->
@@ -477,21 +469,6 @@
                             <td class="text-end" data-col="unitcost">
                                 @x.UnitCost.ToString("0.00")
                             </td>
-
-                            <!-- إجمالي السطر -->
-                            <td class="text-end" data-col="totalcost">
-                                @x.TotalCost?.ToString("0.00")
-                            </td>
-
-                            <!-- خصم الشراء -->
-                            <td class="text-end" data-col="purchdisc">
-                                @(x.PurchaseDiscount.HasValue
-                                                        ? x.PurchaseDiscount.Value.ToString("0.##") + "%"
-                                                        : "")
-                            </td>
-
-                     
-
                             <!-- المتبقي -->
                             <td class="text-end" data-col="rem">
                                 @(x.RemainingQty.HasValue? x.RemainingQty.Value.ToString() : "-")
@@ -515,7 +492,7 @@
                                    data-tab-id="pi-show-tab"
                                    data-tab-title="فاتورة المشتريات"
                                    href="@Url.Action("Show", "PurchaseInvoices", new { id = x.SourceId, frame = 1 })">
-                                    فتح الفاتورة
+                                    الفاتورة
                                 </a>
 
                             </td>

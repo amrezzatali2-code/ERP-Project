@@ -60,6 +60,9 @@ namespace ERP
                     options.AccessDeniedPath = "/Home/AccessDenied"; // صفحة "لا تملك صلاحية"
                 });
 
+            builder.Services.AddScoped<ILedgerPostingService, LedgerPostingService>();
+
+
             // متغير: نظام الصلاحيات (حالياً الأساس فقط، بدون Policies خاصة)
             builder.Services.AddAuthorization();
 

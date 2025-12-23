@@ -728,11 +728,11 @@
                         </li>
 
                         <li class="nav-item">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-light ms-2"
-                                    title="تحديث الشاشة الحالية"
-                                    onclick="if (window.erpTabs && typeof erpTabs.refreshActiveTab === 'function') { erpTabs.refreshActiveTab(); }">
-                                🔄
+                            <button id="btnRefreshActiveTab"
+                                    type="button"
+                                    class="btn btn-sm btn-light"
+                                    onclick="return ERP_refreshActiveTab();">
+                                تحديث 
                             </button>
                         </li>
                     </ul>
@@ -759,6 +759,123 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+
+
+    <script>
+        (function () {
+
+            // =========================
+            // (A) أدوات مساعدة
+            // =========================
+            function setOrReplaceParam(url, key, value) {
+                try {
+                    const u = new URL(url, window.location.origin);
+                    u.searchParams.set(key, value);
+                    return u.toString();
+                } catch {
+                    const sep = url.includes('?') ? '&' : '?';
+                    const has = new RegExp('[?&]' + key + '=').test(url);
+                    if (has) return url.replace(new RegExp('([?&]' + key + '=)[^&]*'), '$1' + encodeURIComponent(value));
+                    return url + sep + key + '=' + encodeURIComponent(value);
+                }
+            }
+
+            // =========================
+            // (B) إيجاد iframe الخاص بالتاب النشط (الأزرق)
+            // =========================
+            function getActiveTabIframe() {
+
+                // 1) زر التاب النشط (الأزرق) في شريط التابات
+                const activeTabBtn =
+                    document.querySelector('.nav-tabs .nav-link.active') ||
+                    document.querySelector('.nav-tabs [aria-selected="true"]') ||
+                    document.querySelector('.app-tabs-container .nav-link.active') ||
+                    document.querySelector('.app-tabs-container [aria-selected="true"]');
+
+                if (activeTabBtn) {
+                    // Bootstrap: data-bs-target أو href="#paneId"
+                    const targetSel =
+                        activeTabBtn.getAttribute('data-bs-target') ||
+                        activeTabBtn.getAttribute('data-target') ||
+                        activeTabBtn.getAttribute('href');
+
+                    if (targetSel && targetSel.startsWith('#')) {
+                        const pane = document.querySelector(targetSel);
+                        if (pane) {
+                            const fr = pane.querySelector('iframe');
+                            if (fr) return fr;
+                        }
+                    }
+                }
+
+                // 2) fallback: tab-pane النشط
+                const pane = document.querySelector('.tab-pane.show.active') || document.querySelector('.tab-pane.active');
+                if (pane) {
+                    const fr = pane.querySelector('iframe');
+                    if (fr) return fr;
+                }
+
+                // 3) fallback أخير: أي iframe داخل محتوى التابات
+                const any = document.querySelector('#appTabsContainer iframe') || document.querySelector('.tab-content iframe');
+                return any || null;
+            }
+
+            // =========================
+            // (C) Refresh حقيقي للـ iframe
+            // =========================
+            function refreshIframe(iframe) {
+                if (!iframe) return;
+
+                const src = iframe.getAttribute('src') || '';
+                if (!src) return;
+
+                // الطريقة الأضمن: تغيير src بإضافة ts (يكسر الكاش ويجبر تحميل جديد)
+                iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));
+            }
+
+            function refreshActiveTab() {
+                const iframe = getActiveTabIframe();
+                if (!iframe) {
+                    console.warn('Refresh: لم يتم العثور على iframe للتاب النشط.');
+                    return;
+                }
+                refreshIframe(iframe);
+            }
+
+            // =========================
+            // (D) ربط زر الريفريش بطريقة تشتغل حتى لو DOMContentLoaded خلص
+            // =========================
+            function bindRefreshButton() {
+                const btn = document.getElementById('btnRefreshActiveTab');
+                if (!btn) {
+                    console.warn('Refresh: زر btnRefreshActiveTab غير موجود في الـ Layout.');
+                    return;
+                }
+
+                // امنع تكرار الربط لو اتنفّذ مرتين
+                if (btn.dataset.bound === '1') return;
+                btn.dataset.bound = '1';
+
+                btn.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    refreshActiveTab();
+                });
+
+                console.log('Refresh: تم ربط زر تحديث التاب النشط بنجاح ✅');
+            }
+
+            // لو الصفحة لسه بتحمّل استنى، لو خلصت اربط فوراً
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', bindRefreshButton);
+            } else {
+                bindRefreshButton();
+            }
+
+        })();
+    </script>
+
+
 
     @RenderSection("Scripts", required: false)
 </body>

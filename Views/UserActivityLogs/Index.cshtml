@@ -301,7 +301,7 @@
         </div>
     </div>
 
-    @* ===== جدول سجل النشاط ===== *@
+@* ===== جدول سجل النشاط ===== *@
     <div class="erp-table-wrapper mt-3 erp-print-area">
         <table id="activityTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light">
@@ -321,16 +321,22 @@
                     <th data-col="entity">@sortLink("EntityName", "اسم الكيان")</th>
                     <th data-col="entityId">@sortLink("EntityId", "رقم السجل")</th>
                     <th data-col="time">@sortLink("ActionTime", "وقت العملية")</th>
+
                     <th data-col="ip">عنوان IP</th>
                     <th data-col="agent">المتصفح / الجهاز</th>
                     <th data-col="desc">الوصف</th>
+
+                    @* ✅ جديد: قبل / بعد *@
+                    <th data-col="old">قبل</th>
+                    <th data-col="new">بعد</th>
                 </tr>
             </thead>
+
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="10" class="text-center text-muted py-4">
+                        <td colspan="12" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -364,15 +370,34 @@
                             <td data-col="entity">@r.EntityName</td>
                             <td data-col="entityId">@r.EntityId</td>
                             <td data-col="time">@r.ActionTime.ToString("yyyy-MM-dd HH:mm")</td>
+
                             <td data-col="ip">@r.IpAddress</td>
                             <td data-col="agent">@r.UserAgent</td>
                             <td data-col="desc">@r.Description</td>
+
+                            @* ✅ جديد: قبل / بعد (ملخص سريع بدل JSON كامل) *@
+                            <td data-col="old" class="text-muted small">
+                                @(
+                                                        string.IsNullOrWhiteSpace(r.OldValues)
+                                                        ? "-"
+                                                        : (r.OldValues!.Length > 40 ? r.OldValues.Substring(0, 40) + "..." : r.OldValues)
+                                                        )
+                            </td>
+
+                            <td data-col="new" class="text-muted small">
+                                @(
+                                                        string.IsNullOrWhiteSpace(r.NewValues)
+                                                        ? "-"
+                                                        : (r.NewValues!.Length > 40 ? r.NewValues.Substring(0, 40) + "..." : r.NewValues)
+                                                        )
+                            </td>
                         </tr>
                     }
                 }
             </tbody>
         </table>
     </div>
+
 
 
 

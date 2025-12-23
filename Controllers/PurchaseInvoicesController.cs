@@ -36,18 +36,20 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;               // سياق قاعدة البيانات
         private readonly DocumentTotalsService _docTotals;    // خدمة إجماليات المستندات
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
-        
+        private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
+
 
 
         public PurchaseInvoicesController(AppDbContext context,
                                           DocumentTotalsService docTotals,
-                                          IUserActivityLogger activityLogger)
+                                          IUserActivityLogger activityLogger,ILedgerPostingService ledgerPosting)
                                        
         {
             _context = context;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
-            
+            _ledgerPostingService = ledgerPosting;     // ✅ متغير: خدمة الترحيل
+
         }
 
 
@@ -1140,12 +1142,18 @@ namespace ERP.Controllers
             }
 
             // ==============================
-            // 3) تعبئة ViewBag للـ View
+            // 3) تعبئة ViewBag للـ View (بدون Null)
             // ==============================
-            ViewBag.NavFirstId = minMax?.FirstId;
-            ViewBag.NavLastId = minMax?.LastId;
-            ViewBag.NavPrevId = prevId;
-            ViewBag.NavNextId = nextId;
+            int firstId = minMax?.FirstId ?? 0;  // متغير: أول فاتورة
+            int lastId = minMax?.LastId ?? 0;  // متغير: آخر فاتورة
+
+            ViewBag.NavFirstId = firstId;
+            ViewBag.NavLastId = lastId;
+            ViewBag.NavPrevId = prevId ?? 0;
+            ViewBag.NavNextId = nextId ?? 0;
+
+
+
         }
 
 
@@ -1399,14 +1407,36 @@ namespace ERP.Controllers
 
 
 
-        [HttpGet]
-        public async Task<IActionResult> Show(int id, int? frame = null)
-        {
-            // ✅ Frame Guard: لو اتفتحت بدون frame=1 نرجّعها لنفسها بـ frame=1
-            // عشان تفتح بنفس التصميم داخل التابات دائمًا
-            if (frame != 1)
-                return RedirectToAction(nameof(Show), new { id = id, frame = 1 });
 
+
+
+        [HttpGet]
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        {
+            // =========================================
+            // متغير: هل هذا الطلب يطلب "Body فقط"؟
+            // - frag=body معناها: نريد جزء الصفحة المتغير فقط (بدون Layout وبدون شريط الأزرار)
+            // =========================================
+            bool isBodyOnly = string.Equals(frag, "body", StringComparison.OrdinalIgnoreCase); // متغير: هل نعرض الجسم فقط؟
+
+            // =========================================
+            // ✅ Frame Guard (لنمط التابات)
+            // مهم جدًا:
+            // - لو frag=body (Fetch) => ممنوع Redirect للـ frame=1 لأننا لا نريد Reload كامل
+            // - لو فتح عادي => نُجبر frame=1 عشان يفتح بنفس التصميم داخل التابات دائمًا
+            // =========================================
+            if (!isBodyOnly && frame != 1)
+                return RedirectToAction(nameof(Show), new { id = id, frag = frag, frame = 1 });
+
+            // =========================================
+            // 0) تمرير حالة الـ Fragment للـ View
+            // - الـ View سيقرر: يعرض Shell كامل أو Body فقط
+            // =========================================
+            ViewBag.Fragment = frag; // متغير: نوع العرض (null أو body)
+
+            // =========================================
+            // 1) محاولة تحميل الفاتورة المطلوبة
+            // =========================================
             var invoice = await _context.PurchaseInvoices
                 .Include(p => p.Customer)
                 .Include(p => p.Lines)
@@ -1414,59 +1444,86 @@ namespace ERP.Controllers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.PIId == id);
 
-            if (invoice == null) return NotFound();
+            // =========================================
+            // 2) لو الفاتورة غير موجودة (ممسوحة / رقم غلط)
+            // =========================================
+            if (invoice == null)
+            {
+                // -----------------------------------------
+                // ✅ حالة خاصة: frag=body (تنقل/Fetch)
+                // هنا ممنوع Redirect لأنه سيؤدي لصفحة فاضية/فلاش
+                // الأفضل: نرجّع 404 برسالة واضحة، والـ JS يتعامل معها
+                // -----------------------------------------
+                if (isBodyOnly)
+                {
+                    return NotFound($"الفاتورة رقم ({id}) غير موجودة (قد تكون ممسوحة).");
+                }
 
+                // -----------------------------------------
+                // منطقك الحالي (فتح أقرب فاتورة بدل NotFound داخل iframe)
+                // -----------------------------------------
+
+                // متغير: نحاول نلاقي "التالي" (أصغر رقم أكبر من id)
+                int? nearestNext = await _context.PurchaseInvoices
+                    .AsNoTracking()
+                    .Where(x => x.PIId > id)
+                    .OrderBy(x => x.PIId)
+                    .Select(x => (int?)x.PIId)
+                    .FirstOrDefaultAsync();
+
+                if (nearestNext.HasValue && nearestNext.Value > 0)
+                {
+                    TempData["Error"] = $"رقم الفاتورة ({id}) غير موجود (قد تكون ممسوحة). تم فتح الفاتورة التالية رقم ({nearestNext.Value}).";
+                    return RedirectToAction(nameof(Show), new { id = nearestNext.Value, frag = (string?)null, frame = 1 });
+                }
+
+                // متغير: لو مفيش التالي… نجرب "السابق" (أكبر رقم أقل من id)
+                int? nearestPrev = await _context.PurchaseInvoices
+                    .AsNoTracking()
+                    .Where(x => x.PIId < id)
+                    .OrderByDescending(x => x.PIId)
+                    .Select(x => (int?)x.PIId)
+                    .FirstOrDefaultAsync();
+
+                if (nearestPrev.HasValue && nearestPrev.Value > 0)
+                {
+                    TempData["Error"] = $"رقم الفاتورة ({id}) غير موجود (قد تكون ممسوحة). تم فتح الفاتورة السابقة رقم ({nearestPrev.Value}).";
+                    return RedirectToAction(nameof(Show), new { id = nearestPrev.Value, frag = (string?)null, frame = 1 });
+                }
+
+                // لو مفيش أي فواتير أصلاً
+                TempData["Error"] = "لا توجد فواتير مشتريات مسجلة حالياً.";
+                return RedirectToAction(nameof(Create), new { frame = 1 });
+            }
+
+            // =========================================
+            // 3) تجهيز القوائم + الأوتوكومبليت
+            // ملاحظة مهمة:
+            // - حتى لو frag=body نحن نترك نفس السلوك الحالي حفاظًا على أي اعتماد داخل الـ View
+            // - لو احتجنا لاحقًا تحسين الأداء، يمكننا جعلها اختيارية للـ body فقط
+            // =========================================
             await PopulateDropDownsAsync(invoice.CustomerId, invoice.WarehouseId);
             await LoadProductsForAutoCompleteAsync();
 
             // متغير: هل الفاتورة مقفولة
             ViewBag.IsLocked = invoice.IsPosted || invoice.Status == "Posted" || invoice.Status == "Closed";
 
-            // متغير: علامة للـ View أننا داخل Frame
-            ViewBag.Frame = 1;
+            // متغير: علامة للـ View أننا داخل Frame (في العرض الكامل فقط)
+            ViewBag.Frame = (!isBodyOnly) ? 1 : 0;
 
+            // =========================================
+            // 4) ✅ تجهيز التنقل بشكل موحّد (استخدم دالتك المساعدة)
+            // =========================================
+            await FillPurchaseInvoiceNavAsync(invoice.PIId);
 
-            // =========================================================
-            // (سرعة) نظام التنقل بين الفواتير داخل شاشة Show
-            // - الهدف: أسهم (أول/سابق/التالي/آخر) + بحث سريع برقم الفاتورة
-            // - لا يفتح تابات جديدة: فقط يغير محتوى نفس التاب
-            // =========================================================
-
-            // 1) أول وآخر فاتورة (Query واحد)
-            var minMax = await _context.PurchaseInvoices
-                .AsNoTracking()
-                .GroupBy(_ => 1)
-                .Select(g => new
-                {
-                    FirstId = g.Min(x => x.PIId),
-                    LastId = g.Max(x => x.PIId)
-                })
-                .FirstOrDefaultAsync();
-
-            // 2) السابقة (أكبر رقم أقل من الحالي)
-            int? prevId = await _context.PurchaseInvoices
-                .AsNoTracking()
-                .Where(x => x.PIId < id)
-                .OrderByDescending(x => x.PIId)
-                .Select(x => (int?)x.PIId)
-                .FirstOrDefaultAsync();
-
-            // 3) التالية (أصغر رقم أكبر من الحالي)
-            int? nextId = await _context.PurchaseInvoices
-                .AsNoTracking()
-                .Where(x => x.PIId > id)
-                .OrderBy(x => x.PIId)
-                .Select(x => (int?)x.PIId)
-                .FirstOrDefaultAsync();
-
-            ViewBag.NavFirstId = minMax?.FirstId;
-            ViewBag.NavLastId = minMax?.LastId;
-            ViewBag.NavPrevId = prevId;
-            ViewBag.NavNextId = nextId;
-
-
+            // =========================================
+            // 5) عرض الـ View نفسه
+            // - الـ View سيقرر ماذا يعرض بناءً على ViewBag.Fragment
+            // =========================================
             return View("Show", invoice);
         }
+
+
 
 
 
@@ -2057,6 +2114,103 @@ namespace ERP.Controllers
             return null;
         }
 
+
+
+
+        [HttpPost]
+        public async Task<IActionResult> PostInvoice(int id)
+        {
+            // ================================
+            // 0) معرفة هل الطلب Ajax أم لا
+            // ================================
+            bool isAjax = Request.Headers["X-Requested-With"] == "XMLHttpRequest"; // متغير: هل الطلب من fetch؟
+
+            try
+            {
+                // ================================
+                // 1) تحميل الفاتورة + المورد
+                // ================================
+                var invoice = await _context.PurchaseInvoices
+                    .Include(x => x.Customer)   // مهم: علشان AccountId
+                    .FirstOrDefaultAsync(x => x.PIId == id);
+
+                if (invoice == null)
+                {
+                    if (isAjax) return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+                    return NotFound();
+                }
+
+                // ================================
+                // 2) منع الترحيل لو مترحّلة بالفعل
+                // ================================
+                if (invoice.IsPosted)
+                {
+                    if (isAjax) return BadRequest(new { ok = false, message = "هذه الفاتورة مترحّلة بالفعل." });
+
+                    TempData["Error"] = "هذه الفاتورة مترحّلة بالفعل.";
+                    return RedirectToAction("Show", new { id = invoice.PIId });
+                }
+
+                // ========================================
+                // 3) تنفيذ الترحيل
+                // ========================================
+                await _ledgerPostingService.PostPurchaseInvoiceAsync(invoice.PIId, User.Identity?.Name);
+
+                // ========================================
+                // 4) تسجيل نشاط (ترحيل فقط)
+                // ========================================
+                await _activityLogger.LogAsync(
+                    actionType: UserActionType.Post,               // متغير: نوع العملية
+                    entityName: "PurchaseInvoice",                 // متغير: اسم الكيان
+                    entityId: invoice.PIId,                        // متغير: رقم الفاتورة
+                    description: $"ترحيل فاتورة مشتريات رقم {invoice.PIId}" // متغير: وصف
+                );
+
+                // ================================
+                // 5) إعادة تحميل بيانات الفاتورة بعد الترحيل (لإرجاع الحالة الجديدة للـ JS)
+                // ================================
+                var updated = await _context.PurchaseInvoices
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.PIId == id);
+
+                // ================================
+                // 6) الرد المناسب حسب نوع الطلب
+                // ================================
+                if (isAjax)
+                {
+                    return Ok(new
+                    {
+                        ok = true,
+                        message = "تم ترحيل الفاتورة بنجاح.",
+                        isPosted = updated?.IsPosted ?? true,
+                        status = updated?.Status ?? "Posted",
+                        postedAt = updated?.PostedAt,
+                        postedBy = updated?.PostedBy
+                    });
+                }
+
+                TempData["Success"] = "تم ترحيل الفاتورة بنجاح";
+                return RedirectToAction("Show", new { id = invoice.PIId });
+            }
+            catch (Exception ex)
+            {
+                // ================================
+                // 7) لو حصل خطأ في الترحيل
+                // ================================
+                if (isAjax)
+                {
+                    // ✅ رسالة مفهومة للزر
+                    return BadRequest(new { ok = false, message = ex.Message });
+                }
+
+                TempData["Error"] = "فشل الترحيل: " + ex.Message;
+                return RedirectToAction("Show", new { id });
+            }
+        }
+
+
         #endregion
+
+
     }
 }

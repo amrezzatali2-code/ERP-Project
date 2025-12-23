@@ -44,18 +44,18 @@
             overflow: hidden;
         }
 
+        /* شريط الأزرار: يفضل ظاهر ومثبت */
+        .invoice-actions-sticky {
+            position: sticky;
+            top: 58px; /* عدّلها حسب ارتفاع الـ Navbar عندك */
+            z-index: 3000; /* أعلى من أي كروت/هيدر */
 
-     /* شريط الأزرار: يفضل ظاهر ومثبت */
-.invoice-actions-sticky{
-    position: sticky;
-    top: 58px;                 /* عدّلها حسب ارتفاع الـ Navbar عندك */
-    z-index: 3000;             /* أعلى من أي كروت/هيدر */
-    background: #f6f7f9;       /* مهم علشان مايبقاش شفاف */
-    padding: 8px 10px;
-    border-radius: 12px;
-    box-shadow: 0 6px 18px rgba(0,0,0,.08);
-}
-
+            background: #ffffff; /* ✅ أفتح لون (بدل الرمادي) */
+            border: 1px solid rgba(13,110,253,.12); /* ✅ بوردر خفيف */
+            padding: 10px 10px;
+            border-radius: 14px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.05); /* ✅ ظل أخف */
+        }
 /* لو عندك تبويب/هيدر ثابت أعلى من النافبار زوّد top */
 @@media (max-width: 992px){
     .invoice-actions-sticky{
@@ -148,6 +148,8 @@
 }
 
 
+
+
 <div class="invoice-page" dir="rtl">
     <div class="container-fluid pt-3">
 
@@ -156,586 +158,614 @@
             @Html.AntiForgeryToken()
         </form>
 
-        @* =========================================================
-           (زي طلب الشراء) نفس الفكرة:
-           - العمود الرئيسي أولاً في الكود
-           - العمود الجانبي (الأزرار) آخر الكود
-           ========================================================= *@
-
         <div class="row g-3">
+
+
+
+            @* =========================
+               العمود الجانبي (أزرار الحركة) — ثابت برا الـ BodyHost
+               ========================= *@
+            <div class="col-12 col-lg-2 order-1 order-lg-2">
+
+                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
+                    <div class="card-header py-2 text-center">
+                        <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
+                    </div>
+
+                    <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
+
+                        @{
+                            int? navFirst = ViewBag.NavFirstId == null ? (int?)null : (int)ViewBag.NavFirstId;
+                            int? navLast = ViewBag.NavLastId == null ? (int?)null : (int)ViewBag.NavLastId;
+                            int? navPrev = ViewBag.NavPrevId == null ? (int?)null : (int)ViewBag.NavPrevId;
+                            int? navNext = ViewBag.NavNextId == null ? (int?)null : (int)ViewBag.NavNextId;
+
+                            int currentId = Model?.PIId ?? 0;
+
+                            bool hasAnyInvoices =
+                            navFirst.HasValue && navLast.HasValue &&
+                            navFirst.Value > 0 && navLast.Value > 0;
+
+                            int? prevEffective = (currentId == 0) ? navLast : navPrev;
+                            int? nextEffective = (currentId == 0) ? navFirst : navNext;
+
+                            bool canFirst = hasAnyInvoices && navFirst.HasValue && navFirst.Value > 0 && navFirst.Value != currentId;
+                            bool canLast = hasAnyInvoices && navLast.HasValue && navLast.Value > 0 && navLast.Value != currentId;
+                            bool canPrev = hasAnyInvoices && prevEffective.HasValue && prevEffective.Value > 0 && prevEffective.Value != currentId;
+                            bool canNext = hasAnyInvoices && nextEffective.HasValue && nextEffective.Value > 0 && nextEffective.Value != currentId;
+                        }
+
+                        <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
+                            <button type="button"
+                                    id="btnFirstInvoice"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="pi-show-tab"
+                                    data-tab-title="فاتورة المشتريات"
+                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (navFirst ?? 0), frame = 1 })"
+                                    data-id="@(navFirst ?? 0)"
+                                    title="أول فاتورة"
+                                    @(canFirst ? "" : "disabled")>
+                                ⏮
+                            </button>
+
+                            <button type="button"
+                                    id="btnPrevInvoice"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="pi-show-tab"
+                                    data-tab-title="فاتورة المشتريات"
+                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (prevEffective ?? 0), frame = 1 })"
+                                    data-id="@(prevEffective ?? 0)"
+                                    title="الفاتورة السابقة"
+                                    @(canPrev ? "" : "disabled")>
+                                ◀
+                            </button>
+
+                            <button type="button"
+                                    id="btnNextInvoice"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="pi-show-tab"
+                                    data-tab-title="فاتورة المشتريات"
+                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (nextEffective ?? 0), frame = 1 })"
+                                    data-id="@(nextEffective ?? 0)"
+                                    title="الفاتورة التالية"
+                                    @(canNext ? "" : "disabled")>
+                                ▶
+                            </button>
+
+                            <button type="button"
+                                    id="btnLastInvoice"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="pi-show-tab"
+                                    data-tab-title="فاتورة المشتريات"
+                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (navLast ?? 0), frame = 1 })"
+                                    data-id="@(navLast ?? 0)"
+                                    title="آخر فاتورة"
+                                    @(canLast ? "" : "disabled")>
+                                ⏭
+                            </button>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number"
+                                   id="NavInvoiceSearchInput"
+                                   class="form-control form-control-sm"
+                                   placeholder="بحث برقم الفاتورة" />
+
+
+                            <button type="button"
+                                    id="btnNavInvoiceSearch"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-tab-id="pi-show-tab"
+                                    data-tab-title="فاتورة المشتريات"
+                                    data-base-url="@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })">
+                                بحث
+                            </button>
+                        </div>
+
+                        <hr class="my-1" />
+
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
+                           data-tab-id="pi-show-tab"
+                           data-tab-title="فاتورة المشتريات"
+                           data-url="@Url.Action("Create", "PurchaseInvoices", new { frame = 1 })">
+                            ➕ فاتورة جديدة
+                        </a>
+
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnSaveInvoiceHeader">
+                            💾 حفظ الفاتورة
+                        </button>
+
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnPostInvoice">
+                            📤 ترحيل الفاتورة
+                        </button>
+
+                        <div id="postInvoiceMsg" class="small mt-2"></div>
+
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnOpenInvoice">
+                            ⏪ فتح الفاتورة
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
+                                id="btnClearInvoiceLines"
+                                data-invoice-id="@(Model?.PIId ?? 0)">
+                            🗑️ مسح كل أصناف الفاتورة
+                        </button>
+
+                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                           asp-action="Edit"
+                           asp-route-id="@(Model?.PIId ?? 0)">
+                            ✏️ تعديل الفاتورة
+                        </a>
+
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" onclick="window.print();">
+                            🖨️ طباعة الفاتورة
+                        </button>
+
+                    </div>
+                </div>
+
+            </div> @* نهاية العمود الجانبي *@
+
+
+
+
 
             @* =========================
                العمود الرئيسي (الهيدر + المورد + الأصناف + السطور + الإجماليات)
                ========================= *@
             <div class="col-12 col-lg-10 order-2 order-lg-1">
 
-                @* ====================================================
-                   1) كارت بيانات فاتورة المشتريات + المورد + المخزن
-                   ==================================================== *@
-                <div class="card shadow-sm mb-2 invoice-header-card">
+                @* ✅ ده الجزء الوحيد اللي هيتبدّل عند التنقل *@
+                <div id="PI_BodyHost">
 
-                    @{
-                        bool isNewInvoice = Model == null || Model.PIId == 0;
-                        bool hasInvoice = !isNewInvoice;
+                    @* =========================
+                       قيم التنقل (لازم تكون داخل الـ BodyHost عشان تتحدّث مع frag=body)
+                       ========================= *@
+                    <input type="hidden" id="NavFirstId" value="@(ViewBag.NavFirstId ?? 0)" />
+                    <input type="hidden" id="NavLastId" value="@(ViewBag.NavLastId ?? 0)" />
+                    <input type="hidden" id="NavPrevId" value="@(ViewBag.NavPrevId ?? 0)" />
+                    <input type="hidden" id="NavNextId" value="@(ViewBag.NavNextId ?? 0)" />
+                    <input type="hidden" id="NavCurrentId" value="@(Model?.PIId ?? 0)" />
 
-                        string invoiceDateText = hasInvoice
-                        ? Model.PIDate.ToString("yyyy/MM/dd")
-                        : "";
+                    @* ====================================================
+                       1) كارت بيانات فاتورة المشتريات + المورد + المخزن
+                       ==================================================== *@
+                    <div class="card shadow-sm mb-2 invoice-header-card">
 
-                        // نستخدم CreatedAt لعرض وقت إنشاء الفاتورة
-                        string invoiceTimeText = hasInvoice
-                        ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
-                        : "";
-                    }
+                        @{
+                            bool isNewInvoice = Model == null || Model.PIId == 0;
+                            bool hasInvoice = !isNewInvoice;
 
-                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            string invoiceDateText = hasInvoice
+                            ? Model.PIDate.ToString("yyyy/MM/dd")
+                            : "";
 
-                        @* الجزء الأيسر: عنوان الفاتورة + كاتب الفاتورة *@
-                        <div>
-                            <h5 class="mb-1">فاتورة مشتريات</h5>
+                            string invoiceTimeText = hasInvoice
+                            ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
+                            : "";
+                        }
 
-                            <div class="small opacity-100">
-                                كاتب الفاتورة:
-                                <span class="fw-semibold">
-                                    @(
-                                                                        !string.IsNullOrWhiteSpace(Model.CreatedBy)
-                                                                        ? Model.CreatedBy
-                                                                        : "غير محدد"
-                                                                        )
-                                </span>
-                            </div>
-                        </div>
+                        <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
 
-                        @* الجزء الأيمن: رسالة بسيطة حسب الحالة + زر الطي *@
-                        <div class="d-flex align-items-center gap-2">
-
-                            <div class="text-end">
-                                @if (!isNewInvoice)
-                                {
-                                    <span class="text-white fw-semibold">
-                                        فاتورة مشتريات مسجَّلة
-                                    </span>
-                                }
+                            <div>
+                                <h5 class="mb-1">فاتورة مشتريات</h5>
                             </div>
 
-                            @* زر سهم: طي/فتح جسم الكارت *@
-                            <button type="button"
-                                    class="btn btn-sm btn-light"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#InvoiceHeaderCardCollapse"
-                                    aria-expanded="true"
-                                    aria-controls="InvoiceHeaderCardCollapse">
-                                <span id="InvoiceHeaderCardArrow">▾</span>
-                            </button>
+                            <div class="d-flex align-items-center gap-2">
 
-                        </div>
-                    </div>
-
-                    @* جسم الكارت الذي سيتم طيه *@
-                    <div id="InvoiceHeaderCardCollapse" class="collapse show">
-
-                        <div class="card-body">
-
-                            <div class="row g-3 align-items-end">
-
-                                @* كود المورد *@
-                                <div class="col-lg-2 col-md-3">
-                                    <label class="form-label form-label-sm">كود المورد</label>
-
-                                    @* بوكس للعرض/البحث فقط *@
-                                    <input id="CustomerCodeDisplay"
-                                           class="form-control form-control-sm text-center invoice-small-input"
-                                           type="number" />
-
-                                    @* الحقل الفعلي المحفوظ *@
-                                    <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                                <div class="text-end">
+                                    @if (!isNewInvoice)
+                                    {
+                                        @* مكان رسائل الحالة إن وجدت *@
+                                    }
                                 </div>
 
-                                @* اسم المورد + أوتوكومبليت *@
-                                <div class="col-lg-4 col-md-6">
-                                    <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
+                                <button type="button"
+                                        class="btn btn-sm btn-light"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#InvoiceHeaderCardCollapse"
+                                        aria-expanded="true"
+                                        aria-controls="InvoiceHeaderCardCollapse">
+                                    <span id="InvoiceHeaderCardArrow">▾</span>
+                                </button>
 
-                                    <input id="CustomerNameInput"
-                                           name="CustomerNameInput"
-                                           class="form-control form-control-sm"
-                                           placeholder="اكتب اسم المورد ثم اختره من القائمة"
-                                           list="customersList"
-                                           autocomplete="off"
-                                           value="@ViewBag.SelectedCustomerName" />
+                            </div>
+                        </div>
 
-                                    <datalist id="customersList">
-                                        @if (ViewBag.Customers != null)
-                                        {
-                                            foreach (var c in ViewBag.Customers)
+                        <div id="InvoiceHeaderCardCollapse" class="collapse show">
+                            <div class="card-body">
+
+                                <div class="row g-3 align-items-end">
+
+                                    <div class="col-lg-2 col-md-3">
+                                        <label class="form-label form-label-sm">كود المورد</label>
+
+                                        <input id="CustomerCodeDisplay"
+                                               class="form-control form-control-sm text-center invoice-small-input"
+                                               type="number" />
+
+                                        <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                                    </div>
+
+                                    <div class="col-lg-4 col-md-6">
+                                        <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
+
+                                        <input id="CustomerNameInput"
+                                               name="CustomerNameInput"
+                                               class="form-control form-control-sm"
+                                               placeholder="اكتب اسم المورد ثم اختره من القائمة"
+                                               list="customersList"
+                                               autocomplete="off"
+                                               value="@ViewBag.SelectedCustomerName" />
+
+                                        <datalist id="customersList">
+                                            @if (ViewBag.Customers != null)
                                             {
-                                                <option value="@c.Name"
-                                                        data-id="@c.Id"
-                                                        data-phone="@c.Phone"
-                                                        data-address="@c.Address"
-                                                        data-gov="@c.Gov"
-                                                        data-district="@c.District"
-                                                        data-area="@c.Area"
-                                                        data-credit="@c.Credit">
-                                                </option>
+                                                foreach (var c in ViewBag.Customers)
+                                                {
+                                                    <option value="@c.Name"
+                                                            data-id="@c.Id"
+                                                            data-phone="@c.Phone"
+                                                            data-address="@c.Address"
+                                                            data-gov="@c.Gov"
+                                                            data-district="@c.District"
+                                                            data-area="@c.Area"
+                                                            data-credit="@c.Credit">
+                                                    </option>
+                                                }
                                             }
-                                        }
-                                    </datalist>
+                                        </datalist>
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-2">
+                                        <label class="form-label form-label-sm">رقم الفاتورة</label>
+
+                                        <input type="hidden"
+                                               id="InvoiceId"
+                                               value="@(Model?.PIId ?? 0)" />
+
+                                        <input id="InvoiceNumberDisplay"
+                                               class="form-control form-control-sm text-center"
+                                               value="@(Model != null && Model.PIId > 0 ? Model.PIId.ToString() : "")"
+                                               readonly />
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-6">
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <label class="form-label form-label-sm">تاريخ الفاتورة</label>
+                                                <input id="InvoiceDateDisplay"
+                                                       class="form-control form-control-sm text-center"
+                                                       value="@invoiceDateText"
+                                                       readonly />
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="form-label form-label-sm">وقت الإنشاء</label>
+                                                <input id="InvoiceTimeDisplay"
+                                                       class="form-control form-control-sm text-center"
+                                                       value="@invoiceTimeText"
+                                                       readonly />
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
 
-                                @* رقم الفاتورة *@
-                                <div class="col-lg-3 col-md-2">
-                                    <label class="form-label form-label-sm">رقم الفاتورة</label>
+                                <br />
 
-                                    <input type="hidden"
-                                           id="InvoiceId"
-                                           value="@(Model?.PIId ?? 0)" />
+                                <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
 
-                                    <input id="InvoiceNumberDisplay"
-                                           class="form-control form-control-sm text-center"
-                                           value="@(Model != null && Model.PIId > 0 ? Model.PIId.ToString() : "")"
-                                           readonly />
+                                <div class="row g-3">
+
+                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                        <label class="form-label form-label-sm">مُرحَّلة؟</label>
+                                        <input id="InvoiceIsPostedDisplay"
+                                               class="form-control form-control-sm text-center"
+                                               value="@(Model.IsPosted ? "نعم" : "لا")"
+                                               readonly />
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                        <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
+                                        <input class="form-control form-control-sm text-center"
+                                               value="@(Model.RefPRId?.ToString() ?? "")"
+                                               readonly />
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                        <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+                                        <select asp-for="WarehouseId"
+                                                asp-items="ViewBag.Warehouses"
+                                                class="form-select form-select-sm">
+                                            <option value="">اختر المخزن</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                        <label class="form-label form-label-sm">كاتب الفاتورة</label>
+                                        <input id="InvoiceCreatedByDisplay"
+                                               class="form-control form-control-sm text-center"
+                                               value="@Model.CreatedBy"
+                                               readonly />
+                                    </div>
+
                                 </div>
 
-                                @* التاريخ والوقت *@
-                                <div class="col-lg-3 col-md-6">
-                                    <div class="row g-2">
-                                        <div class="col-6">
-                                            <label class="form-label form-label-sm">تاريخ الفاتورة</label>
-                                            <input id="InvoiceDateDisplay"
-                                                   class="form-control form-control-sm text-center"
-                                                   value="@invoiceDateText"
-                                                   readonly />
-                                        </div>
-                                        <div class="col-6">
-                                            <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                            <input id="InvoiceTimeDisplay"
-                                                   class="form-control form-control-sm text-center"
-                                                   value="@invoiceTimeText"
-                                                   readonly />
-                                        </div>
+                                <div class="row g-4">
+                                    <div class="col-lg-3 col-md-3">
+                                        <label class="form-label form-label-sm">الهاتف</label>
+                                        <input id="CustomerPhone" class="form-control form-control-sm" readonly />
+                                    </div>
+                                    <div class="col-lg-3 col-md-3">
+                                        <label class="form-label form-label-sm">المحافظة</label>
+                                        <input id="CustomerGovernorate" class="form-control form-control-sm" readonly />
+                                    </div>
+                                    <div class="col-lg-3 col-md-3">
+                                        <label class="form-label form-label-sm">الحي</label>
+                                        <input id="CustomerDistrict" class="form-control form-control-sm" readonly />
+                                    </div>
+                                    <div class="col-lg-3 col-md-3">
+                                        <label class="form-label form-label-sm">المنطقة</label>
+                                        <input id="CustomerArea" class="form-control form-control-sm" readonly />
+                                    </div>
+                                </div>
+
+                                <div class="row g-3">
+                                    <div class="col-lg-8 col-md-6">
+                                        <label class="form-label form-label-sm">العنوان</label>
+                                        <input id="CustomerAddress" class="form-control form-control-sm" readonly />
+                                    </div>
+                                    <div class="col-lg-4 col-md-2">
+                                        <label class="form-label form-label-sm">الحد الإتماني</label>
+                                        <input id="CustomerCredit" class="form-control form-control-sm" readonly />
                                     </div>
                                 </div>
 
                             </div>
-
-                            <br />
-
-                            @* حالة الفاتورة *@
-                            <input type="hidden"
-                                   asp-for="Status"
-                                   id="InvoiceStatusHidden" />
-
-                            <div class="row g-3">
-
-                                @* مُرحَّلة؟ *@
-                                <div class="col-lg-3 col-md-6 col-sm-12">
-                                    <label class="form-label form-label-sm">مُرحَّلة؟</label>
-                                    <input id="InvoiceIsPostedDisplay"
-                                           class="form-control form-control-sm text-center"
-                                           value="@(Model.IsPosted ? "نعم" : "لا")"
-                                           readonly />
-                                </div>
-
-                                @* طلب الشراء المرجعي *@
-                                <div class="col-lg-3 col-md-6 col-sm-12">
-                                    <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
-                                    <input class="form-control form-control-sm text-center"
-                                           value="@(Model.RefPRId?.ToString() ?? "")"
-                                           readonly />
-                                </div>
-
-                                @* المخزن *@
-                                <div class="col-lg-3 col-md-6 col-sm-12">
-                                    <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
-                                    <select asp-for="WarehouseId"
-                                            asp-items="ViewBag.Warehouses"
-                                            class="form-select form-select-sm">
-                                        <option value="">اختر المخزن</option>
-                                    </select>
-                                </div>
-
-                                @* كاتب الفاتورة *@
-                                <div class="col-lg-3 col-md-6 col-sm-12">
-                                    <label class="form-label form-label-sm">كاتب الفاتورة</label>
-                                    <input id="InvoiceCreatedByDisplay"
-                                           class="form-control form-control-sm text-center"
-                                           value="@Model.CreatedBy"
-                                           readonly />
-                                </div>
-
-                            </div>
-
-                            <div class="row g-4">
-                                <div class="col-lg-3 col-md-3">
-                                    <label class="form-label form-label-sm">الهاتف</label>
-                                    <input id="CustomerPhone"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-
-                                <div class="col-lg-3 col-md-3">
-                                    <label class="form-label form-label-sm">المحافظة</label>
-                                    <input id="CustomerGovernorate"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-
-                                <div class="col-lg-3 col-md-3">
-                                    <label class="form-label form-label-sm">الحي</label>
-                                    <input id="CustomerDistrict"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-
-                                <div class="col-lg-3 col-md-3">
-                                    <label class="form-label form-label-sm">المنطقة</label>
-                                    <input id="CustomerArea"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-                            </div>
-
-                            <div class="row g-3">
-
-                                <div class="col-lg-8 col-md-6">
-                                    <label class="form-label form-label-sm">العنوان</label>
-                                    <input id="CustomerAddress"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-
-                                <div class="col-lg-4 col-md-2">
-                                    <label class="form-label form-label-sm">الحد الإتماني</label>
-                                    <input id="CustomerCredit"
-                                           class="form-control form-control-sm"
-                                           readonly />
-                                </div>
-                            </div>
-
-                        </div> @* نهاية card-body *@
-                    </div> @* نهاية collapse *@
-                </div>
-
-                @* =====================================================
-                   2) كارت بيانات الصنف من المخزون + سياسة شراء
-                   ===================================================== *@
-                <div class="card shadow-sm mb-3 invoice-product-card">
-
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h6 class="mb-0">بيانات الصنف</h6>
-
-                        <button type="button"
-                                class="btn btn-sm btn-light"
-                                data-bs-toggle="collapse"
-                                data-bs-target="#ProductCardCollapse"
-                                aria-expanded="true"
-                                aria-controls="ProductCardCollapse">
-                            <span id="ProductCardArrow">▾</span>
-                        </button>
+                        </div>
                     </div>
 
-                    <div id="ProductCardCollapse" class="collapse show">
+                    @* =====================================================
+                       2) كارت بيانات الصنف
+                       ===================================================== *@
+                    <div class="card shadow-sm mb-3 invoice-product-card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">بيانات الصنف</h6>
+                            <button type="button"
+                                    class="btn btn-sm btn-light"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#ProductCardCollapse"
+                                    aria-expanded="true"
+                                    aria-controls="ProductCardCollapse">
+                                <span id="ProductCardArrow">▾</span>
+                            </button>
+                        </div>
+
+                        <div id="ProductCardCollapse" class="collapse show">
+                            <div class="card-body">
+
+                                <div class="row g-2 mb-3">
+                                    <div class="col-md-3 col-sm-6">
+                                        <label class="form-label form-label-sm">الكمية في هذا المخزن</label>
+                                        <input type="text" id="ProdQtyCurrentWarehouse"
+                                               class="form-control form-control-sm text-center" value="0" readonly />
+                                    </div>
+
+                                    <div class="col-md-3 col-sm-6">
+                                        <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
+                                        <input type="text" id="ProdQtyAllWarehouses"
+                                               class="form-control form-control-sm text-center" value="0" readonly />
+                                    </div>
+
+                                    <div class="col-md-3 col-sm-6">
+                                        <label class="form-label form-label-sm">الصنف عليه كوتة؟</label>
+                                        <input type="text" id="ProdQuotaText"
+                                               class="form-control form-control-sm text-center" value="بدون كوتة" readonly />
+                                    </div>
+
+                                    <div class="col-md-3 col-sm-6">
+                                        <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
+                                        <input type="text" id="ProdWeightedDiscount"
+                                               class="form-control form-control-sm text-center" value="0" readonly />
+                                    </div>
+                                </div>
+
+                                <div class="row g-2 mb-3">
+                                    <div class="col-lg-6 col-md-6">
+                                        <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
+                                        <select id="AlternativeProducts" class="form-select form-select-sm"></select>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    @* =====================================================
+                       4) كارت إدخال الصنف
+                       ===================================================== *@
+                    <div class="card shadow-sm mb-3 invoice-Add-card">
+                        <div class="card-header">
+                            <h6 class="mb-0">إضافة صنف للفاتورة</h6>
+                        </div>
+
                         <div class="card-body">
 
-                            <div class="row g-2 mb-3">
+                            <div class="row g-2 align-items-end mb-2">
 
-                                <div class="col-md-3 col-sm-6">
-                                    <label class="form-label form-label-sm">الكمية في هذا المخزن</label>
-                                    <input type="text"
-                                           id="ProdQtyCurrentWarehouse"
-                                           class="form-control form-control-sm text-center"
-                                           value="0"
-                                           readonly />
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label form-label-sm">كود الصنف</label>
+                                    <input type="number" id="ProdCodeInput"
+                                           class="form-control form-control-sm text-center pi-input"
+                                           placeholder="بحث بالكود..." />
                                 </div>
 
-                                <div class="col-md-3 col-sm-6">
-                                    <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
-                                    <input type="text"
-                                           id="ProdQtyAllWarehouses"
-                                           class="form-control form-control-sm text-center"
-                                           value="0"
-                                           readonly />
-                                </div>
+                                <div class="col-lg-4 col-md-8">
+                                    <label class="form-label form-label-sm">اسم الصنف</label>
 
-                                <div class="col-md-3 col-sm-6">
-                                    <label class="form-label form-label-sm">الصنف عليه كوتة؟</label>
-                                    <input type="text"
-                                           id="ProdQuotaText"
-                                           class="form-control form-control-sm text-center"
-                                           value="بدون كوتة"
-                                           readonly />
-                                </div>
+                                    <input id="ProdNameInput"
+                                           list="productsList"
+                                           class="form-control form-control-sm pi-input"
+                                           placeholder="اكتب اسم الصنف أو جزء منه..."
+                                           autocomplete="off" />
 
-                                <div class="col-md-3 col-sm-6">
-                                    <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
-                                    <input type="text"
-                                           id="ProdWeightedDiscount"
-                                           class="form-control form-control-sm text-center"
-                                           value="0"
-                                           readonly />
-                                </div>
-                            </div>
-
-                            <div class="row g-2 mb-3">
-                                <div class="col-lg-6 col-md-6">
-                                    <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
-                                    <select id="AlternativeProducts"
-                                            class="form-select form-select-sm">
-                                    </select>
-                                </div>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-
-                @* =====================================================
-                   4) كارت إدخال الصنف في فاتورة المشتريات
-                   ===================================================== *@
-                <div class="card shadow-sm mb-3 invoice-Add-card">
-                    <div class="card-header">
-                        <h6 class="mb-0">إضافة صنف للفاتورة</h6>
-                    </div>
-
-                    <div class="card-body">
-
-                        <div class="row g-2 align-items-end mb-2">
-
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">كود الصنف</label>
-                                <input type="number"
-                                       id="ProdCodeInput"
-                                       class="form-control form-control-sm text-center pi-input"
-                                       placeholder="بحث بالكود..." />
-                            </div>
-
-                            <div class="col-lg-4 col-md-8">
-                                <label class="form-label form-label-sm">اسم الصنف</label>
-
-                                <input id="ProdNameInput"
-                                       list="productsList"
-                                       class="form-control form-control-sm pi-input"
-                                       placeholder="اكتب اسم الصنف أو جزء منه..."
-                                       autocomplete="off" />
-
-                                <datalist id="productsList">
-                                    @if (ViewBag.ProductsAuto != null)
-                                    {
-                                        foreach (var p in ViewBag.ProductsAuto)
+                                    <datalist id="productsList">
+                                        @if (ViewBag.ProductsAuto != null)
                                         {
-                                            <option value="@p.Name"
-                                                    data-id="@p.Id"
-                                                    data-code="@p.Id"
-                                                    data-generic="@p.GenericName"
-                                                    data-company="@p.Company"
-                                                    data-price="@p.PriceRetail"
-                                                    data-hasquota="@(p.HasQuota ? "true" : "false")">
-                                            </option>
-                                        }
-                                    }
-                                </datalist>
-
-                                <input type="hidden" id="ProdId" />
-                            </div>
-
-                            @* الأزرار داخل Grid مضبوط (عشان ما يكسرش الصف) *@
-                            <div class="col-lg-6 col-md-12">
-                                <div class="d-flex gap-2 justify-content-end flex-wrap">
-                                    <button type="button"
-                                            id="btnOpenProductMovement"
-                                            class="btn btn-outline-secondary btn-sm">
-                                        حركة الصنف
-                                    </button>
-
-                                    <button type="button"
-                                            id="btnOpenProductEdit"
-                                            class="btn btn-outline-primary btn-sm">
-                                        تعديل بيانات الصنف
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="row g-2 align-items-end">
-
-                            <div class="col-lg-2 col-md-4">
-                                <label id="ProdPriceLabel" class="form-label form-label-sm">
-                                    سعر الجمهور
-                                    <small id="ProdPriceLockState" class="text-muted">(مغلق)</small>
-                                </label>
-
-                                <input type="number"
-                                       id="ProdPriceInput"
-                                       class="form-control form-control-sm text-center pi-input bg-light text-muted"
-                                       readonly />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">الكمية</label>
-                                <input type="number"
-                                       id="ProdQtyInput"
-                                       class="form-control form-control-sm text-center pi-input"
-                                       placeholder="0" />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4">
-                                <label id="ProdDisc1Label" class="form-label form-label-sm">الخصم</label>
-                                <input type="number"
-                                       id="ProdDisc1Input"
-                                       class="form-control form-control-sm text-center pi-input"
-                                       value="0" />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">الباتش</label>
-                                <input type="text"
-                                       id="ProdBatchInput"
-                                       class="form-control form-control-sm text-center pi-input"
-                                       placeholder="باتش" />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
-                                <input type="text"
-                                       id="ProdExpiryInput"
-                                       class="form-control form-control-sm text-center pi-input"
-                                       placeholder="MM/YYYY" />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4 d-grid">
-                                <label class="form-label form-label-sm">&nbsp;</label>
-
-                                <button type="button"
-                                        id="btnAddInvoiceLine"
-                                        class="btn btn-primary btn-sm w-100">
-                                    إضافة
-                                </button>
-                            </div>
-
-                        </div>
-                    </div>
-                </div>
-
-                @* ==========================================
-                   5) جدول سطور فاتورة المشتريات (Hybrid)
-                   ========================================== *@
-                <div class="card shadow-sm mb-3 invoice-lines-card">
-                    <div class="card-header py-2 invoice-lines-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="fw-semibold">سطور فاتورة المشتريات</span>
-                        </div>
-                    </div>
-
-                    <div class="card-body p-0">
-                        <div class="erp-table-wrapper mb-0">
-                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                                <thead>
-                                    <tr>
-                                        <th class="text-center">#</th>
-                                        <th>اسم الصنف</th>
-                                        <th class="text-center">التشغيلة</th>
-                                        <th class="text-center">الصلاحية</th>
-                                        <th class="text-center">الكمية</th>
-                                        <th class="text-center">سعر الجمهور</th>
-                                        <th class="text-center">خصم الشراء %</th>
-                                        <th class="text-center">قيمة السطر</th>
-                                        <th class="text-center">مسح</th>
-                                    </tr>
-                                </thead>
-
-                                <tbody id="PILinesTbody">
-                                    @{
-                                        var linesList = Model.Lines?.OrderBy(l => l.LineNo).ToList()
-                                        ?? new List<ERP.Models.PILine>();
-
-                                        var groups = linesList
-                                        .GroupBy(l => new
-                                        {
-                                            l.ProdId,
-                                            ProdName = l.Product?.ProdName ?? ("صنف #" + l.ProdId)
-                                        })
-                                        .OrderBy(g => g.Key.ProdName);
-                                    }
-
-                                    @if (!groups.Any())
-                                    {
-                                        <tr>
-                                            <td colspan="9" class="text-center text-muted py-3">
-                                                لا يوجد سطور داخل الفاتورة حتى الآن.
-                                            </td>
-                                        </tr>
-                                    }
-                                    else
-                                    {
-                                        foreach (var g in groups)
-                                        {
-                                            int batchCount = g.Count();
-
-                                            if (batchCount == 1)
+                                            foreach (var p in ViewBag.ProductsAuto)
                                             {
-                                                var line = g.First();
-                                                decimal lineValue =
-                                                line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountPct / 100m));
-
-                                                <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
-                                                    <td class="text-center">@line.LineNo</td>
-
-                                                    <td>
-                                                        <strong>@g.Key.ProdName</strong>
-                                                        <span class="text-muted small"> | كود: @g.Key.ProdId</span>
-                                                    </td>
-
-                                                    <td class="text-center">@line.BatchNo</td>
-
-                                                    <td class="text-center">
-                                                        @(line.Expiry.HasValue? line.Expiry.Value.ToString("yyyy-MM-dd") : "")
-                                                    </td>
-
-                                                    <td class="text-center">@line.Qty</td>
-
-                                                    <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
-
-                                                    <td class="text-center">@line.PurchaseDiscountPct.ToString("0.##")</td>
-
-                                                    <td class="text-center">@lineValue.ToString("0.00")</td>
-
-                                                    <td class="text-center">
-                                                        <button type="button"
-                                                                class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                data-line-no="@line.LineNo">
-                                                            مسح
-                                                        </button>
-                                                    </td>
-                                                </tr>
+                                                <option value="@p.Name"
+                                                        data-id="@p.Id"
+                                                        data-code="@p.Id"
+                                                        data-generic="@p.GenericName"
+                                                        data-company="@p.Company"
+                                                        data-price="@p.PriceRetail"
+                                                        data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                                </option>
                                             }
-                                            else
+                                        }
+                                    </datalist>
+
+                                    <input type="hidden" id="ProdId" />
+                                </div>
+
+                                <div class="col-lg-6 col-md-12">
+                                    <div class="d-flex gap-2 justify-content-end flex-wrap">
+                                        <button type="button" id="btnOpenProductMovement"
+                                                class="btn btn-outline-secondary btn-sm">
+                                            حركة الصنف
+                                        </button>
+
+                                        <button type="button" id="btnOpenProductEdit"
+                                                class="btn btn-outline-primary btn-sm">
+                                            تعديل بيانات الصنف
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="row g-2 align-items-end">
+
+                                <div class="col-lg-2 col-md-4">
+                                    <label id="ProdPriceLabel" class="form-label form-label-sm">
+                                        سعر الجمهور
+                                        <small id="ProdPriceLockState" class="text-muted">(مغلق)</small>
+                                    </label>
+
+                                    <input type="number" id="ProdPriceInput"
+                                           class="form-control form-control-sm text-center pi-input bg-light text-muted"
+                                           readonly />
+                                </div>
+
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label form-label-sm">الكمية</label>
+                                    <input type="number" id="ProdQtyInput"
+                                           class="form-control form-control-sm text-center pi-input"
+                                           placeholder="0" />
+                                </div>
+
+                                <div class="col-lg-2 col-md-4">
+                                    <label id="ProdDisc1Label" class="form-label form-label-sm">الخصم</label>
+                                    <input type="number" id="ProdDisc1Input"
+                                           class="form-control form-control-sm text-center pi-input"
+                                           value="0" />
+                                </div>
+
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label form-label-sm">الباتش</label>
+                                    <input type="text" id="ProdBatchInput"
+                                           class="form-control form-control-sm text-center pi-input"
+                                           placeholder="باتش" />
+                                </div>
+
+                                <div class="col-lg-2 col-md-4">
+                                    <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                    <input type="text" id="ProdExpiryInput"
+                                           class="form-control form-control-sm text-center pi-input"
+                                           placeholder="MM/YYYY" />
+                                </div>
+
+                                <div class="col-lg-2 col-md-4 d-grid">
+                                    <label class="form-label form-label-sm">&nbsp;</label>
+                                    <button type="button" id="btnAddInvoiceLine"
+                                            class="btn btn-primary btn-sm w-100">
+                                        إضافة
+                                    </button>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
+
+                    @* =====================================================
+                       5) جدول السطور
+                       ===================================================== *@
+                    <div class="card shadow-sm mb-3 invoice-lines-card">
+                        <div class="card-header py-2 invoice-lines-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="fw-semibold">سطور فاتورة المشتريات</span>
+                            </div>
+                        </div>
+
+                        <div class="card-body p-0">
+                            <div class="erp-table-wrapper mb-0">
+                                <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                                    <thead>
+                                        <tr>
+                                            <th class="text-center">#</th>
+                                            <th>اسم الصنف</th>
+                                            <th class="text-center">التشغيلة</th>
+                                            <th class="text-center">الصلاحية</th>
+                                            <th class="text-center">الكمية</th>
+                                            <th class="text-center">سعر الجمهور</th>
+                                            <th class="text-center">خصم الشراء %</th>
+                                            <th class="text-center">قيمة السطر</th>
+                                            <th class="text-center">مسح</th>
+                                        </tr>
+                                    </thead>
+
+                                    <tbody id="PILinesTbody">
+                                        @{
+                                            var linesList = Model.Lines?.OrderBy(l => l.LineNo).ToList()
+                                            ?? new List<ERP.Models.PILine>();
+
+                                            var groups = linesList
+                                            .GroupBy(l => new
                                             {
-                                                <tr class="table-light pi-group-row" data-prodid="@g.Key.ProdId">
-                                                    <td class="text-center">—</td>
+                                                l.ProdId,
+                                                ProdName = l.Product?.ProdName ?? ("صنف #" + l.ProdId)
+                                            })
+                                            .OrderBy(g => g.Key.ProdName);
+                                        }
 
-                                                    <td>
-                                                        <strong>@g.Key.ProdName</strong>
-                                                        <span class="text-muted small"> | كود: @g.Key.ProdId</span>
-                                                    </td>
+                                        @if (!groups.Any())
+                                        {
+                                            <tr>
+                                                <td colspan="9" class="text-center text-muted py-3">
+                                                    لا يوجد سطور داخل الفاتورة حتى الآن.
+                                                </td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            foreach (var g in groups)
+                                            {
+                                                int batchCount = g.Count();
 
-                                                    <td class="text-center text-muted small">تشغيلات: @batchCount</td>
-                                                    <td class="text-center"></td>
-                                                    <td class="text-center"></td>
-                                                    <td class="text-center"></td>
-                                                    <td class="text-center"></td>
-                                                    <td class="text-center"></td>
-                                                    <td class="text-center"></td>
-                                                </tr>
-
-                                                foreach (var line in g.OrderBy(x => x.LineNo))
+                                                if (batchCount == 1)
                                                 {
+                                                    var line = g.First();
                                                     decimal lineValue =
                                                     line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountPct / 100m));
 
                                                     <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                         <td class="text-center">@line.LineNo</td>
 
-                                                        <td class="text-muted small">↳</td>
+                                                        <td>
+                                                            <strong>@g.Key.ProdName</strong>
+                                                            <span class="text-muted small"> | كود: @g.Key.ProdId</span>
+                                                        </td>
 
                                                         <td class="text-center">@line.BatchNo</td>
 
@@ -760,261 +790,166 @@
                                                         </td>
                                                     </tr>
                                                 }
+                                                else
+                                                {
+                                                    <tr class="table-light pi-group-row" data-prodid="@g.Key.ProdId">
+                                                        <td class="text-center">—</td>
+
+                                                        <td>
+                                                            <strong>@g.Key.ProdName</strong>
+                                                            <span class="text-muted small"> | كود: @g.Key.ProdId</span>
+                                                        </td>
+
+                                                        <td class="text-center text-muted small">تشغيلات: @batchCount</td>
+                                                        <td class="text-center"></td>
+                                                        <td class="text-center"></td>
+                                                        <td class="text-center"></td>
+                                                        <td class="text-center"></td>
+                                                        <td class="text-center"></td>
+                                                        <td class="text-center"></td>
+                                                    </tr>
+
+                                                    foreach (var line in g.OrderBy(x => x.LineNo))
+                                                    {
+                                                        decimal lineValue =
+                                                        line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountPct / 100m));
+
+                                                        <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                            <td class="text-center">@line.LineNo</td>
+                                                            <td class="text-muted small">↳</td>
+                                                            <td class="text-center">@line.BatchNo</td>
+                                                            <td class="text-center">
+                                                                @(line.Expiry.HasValue? line.Expiry.Value.ToString("yyyy-MM-dd") : "")
+                                                            </td>
+                                                            <td class="text-center">@line.Qty</td>
+                                                            <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
+                                                            <td class="text-center">@line.PurchaseDiscountPct.ToString("0.##")</td>
+                                                            <td class="text-center">@lineValue.ToString("0.00")</td>
+                                                            <td class="text-center">
+                                                                <button type="button"
+                                                                        class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
+                                                                        data-line-no="@line.LineNo">
+                                                                    مسح
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                }
                                             }
                                         }
-                                    }
-                                </tbody>
-                            </table>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                @* ====================================
-                   6) ملخص الفاتورة (حسابات صحيحة من السطور)
-                   ==================================== *@
-                @{
-                    var lines = Model.Lines?.ToList() ?? new List<ERP.Models.PILine>();
+                    @* =====================================================
+                       6) ملخص الفاتورة
+                       ===================================================== *@
+                    @{
+                        var lines = Model.Lines?.ToList() ?? new List<ERP.Models.PILine>();
 
-                    int totalLines = lines.Count;
-                    int totalItems = lines.Select(l => l.ProdId).Distinct().Count();
-                    int totalQty = lines.Sum(l => l.Qty);
+                        int totalLines = lines.Count;
+                        int totalItems = lines.Select(l => l.ProdId).Distinct().Count();
+                        int totalQty = lines.Sum(l => l.Qty);
 
-                    decimal totalRetail = lines.Sum(l => l.Qty * l.PriceRetail);
-                    decimal totalAfterDiscount = lines.Sum(l =>
-                    l.Qty * l.PriceRetail * (1m - (l.PurchaseDiscountPct / 100m))
-                    );
+                        decimal totalRetail = lines.Sum(l => l.Qty * l.PriceRetail);
+                        decimal totalAfterDiscount = lines.Sum(l =>
+                        l.Qty * l.PriceRetail * (1m - (l.PurchaseDiscountPct / 100m))
+                        );
 
-                    decimal discountTotal = totalRetail - totalAfterDiscount;
-                    decimal taxAmount = Model.TaxTotal;
-                    decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
-                    decimal netTotal = totalAfterDiscountAndTax;
-                }
+                        decimal taxAmount = Model.TaxTotal;
+                        decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
+                        decimal netTotal = totalAfterDiscountAndTax;
+                    }
 
-                <div class="card shadow-sm invoice-totals-card">
-                    <div class="card-body">
+                    <div class="card shadow-sm invoice-totals-card">
+                        <div class="card-body">
 
-                        <div class="row g-3 align-items-center mb-2">
+                            <div class="row g-3 align-items-center mb-2">
 
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">عدد السطور</span>
-                                    <span id="TotalLinesValue" class="badge bg-light text-dark summary-badge">@totalLines</span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">عدد الأصناف</span>
-                                    <span id="TotalItemsValue" class="badge bg-light text-dark summary-badge">@totalItems</span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي الكمية</span>
-                                    <span id="TotalQtyValue" class="badge bg-light text-dark summary-badge">@totalQty</span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي سعر الجمهور</span>
-                                    <span id="TotalRetailValue" class="badge bg-light text-dark summary-badge">@totalRetail.ToString("0.00")</span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">الإجمالي بعد الخصم</span>
-                                    <span id="TotalAfterDiscountValue" class="badge bg-light text-dark summary-badge">@totalAfterDiscount.ToString("0.00")</span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2 col-sm-6">
-                                <label class="form-label form-label-sm">قيمة الضريبة</label>
-                                <input type="number"
-                                       step="0.01"
-                                       id="TaxAmountInput"
-                                       class="form-control form-control-sm text-center pi-input"
-                                       value="@taxAmount.ToString("0.00")" />
-                            </div>
-
-                        </div>
-
-                        <hr class="my-3" />
-
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <div>
-                                <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
-                                <h5 id="TotalAfterDiscountAndTaxValue" class="mb-1">@totalAfterDiscountAndTax.ToString("0.00")</h5>
-
-                                <span class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
-                                <h3 id="NetTotalValue" class="mb-0 text-success">@netTotal.ToString("0.00")</h3>
-                            </div>
-
-                            <div class="text-end small text-muted">
-                                @if (Model.UpdatedAt.HasValue)
-                                {
-                                    <div>
-                                        آخر تعديل:
-                                        <span class="fw-semibold">@Model.UpdatedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</span>
+                                <div class="col-md-2">
+                                    <div class="d-flex flex-column">
+                                        <span class="small text-muted">عدد السطور</span>
+                                        <span id="TotalLinesValue" class="badge bg-light text-dark summary-badge">@totalLines</span>
                                     </div>
-                                }
+                                </div>
+
+                                <div class="col-md-2">
+                                    <div class="d-flex flex-column">
+                                        <span class="small text-muted">عدد الأصناف</span>
+                                        <span id="TotalItemsValue" class="badge bg-light text-dark summary-badge">@totalItems</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-2">
+                                    <div class="d-flex flex-column">
+                                        <span class="small text-muted">إجمالي الكمية</span>
+                                        <span id="TotalQtyValue" class="badge bg-light text-dark summary-badge">@totalQty</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-2">
+                                    <div class="d-flex flex-column">
+                                        <span class="small text-muted">إجمالي سعر الجمهور</span>
+                                        <span id="TotalRetailValue" class="badge bg-light text-dark summary-badge">@totalRetail.ToString("0.00")</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-2">
+                                    <div class="d-flex flex-column">
+                                        <span class="small text-muted">الإجمالي بعد الخصم</span>
+                                        <span id="TotalAfterDiscountValue" class="badge bg-light text-dark summary-badge">@totalAfterDiscount.ToString("0.00")</span>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-2 col-sm-6">
+                                    <label class="form-label form-label-sm">قيمة الضريبة</label>
+                                    <input type="number"
+                                           step="0.01"
+                                           id="TaxAmountInput"
+                                           class="form-control form-control-sm text-center pi-input"
+                                           value="@taxAmount.ToString("0.00")" />
+                                </div>
+
                             </div>
+
+                            <hr class="my-3" />
+
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                <div>
+                                    <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
+                                    <h5 id="TotalAfterDiscountAndTaxValue" class="mb-1">@totalAfterDiscountAndTax.ToString("0.00")</h5>
+
+                                    <span class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
+                                    <h3 id="NetTotalValue" class="mb-0 text-success">@netTotal.ToString("0.00")</h3>
+                                </div>
+
+                                <div class="text-end small text-muted">
+                                    @if (Model.UpdatedAt.HasValue)
+                                    {
+                                        <div>
+                                            آخر تعديل:
+                                            <span class="fw-semibold">@Model.UpdatedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+
                         </div>
-
-                    </div>
-                </div>
-
-            </div> @* نهاية Main Content *@
-
-
-            @* =========================
-               العمود الجانبي (أزرار الحركة) — آخر الكود زي طلب الشراء
-               ========================= *@
-            <div class="col-12 col-lg-2 order-1 order-lg-2">
-
-                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
-                    <div class="card-header py-2 text-center">
-                        <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
                     </div>
 
-                    <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
+                </div> @* ✅ نهاية PI_BodyHost *@
 
-                        @{
-                            // ========= قراءة قيم التنقل من ViewBag (بشكل آمن) =========
-                            int? navFirst = ViewBag.NavFirstId == null ? (int?)null : (int)ViewBag.NavFirstId;
-                            int? navLast = ViewBag.NavLastId == null ? (int?)null : (int)ViewBag.NavLastId;
-                            int? navPrev = ViewBag.NavPrevId == null ? (int?)null : (int)ViewBag.NavPrevId;
-                            int? navNext = ViewBag.NavNextId == null ? (int?)null : (int)ViewBag.NavNextId;
+            </div> @* نهاية العمود الرئيسي *@
 
-                            int currentId = Model?.PIId ?? 0; // 0 = فاتورة جديدة
 
-                            bool hasAnyInvoices =
-                            navFirst.HasValue && navLast.HasValue &&
-                            navFirst.Value > 0 && navLast.Value > 0;
-
-                            // في الفاتورة الجديدة: السابق=آخر، التالي=أول
-                            int? prevEffective = (currentId == 0) ? navLast : navPrev;
-                            int? nextEffective = (currentId == 0) ? navFirst : navNext;
-
-                            bool canFirst = hasAnyInvoices && navFirst.HasValue && navFirst.Value > 0 && navFirst.Value != currentId;
-                            bool canLast = hasAnyInvoices && navLast.HasValue && navLast.Value > 0 && navLast.Value != currentId;
-                            bool canPrev = hasAnyInvoices && prevEffective.HasValue && prevEffective.Value > 0 && prevEffective.Value != currentId;
-                            bool canNext = hasAnyInvoices && nextEffective.HasValue && nextEffective.Value > 0 && nextEffective.Value != currentId;
-                        }
-
-                        @* ====== مجموعة الأسهم + البحث (هي فقط اللي عليها ToolTip) ====== *@
-                        <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
-
-                            <button type="button"
-                                    id="btnFirstInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    data-id="@(navFirst ?? 0)"
-                                    title="أول فاتورة"
-                                    @(canFirst ? "" : "disabled")>
-                                ⏮
-                            </button>
-
-                            <button type="button"
-                                    id="btnPrevInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    data-id="@(prevEffective ?? 0)"
-                                    title="الفاتورة السابقة"
-                                    @(canPrev ? "" : "disabled")>
-                                ◀
-                            </button>
-
-                            <button type="button"
-                                    id="btnNextInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    data-id="@(nextEffective ?? 0)"
-                                    title="الفاتورة التالية"
-                                    @(canNext ? "" : "disabled")>
-                                ▶
-                            </button>
-
-                            <button type="button"
-                                    id="btnLastInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    data-id="@(navLast ?? 0)"
-                                    title="آخر فاتورة"
-                                    @(canLast ? "" : "disabled")>
-                                ⏭
-                            </button>
-                        </div>
-
-                        <div class="d-flex align-items-center gap-1">
-                            <input type="number"
-                                   id="NavInvoiceSearchInput"
-                                   class="form-control form-control-sm"
-                                   placeholder="رقم فاتورة..."
-                                   title="بحث برقم الفاتورة" />
-
-                            <button type="button"
-                                    id="btnNavInvoiceSearch"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    title="بحث">
-                                بحث
-                            </button>
-                        </div>
-
-                        <hr class="my-1" />
-
-                        @* ====== بقية الأزرار (بدون ToolTips تماماً) ====== *@
-                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
-                           data-tab-id="pi-show-tab"
-                           data-tab-title="فاتورة المشتريات"
-                           data-url="@Url.Action("Create", "PurchaseInvoices", new { frame = 1 })">
-                            ➕ فاتورة جديدة
-                        </a>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                                id="btnSaveInvoiceHeader">
-                            💾 حفظ الفاتورة
-                        </button>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
-                                id="btnClearInvoiceLines"
-                                data-invoice-id="@(Model?.PIId ?? 0)">
-                            🗑️ مسح كل أصناف الفاتورة
-                        </button>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                                id="btnOpenInvoice">
-                            ⏪ فتح الفاتورة
-                        </button>
-
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                           asp-action="Edit"
-                           asp-route-id="@(Model?.PIId ?? 0)">
-                            ✏️ تعديل الفاتورة
-                        </a>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                                id="btnPostInvoice">
-                            📤 ترحيل الفاتورة
-                        </button>
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                                onclick="window.print();">
-                            🖨️ طباعة الفاتورة
-                        </button>
-
-                    </div>
-                </div>
-
-            </div> @* نهاية العمود الجانبي *@
+          
 
         </div> @* نهاية row *@
-
-    </div> @* نهاية container-fluid *@
+    </div> @* نهاية container *@
 </div> @* نهاية invoice-page *@
+
 
 
 
@@ -2428,6 +2363,403 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+                // =========================================================
+            // زر: ترحيل الفاتورة
+            // - يمنع الضغط مرتين
+            // - يعرض رسالة نجاح/خطأ
+            // - لا يفتح دفتر الأستاذ
+            // - يحدّث خانة "مُرحَّلة؟" بدون Reload
+            // =========================================================
+            document.addEventListener("DOMContentLoaded", function () {
+
+                const btnPost = document.getElementById("btnPostInvoice");         // متغير: زر الترحيل
+                const msg = document.getElementById("postInvoiceMsg");             // متغير: مكان الرسائل
+                const isPostedBox = document.getElementById("InvoiceIsPostedDisplay"); // متغير: خانة مُرحَّلة؟
+
+                if (!btnPost) return;
+
+                // متغير: رقم الفاتورة من الموديل (لا نغير الاسم)
+                const invoiceId = @Model.PIId;
+
+                // متغير: حالة الترحيل من السيرفر وقت فتح الصفحة
+                const isPosted = @Model.IsPosted.ToString().ToLower();
+
+                // لو الفاتورة مترحلة بالفعل نقفل الزر ونثبت الحالة
+                if (isPosted === "true") {
+                    btnPost.disabled = true;
+                    btnPost.textContent = "✅ تم ترحيل الفاتورة";
+
+                    if (isPostedBox) isPostedBox.value = "نعم";
+
+                    if (msg) {
+                        msg.textContent = "هذه الفاتورة مترحّلة بالفعل.";
+                        msg.className = "small mt-2 text-muted";
+                    }
+                    return;
+                }
+
+                btnPost.addEventListener("click", async function () {
+
+                    // حماية: لو اتضغط أثناء التنفيذ
+                    if (btnPost.disabled) return;
+
+                    // تأكيد قبل الترحيل
+                    const ok = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
+                    if (!ok) return;
+
+                    // تجهيز حالة الزر
+                    btnPost.disabled = true;
+                    const oldHtml = btnPost.innerHTML;          // متغير: حفظ شكل الزر القديم (فيه الإيموجي)
+                    btnPost.innerHTML = "⏳ جاري الترحيل...";
+
+                    if (msg) {
+                        msg.textContent = "يتم الآن ترحيل الفاتورة...";
+                        msg.className = "small mt-2 text-muted";
+                    }
+
+                    try {
+                        // إرسال طلب POST للكنترولر
+                        const res = await fetch(`/PurchaseInvoices/PostInvoice?id=${invoiceId}`, {
+                            method: "POST",
+                            headers: { "X-Requested-With": "XMLHttpRequest" }
+                        });
+
+                        // لو خطأ: نحاول نفهم الرسالة (JSON أو نص)
+                        if (!res.ok) {
+                            let errText = "حدث خطأ أثناء الترحيل.";
+
+                            try {
+                                const errJson = await res.json();     // لو السيرفر يرجع JSON
+                                if (errJson && errJson.message) errText = errJson.message;
+                            } catch {
+                                const text = await res.text();        // لو السيرفر يرجع نص عادي
+                                if (text) errText = text;
+                            }
+
+                            throw new Error(errText);
+                        }
+
+                        // نجاح: لو السيرفر بيرجع JSON نقرأه (لو Ok بدون Body مش هتكسر)
+                        let okMsg = "تم ترحيل الفاتورة بنجاح.";
+                        try {
+                            const data = await res.json();
+                            if (data && data.message) okMsg = data.message;
+                        } catch { }
+
+                        // 1) تحديث الزر
+                        btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
+                        btnPost.disabled = true;
+
+                        // 2) تحديث خانة "مُرحَّلة؟" بدون Reload
+                        if (isPostedBox) isPostedBox.value = "نعم";
+
+                        // 3) رسالة نجاح
+                        if (msg) {
+                            msg.textContent = okMsg;
+                            msg.className = "small mt-2 text-success";
+                        }
+
+                    } catch (err) {
+
+                        // فشل: نرجع الزر كما كان
+                        btnPost.disabled = false;
+                        btnPost.innerHTML = oldHtml;
+
+                        if (msg) {
+                            msg.textContent = "فشل الترحيل: " + (err.message || "خطأ غير معروف");
+                            msg.className = "small mt-2 text-danger";
+                        }
+                    }
+                });
+            });
+
+
+
+
+
+
+
+
+                    // =========================
+                   // نظام تنقّل فواتير المشتريات (تحميل جزئي + أسهم جانبية + منع فتح تبويبات + إدارة Tooltips)
+                  // =========================
+
+
+                (function () {
+
+            // =========================================================
+            // ✅ Guard: يمنع تركيب نفس السكربت أكثر من مرة
+            // =========================================================
+            if (window.__PI_NAV_SCRIPT_LOADED__) return;
+            window.__PI_NAV_SCRIPT_LOADED__ = true;
+
+            // =========================
+            // أدوات مساعدة
+            // =========================
+            function setOrReplaceParam(url, key, value) {
+                try {
+                    const u = new URL(url, window.location.origin);
+                    u.searchParams.set(key, value);
+                    return u.toString();
+                } catch {
+                    const sep = url.includes('?') ? '&' : '?';
+                    const has = new RegExp('[?&]' + key + '=').test(url);
+                    if (has) return url.replace(new RegExp('([?&]' + key + '=)[^&]*'), '$1' + encodeURIComponent(value));
+                    return url + sep + key + '=' + encodeURIComponent(value);
+                }
+            }
+
+            function getInt(id) {
+                const el = document.getElementById(id);
+                if (!el) return 0;
+                const v = parseInt(el.value || '0', 10);
+                return isNaN(v) ? 0 : v;
+            }
+
+            function setBtnState(btn, can) {
+                if (!btn) return;
+                if (can) btn.removeAttribute('disabled');
+                else btn.setAttribute('disabled', 'disabled');
+            }
+
+            // =========================================================
+            // ✅ (1) إدارة الـ Tooltips بشكل آمن
+            // - الأسهم: Hover فقط (بدون Focus)
+            // - البحث: بدون Tooltip تمامًا
+            // =========================================================
+            function setupTooltips() {
+
+                // ✅ لو Bootstrap Tooltip غير موجود، نخرج بدون مشاكل
+                if (!window.bootstrap || !bootstrap.Tooltip) return;
+
+                // ---------- 1) إزالة Tooltip من البحث ----------
+                const searchInput = document.getElementById('NavInvoiceSearchInput');
+                const searchBtn = document.getElementById('btnNavInvoiceSearch');
+
+                if (searchInput) {
+                    // تعليق: نشيل title نهائيًا عشان Bootstrap ما يعملش Tooltip
+                    searchInput.removeAttribute('title');
+
+                    // تعليق: لو عليه Tooltip قديم، نقفله
+                    try {
+                        const inst = bootstrap.Tooltip.getInstance(searchInput);
+                        if (inst) inst.dispose();
+                    } catch { }
+                }
+
+                if (searchBtn) {
+                    searchBtn.removeAttribute('title');
+                    try {
+                        const inst = bootstrap.Tooltip.getInstance(searchBtn);
+                        if (inst) inst.dispose();
+                    } catch { }
+                }
+
+                // ---------- 2) تهيئة Tooltip الأسهم (Hover فقط) ----------
+                const ids = ['btnFirstInvoice', 'btnPrevInvoice', 'btnNextInvoice', 'btnLastInvoice'];
+
+                ids.forEach(function (id) {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+
+                    // ✅ Dispose لأي Instance قديم (عشان ما تتكرر)
+                    try {
+                        const oldInst = bootstrap.Tooltip.getInstance(el);
+                        if (oldInst) oldInst.dispose();
+                    } catch { }
+
+                    // ✅ إنشاء Tooltip جديد بسلوك ثابت
+                    // trigger: 'hover' => يظهر على الوقوف فقط (مش بالضغط)
+                    // container: 'body' => يمنع “النزول لتحت” الغريب
+                    try {
+                        new bootstrap.Tooltip(el, {
+                            trigger: 'hover',
+                            container: 'body',
+                            boundary: 'viewport'
+                        });
+                    } catch { }
+                });
+            }
+
+            // ✅ إخفاء Tooltip بسرعة + إزالة فوكس الزر بعد الضغط
+            function hideTooltipAndBlur(el) {
+                if (!el) return;
+
+                // 1) Blur لمنع Focus-trigger
+                try { el.blur(); } catch { }
+
+                // 2) Hide tooltip لو موجود
+                if (window.bootstrap && bootstrap.Tooltip) {
+                    try {
+                        const inst = bootstrap.Tooltip.getInstance(el);
+                        if (inst) inst.hide();
+                    } catch { }
+                }
+            }
+
+            // =========================
+            // تحديث أزرار السايد بار بعد تحميل body
+            // =========================
+            function refreshSideNavButtons() {
+
+                // القيم الجديدة داخل PI_BodyHost (تتغير مع كل فاتورة)
+                const navFirst = getInt('NavFirstId');
+                const navLast = getInt('NavLastId');
+                const navPrev = getInt('NavPrevId');
+                const navNext = getInt('NavNextId');
+                const currentId = getInt('NavCurrentId'); // 0 = فاتورة جديدة
+
+                const hasAny = (navFirst > 0 && navLast > 0);
+
+                // في الفاتورة الجديدة: السابق=آخر، التالي=أول
+                const prevEffective = (currentId === 0) ? navLast : navPrev;
+                const nextEffective = (currentId === 0) ? navFirst : navNext;
+
+                const canFirst = hasAny && navFirst > 0 && navFirst !== currentId;
+                const canLast = hasAny && navLast > 0 && navLast !== currentId;
+                const canPrev = hasAny && prevEffective > 0 && prevEffective !== currentId;
+                const canNext = hasAny && nextEffective > 0 && nextEffective !== currentId;
+
+                // الأزرار
+                const btnFirst = document.getElementById('btnFirstInvoice');
+                const btnPrev = document.getElementById('btnPrevInvoice');
+                const btnNext = document.getElementById('btnNextInvoice');
+                const btnLast = document.getElementById('btnLastInvoice');
+
+                // base URL للعرض
+                const base = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
+                    || '@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })';
+
+                // نجهز URLs
+                const urlFirst = setOrReplaceParam(base, 'id', navFirst);
+                const urlLast = setOrReplaceParam(base, 'id', navLast);
+                const urlPrev = setOrReplaceParam(base, 'id', prevEffective);
+                const urlNext = setOrReplaceParam(base, 'id', nextEffective);
+
+                if (btnFirst) { btnFirst.setAttribute('data-url', urlFirst); btnFirst.setAttribute('data-id', navFirst); }
+                if (btnLast) { btnLast.setAttribute('data-url', urlLast); btnLast.setAttribute('data-id', navLast); }
+                if (btnPrev) { btnPrev.setAttribute('data-url', urlPrev); btnPrev.setAttribute('data-id', prevEffective); }
+                if (btnNext) { btnNext.setAttribute('data-url', urlNext); btnNext.setAttribute('data-id', nextEffective); }
+
+                // Disabled
+                setBtnState(btnFirst, canFirst);
+                setBtnState(btnLast, canLast);
+                setBtnState(btnPrev, canPrev);
+                setBtnState(btnNext, canNext);
+            }
+
+            // =========================
+            // تحميل Body فقط وتبديل المحتوى
+            // =========================
+            async function loadInvoiceBody(url) {
+
+                const host = document.getElementById('PI_BodyHost');
+                if (!host) return;
+
+                url = setOrReplaceParam(url, 'frag', 'body');
+
+                if (host.dataset.loading === "1") return;
+                host.dataset.loading = "1";
+
+                try {
+                    const res = await fetch(url, {
+                        method: 'GET',
+                        credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                    });
+
+                    const html = await res.text();
+
+                    const parser = new DOMParser();
+                    const doc = parser.parseFromString(html, 'text/html');
+                    const newHost = doc.getElementById('PI_BodyHost');
+
+                    if (newHost) {
+                        host.innerHTML = newHost.innerHTML;
+                    } else {
+                        host.innerHTML = html;
+                    }
+
+                    // ✅ بعد تبديل الـ body: حدّث أزرار السايد بار
+                    refreshSideNavButtons();
+
+                    // ✅ بعد التبديل: أعد تهيئة tooltips للأسهم مرة واحدة وبشكل سليم
+                    setupTooltips();
+
+                } catch (e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء تحميل الفاتورة.');
+                } finally {
+                    host.dataset.loading = "0";
+                }
+            }
+
+            // =========================
+            // اعتراض الضغط على الأسهم/بحث الفاتورة على مستوى document (Capture)
+            // =========================
+            function docCaptureHandler(ev) {
+
+                const t = ev.target;
+                if (!t) return;
+
+                const btn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
+                if (!btn) return;
+
+                if (btn.hasAttribute('disabled')) return;
+
+                // ✅ امنع أي نظام تابات/لينكات
+                ev.preventDefault();
+                ev.stopPropagation();
+                ev.stopImmediatePropagation();
+
+                // ✅ مهم: اقفل Tooltip + شيل فوكس بعد الضغط (عشان ما يظهرش Tooltip بالضغط)
+                hideTooltipAndBlur(btn);
+
+                if (btn.id === 'btnNavInvoiceSearch') {
+                    const input = document.getElementById('NavInvoiceSearchInput');
+                    const val = input ? parseInt(input.value || '0', 10) : 0;
+                    if (!val || val <= 0) return;
+
+                    const baseUrl = btn.getAttribute('data-base-url');
+                    if (!baseUrl) return;
+
+                    const url = setOrReplaceParam(baseUrl, 'id', val);
+                    loadInvoiceBody(url);
+                    return;
+                }
+
+                const url = btn.getAttribute('data-url');
+                if (!url) return;
+
+                loadInvoiceBody(url);
+            }
+
+            // =========================
+            // تشغيل
+            // =========================
+            document.addEventListener('click', docCaptureHandler, true);
+
+            document.addEventListener('DOMContentLoaded', function () {
+
+                // ✅ أول ما الصفحة تفتح: نضبط الأزرار
+                refreshSideNavButtons();
+
+                // ✅ أول ما الصفحة تفتح: نضبط Tooltips (الأسهم فقط)
+                setupTooltips();
+
+                // ✅ إزالة Tooltip من البحث نهائيًا (Placeholder فقط)
+                const input = document.getElementById('NavInvoiceSearchInput');
+                if (input) {
+                    input.removeAttribute('title');
+                    // تعليق: placeholder هو اللي هيوضح وظيفة البحث
+                    if (!input.getAttribute('placeholder')) input.setAttribute('placeholder', 'بحث برقم الفاتورة');
+                }
+
+                const btn = document.getElementById('btnNavInvoiceSearch');
+                if (btn) btn.removeAttribute('title');
+            });
+
+        })();
 
 
 

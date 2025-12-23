@@ -32,6 +32,34 @@ if (window.__ERP_TABS_INITED__) {
             }
         }
 
+        // تعليق عربي: ضمان وجود frame=1 في الرابط (عشان يفتح داخل التاب/iframe)
+        function ensureFrameParam(url) {
+            if (!url) return url;
+            if (url.includes("frame=1")) return url;
+            const joiner = url.includes("?") ? "&" : "?";
+            return url + joiner + "frame=1";
+        }
+
+        // تعليق عربي: منع الكاش (مهم لأن بعض المتصفحات قد تعيد صفحة قديمة فتظهر فاضية)
+        function addNoCache(url) {
+            if (!url) return url;
+            const joiner = url.includes("?") ? "&" : "?";
+            return url + joiner + "_ts=" + Date.now();
+        }
+
+        // تعليق عربي: قراءة URL من data-url (لو موجود) أو href (لو لينك)
+        function getTargetUrl(el) {
+            if (!el) return '';
+            const dataUrl = el.getAttribute("data-url");
+            if (dataUrl && dataUrl.trim()) return dataUrl.trim();
+
+            // لو عنصر <a>
+            const href = el.getAttribute("href");
+            if (href && href.trim()) return href.trim();
+
+            return '';
+        }
+
         // ===============================
         // 1) كشف هل الصفحة داخل IFRAME أم لا
         // ===============================
@@ -45,15 +73,62 @@ if (window.__ERP_TABS_INITED__) {
         // ===============================
         // 2) وضع "داخل iframe"
         // ===============================
-        // مهم: لا نمنع أي لينك إلا لو فعلاً من نوع:
+        // مهم: لا نمنع أي لينك/زر إلا لو فعلاً من نوع:
         // app-menu-link أو open-tab أو open-same-tab
         // ===============================
         if (inFrame) {
 
             document.addEventListener('click', function (event) {
 
-                // تعليق عربي: نلتقط فقط الروابط المخصصة لنظام التابات
-                var link = event.target.closest('a.app-menu-link, a.open-tab, a.open-same-tab');
+                // =========================================================
+                // (0) زر البحث داخل فاتورة المشتريات (يبني URL حسب رقم المستخدم)
+                // =========================================================
+                var navSearchBtn = event.target.closest('#btnNavInvoiceSearch');
+                if (navSearchBtn) {
+
+                    // تعليق عربي: منع أي سلوك افتراضي
+                    event.preventDefault();
+
+                    // متغير: رقم الفاتورة الذي كتبه المستخدم
+                    var input = document.getElementById('NavInvoiceSearchInput');
+                    var id = input ? parseInt(input.value || '0', 10) : 0;
+
+                    if (!id || id <= 0) {
+                        // تعليق عربي: لو المستخدم لم يكتب رقم صحيح، لا نفعل شيئاً
+                        return;
+                    }
+
+                    // متغير: tabId ثابت لفتح نفس شاشة فاتورة المشتريات
+                    var tabIdS = normalizeTabId(navSearchBtn.getAttribute('data-tab-id') || 'pi-show-tab');
+                    var titleS = (navSearchBtn.getAttribute('data-tab-title') || 'فاتورة المشتريات').trim();
+
+                    // متغير: baseUrl يأتي من الرازر مثل: /PurchaseInvoices/Show?frame=1
+                    var baseUrl = navSearchBtn.getAttribute('data-base-url') || '';
+                    baseUrl = normalizeUrl(baseUrl);
+                    baseUrl = ensureFrameParam(baseUrl);
+
+                    // تعليق عربي: إضافة id كرابط Query
+                    var joiner = baseUrl.includes("?") ? "&" : "?";
+                    var urlS = baseUrl + joiner + "id=" + encodeURIComponent(id);
+
+                    // منع الكاش
+                    urlS = addNoCache(urlS);
+
+                    window.top.postMessage({
+                        type: 'erp-open-tab',
+                        tabId: tabIdS,
+                        title: titleS,
+                        url: urlS
+                    }, '*');
+
+                    return;
+                }
+
+                // =========================================================
+                // (1) التقاط الروابط/الأزرار الخاصة بنظام التابات (Delegation)
+                // =========================================================
+                // ✅ تعديل مهم: أضفنا button.open-same-tab
+                var link = event.target.closest('a.app-menu-link, a.open-tab, a.open-same-tab, button.open-same-tab');
                 if (!link) return;
 
                 // ------------------------------
@@ -63,7 +138,9 @@ if (window.__ERP_TABS_INITED__) {
 
                     var tabId = normalizeTabId(link.getAttribute('data-tab-id') || '');
                     var tabTitle = (link.getAttribute('data-tab-title') || link.textContent || '').trim();
-                    var url = normalizeUrl(link.getAttribute('data-url'));
+
+                    // ✅ تعديل مهم: نقرأ URL من data-url أو href
+                    var url = normalizeUrl(getTargetUrl(link));
 
                     // تعليق عربي: لو tabId فاضي ⇒ لا نفتح تاب جديد عشوائي (هذا سبب التكرار)
                     if (!tabId) {
@@ -72,9 +149,13 @@ if (window.__ERP_TABS_INITED__) {
                     }
 
                     if (!url) {
-                        console.warn("⚠ open-same-tab: data-url غير موجود/فارغ");
+                        console.warn("⚠ open-same-tab: url غير موجود/فارغ (data-url/href)");
                         return;
                     }
+
+                    // ✅ ضمان frame=1 + منع الكاش
+                    url = ensureFrameParam(url);
+                    url = addNoCache(url);
 
                     // تعليق عربي: الآن فقط نمنع السلوك الافتراضي
                     event.preventDefault();
@@ -106,6 +187,10 @@ if (window.__ERP_TABS_INITED__) {
 
                 if (!url2) return;
 
+                // ✅ ضمان frame=1 + منع الكاش
+                url2 = ensureFrameParam(url2);
+                url2 = addNoCache(url2);
+
                 event.preventDefault();
 
                 window.top.postMessage({
@@ -114,6 +199,20 @@ if (window.__ERP_TABS_INITED__) {
                     title: tabTitle2,
                     url: url2
                 }, '*');
+            });
+
+            // =========================================================
+            // (2) دعم Enter داخل حقل البحث في فاتورة المشتريات
+            // =========================================================
+            document.addEventListener('keydown', function (ev) {
+                var input = ev.target;
+                if (!input || input.id !== 'NavInvoiceSearchInput') return;
+
+                if (ev.key === 'Enter') {
+                    ev.preventDefault();
+                    var btn = document.getElementById('btnNavInvoiceSearch');
+                    if (btn) btn.click();
+                }
             });
 
             return;
