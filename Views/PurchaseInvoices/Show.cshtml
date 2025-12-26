@@ -201,7 +201,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pi-show-tab"
                                     data-tab-title="فاتورة المشتريات"
-                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (navFirst ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseInvoices", new { id = (navFirst ?? 0), frame = 1 })"
                                     data-id="@(navFirst ?? 0)"
                                     title="أول فاتورة"
                                     @(canFirst ? "" : "disabled")>
@@ -213,7 +213,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pi-show-tab"
                                     data-tab-title="فاتورة المشتريات"
-                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (prevEffective ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseInvoices", new { id = (prevEffective ?? 0), frame = 1 })"
                                     data-id="@(prevEffective ?? 0)"
                                     title="الفاتورة السابقة"
                                     @(canPrev ? "" : "disabled")>
@@ -225,7 +225,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pi-show-tab"
                                     data-tab-title="فاتورة المشتريات"
-                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (nextEffective ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseInvoices", new { id = (nextEffective ?? 0), frame = 1 })"
                                     data-id="@(nextEffective ?? 0)"
                                     title="الفاتورة التالية"
                                     @(canNext ? "" : "disabled")>
@@ -237,7 +237,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pi-show-tab"
                                     data-tab-title="فاتورة المشتريات"
-                                    data-url="@Url.Action("Show", "PurchaseInvoices", new { id = (navLast ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseInvoices", new { id = (navLast ?? 0), frame = 1 })"
                                     data-id="@(navLast ?? 0)"
                                     title="آخر فاتورة"
                                     @(canLast ? "" : "disabled")>
@@ -495,32 +495,62 @@
                                 <div class="row g-4">
                                     <div class="col-lg-3 col-md-3">
                                         <label class="form-label form-label-sm">الهاتف</label>
-                                        <input id="CustomerPhone" class="form-control form-control-sm" readonly />
+                                        <input id="CustomerPhone"
+                                               class="form-control form-control-sm"
+                                               value="@(
+                                               Model?.Customer?.Phone1
+                                               ?? Model?.Customer?.Phone2
+                                               ?? Model?.Customer?.Whatsapp
+                                               ?? ""
+                                                              )"
+                                               readonly />
                                     </div>
+
                                     <div class="col-lg-3 col-md-3">
                                         <label class="form-label form-label-sm">المحافظة</label>
-                                        <input id="CustomerGovernorate" class="form-control form-control-sm" readonly />
+                                        <input id="CustomerGovernorate"
+                                               class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")"
+                                               readonly />
                                     </div>
+
                                     <div class="col-lg-3 col-md-3">
                                         <label class="form-label form-label-sm">الحي</label>
-                                        <input id="CustomerDistrict" class="form-control form-control-sm" readonly />
+                                        <input id="CustomerDistrict"
+                                               class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.District?.DistrictName ?? "")"
+                                               readonly />
                                     </div>
+
                                     <div class="col-lg-3 col-md-3">
                                         <label class="form-label form-label-sm">المنطقة</label>
-                                        <input id="CustomerArea" class="form-control form-control-sm" readonly />
+                                        <input id="CustomerArea"
+                                               class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.Area?.AreaName ?? "")"
+                                               readonly />
                                     </div>
+
                                 </div>
 
                                 <div class="row g-3">
+
                                     <div class="col-lg-8 col-md-6">
                                         <label class="form-label form-label-sm">العنوان</label>
-                                        <input id="CustomerAddress" class="form-control form-control-sm" readonly />
+                                        <input id="CustomerAddress"
+                                               class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.Address ?? "")"
+                                               readonly />
                                     </div>
+
                                     <div class="col-lg-4 col-md-2">
                                         <label class="form-label form-label-sm">الحد الإتماني</label>
-                                        <input id="CustomerCredit" class="form-control form-control-sm" readonly />
+                                        <input id="CustomerCredit"
+                                               class="form-control form-control-sm"
+                                               value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))"
+                                               readonly />
                                     </div>
-                                </div>
+
+
 
                             </div>
                         </div>
@@ -1801,6 +1831,10 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             if (typeof inp.select === 'function') inp.select();
         }
 
+
+
+
+
              // =========================================================
         // إضافة سطر (AJAX) — مع حماية من أخطاء الدوال غير المعرفة
         // =========================================================
@@ -2066,6 +2100,11 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             }
 
         })(); // نهاية IIFE الأصناف
+
+
+
+
+
 
         // =========================================================
         // (C) فوكس + حفظ الهيدر (AJAX) — بدون تكرار
@@ -2686,6 +2725,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     // ✅ بعد التبديل: أعد تهيئة tooltips للأسهم مرة واحدة وبشكل سليم
                     setupTooltips();
 
+                                // ✅ نظام ثابت: بعد تبديل الـ Body لازم نعيد تهيئة الصفحة
+            if (typeof window.__ERP_INIT__ === 'function') {
+                window.__ERP_INIT__();
+            }
+
+
                 } catch (e) {
                     console.error(e);
                     alert('حدث خطأ أثناء تحميل الفاتورة.');
@@ -2694,14 +2739,103 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
+
+
+
+
             // =========================
             // اعتراض الضغط على الأسهم/بحث الفاتورة على مستوى document (Capture)
             // =========================
-            function docCaptureHandler(ev) {
+            async function docCaptureHandler(ev) {
 
+                // متغير: العنصر الذي تم الضغط عليه
                 const t = ev.target;
-                if (!t) return;
 
+                // حماية: لو target مش Element (نادرًا) نخرج
+                if (!(t instanceof Element)) return;
+
+
+
+                // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
+// ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
+const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
+if (navBtn) return;
+
+
+
+                // =========================
+                // (0) زر مسح سطر من الفاتورة
+                // =========================
+                const removeBtn = t.closest('.btnRemoveLineFromInvoice');
+                if (removeBtn) {
+
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    ev.stopImmediatePropagation();
+
+                    // متغير: رقم السطر داخل الفاتورة
+                    const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
+
+                    // متغير: رقم الفاتورة الحالية (موجود في hidden input داخل الـ body)
+                    const piId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10);
+
+                    if (!piId || piId <= 0) {
+                        alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.');
+                        return;
+                    }
+
+                    if (!lineNo || lineNo <= 0) {
+                        alert('لا يمكن مسح سطر: رقم السطر غير صحيح.');
+                        return;
+                    }
+
+                    // تأكيد بسيط
+                    if (!confirm(`هل تريد مسح السطر رقم (${lineNo})؟`)) return;
+
+                    // منع الضغط المتكرر أثناء التنفيذ
+                    removeBtn.disabled = true;
+
+                    try {
+                        // ✅ استدعاء الأكشن RemoveLine (الموجود عندك بالفعل)
+                        const res = await fetch('@Url.Action("RemoveLine", "PurchaseInvoices")', {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            },
+                            body: JSON.stringify({ piId: piId, lineNo: lineNo })
+                        });
+
+                        const data = await res.json().catch(() => null);
+
+                        if (!res.ok || !data || data.ok !== true) {
+                            const msg = (data && data.message) ? data.message : 'فشل مسح السطر.';
+                            alert(msg);
+                            return;
+                        }
+
+                        // ✅ بعد المسح: نعمل Reload جزئي للفاتورة (frag=body) بنفس نظامك
+                        const baseUrl =
+                            document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
+                            || '@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })';
+
+                        const url = setOrReplaceParam(baseUrl, 'id', piId);
+                        loadInvoiceBody(url);
+
+                    } catch (e) {
+                        console.error(e);
+                        alert('حدث خطأ أثناء مسح السطر.');
+                    } finally {
+                        removeBtn.disabled = false;
+                    }
+
+                    return; // مهم: منع استمرار التعامل كأنه زر أسهم
+                }
+
+                // =========================
+                // (1) الأسهم + البحث
+                // =========================
                 const btn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
                 if (!btn) return;
 
@@ -2712,7 +2846,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ev.stopPropagation();
                 ev.stopImmediatePropagation();
 
-                // ✅ مهم: اقفل Tooltip + شيل فوكس بعد الضغط (عشان ما يظهرش Tooltip بالضغط)
+                // ✅ مهم: اقفل Tooltip + شيل فوكس بعد الضغط
                 hideTooltipAndBlur(btn);
 
                 if (btn.id === 'btnNavInvoiceSearch') {
@@ -2728,11 +2862,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     return;
                 }
 
-                const url = btn.getAttribute('data-url');
+                const baseUrl = btn.getAttribute('data-base-url');
                 if (!url) return;
 
                 loadInvoiceBody(url);
             }
+
 
             // =========================
             // تشغيل
@@ -2760,6 +2895,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
         })();
+
+
+
+
 
 
 

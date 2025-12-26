@@ -37,6 +37,118 @@
     - Purchase / Sales / Stock / Security / Logs …
   - تكوين العلاقات، الـ OnModelCreating، وأي Fluent API إضافي.
 
+
+#### 2.1.1 🔒 ثوابت أسماء DbSet المعتمدة في AppDbContext (ثابت مشروع)
+
+> هذا القسم مرجعي وأساسي.  
+> ❌ يُمنع استخدام أي اسم DbSet غير مذكور هنا داخل أي Controller أو Service.  
+> ✅ الهدف: منع أخطاء الأسماء (مثل StockLedgers/StockLedger) وتثبيت مرجع واحد للمشروع.
+
+**المشتريات (Purchasing)**
+- `PurchaseInvoices`  → `DbSet<PurchaseInvoice>`
+- `PILines`           → `DbSet<PILine>`
+- `PurchaseRequests`  → `DbSet<PurchaseRequest>`
+- `PRLines`           → `DbSet<PRLine>`
+- `PurchaseReturns`   → `DbSet<PurchaseReturn>`
+- `PurchaseReturnLines` → `DbSet<PurchaseReturnLine>`
+
+**المبيعات (Sales)**
+- `SalesInvoices`       → `DbSet<SalesInvoice>`
+- `SalesInvoiceLines`   → `DbSet<SalesInvoiceLine>`
+- `SalesOrders`         → `DbSet<SalesOrder>`
+- `SOLines`             → `DbSet<SOLine>`
+- `SalesReturns`        → `DbSet<SalesReturn>`
+- `SalesReturnLines`    → `DbSet<SalesReturnLine>`
+
+**المخزون (Stock)**
+- `StockLedger`   → `DbSet<StockLedger>`  (**الاسم المعتمد مفرد بدون s**)
+- `StockFifoMap`  → `DbSet<StockFifoMap>` (الجدول موجود، وتفعيله المنطقي الأساسي يبدأ مع المبيعات)
+- `Batches`       → `DbSet<Batch>`
+
+**الماستر داتا (Master Data)**
+- `Products`     → `DbSet<Product>`
+- `Customers`    → `DbSet<Customer>`
+- `Warehouses`   → `DbSet<Warehouse>`
+- `Branches`     → `DbSet<Branch>`
+- `Categories`   → `DbSet<Category>`
+- `Accounts`     → `DbSet<Account>`
+- `DocumentSeries` → `DbSet<DocumentSeries>`
+
+**التسويات والتحويلات**
+- `StockAdjustments`      → `DbSet<StockAdjustment>`
+- `StockAdjustmentLines`  → `DbSet<StockAdjustmentLine>`
+- `StockTransfers`        → `DbSet<StockTransfer>`
+- `StockTransferLines`    → `DbSet<StockTransferLine>`
+
+**الخزنة / القيود**
+- `LedgerEntries` → `DbSet<LedgerEntry>`
+- `CashReceipts`  → `DbSet<CashReceipt>`
+- `CashPayments`  → `DbSet<CashPayment>`
+- `DebitNotes`    → `DbSet<DebitNote>`
+- `CreditNotes`   → `DbSet<CreditNote>`
+
+**المستخدمين والصلاحيات**
+- `Users`                 → `DbSet<User>`
+- `Roles`                 → `DbSet<Role>`
+- `Permissions`           → `DbSet<Permission>`
+- `UserRoles`             → `DbSet<UserRole>`
+- `RolePermissions`       → `DbSet<RolePermission>`
+- `UserDeniedPermissions` → `DbSet<UserDeniedPermission>`
+- `UserExtraPermissions`  → `DbSet<UserExtraPermissions>`
+- `UserActivityLogs`      → `DbSet<UserActivityLog>`
+
+
+#### 2.1.2 🔒 ثوابت عامة للتطوير (Global Coding Standards) — ثابت مشروع
+
+> هذه قواعد تشغيل ثابتة نلتزم بها في كل أجزاء الـ ERP.  
+> الهدف: سرعة + دقة + منع كسر الميزات الحالية عند إضافة أي تعديل جديد.
+
+**أولاً: قواعد الأمان (Transactions)**
+- أي عملية تؤثر على **سطور مستند** (إضافة/تعديل/حذف) يجب أن تكون داخل **Transaction واحدة** تشمل:
+  - جدول السطور + تحديث إجماليات الهيدر + تحديث المخزون + أي جداول مساعدة.
+- أي فشل في خطوة ⇒ `Rollback` + رسالة عربية واضحة للمستخدم.
+
+**ثانيًا: قواعد تسجيل النشاط (UserActivityLog)**
+- أي عملية مهمة تُسجَّل دائمًا:
+  - Create / Edit / Delete / Post
+- السجل يحتوي (على الأقل): المستخدم + الوقت + نوع العملية + رقم المستند/السجل.
+- ❌ ممنوع ترك عمليات كبيرة بدون Log.
+
+**ثالثًا: قاعدة “لا تغيّر الأسماء / لا نخمن الأسماء”**
+- ❌ ممنوع تخمين أسماء:
+  - DbSet / Properties / Routes / Actions
+- أي تغيير اسم (Model/Property/DbSet/Route) ⇒ يجب توثيقه فورًا في هذا الملف.
+
+**رابعًا: ثوابت نظام التابات (Tabs) + frame**
+- أي شاشة تفتح داخل Tab يجب أن تعتمد:
+  - `data-tab-id` ثابت (بدون أرقام/بدون IDs متغيرة)
+  - الرابط يحتوي `frame=1`
+- أي تعديل في منطق التابات يكون فقط داخل:
+  - `Views/Shared/_Layout.cshtml`
+  - `wwwroot/js/site.js`
+
+**خامسًا: ثوابت السرعة داخل الفواتير (Shell ثابت + Body متغير)**
+- الفاتورة = Shell ثابت داخل التاب + Body متغير يتم تحميله جزئيًا.
+- التنقل (أول/سابق/التالي/آخر/بحث) يتم بـ `fetch()` لتبديل الـ Body فقط.
+- الأزرار لا تختفي: ✅ فقط `Disabled/Enabled` حسب الحالة.
+
+**سادسًا: ثوابت AJAX**
+- أي Endpoint يُستدعى بـ AJAX:
+  - إما نستخدم `[IgnoreAntiforgeryToken]` (لو هذا هو النمط الحالي)
+  - أو نعتمد نمط موحد لإرسال AntiForgery Token (إذا قررنا تفعيله لاحقًا)
+- ❌ ممنوع خلط طريقتين داخل نفس الموديول.
+
+**سابعًا: رسائل الأخطاء للمستخدم**
+- ❌ لا نعرض تفاصيل `Exception` للمستخدم النهائي.
+- ✅ نرجع شكل ثابت:
+  - `{ ok: false, message: "رسالة عربية واضحة" }`
+- تفاصيل الخطأ تذهب للـ Logs فقط.
+
+**ثامنًا: ثوابت الأداء**
+- Endpoints الخاصة بـ `frag=body` (أو Body فقط) يجب أن ترجع HTML “خفيف” قدر الإمكان.
+- نستخدم `_ts=Date.now()` في طلبات التنقل السريعة لكسر الكاش عند الحاجة.
+- ❌ ممنوع تحميل بيانات ضخمة داخل الـ Body إذا لم تكن مطلوبة فورًا (Lazy Load عند الضرورة).
+
 - **الهجرة (Migrations)**
   - مجلد `Migrations` يحتوي كل الـ migrations بترتيب زمني.
   - آخر Migration هي الحالة الفعلية لهيكل قاعدة البيانات.
@@ -97,9 +209,37 @@
     - حساب الكميات المتاحة/المتبقية.
     - تجهيز بيانات تحليلات المخزون (متوسطات، خصم مرجّح …) لاستخدامها لاحقًا.
 
+- **LedgerPostingService.cs**
+  - خدمة الترحيل/القيد المحاسبي (Posting):
+    - تُستخدم لتسجيل القيود الناتجة عن المستندات (مشتريات/مبيعات/مرتجعات/خزنة).
+    - أي تعديل في منطق الترحيل يُعتبر “ثابت حساس” لأنه يؤثر على الحسابات.
+
+---
+
+### 2.4.1 ViewModels المهمة (ثابت)
+
+- **LoginViewModel.cs**
+  - ViewModel لعملية تسجيل الدخول.
+  - يحتوي على حقول الإدخال المطلوبة + التحقق من البيانات.
+
+- **PurchaseInvoiceHeaderDto.cs**
+  - DTO/VM خاص بحفظ هيدر فاتورة المشتريات عبر AJAX.
+  - يُستخدم في Endpoints مثل SaveHeader/UpdateHeader لتقليل البيانات المرسلة.
+
 ---
 
 ### 2.5 طبقة الـ Data / Seed (ثابت)
+
+---
+
+### 2.4.1 ViewModels (ثابت)
+
+- **LoginViewModel.cs**
+  - موديل تسجيل الدخول (اسم المستخدم/كلمة المرور/تذكرني... حسب التصميم الحالي).
+
+- **PurchaseInvoiceHeaderDto.cs**
+  - DTO خاص بهيدر فاتورة المشتريات يُستخدم مع AJAX (حفظ الهيدر بدون إعادة تحميل الصفحة).
+
 
 - **Seeders (داخل Data/Seed):**
   - `AccountsSeeder`          — إنشاء شجرة الحسابات الأساسية.
@@ -541,6 +681,35 @@
    - هذا التقرير سيعتمد بالكامل على بيانات `StockLedger` + الـ FIFO + أعمدة السعر والتكلفة المذكورة أعلاه.
 
 ---
+
+#### تحديث 2025-12-24 — (استكمال) بيانات المورد/العميل + ملاحظة بطء التنقل
+
+- ✅ تم إصلاح عرض بيانات المورد/العميل الإضافية داخل `Show.cshtml` (الهاتف/العنوان/الحد الائتماني…).
+- ✅ تم توحيد أسماء الحقول مع موديل `Customer` الصحيح:
+  - `Phone1` بدلًا من `Phone`
+  - `CreditLimit` بدلًا من `Credit`
+  - الربط الجغرافي عبر:
+    - `Customer.Governorate` / `Customer.District` / `Customer.Area`
+- ⚠️ ملاحظة أداء: يوجد **بطء ملحوظ** عند التنقل بين الفواتير لأن تحميل `frag=body` ما زال يعيد HTML كبير (قد يصل لعدة MB).
+  - **قاعدة ثابتة للأداء:** عند استخدام `frag=body` نرجّع Body “خفيف” قدر الإمكان (بدون تجهيزات ثقيلة/تحميل بيانات غير لازمة).
+  - **الهدف القادم:** جعل Endpoint الـ Body يحمّل فقط ما نحتاجه فعليًا (وتحميل الأجزاء الثقيلة Lazy عند الطلب).
+
+#### تحديث 2025-12-24 — زر مسح السطر (Delete Line) — المطلوب تثبيته كنمط قياسي
+
+- ✅ تم إضافة زر مسح في جدول السطور:
+  - زر يحمل `data-line-no` ويستدعي AJAX على أكشن `RemoveLine`.
+- ❗ المشكلة الحالية: المسح يتم على جدول السطور فقط، **بدون**:
+  1) تحديث إجماليات الفاتورة (Header Totals) في جدول `PurchaseInvoices`.
+  2) مسح/عكس قيد المخزن في `StockLedger`.
+  3) تحديث `RemainingQty` وخرائط FIFO عند وجود ربط.
+  4) تحديث بيانات التشغيلات/الرصيد السريع إن كان موجود (مثل `Stock_Batches` أو تحديث Batch balances).
+- ✅ **القاعدة القياسية التي سنطبقها على أي مستند (شراء/بيع/مرتجع/تحويل):**
+  - حذف/تعديل سطر = معاملة واحدة Transaction تشمل:
+    - حذف السطر
+    - إعادة حساب الإجماليات (DocumentTotalsService)
+    - تحديث المخزن (StockLedger/StockFifoMap/Stock_Batches) حسب نوع السطر
+    - تسجيل نشاط المستخدم (UserActivityLog)
+  - أي فشل في خطوة → Rollback وعودة رسالة خطأ واضحة.
 
 ### 5.7 ترحيل فاتورة المشتريات (Posting) — تم التنفيذ
 

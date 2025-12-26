@@ -49,6 +49,10 @@ namespace ERP.Controllers
             ViewBag.SelectedProdId = selectedProdId;         // متغير: الصنف المختار مبدئياً
         }
 
+
+
+
+
         // =========================================================
         // دالة مساعدة: تطبيق البحث / الفلترة / الترتيب
         // =========================================================
@@ -177,7 +181,7 @@ namespace ERP.Controllers
             }
 
             // ------------------------------
-            // الترتيب
+            // الترتيب (مع Tie-breaker ثابت)
             // ------------------------------
             bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             string sortCol = (sort ?? "expiry").ToLower();
@@ -194,42 +198,49 @@ namespace ERP.Controllers
 
                 case "batchno":
                     ordered = descending
-                        ? q.OrderByDescending(b => b.BatchNo)
-                        : q.OrderBy(b => b.BatchNo);
+                        ? q.OrderByDescending(b => b.BatchNo).ThenByDescending(b => b.BatchId)
+                        : q.OrderBy(b => b.BatchNo).ThenBy(b => b.BatchId);
                     break;
 
                 case "prod":
                     ordered = descending
-                        ? q.OrderByDescending(b => b.Product!.ProdName)
-                        : q.OrderBy(b => b.Product!.ProdName);
+                        ? q.OrderByDescending(b => b.Product!.ProdName).ThenByDescending(b => b.BatchId)
+                        : q.OrderBy(b => b.Product!.ProdName).ThenBy(b => b.BatchId);
                     break;
 
                 case "created":
                     ordered = descending
-                        ? q.OrderByDescending(b => b.CreatedAt)
-                        : q.OrderBy(b => b.CreatedAt);
+                        ? q.OrderByDescending(b => b.CreatedAt).ThenByDescending(b => b.BatchId)
+                        : q.OrderBy(b => b.CreatedAt).ThenBy(b => b.BatchId);
                     break;
 
                 case "updated":
                     ordered = descending
-                        ? q.OrderByDescending(b => b.UpdatedAt)
-                        : q.OrderBy(b => b.UpdatedAt);
+                        ? q.OrderByDescending(b => b.UpdatedAt).ThenByDescending(b => b.BatchId)
+                        : q.OrderBy(b => b.UpdatedAt).ThenBy(b => b.BatchId);
                     break;
 
                 case "expiry":
                 default:
                     ordered = descending
-                        ? q.OrderByDescending(b => b.Expiry)
-                        : q.OrderBy(b => b.Expiry);
+                        ? q.OrderByDescending(b => b.Expiry).ThenByDescending(b => b.BatchId)
+                        : q.OrderBy(b => b.Expiry).ThenBy(b => b.BatchId);
                     break;
             }
 
             return ordered;
         }
 
+
+
+
+
+
+
+
         // =========================================================
         // GET: /Batches
-        // شاشة قائمة التشغيلات (النظام الموحد)
+        // شاشة قائمة التشغيلات (النظام الموحد) - Paging يدوي (حل ثابت)
         // =========================================================
         public async Task<IActionResult> Index(
             string? search,
@@ -244,10 +255,23 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null)
         {
-            // نحدد الترتيب تصاعدي/تنازلي
-            bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            // =========================
+            // (1) قيم افتراضية + حماية Paging
+            // =========================
+            searchBy ??= "batchno";      // متغير: نوع البحث الافتراضي
+            sort ??= "expiry";           // متغير: عمود الترتيب الافتراضي
+            dir ??= "asc";               // متغير: اتجاه الترتيب الافتراضي
 
-            // نطبّق الفلاتر والبحث والترتيب
+            if (page < 1) page = 1;
+            if (pageSize <= 0) pageSize = 25;
+
+            // حماية إضافية (اختياري) لمنع قيم غريبة
+            if (pageSize < 10) pageSize = 10;
+            if (pageSize > 500) pageSize = 500;
+
+            // =========================
+            // (2) استعلام واحد فقط: فلترة + بحث + ترتيب
+            // =========================
             var query = SearchSortFilter(
                 search,
                 searchBy,
@@ -256,39 +280,71 @@ namespace ERP.Controllers
                 useDateRange,
                 fromDate,
                 toDate,
-                "CreatedAt",
+                "CreatedAt",   // ثابت عندك
                 fromCode,
                 toCode);
 
-            // نستخدم PagedResult لتقسيم الصفحات
-            var model = await PagedResult<Batch>.CreateAsync(
-                query,
-                page,
-                pageSize,
-                search,
-                descending,
-                sort,
-                searchBy);
+            // =========================
+            // (3) إجمالي العدد بعد الفلاتر
+            // =========================
+            int totalCount = await query.CountAsync();
 
-            // تعبئة خصائص إضافية للنظام الموحد
-            model.UseDateRange = useDateRange;
-            model.FromDate = fromDate;
-            model.ToDate = toDate;
+            // حساب عدد الصفحات
+            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            if (totalPages < 1) totalPages = 1;
 
+            // لو الصفحة الحالية أكبر من آخر صفحة (يحصل عند تغيير pageSize أو بعد فلترة)
+            if (page > totalPages) page = 1;
 
-            // فلاتر البحث تُرسل للـ View عن طريق ViewBag
+            // =========================
+            // (4) قراءة صفحة واحدة فقط (Skip/Take)
+            // =========================
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            // =========================
+            // (5) تجهيز PagedResult يدويًا (نفس نمط فواتير المشتريات)
+            // =========================
+            bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+
+            var model = new PagedResult<Batch>
+            {
+                Items = items,
+                PageNumber = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                HasPrevious = page > 1,
+                HasNext = page < totalPages,
+                Search = search,
+                SortColumn = sort,
+                SortDescending = sortDesc,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
+
+            // =========================
+            // (6) ViewBag لحفظ الحالة في الواجهة
+            // =========================
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy;
             ViewBag.Sort = sort;
-            ViewBag.Dir = dir;
+            ViewBag.Dir = sortDesc ? "desc" : "asc";
 
-
-            // فلتر الكود من/إلى هنستعمله في الواجهة فقط (مش لازم جوّة PagedResult)
-            ViewBag.FromCode = fromCode;   // متغير: أقل كود تشغيلة في الفلتر
-            ViewBag.ToCode = toCode;     // متغير: أعلى كود تشغيلة في الفلتر
+            ViewBag.FromCode = fromCode;
+            ViewBag.ToCode = toCode;
 
             return View(model);
         }
+
+
+
+
+
+
 
         // =========================================================
         // GET: /Batches/Create
@@ -299,6 +355,13 @@ namespace ERP.Controllers
             await FillProductsDropDownAsync();
             return View(new Batch());    // متغير: موديل فارغ
         }
+
+
+
+
+
+
+
 
         // =========================================================
         // POST: /Batches/Create
@@ -330,6 +393,12 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+
+
+
+
+
+
         // =========================================================
         // GET: /Batches/Edit/5
         // فتح شاشة تعديل تشغيلة
@@ -345,6 +414,12 @@ namespace ERP.Controllers
             await FillProductsDropDownAsync(batch.ProdId);
             return View(batch);
         }
+
+
+
+
+
+
 
         // =========================================================
         // POST: /Batches/Edit/5
@@ -384,6 +459,13 @@ namespace ERP.Controllers
             }
         }
 
+
+
+
+
+
+
+
         // =========================================================
         // GET: /Batches/Show/5
         // عرض تفاصيل تشغيلة واحدة
@@ -404,6 +486,12 @@ namespace ERP.Controllers
             return View(batch);
         }
 
+
+
+
+
+
+
         // =========================================================
         // GET: /Batches/Delete/5
         // تأكيد حذف تشغيلة
@@ -423,6 +511,11 @@ namespace ERP.Controllers
             return View(batch);
         }
 
+
+
+
+
+
         // =========================================================
         // POST: /Batches/Delete/5
         // تنفيذ الحذف
@@ -441,6 +534,12 @@ namespace ERP.Controllers
 
             return RedirectToAction(nameof(Index));
         }
+
+
+
+
+
+
 
         // =========================================================
         // POST: /Batches/BulkDelete
@@ -480,6 +579,13 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+
+
+
+
+
+
+
         // =========================================================
         // POST: /Batches/DeleteAll
         // حذف جميع تشغيلات الجدول
@@ -495,6 +601,13 @@ namespace ERP.Controllers
             TempData["Success"] = "تم حذف جميع التشغيلات.";
             return RedirectToAction(nameof(Index));
         }
+
+
+
+
+
+
+
 
         // =========================================================
         // GET: /Batches/Export

@@ -441,8 +441,16 @@
                                 </li>
                                 <li>
                                     <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockBatches" asp-action="Index"
+                                       data-tab-id="StockBatches"
+                                       data-tab-title="مخزون التشغيلات">
+                                        مخزون التشغيلات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
                                        asp-controller="Batches" asp-action="Index"
-                                       data-tab-id="stock-ledger"
+                                       data-tab-id="Batches"
                                        data-tab-title="قائمة التشغيلات">
                                         قائمة التشغيلات
                                     </a>
@@ -741,6 +749,14 @@
         </nav>
     </header>
 
+
+
+
+
+
+
+
+
     @* ================= التابات + محتوى الصفحة الرئيسية ================= *@
     <main role="main" class="container-fluid py-3">
         <div id="appTabsBar" class="app-tabs-bar">
@@ -759,6 +775,12 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+
+
+
+
+
+
 
 
     <script>

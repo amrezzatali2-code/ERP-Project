@@ -1,5 +1,6 @@
 ﻿// ===============================
 // نظام التابات للـ ERP (نسخة IFRAME + زر تحديث)
+// + نظام ثابت لإعادة تهيئة الصفحات بعد التحميل (ERP_INIT Hook)
 // ===============================
 
 // تعليق عربي: حماية لمنع تشغيل نفس الملف مرتين (لو اتعمل include مرتين بالخطأ)
@@ -60,6 +61,36 @@ if (window.__ERP_TABS_INITED__) {
             return '';
         }
 
+        // =========================================================
+        // ✅ نظام ثابت: محاولة استدعاء __ERP_INIT__ داخل صفحة الـ iframe
+        // الهدف: أي View فيها بحث/أسهم/Fetch لازم تعرّف window.__ERP_INIT__
+        // =========================================================
+        function tryCallErpInitFromFrame(frameEl) {
+            if (!frameEl) return;
+
+            // تعليق عربي: onload قد يتكرر — لا مشكلة، المهم يكون init Idempotent
+            try {
+                const w = frameEl.contentWindow;
+                if (!w) return;
+
+                // 1) الشكل القياسي
+                if (typeof w.__ERP_INIT__ === 'function') {
+                    w.__ERP_INIT__();
+                    return;
+                }
+
+                // 2) بدائل احتياطية (لو في شاشات قديمة)
+                if (typeof w.erpInitPage === 'function') {
+                    w.erpInitPage();
+                    return;
+                }
+
+            } catch (e) {
+                // تعليق عربي: قد يحدث Cross-origin في حالات نادرة، نتجاهل
+                console.warn("ERP Init: cannot call init inside frame", e);
+            }
+        }
+
         // ===============================
         // 1) كشف هل الصفحة داخل IFRAME أم لا
         // ===============================
@@ -72,9 +103,6 @@ if (window.__ERP_TABS_INITED__) {
 
         // ===============================
         // 2) وضع "داخل iframe"
-        // ===============================
-        // مهم: لا نمنع أي لينك/زر إلا لو فعلاً من نوع:
-        // app-menu-link أو open-tab أو open-same-tab
         // ===============================
         if (inFrame) {
 
@@ -94,7 +122,6 @@ if (window.__ERP_TABS_INITED__) {
                     var id = input ? parseInt(input.value || '0', 10) : 0;
 
                     if (!id || id <= 0) {
-                        // تعليق عربي: لو المستخدم لم يكتب رقم صحيح، لا نفعل شيئاً
                         return;
                     }
 
@@ -127,7 +154,6 @@ if (window.__ERP_TABS_INITED__) {
                 // =========================================================
                 // (1) التقاط الروابط/الأزرار الخاصة بنظام التابات (Delegation)
                 // =========================================================
-                // ✅ تعديل مهم: أضفنا button.open-same-tab
                 var link = event.target.closest('a.app-menu-link, a.open-tab, a.open-same-tab, button.open-same-tab');
                 if (!link) return;
 
@@ -139,10 +165,9 @@ if (window.__ERP_TABS_INITED__) {
                     var tabId = normalizeTabId(link.getAttribute('data-tab-id') || '');
                     var tabTitle = (link.getAttribute('data-tab-title') || link.textContent || '').trim();
 
-                    // ✅ تعديل مهم: نقرأ URL من data-url أو href
+                    // ✅ نقرأ URL من data-url أو href
                     var url = normalizeUrl(getTargetUrl(link));
 
-                    // تعليق عربي: لو tabId فاضي ⇒ لا نفتح تاب جديد عشوائي (هذا سبب التكرار)
                     if (!tabId) {
                         console.warn("⚠ open-same-tab: data-tab-id فارغ → تم إلغاء العملية لمنع تابات مكررة");
                         return;
@@ -157,7 +182,6 @@ if (window.__ERP_TABS_INITED__) {
                     url = ensureFrameParam(url);
                     url = addNoCache(url);
 
-                    // تعليق عربي: الآن فقط نمنع السلوك الافتراضي
                     event.preventDefault();
 
                     window.top.postMessage({
@@ -177,17 +201,13 @@ if (window.__ERP_TABS_INITED__) {
                 var tabTitle2 = (link.getAttribute('data-tab-title') || link.textContent || '').trim();
                 var url2 = normalizeUrl(link.href);
 
-                // تعليق عربي: لو tabId فاضي هنا ⇒ نخلي الرابط يفتح عادي داخل نفس iframe
-                // لأن فتح تاب بـ id عشوائي = تابات مكررة
                 if (!tabId2) {
-                    // لا نعمل preventDefault
                     console.warn("⚠ open-tab/app-menu-link: data-tab-id فارغ → سيتم ترك الرابط يفتح بشكل طبيعي داخل نفس التاب");
                     return;
                 }
 
                 if (!url2) return;
 
-                // ✅ ضمان frame=1 + منع الكاش
                 url2 = ensureFrameParam(url2);
                 url2 = addNoCache(url2);
 
@@ -227,13 +247,11 @@ if (window.__ERP_TABS_INITED__) {
 
         if (!tabsBar || !tabsContainer) return;
 
-        // إظهار منطقة التابات
         function enableTabsMode() {
             document.body.classList.add('has-tabs');
             if (homeContent) homeContent.style.display = 'none';
         }
 
-        // إخفاء منطقة التابات لو مفيش ولا تاب
         function disableTabsModeIfNoTabs() {
             var count = tabsBar.querySelectorAll('.app-tab').length;
             if (count === 0) {
@@ -250,7 +268,6 @@ if (window.__ERP_TABS_INITED__) {
             tabId = normalizeTabId(tabId);
             url = normalizeUrl(url);
 
-            // تعليق عربي: ممنوع إنشاء تاب عشوائي لو tabId فاضي (ده كان سبب التكرار)
             if (!tabId) {
                 console.warn("⚠ openTab تم استدعاؤه بـ tabId فارغ → تم إلغاء فتح التاب لمنع التكرار");
                 return;
@@ -263,9 +280,18 @@ if (window.__ERP_TABS_INITED__) {
                 var existingFrame = tabsContainer.querySelector('.app-tab-frame[data-tab-id="' + tabId + '"]');
 
                 if (existingFrame) {
+
+                    // ✅ مهم: كل مرة نحدّث src نربط onload ثم ننادي __ERP_INIT__
+                    existingFrame.onload = function () {
+                        tryCallErpInitFromFrame(existingFrame);
+                    };
+
                     var currentSrc = normalizeUrl(existingFrame.getAttribute('src') || existingFrame.src);
                     if (currentSrc !== url) {
                         existingFrame.src = url;
+                    } else {
+                        // لو نفس الرابط: نجبر no-cache خفيف
+                        existingFrame.src = addNoCache(url);
                     }
                 }
 
@@ -288,6 +314,12 @@ if (window.__ERP_TABS_INITED__) {
             var frame = document.createElement('iframe');
             frame.className = 'app-tab-frame';
             frame.setAttribute('data-tab-id', tabId);
+
+            // ✅ Hook ثابت بعد التحميل
+            frame.onload = function () {
+                tryCallErpInitFromFrame(frame);
+            };
+
             frame.src = url;
             frame.loading = 'lazy';
 
@@ -297,7 +329,6 @@ if (window.__ERP_TABS_INITED__) {
             activateTab(tabId);
         }
 
-        // تنشيط تاب
         function activateTab(tabId) {
             tabId = normalizeTabId(tabId);
 
@@ -312,7 +343,6 @@ if (window.__ERP_TABS_INITED__) {
             });
         }
 
-        // إغلاق تاب
         function closeTab(tabId) {
             tabId = normalizeTabId(tabId);
 
@@ -335,14 +365,18 @@ if (window.__ERP_TABS_INITED__) {
             disableTabsModeIfNoTabs();
         }
 
-        // تحديث التاب الحالي
+        // ✅ تحديث التاب الحالي (مع استدعاء __ERP_INIT__ بعد التحميل)
         function refreshCurrentTab() {
             var activeFrame = tabsContainer.querySelector('.app-tab-frame:not(.d-none)');
             if (!activeFrame) return;
-            activeFrame.src = activeFrame.src;
+
+            activeFrame.onload = function () {
+                tryCallErpInitFromFrame(activeFrame);
+            };
+
+            activeFrame.src = addNoCache(activeFrame.src);
         }
 
-        // التعامل مع كليك شريط التابات
         tabsBar.addEventListener('click', function (event) {
             var target = event.target;
 
@@ -358,7 +392,6 @@ if (window.__ERP_TABS_INITED__) {
             }
         });
 
-        // ربط روابط القائمة الرئيسية بنظام التابات
         document.querySelectorAll('.app-menu-link').forEach(function (link) {
             link.addEventListener('click', function (event) {
                 event.preventDefault();
@@ -367,7 +400,6 @@ if (window.__ERP_TABS_INITED__) {
                 var title = (link.getAttribute('data-tab-title') || link.textContent || '').trim();
                 var url = normalizeUrl(link.href);
 
-                // تعليق عربي: لو tabId فاضي لا نفتح تاب
                 if (!tabId) {
                     console.warn("⚠ app-menu-link: data-tab-id فارغ → لن يتم فتح تبويب");
                     return;
@@ -377,7 +409,6 @@ if (window.__ERP_TABS_INITED__) {
             });
         });
 
-        // استقبال رسائل من صفحات IFRAME
         window.addEventListener('message', function (event) {
             var data = event.data;
             if (!data || data.type !== 'erp-open-tab') return;
@@ -396,7 +427,6 @@ if (window.__ERP_TABS_INITED__) {
             openTab(tabId, url, title);
         });
 
-        // زر التحديث في الـ Layout الرئيسي
         document.addEventListener('DOMContentLoaded', function () {
             var btnRefresh = document.getElementById('btnRefreshTab');
             if (btnRefresh) {
@@ -407,7 +437,6 @@ if (window.__ERP_TABS_INITED__) {
             }
         });
 
-        // إتاحة الدوال للاستخدام خارجيًا
         window.erpTabs = {
             openTab: openTab,
             activateTab: activateTab,

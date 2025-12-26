@@ -290,6 +290,13 @@ namespace ERP.Controllers
             return View(model);
         }
 
+
+
+
+
+
+
+
         // =========================================================
         // GET: Accounts/Create
         // فتح شاشة إضافة حساب جديد

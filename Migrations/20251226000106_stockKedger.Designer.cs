@@ -4,6 +4,7 @@ using ERP.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace ERP.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251226000106_stockKedger")]
+    partial class stockKedger
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2284,7 +2287,7 @@ namespace ERP.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime>("Expiry")
+                    b.Property<DateTime?>("Expiry")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Note")
@@ -2315,7 +2318,8 @@ namespace ERP.Migrations
                     b.HasIndex("WarehouseId", "ProdId");
 
                     b.HasIndex("WarehouseId", "ProdId", "BatchNo", "Expiry")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[Expiry] IS NOT NULL");
 
                     b.ToTable("Stock_Batches", (string)null);
                 });

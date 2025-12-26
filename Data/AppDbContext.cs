@@ -80,6 +80,8 @@ namespace ERP.Data
         // جدول سطور التحويلات
         public DbSet<StockTransferLine> StockTransferLines { get; set; } = null!; // متغير: جدول سطور الأصناف لكل تحويل
         public DbSet<ProductBonusGroup> ProductBonusGroups { get; set; } = default!;
+        public DbSet<ERP.Models.StockBatch> StockBatches { get; set; } = default!;
+
 
 
 
@@ -116,6 +118,38 @@ namespace ERP.Data
 
 
 
+
+            // ===== Stock_Batches (رصيد سريع للتشغيلات) =====
+            mb.Entity<StockBatch>(e =>
+            {
+                e.ToTable("Stock_Batches"); // ✅ الاسم النهائي للجدول
+
+                e.HasKey(x => x.Id);
+
+                // ✅ الصلاحية إلزامية (ممنوع NULL)
+                e.Property(x => x.Expiry)
+                 .IsRequired();
+
+                // ✅ صف واحد فقط لكل (Warehouse + Prod + BatchNo + Expiry)
+                e.HasIndex(x => new { x.WarehouseId, x.ProdId, x.BatchNo, x.Expiry })
+                 .IsUnique();
+
+                e.Property(x => x.BatchNo)
+                 .HasMaxLength(50)
+                 .IsRequired();
+
+                // القيم الافتراضية
+                e.Property(x => x.QtyOnHand).HasDefaultValue(0);
+                e.Property(x => x.QtyReserved).HasDefaultValue(0);
+
+                // Index سريع للبحث
+                e.HasIndex(x => new { x.WarehouseId, x.ProdId });
+            });
+
+
+
+
+
             mb.Entity<ProductBonusGroup>(entity =>
             {
                 entity.ToTable("ProductBonusGroups");          // اسم الجدول في SQL
@@ -134,6 +168,7 @@ namespace ERP.Data
 
                 entity.Property(x => x.UpdatedAt)
                       .HasColumnType("datetime2");
+
             });
 
 
