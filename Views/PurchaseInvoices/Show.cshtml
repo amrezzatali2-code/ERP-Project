@@ -271,11 +271,11 @@
                             ➕ فاتورة جديدة
                         </a>
 
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnSaveInvoiceHeader">
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnSaveInvoiceHeader" data-lock-posted="1">
                             💾 حفظ الفاتورة
                         </button>
 
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnPostInvoice">
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnPostInvoice" data-lock-posted="1">
                             📤 ترحيل الفاتورة
                         </button>
 
@@ -288,17 +288,13 @@
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
                                 id="btnClearInvoiceLines"
-                                data-invoice-id="@(Model?.PIId ?? 0)">
+                                data-invoice-id="@(Model?.PIId ?? 0)" data-lock-posted="1">
                             🗑️ مسح كل أصناف الفاتورة
                         </button>
 
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                           asp-action="Edit"
-                           asp-route-id="@(Model?.PIId ?? 0)">
-                            ✏️ تعديل الفاتورة
-                        </a>
+                      
 
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" onclick="window.print();">
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" onclick="window.print();" data-lock-posted="1">
                             🖨️ طباعة الفاتورة
                         </button>
 
@@ -383,7 +379,7 @@
 
                                         <input id="CustomerCodeDisplay"
                                                class="form-control form-control-sm text-center invoice-small-input"
-                                               type="number" />
+                                               type="number" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
 
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
@@ -397,7 +393,7 @@
                                                placeholder="اكتب اسم المورد ثم اختره من القائمة"
                                                list="customersList"
                                                autocomplete="off"
-                                               value="@ViewBag.SelectedCustomerName" />
+                                               value="@ViewBag.SelectedCustomerName" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
 
                                         <datalist id="customersList">
                                             @if (ViewBag.Customers != null)
@@ -463,7 +459,7 @@
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
                                                value="@(Model.IsPosted ? "نعم" : "لا")"
-                                               readonly />
+                                               readonly data-is-posted="@(Model.IsPosted ? "1" : "0")" />
                                     </div>
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
@@ -628,7 +624,7 @@
                                     <label class="form-label form-label-sm">كود الصنف</label>
                                     <input type="number" id="ProdCodeInput"
                                            class="form-control form-control-sm text-center pi-input"
-                                           placeholder="بحث بالكود..." />
+                                               placeholder="بحث بالكود..." data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")"/>
                                 </div>
 
                                 <div class="col-lg-4 col-md-8">
@@ -638,7 +634,7 @@
                                            list="productsList"
                                            class="form-control form-control-sm pi-input"
                                            placeholder="اكتب اسم الصنف أو جزء منه..."
-                                           autocomplete="off" />
+                                               autocomplete="off" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
 
                                     <datalist id="productsList">
                                         @if (ViewBag.ProductsAuto != null)
@@ -699,27 +695,27 @@
                                     <label id="ProdDisc1Label" class="form-label form-label-sm">الخصم</label>
                                     <input type="number" id="ProdDisc1Input"
                                            class="form-control form-control-sm text-center pi-input"
-                                           value="0" />
+                                           value="0" data-lock-posted="1"/>
                                 </div>
 
                                 <div class="col-lg-2 col-md-4">
                                     <label class="form-label form-label-sm">الباتش</label>
                                     <input type="text" id="ProdBatchInput"
                                            class="form-control form-control-sm text-center pi-input"
-                                           placeholder="باتش" />
+                                           placeholder="باتش" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")"/>
                                 </div>
 
                                 <div class="col-lg-2 col-md-4">
                                     <label class="form-label form-label-sm">تاريخ الصلاحية</label>
                                     <input type="text" id="ProdExpiryInput"
                                            class="form-control form-control-sm text-center pi-input"
-                                           placeholder="MM/YYYY" />
+                                               placeholder="MM/YYYY" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
                                 </div>
 
                                 <div class="col-lg-2 col-md-4 d-grid">
                                     <label class="form-label form-label-sm">&nbsp;</label>
                                     <button type="button" id="btnAddInvoiceLine"
-                                            class="btn btn-primary btn-sm w-100">
+                                                class="btn btn-primary btn-sm w-100" data-lock-posted="1">
                                         إضافة
                                     </button>
                                 </div>
@@ -814,7 +810,7 @@
                                                         <td class="text-center">
                                                             <button type="button"
                                                                     class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                    data-line-no="@line.LineNo">
+                                                                        data-line-no="@line.LineNo" data-lock-posted="1">
                                                                 مسح
                                                             </button>
                                                         </td>
@@ -2510,6 +2506,114 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 });
+
+
+
+
+                            // =========================================================
+            // ثابت: قراءة حالة "مُرحّلة؟" من Flag (0/1)
+            // =========================================================
+            function isInvoicePosted() {
+                const flag = document.getElementById("InvoiceIsPostedFlag"); // متغير: علم الترحيل
+                return flag && flag.value === "1";
+            }
+
+            // =========================================================
+            // ثابت: تحديث Flag بعد الترحيل/الفتح (بدون Reload)
+            // =========================================================
+            function setInvoicePosted(posted) {
+                const flag = document.getElementById("InvoiceIsPostedFlag"); // متغير: علم الترحيل
+                if (flag) flag.value = posted ? "1" : "0";
+            }
+
+            // =========================================================
+            // ثابت: تطبيق القفل على أي عنصر عليه data-lock-posted="1"
+            // - الأزرار: disabled
+            // - input/textarea: readonly (عشان الشكل ما يتبهدلش)
+            // - select: disabled
+            // - الروابط: disabled + منع الضغط
+            // =========================================================
+            function applyPostedUiLock() {
+
+                const posted = isInvoicePosted(); // متغير: هل الفاتورة مُرحّلة؟
+
+                const lockables = document.querySelectorAll('[data-lock-posted="1"]'); // متغير: العناصر المطلوب قفلها
+
+                lockables.forEach(el => {
+
+                    // --- أول مرة: نحفظ الحالة الأصلية عشان نرجّعها لو اتفتحت الفاتورة ---
+                    if (el.dataset.lockInit !== "1") {
+                        el.dataset.lockInit = "1";
+                        el.dataset.origDisabled = el.disabled ? "1" : "0";                 // متغير: disabled الأصلي
+                        el.dataset.origReadonly = el.readOnly ? "1" : "0";                 // متغير: readonly الأصلي
+                        el.dataset.origTabIndex = el.getAttribute("tabindex") ?? "";       // متغير: tabindex الأصلي
+                    }
+
+                    const tag = (el.tagName || "").toUpperCase(); // متغير: نوع العنصر
+
+                    // ---- حالة (مُرحّلة) ----
+                    if (posted) {
+
+                        if (tag === "BUTTON") {
+                            el.disabled = true;
+                            return;
+                        }
+
+                        if (tag === "A") {
+                            el.classList.add("disabled", "pe-none");
+                            el.setAttribute("aria-disabled", "true");
+                            el.setAttribute("tabindex", "-1");
+                            return;
+                        }
+
+                        if (tag === "INPUT" || tag === "TEXTAREA") {
+                            el.readOnly = true;
+                            el.classList.add("bg-light", "text-muted");
+                            return;
+                        }
+
+                        if (tag === "SELECT") {
+                            el.disabled = true;
+                            return;
+                        }
+
+                        return;
+                    }
+
+                    // ---- حالة (مفتوحة) = نرجّع الأصل ----
+                    const origDisabled = el.dataset.origDisabled === "1";
+                    const origReadonly = el.dataset.origReadonly === "1";
+                    const origTabIndex = el.dataset.origTabIndex;
+
+                    if (tag === "BUTTON") {
+                        el.disabled = origDisabled;
+                        return;
+                    }
+
+                    if (tag === "A") {
+                        el.classList.remove("disabled", "pe-none");
+                        el.removeAttribute("aria-disabled");
+                        if (origTabIndex === "") el.removeAttribute("tabindex");
+                        else el.setAttribute("tabindex", origTabIndex);
+                        return;
+                    }
+
+                    if (tag === "INPUT" || tag === "TEXTAREA") {
+                        el.readOnly = origReadonly;
+                        el.classList.remove("bg-light", "text-muted");
+                        return;
+                    }
+
+                    if (tag === "SELECT") {
+                        el.disabled = origDisabled;
+                        return;
+                    }
+                });
+            }
+
+            // تشغيل القفل مرة عند تحميل الصفحة
+            document.addEventListener("DOMContentLoaded", applyPostedUiLock);
+
             });
 
 
@@ -2756,82 +2860,108 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-                // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
-// ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
-const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
-if (navBtn) return;
+                            // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
+            // ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
+            const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
+            if (navBtn) return;
 
+                        // =========================
+            // (0) زر مسح سطر من الفاتورة
+            // =========================
+            const removeBtn = t.closest('.btnRemoveLineFromInvoice');
+            if (removeBtn) {
 
+                ev.preventDefault();
+                ev.stopPropagation();
+                ev.stopImmediatePropagation();
 
-                // =========================
-                // (0) زر مسح سطر من الفاتورة
-                // =========================
-                const removeBtn = t.closest('.btnRemoveLineFromInvoice');
-                if (removeBtn) {
+                // متغير: رقم السطر داخل الفاتورة
+                const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
 
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    ev.stopImmediatePropagation();
+                // متغير: رقم الفاتورة الحالية (موجود في hidden input داخل الـ body)
+                const piId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10);
 
-                    // متغير: رقم السطر داخل الفاتورة
-                    const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
+                if (!piId || piId <= 0) { alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.'); return; }
+                if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
 
-                    // متغير: رقم الفاتورة الحالية (موجود في hidden input داخل الـ body)
-                    const piId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10);
+                // تأكيد بسيط
+                if (!confirm(`هل تريد مسح السطر رقم (${lineNo})؟`)) return;
 
-                    if (!piId || piId <= 0) {
-                        alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.');
+                // منع الضغط المتكرر أثناء التنفيذ
+                removeBtn.disabled = true;
+
+                // ✅ متغير: توكن AntiForgery (من الدالة المثبتة عندك في Show)
+                const antiToken = (window.getAntiForgeryToken ? window.getAntiForgeryToken() : '');
+
+                // متغير: تايم آوت علشان ما يفضلش معلق
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 ثانية
+
+                try {
+                    // ✅ استدعاء الأكشن الصحيح: RemoveLineJson
+                    const res = await fetch('@Url.Action("RemoveLineJson", "PurchaseInvoices")', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        signal: controller.signal,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            ...(antiToken ? { 'RequestVerificationToken': antiToken } : {})
+                        },
+                        // ✅ لازم نفس أسماء الـ DTO
+                        body: JSON.stringify({ PIId: piId, LineNo: lineNo })
+                    });
+
+                    // متغير: نحاول نفهم الرد سواء JSON أو نص
+                    let data = null;
+                    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
+                    if (contentType.includes('application/json')) {
+                        data = await res.json().catch(() => null);
+                    } else {
+                        const txt = await res.text().catch(() => '');
+                        data = { ok: false, message: txt ? 'فشل مسح السطر (رد غير متوقع من السيرفر).' : 'فشل مسح السطر.' };
+                    }
+
+                    if (!res.ok || !data || data.ok !== true) {
+                        const msg = (data && data.message) ? data.message : 'فشل مسح السطر.';
+                        alert(msg);
                         return;
                     }
 
-                    if (!lineNo || lineNo <= 0) {
-                        alert('لا يمكن مسح سطر: رقم السطر غير صحيح.');
-                        return;
-                    }
+                    // ✅ بعد المسح: Reload جزئي للفاتورة (frag=body)
+                    const baseUrl =
+                        document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
+                        || '@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })';
 
-                    // تأكيد بسيط
-                    if (!confirm(`هل تريد مسح السطر رقم (${lineNo})؟`)) return;
+                    const url = setOrReplaceParam(baseUrl, 'id', piId);
 
-                    // منع الضغط المتكرر أثناء التنفيذ
-                    removeBtn.disabled = true;
+                    // ✅ مهم: ننتظر التحميل قبل إعادة تفعيل الزر
+                    await loadInvoiceBody(url);
 
-                    try {
-                        // ✅ استدعاء الأكشن RemoveLine (الموجود عندك بالفعل)
-                        const res = await fetch('@Url.Action("RemoveLine", "PurchaseInvoices")', {
-                            method: 'POST',
-                            credentials: 'same-origin',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-Requested-With': 'XMLHttpRequest'
-                            },
-                            body: JSON.stringify({ piId: piId, lineNo: lineNo })
-                        });
+                } catch (e) {
+                    console.error(e);
 
-                        const data = await res.json().catch(() => null);
-
-                        if (!res.ok || !data || data.ok !== true) {
-                            const msg = (data && data.message) ? data.message : 'فشل مسح السطر.';
-                            alert(msg);
-                            return;
-                        }
-
-                        // ✅ بعد المسح: نعمل Reload جزئي للفاتورة (frag=body) بنفس نظامك
-                        const baseUrl =
-                            document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
-                            || '@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })';
-
-                        const url = setOrReplaceParam(baseUrl, 'id', piId);
-                        loadInvoiceBody(url);
-
-                    } catch (e) {
-                        console.error(e);
+                    if (e && e.name === 'AbortError') {
+                        alert('التنفيذ أخذ وقت طويل. حاول مرة أخرى.');
+                    } else {
                         alert('حدث خطأ أثناء مسح السطر.');
-                    } finally {
+                    }
+                } finally {
+                    clearTimeout(timeoutId);
+
+                    if (document.contains(removeBtn)) {
                         removeBtn.disabled = false;
                     }
-
-                    return; // مهم: منع استمرار التعامل كأنه زر أسهم
                 }
+
+                return; // مهم: منع استمرار التعامل كأنه زر أسهم
+            }
+
+
+
+
+
 
                 // =========================
                 // (1) الأسهم + البحث

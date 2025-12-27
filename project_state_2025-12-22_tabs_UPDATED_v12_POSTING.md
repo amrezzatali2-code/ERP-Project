@@ -148,6 +148,8 @@
 - Endpoints الخاصة بـ `frag=body` (أو Body فقط) يجب أن ترجع HTML “خفيف” قدر الإمكان.
 - نستخدم `_ts=Date.now()` في طلبات التنقل السريعة لكسر الكاش عند الحاجة.
 - ❌ ممنوع تحميل بيانات ضخمة داخل الـ Body إذا لم تكن مطلوبة فورًا (Lazy Load عند الضرورة).
+- **ثابت شاشات الفواتير السريعة:** بعد أي تبديل للـ Body (`innerHTML`)، لازم نستدعي `window.__ERP_INIT__()` لإعادة تهيئة الأحداث (الأوتوكومبليت/Enter/الأسهم/الفوكس) حتى لا تختفي قيم مثل السعر.
+- **ثابت بناء روابط التنقل:** الاعتماد يكون على `data-base-url` + `data-id` (ولا نعتمد على `data-url` لأنه قد يصبح قديم بعد تبديل الـ Body).
 
 - **الهجرة (Migrations)**
   - مجلد `Migrations` يحتوي كل الـ migrations بترتيب زمني.
@@ -489,16 +491,51 @@
 
 ### B) نظام الأسهم + البحث داخل فاتورة المشتريات (بدون فتح تابات جديدة)
 
-- **القاعدة:** اعتراض الضغط على الأسهم/زر البحث بـ `document.addEventListener('click', handler, true)` (Capture)  
+- **القاعدة:** اعتراض الضغط على **الأسهم** و **زر البحث** بـ  
+  `document.addEventListener('click', handler, true)` *(Capture)*  
   لمنع أي handler آخر (مثل `open-same-tab`) من فتح تاب جديد.
-- **مصدر IDs للتنقل:** hidden inputs داخل `#PI_BodyHost`:
-  - `NavFirstId`, `NavLastId`, `NavPrevId`, `NavNextId`, `NavCurrentId`.
-- **حالة “فاتورة جديدة” (currentId = 0):**
-  - السابق = آخر فاتورة
-  - التالي = أول فاتورة
-- **بعد كل تحميل body:** نستخدم `refreshSideNavButtons()` لتحديث `data-url` + `disabled` للأزرار.
 
----
+- **IDs ثابتة في أي فاتورة تستخدم التنقل السريع:**
+  - أزرار الأسهم: `btnFirstInvoice`, `btnPrevInvoice`, `btnNextInvoice`, `btnLastInvoice`
+  - البحث: `NavInvoiceSearchInput`, `btnNavInvoiceSearch`
+
+- **مصدر أرقام التنقل (IDs):** hidden inputs داخل `#PI_BodyHost` (تتحدث مع كل فاتورة):
+  - `NavFirstId`, `NavLastId`, `NavPrevId`, `NavNextId`, `NavCurrentId`
+
+- **قاعدة بناء الرابط (ثابتة لتفادي أخطاء الأسهم/السعر/الفوكس):**
+  - كل الأزرار تعتمد على:
+    - `data-base-url` = رابط ثابت لـ `Show` (مثلاً `id=0` + `frame=1`)
+    - `data-id` = رقم الفاتورة الهدف (يتحدّث من `refreshSideNavButtons()` بعد كل تحميل body)
+  - **ممنوع** الاعتماد على `data-url` القديم لأنه قد يصبح “Stale” بعد تبديل الـ body.
+
+- **منطق البحث (زر البحث):**
+  1) اقرأ الرقم من `NavInvoiceSearchInput`.
+  2) خذ `data-base-url` من زر البحث.
+  3) استبدل باراميتر `id` بالقيمة المكتوبة ثم استدعِ `loadInvoiceBody(url)`.
+
+- **منطق الأسهم (أول/سابق/التالي/آخر):**
+  1) خذ `data-base-url` من الزر.
+  2) خذ `data-id` من نفس الزر.
+  3) استبدل باراميتر `id` بالقيمة الموجودة في `data-id` ثم استدعِ `loadInvoiceBody(url)`.
+
+- **حالة “فاتورة جديدة” (NavCurrentId = 0):**
+  - السابق = آخر فاتورة
+  - التالي = أول فاتورة  
+  *(يتم حسابها داخل الكنترولر وتُمرَّر عبر الـ hidden inputs)*
+
+- **بعد كل تحميل Body (الجزء المتغير فقط):**
+  1) `refreshSideNavButtons()` لتحديث `data-id` + `disabled` للأزرار
+  2) `setupTooltips()` مرة واحدة وبشكل آمن
+  3) **الأهم:** استدعاء `window.__ERP_INIT__()` لإعادة تهيئة:
+     - أوتوكومبليت المورد/الصنف
+     - ربط أحداث Enter/الأسهم
+     - إظهار السعر وتهيئة الحقول
+     - قواعد الـ Focus (فتح فاتورة جديدة ⇒ فوكس المورد / فاتورة محفوظة ⇒ فوكس الصنف)
+
+> ✅ ملاحظة مهمة (سبب “السعر لا يظهر مع الأسهم”):  
+> عند تبديل `#PI_BodyHost` بـ `innerHTML` بتضيع كل الـ event listeners والتهيئة القديمة.  
+> الحل الثابت: **لازم** `__ERP_INIT__()` يتنفّذ بعد أي تحميل Body (سواء سهم أو بحث).
+
 
 ### C) التولتيب ToolTip (مرة واحدة فقط + بدون خطف الفوكس)
 
@@ -711,55 +748,199 @@
     - تسجيل نشاط المستخدم (UserActivityLog)
   - أي فشل في خطوة → Rollback وعودة رسالة خطأ واضحة.
 
-### 5.7 ترحيل فاتورة المشتريات (Posting) — تم التنفيذ
+### 5.7 ترحيل فاتورة المشتريات (Posting) + قفل التعديل بعد الترحيل (ثابت)
 
-#### الهدف
-تشغيل زر **📤 ترحيل الفاتورة** داخل `PurchaseInvoices/Show.cshtml` بحيث:
-- يمنع الترحيل مرتين.
-- ينشئ **قيد مزدوج** داخل `LedgerEntries`.
-- يغيّر حالة الفاتورة إلى **مُرحَّلة** ويقفلها منطقيًا.
-- لا يفتح دفتر الأستاذ بعد الترحيل.
-- يحدّث خانة **مُرحَّلة؟** في الشاشة **بدون Reload**.
-
-#### القاعدة المحاسبية المعتمدة لفاتورة مشتريات (آجل)
-- **حساب المخزون (AccountCode = 1105)**: **مدين**
-- **حساب المورد (Customer.AccountId)**: **دائن** (له فلوس)
-
-> ملاحظة: الترحيل يعتمد على **الأكواد/المعرفات** وليس على أسماء الحسابات.
-
-#### الملفات/الأجزاء التي تم الاعتماد عليها
-- `Services/LedgerPostingService.cs`
-  - `PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy)`
-- `Controllers/PurchaseInvoicesController.cs`
-  - `PostInvoice(int id)` (يدعم Ajax)
-- `Views/PurchaseInvoices/Show.cshtml`
-  - زر `btnPostInvoice`
-  - خانة العرض `InvoiceIsPostedDisplay`
-  - مكان الرسائل `postInvoiceMsg`
-  - سكربت JS للـ fetch
-
-#### سلوك زر الترحيل (بدون Reload)
-- عند النجاح:
-  - تعطيل الزر + تغيير نصه إلى ✅
-  - تحديث `InvoiceIsPostedDisplay` من **لا** إلى **نعم**
-  - إظهار رسالة نجاح في `postInvoiceMsg`
-- عند الخطأ:
-  - إعادة تفعيل الزر
-  - عرض رسالة الخطأ القادمة من السيرفر (Text أو JSON)
-
-#### تسجيل النشاط (UserActivityLog)
-- عملية **الترحيل** تُسجَّل كـ:
-  - `UserActionType.Post`
-  - بدون Before/After
-- Before/After يتم تخصيصه **للتعديل فقط** (Edit) كما هو متفق.
-
-
-
-> ✅ **طريقة الاستخدام:**  
-> - في بداية أي جلسة جديدة: ترسل لي نسخة من هذا الملف لأقرأه فأعرف بسرعة أين وصلنا.  
-> - في نهاية الجلسة: أكتب لك نص التحديث لقسم **5) حالة العمل الحالية** (مع الحفاظ على الأقسام 1–4 ثابتة)، وتلصقه مكان القسم القديم.
+> الهدف: عند الضغط على **ترحيل الفاتورة** يتم:
+> 1) إنشاء قيود في **LedgerEntries** مرتبطة بالفاتورة  
+> 2) تحديث **رصيد الحساب (CurrentBalance)** للطرف (Account)  
+> 3) تغيير حالة الفاتورة إلى **مُرحَّلة IsPosted = true** (وتصبح “مغلقة للتعديل”)  
+> 4) **لا نخفي أي زر** — نُعطّل فقط الأزرار/الخانات المعلَّمة (Disabled/ReadOnly)
 
 ---
+
+### (أ) Backend — أكشن الترحيل في PurchaseInvoicesController
+
+**اسم الأكشن:** `PostInvoice(int id)`  
+**سلوكه:**
+- يتحقق من وجود الفاتورة.
+- يمنع الترحيل لو الفاتورة مُرحّلة بالفعل.
+- يستدعي خدمة الترحيل:  
+  `await _ledgerPostingService.PostPurchaseInvoiceAsync(invoice.PIId, User.Identity?.Name);`
+- يسجل ActivityLog لنوع العملية: `UserActionType.Post`
+- يرجّع JSON لو الطلب AJAX (الواجهة بتستخدم fetch).
+
+> ملاحظة: أكشن الترحيل لازم يحدّث حقول الحالة في الفاتورة مثل:  
+> `IsPosted`, `Status`, `PostedAt`, `PostedBy` (حسب الموجود عندك في المودل).
+
+---
+
+### (ب) Backend — فكرة LedgerPostingService (المعتمد حاليًا)
+
+**الفكرة الأساسية:**
+- قيود LedgerEntries تُنشأ “مرة واحدة” لكل عملية ترحيل.
+- تُربط القيود بالفاتورة عن طريق: `SourceType = "PurchaseInvoice"` و `SourceId = PIId` (أو أي تسمية ثابتة اعتمدناها في جدول LedgerEntries).
+- يتم **تحديث CurrentBalance** في حساب الطرف (Account) بمبلغ الفاتورة.
+
+#### لماذا CurrentBalance؟
+- لأن الرصيد “مخزّن” في الحساب لتسريع عرض “حجم تعامل عميل / Supplier Balance” بدون إعادة تجميع كل القيود في كل مرة.
+- لذلك عند “فتح الفاتورة لاحقًا” (Unpost/Reopen) لازم نعمل العكس:
+  - حذف قيود Ledger الخاصة بالفاتورة
+  - عكس تأثير الرصيد: `CurrentBalance -= amount`
+  - `IsPosted = false`
+
+> مهم: التحديث ده **ليس محاسبة من القيود** — ده “Cache” سريع لازم يبقى له عكس عند فك الترحيل.
+
+---
+
+### (ج) Frontend — زر الترحيل (JS) بدون Reload
+
+الـ JS الحالي يعمل الآتي:
+- يمنع الضغط مرتين
+- Confirm قبل الترحيل
+- ينادي `/PurchaseInvoices/PostInvoice?id=...` كـ POST
+- يحدّث:
+  - نص زر الترحيل
+  - خانة “مُرحّلة؟” (`#InvoiceIsPostedDisplay`)
+  - رسالة نجاح/خطأ
+
+> هذا الجزء **لا يطبّق قفل التعديل على باقي الأزرار/الخانات** — سنطبّقه بالثابت القادم (د).
+
+---
+
+### (د) ثابت “قفل التعديل بعد الترحيل” (بدون تغيير IDs)
+
+#### 1) كيف نعلّم العناصر التي تُقفل بعد الترحيل؟
+بدون ما نغيّر أي `id` (لأن الـ JS يعتمد عليه)، نضيف Attribute إضافي فقط:
+
+- **للأزرار** (إضافة/مسح/حفظ سطور… إلخ):
+```html
+data-lock-posted="1"
+```
+
+مثال زر مسح سطر:
+```html
+<button type="button"
+        class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
+        data-line-no="@line.LineNo"
+        data-lock-posted="1">مسح</button>
+```
+
+- **للـ Inputs/Selects** التي تريد منع الكتابة فيها بعد الترحيل:
+```html
+data-lock-posted="1"
+```
+
+مثال:
+```html
+<input id="ProdNameInput" class="form-control" data-lock-posted="1" />
+<select id="WarehouseId" class="form-select" data-lock-posted="1"></select>
+```
+
+> ملاحظة: أنت بالفعل بدأت تضيف `data-lock-posted="1"` للأزرار التي تريد قفلها — ده هو المطلوب.
+
+---
+
+#### 2) تطبيق القفل في JS (قاعدة واحدة في Show.cshtml)
+
+**الفكرة:** لو `@Model.IsPosted == true`  
+نعطّل كل العناصر التي تحمل `data-lock-posted="1"` فقط، ونترك البحث/التنقل/فاتورة جديدة/فتح الفاتورة تعمل طبيعي.
+
+قالب JS (يوضع داخل Show.cshtml في نفس سكشن السكربتات):
+
+```javascript
+// =========================================================
+// ثابت: قفل عناصر التعديل بعد الترحيل (بدون إخفاء أزرار)
+// =========================================================
+function applyPostedLock(isPosted) {
+
+    const items = document.querySelectorAll('[data-lock-posted="1"]');
+
+    items.forEach(el => {
+
+        // أزرار
+        if (el.tagName === 'BUTTON') {
+            el.disabled = !!isPosted;
+            return;
+        }
+
+        // Select
+        if (el.tagName === 'SELECT') {
+            el.disabled = !!isPosted;
+            return;
+        }
+
+        // Inputs/TextAreas
+        if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+
+            // readonly أفضل للمظهر (القيمة تظل ظاهرة)
+            el.readOnly = !!isPosted;
+
+            // لو نوع لا يحترم readonly (زي checkbox/radio/file) نستخدم disabled
+            const t = (el.getAttribute('type') || '').toLowerCase();
+            if (t === 'checkbox' || t === 'radio' || t === 'file') {
+                el.disabled = !!isPosted;
+            }
+
+            // لمسة شكلية بسيطة (اختياري)
+            if (isPosted) {
+                el.classList.add('bg-light', 'text-muted');
+            } else {
+                el.classList.remove('bg-light', 'text-muted');
+            }
+        }
+    });
+}
+```
+
+ثم نستدعيها:
+- عند تحميل الصفحة:
+```javascript
+document.addEventListener("DOMContentLoaded", function () {
+    const isPosted = @Model.IsPosted.ToString().ToLower() === "true";
+    applyPostedLock(isPosted);
+});
+```
+
+- وبعد نجاح زر الترحيل (نفس مكان نجاح الترحيل في كود btnPost):
+```javascript
+applyPostedLock(true);
+```
+
+- وبعد نجاح زر فتح الفاتورة (عند تنفيذ Unpost/Reopen لاحقًا):
+```javascript
+applyPostedLock(false);
+```
+
+> مبدأ ثابت: **لا نخفي الأزرار** — نخليها موجودة لكن Disabled / ReadOnly.
+
+---
+
+### (هـ) Backend Guard — رسالة واضحة بدل “حدث خطأ ما”
+
+أي أكشن يغيّر بيانات الفاتورة لازم يبدأ بالتحقق:
+- لو الفاتورة مُرحّلة: رجّع رسالة واضحة للـ JS:
+
+**نص الرسالة المعتمد:**
+> "هذه الفاتورة مُرحَّلة (مغلقة) ولا يسمح بالتعديل. استخدم زر (فتح الفاتورة) أولاً."
+
+**مثال مكانه (في AddLineJson / RemoveLineJson / SaveTaxJson / SaveHeader...):**
+```csharp
+if (invoice.IsPosted)
+    return BadRequest(new { ok = false, message = "هذه الفاتورة مُرحَّلة (مغلقة) ولا يسمح بالتعديل. استخدم زر (فتح الفاتورة) أولاً." });
+```
+
+وبالتالي الـ JS يقرأ `data.message` ويعرضه بدل رسالة عامة.
+
+---
+
+### (و) ملاحظة مهمة — “ترحيل ثاني بعد فتح وتعديل”
+
+المخطط الذي اتفقنا عليه (وسننهيه في مرحلة لاحقة):
+- أول ترحيل: قيود جديدة + `IsPosted=true`
+- زر فتح الفاتورة: **إلغاء الترحيل** (حذف قيود الفاتورة + عكس `CurrentBalance` + `IsPosted=false`)
+- بعد أي تعديل ثم ترحيل مرة أخرى: يتم إنشاء قيود جديدة من جديد  
+ويمكن لاحقًا إضافة رقم مرحلة مثل: `مرحلة 1 / مرحلة 2 ...` لتمييز عدد مرات التعديل بعد الترحيل.
+
 
 ## 7) طريقة حساب الأرباح (ثابت مشروع)
 
@@ -935,3 +1116,108 @@
 
 ---
 
+# تحديث جلسة 2025-12-26 — المشتريات + StockBatch (رصيد التشغيلات السريع)
+
+## الهدف
+- الحفاظ على **السرعة** بدون التضحية بالدقة.
+- جعل التعامل مع التشغيلات (BatchNo + Expiry + سعر الجمهور للتشغيلة) واضح داخل النظام.
+- اعتماد جدول **StockBatch** كـ “رصيد سريع” (Snapshot) بجانب **StockLedger** كمصدر الحقيقة.
+
+---
+
+## أولاً: ما اتفقنا عليه في الحذف (ثوابت البرنامج)
+
+### 1) حذف سطر من فاتورة مشتريات (PILine)
+عند حذف سطر:
+1. يتم حذف السطر من جدول `PILines`.
+2. يتم حذف/عكس أثره من `StockLedger` **لنفس السطر**:
+   - الربط يكون عبر:  
+     `SourceType = "Purchase"`, `SourceId = PIId`, `SourceLine = LineNo`
+3. يتم **عكس** الرصيد في `StockBatch` (إن كان السطر له BatchNo + Expiry):
+   - `QtyOnHand -= QtyIn الخاصة بسطر الشراء`
+4. حماية FIFO (شرط أمان):
+   - لا نسمح بالحذف إذا كانت حركة الشراء تم استهلاك جزء منها:  
+     `RemainingQty < QtyIn`  
+   - لأن هذا يعني أن جزء من الكمية خرج (بيع/تحويل…)، والحذف سيكسر التاريخ.
+
+### 2) حذف فاتورة مشتريات كاملة (PurchaseInvoice)
+عند حذف الفاتورة:
+- يتم حذف سطورها `PILines` (Cascade من الـ Header للـ Lines فقط).
+- يتم التعامل مع `StockLedger` و `StockBatch` **برمجياً** (وليس Cascade في قاعدة البيانات) بنفس قواعد الحذف بالأعلى:
+  - لكل سطر: نحذف قيود الليدجر المرتبطة به ونخصم من StockBatch.
+  - مع نفس شرط الأمان (عدم السماح إذا تم استهلاك الكمية).
+
+> ملحوظة ثابتة: **لا نعمل Cascade DB من PurchaseInvoice إلى StockLedger**  
+> لأن StockLedger مصدر حركة عام (Purchase/Sales/Transfer/Adjustment…) وقد يحدث تعارض مسارات Cascade أو كسر تاريخ المخزون.
+
+---
+
+## ثانياً: دور StockLedger vs StockBatch vs Batch
+
+### 1) StockLedger (مصدر الحقيقة)
+- يسجل **كل حركة** دخول/خروج بسجلات متعددة.
+- مناسب للحسابات، التاريخ، المراجعة، وتقارير الحركة.
+- FIFO يعتمد عليه (QtyIn/RemainingQty + Expiry + TranDate …).
+
+### 2) StockBatch (رصيد سريع “صف واحد”)
+- **صف واحد فقط** لكل:
+  `(WarehouseId + ProdId + BatchNo + Expiry)`
+- الهدف: سرعة عرض “رصيد التشغيلات الحالي” بدون تجميع ملايين سطور الليدجر.
+- يتم تحديثه أثناء العمليات:
+  - شراء: `QtyOnHand += qtyDelta`
+  - بيع/صرف: `QtyOnHand -= qtyOut`
+  - حجز (اختياري): `QtyReserved` يزيد/ينقص حسب منطق الحجز.
+
+**مهم:** StockBatch ليس بديل عن StockLedger  
+بل “Cache/Materialized Balance” لتسريع الشاشات والاستعلامات.
+
+### 3) Batch (ماستر التشغيلات)
+- يحتفظ بخصائص التشغيله (BatchNo/Expiry/سعر الجمهور للتشغيلة/تكلفة افتراضية…).
+- وجوده مفيد لأن نفس التشغيله قد تظهر في أكثر من فاتورة شراء (نفس BatchNo/Expiry للصنف).
+- **لا نحذف Batch عادةً** حتى لو الرصيد صفر (للتاريخ)، ويمكن استخدام `IsActive` بدل الحذف.
+- الرصيد الحقيقي لا يؤخذ من Batch؛ الرصيد يؤخذ من StockBatch/StockLedger.
+
+---
+
+## ثالثاً: قرار “سعر الجمهور للتشغيلة عند البيع”
+- لأن السوق فعلاً فيه أكثر من سعر للصنف، ولأنك تريد بيع “كل تشغيلة بثمنها”،
+  فإن سعر الجمهور الذي يُستخدم عند البيع يجب أن يكون مرتبطًا بالتشغيلة.
+- المصدر المقترح عمليًا:
+  - **من StockBatch** (لأنه يمثل الرصيد الحالي للتشغيلة داخل مخزن محدد ويُسهل اختيار التشغيلة).
+  - أو من Batch كمرجع “ماستر” (لكن StockBatch هو الأسرع للشاشات).
+
+> القاعدة: **السعر داخل جدول Products لا يتم تغييره مع كل تغيير سوقي**  
+> بل البيع يعتمد على “سعر التشغيلة” (Batch/StockBatch).
+
+---
+
+## رابعاً: ثوابت قاعدة البيانات (OnModelCreating) لجدول StockBatch
+- اسم DbSet: `StockBatches`
+- اسم الجدول: `StockBatches` (كما في الموديل).
+- Unique Index:
+  - `(WarehouseId, ProdId, BatchNo, Expiry)` Unique
+- Defaults:
+  - `QtyOnHand` يبدأ 0
+  - `QtyReserved` يبدأ 0
+- Index إضافي:
+  - `(WarehouseId, ProdId)` لتسريع البحث.
+
+---
+
+## خامساً: قاعدة التحديث بدون تكرار صفوف (Upsert)
+- في عمليات الشراء/البيع:
+  - نبحث عن صف StockBatch بنفس (WarehouseId, ProdId, BatchNo, Expiry)
+  - لو موجود: نعدل الكمية فقط.
+  - لو غير موجود: ننشئ صف جديد.
+
+---
+
+## سادساً: ملاحظة مهمة قبل التجربة
+- لو ظهرت أخطاء “does not exist in the current context” فهذا معناه أنك وضعت جزء كود
+  **خارج مكان تعريف المتغيرات** (invoice/batchNo/expDate…).
+- الحل: أي إضافة تخص StockBatch يجب أن تأتي **بعد** حساب:
+  - `batchNo` و `expDate`
+  - وبعد تحميل `invoice`
+  - وبعد تحديد `qtyDelta` و `affectedLine`
+
+---

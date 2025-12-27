@@ -2,7 +2,6 @@
 using ERP.Models;                // UserActivityLog, UserActionType
 using Microsoft.AspNetCore.Http; // IHttpContextAccessor
 using System;
-using System.Linq;
 using System.Security.Claims;
 using System.Threading.Tasks;
 
@@ -10,23 +9,27 @@ namespace ERP.Infrastructure
 {
     /// <summary>
     /// خدمة لتسجيل نشاط المستخدمين في جدول UserActivityLogs.
+    /// 
+    /// سياسة التسجيل هنا (حسب طلبك):
+    /// - نسجل "التعديل" و "الحذف" فقط
+    /// - نتجاهل Create / View / Import / Export ... لتقليل الحمل
     /// </summary>
     public interface IUserActivityLogger
     {
         Task LogAsync(
-            UserActionType actionType,   // نوع العملية (Login, Create,...)
-            string entityName,           // اسم الكيان (PurchaseInvoice, Product,...)
-            int? entityId = null,        // رقم السجل لو موجود
-            string? description = null,  // وصف بالعربي
-            string? oldValues = null,    // JSON اختياري للقيم القديمة
-            string? newValues = null     // JSON اختياري للقيم الجديدة
+            UserActionType actionType,   // متغير: نوع العملية
+            string entityName,           // متغير: اسم الكيان (PurchaseInvoice / PILine / Product ...)
+            int? entityId = null,        // متغير: رقم السجل لو موجود
+            string? description = null,  // متغير: وصف مختصر
+            string? oldValues = null,    // متغير: JSON للقيم قبل التعديل/قبل الحذف
+            string? newValues = null     // متغير: JSON للقيم بعد التعديل
         );
     }
 
     public class UserActivityLogger : IUserActivityLogger
     {
-        private readonly AppDbContext _db;                 // متغير: سياق قاعدة البيانات
-        private readonly IHttpContextAccessor _http;       // متغير: للوصول لليوزر والـ IP
+        private readonly AppDbContext _db;           // متغير: سياق قاعدة البيانات
+        private readonly IHttpContextAccessor _http; // متغير: للوصول للمستخدم الحالي + IP + UserAgent
 
         public UserActivityLogger(AppDbContext db, IHttpContextAccessor http)
         {
@@ -42,31 +45,51 @@ namespace ERP.Infrastructure
             string? oldValues = null,
             string? newValues = null)
         {
-            // متغير: المستخدم الحالي (لو مسجل دخول)
-            int? userId = null;
-            var httpContext = _http.HttpContext;
+            // =========================================================
+            // (1) فلترة: نسجل "التعديل" و"الحذف" فقط
+            // =========================================================
+            if (actionType != UserActionType.Edit && actionType != UserActionType.Delete)
+                return; // ✅ تجاهل أي نوع آخر لتخفيف اللوج والبرنامج
 
-            if (httpContext?.User?.Identity?.IsAuthenticated == true)
+            // =========================================================
+            // (2) حماية بسيطة: لازم اسم كيان
+            // =========================================================
+            if (string.IsNullOrWhiteSpace(entityName))
+                return;
+
+            // =========================================================
+            // (3) لو مفيش أي معلومة مفيدة (لا وصف ولا قبل/بعد) يبقى ملهاش معنى
+            // =========================================================
+            if (string.IsNullOrWhiteSpace(description) &&
+                string.IsNullOrWhiteSpace(oldValues) &&
+                string.IsNullOrWhiteSpace(newValues))
+                return;
+
+            // =========================================================
+            // (4) قراءة بيانات المستخدم الحالي (اختياري)
+            // =========================================================
+            int? userId = null; // متغير: رقم المستخدم إن وُجد
+            var ctx = _http.HttpContext;
+
+            if (ctx?.User?.Identity?.IsAuthenticated == true)
             {
-                var idClaim = httpContext.User.FindFirst(ClaimTypes.NameIdentifier);
-                if (idClaim != null && int.TryParse(idClaim.Value, out var parsedId))
-                {
-                    userId = parsedId;
-                }
+                var idClaim = ctx.User.FindFirst(ClaimTypes.NameIdentifier);
+                if (idClaim != null && int.TryParse(idClaim.Value, out var parsed))
+                    userId = parsed;
             }
 
-            // متغير: عنوان الـ IP
-            var ip = httpContext?.Connection?.RemoteIpAddress?.ToString();
+            // متغيرات: IP و UserAgent
+            var ip = ctx?.Connection?.RemoteIpAddress?.ToString();
+            var userAgent = ctx?.Request?.Headers["User-Agent"].ToString();
 
-            // متغير: نوع المتصفح / الجهاز
-            var userAgent = httpContext?.Request?.Headers["User-Agent"].ToString();
-
-            // متغير: سطر جديد في سجل النشاط
+            // =========================================================
+            // (5) إنشاء سجل اللوج وحفظه
+            // =========================================================
             var log = new UserActivityLog
             {
                 UserId = userId,
                 ActionType = actionType,
-                EntityName = entityName,
+                EntityName = entityName.Trim(),
                 EntityId = entityId,
                 Description = description,
                 OldValues = oldValues,

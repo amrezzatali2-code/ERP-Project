@@ -529,6 +529,21 @@ namespace ERP.Controllers
                 if (invoice.WarehouseId <= 0)
                     return BadRequest(new { ok = false, message = "يجب اختيار مخزن قبل إضافة سطور." });
 
+
+                // =========================
+                // 2.1) منع التعديل على فاتورة مُرحّلة
+                // =========================
+                if (invoice.IsPosted)
+                {
+                    await tx.RollbackAsync(); // تعليق: نفك الترانزاكشن لأننا هنخرج بدري
+                    return BadRequest(new
+                    {
+                        ok = false,
+                        message = "لا يمكن إضافة/تعديل سطور: هذه الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً."
+                    });
+                }
+
+
                 // =========================
                 // 3) التأكد أن الصنف موجود
                 // =========================
@@ -820,6 +835,13 @@ namespace ERP.Controllers
 
 
 
+
+
+
+
+
+
+
         // ================================================================
         // DTO: بيانات مسح سطر (جاية من AJAX)
         // ================================================================
@@ -833,8 +855,6 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
         {
-            await using var tx = await _context.Database.BeginTransactionAsync();
-
             try
             {
                 // =========================
@@ -853,6 +873,13 @@ namespace ERP.Controllers
                     return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
 
                 // =========================
+                // 1.1) منع التعديل على فاتورة مُرحّلة
+                // =========================
+
+                if (invoice.IsPosted)
+                    return BadRequest(new { ok = false, message = "الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً." });
+
+                // =========================
                 // 2) تحميل السطر المطلوب
                 // =========================
                 var line = await _context.PILines
@@ -861,103 +888,118 @@ namespace ERP.Controllers
                 if (line == null)
                     return NotFound(new { ok = false, message = "السطر غير موجود." });
 
+
+                
+
                 // =========================
                 // 3) تحميل حركات StockLedger المرتبطة بالسطر
                 // =========================
                 var ledgers = await _context.StockLedger
                     .Where(x =>
-                        x.SourceType == "Purchase" &&
-                        x.SourceId == dto.PIId &&
-                        x.SourceLine == dto.LineNo)
+                        x.SourceType == "Purchase" &&   // ثابت: مصدر الحركة شراء
+                        x.SourceId == dto.PIId &&       // ثابت: رقم الفاتورة
+                        x.SourceLine == dto.LineNo)     // ثابت: رقم السطر
                     .ToListAsync();
 
                 // =========================
-                // 4) حماية FIFO: ممنوع المسح لو الحركة اتسحب منها
+                // 4) شرط الأمان FIFO (قبل أي تعديل)
                 // =========================
-                // تعليق: لو RemainingQty أقل من QtyIn => جزء من الداخل اتصرف
-                // ساعتها مسح الشراء هيكسر التاريخ الحقيقي للمخزون
+                // ممنوع الحذف لو الكمية اتسحب/اتباع منها بعد كده
                 foreach (var lg in ledgers)
                 {
                     if (lg.QtyIn > 0)
                     {
-                        var rem = lg.RemainingQty ?? 0;
+                        var rem = lg.RemainingQty ?? 0; // متغير: المتبقي من قيد الدخول
                         if (rem < lg.QtyIn)
                         {
+                            // ✅ رسالة واضحة جدًا حسب طلبك: "تم البيع منه"
                             return BadRequest(new
                             {
                                 ok = false,
-                                message = "لا يمكن مسح السطر لأن جزءًا من كميته تم صرفه/استهلاكه. يجب مسح البيع/السحب المرتبط أولاً."
+                                message = "لا يمكن حذف هذا السطر لأن جزءًا من كميته تم البيع/الصرف منه بالفعل. (تم البيع منه) — احذف السحب/البيع المرتبط أولاً."
                             });
                         }
                     }
                 }
 
                 // =========================
-                // 5) تحديث StockBatch (ننقص كمية السطر)
+                // 5) نبدأ Transaction بعد ما اتأكدنا إن الحذف مسموح
                 // =========================
-                // تعليق: StockBatch عندك صف واحد للتشغيلة داخل المخزن
-                // شرطنا: BatchNo + Expiry لازم يكونوا موجودين
-                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
-                var expDate = line.Expiry?.Date;
+                await using var tx = await _context.Database.BeginTransactionAsync();
 
+                // =========================
+                // 6) تحديث StockBatches (تعديل كمية فقط — بدون حذف الصف)
+                // =========================
+                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim(); // متغير: رقم التشغيلة
+                var expDate = line.Expiry?.Date;                                                   // متغير: تاريخ الصلاحية
+
+                // شرطنا الثابت: لازم BatchNo + Expiry
                 if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
                 {
                     var exp = expDate.Value.Date;
 
                     var sbRow = await _context.StockBatches
                         .FirstOrDefaultAsync(x =>
-                            x.WarehouseId == invoice.WarehouseId &&
-                            x.ProdId == line.ProdId &&
-                            x.BatchNo == batchNo &&
+                            x.WarehouseId == invoice.WarehouseId &&         // متغير: المخزن
+                            x.ProdId == line.ProdId &&                      // متغير: الصنف
+                            x.BatchNo == batchNo &&                          // متغير: التشغيلة
                             x.Expiry.HasValue &&
                             x.Expiry.Value.Date == exp);
 
                     if (sbRow != null)
                     {
-                        sbRow.QtyOnHand -= line.Qty; // متغير: نقص كمية الشراء
+                        sbRow.QtyOnHand -= line.Qty; // ✅ تعديل الرصيد (نقص كمية الشراء)
 
-                        // تعليق: لا نسمح بالسالب
+                        // لا نسمح بالسالب
                         if (sbRow.QtyOnHand < 0) sbRow.QtyOnHand = 0;
 
                         sbRow.UpdatedAt = DateTime.UtcNow;
                         sbRow.Note = $"PI:{dto.PIId} Line:{dto.LineNo} (-{line.Qty})";
 
-                        // ✅ اختيار مهم: لو الرصيد = 0 ومفيش محجوز، نحذف الصف (تنضيف)
-                        if (sbRow.QtyOnHand == 0 && (sbRow.QtyReserved <= 0))
-                        {
-                            _context.StockBatches.Remove(sbRow);
-                        }
+                        // ❌ ممنوع حذف صف StockBatches حتى لو الرصيد = 0 (حسب الاتفاق)
+                        // (مفيش Remove هنا)
                     }
                 }
 
                 // =========================
-                // 6) حذف StockLedger ثم PILine
+                // 7) حذف StockLedger ثم حذف سطر الفاتورة
                 // =========================
                 if (ledgers.Count > 0)
-                    _context.StockLedger.RemoveRange(ledgers);
+                    _context.StockLedger.RemoveRange(ledgers);   // ✅ حذف وليس عكس
 
                 _context.PILines.Remove(line);
 
                 await _context.SaveChangesAsync();
-                await tx.CommitAsync();
 
                 // =========================
-                // 7) إعادة حساب إجماليات الفاتورة
+                // 8) تحديث هيدر الفاتورة (داخل نفس الـ Transaction)
                 // =========================
                 await _docTotals.RecalcPurchaseInvoiceTotalsAsync(dto.PIId);
 
-                // =========================
-                // 8) LogActivity
-                // =========================
-                await _activityLogger.LogAsync(
-                    UserActionType.Delete,
-                    "PILine",
-                    dto.PIId,
-                    $"PIId={dto.PIId} | LineNo={dto.LineNo} | ProdId={line.ProdId} | Qty={line.Qty}"
-                );
+                await _context.SaveChangesAsync();
+
+                // ✅ Commit بعد كل شيء يخص الداتا
+                await tx.CommitAsync();
 
                 // =========================
-                // 9) رجّع السطور + الإجماليات بعد المسح
+                // 9) LogActivity (بعد الـ Commit حتى لا يعطل المسح)
+                // =========================
+                try
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "PILine",
+                        dto.PIId,
+                        $"PIId={dto.PIId} | LineNo={dto.LineNo} | ProdId={line.ProdId} | Qty={line.Qty}"
+                    );
+                }
+                catch
+                {
+                    // تعليق: لا نوقف العملية لو اللوج حصل فيه مشكلة
+                }
+
+                // =========================
+                // 10) رجّع السطور + الإجماليات بعد المسح
                 // =========================
                 var linesNow = await _context.PILines
                     .Where(l => l.PIId == dto.PIId)
@@ -1000,14 +1042,13 @@ namespace ERP.Controllers
                 return Json(new
                 {
                     ok = true,
-                    message = "تم مسح السطر بنجاح.",
+                    message = "تم حذف السطر بنجاح.",
                     lines = linesDto,
                     totals = new { totalLines, totalItems, totalQty, totalRetail, totalDiscount, totalAfterDiscount }
                 });
             }
             catch (Exception ex)
             {
-                await tx.RollbackAsync();
                 return BadRequest(new { ok = false, message = ex.Message });
             }
         }
@@ -1037,6 +1078,19 @@ namespace ERP.Controllers
 
             if (invoice == null)
                 return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+            // =========================
+            // منع التعديل على فاتورة مُرحّلة
+            // =========================
+            if (invoice.IsPosted)
+            {
+                return BadRequest(new
+                {
+                    ok = false,
+                    message = "لا يمكن تعديل الضريبة: هذه الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً."
+                });
+            }
+
 
             // متغير: تحديث الضريبة
             invoice.TaxTotal = dto.taxTotal;
@@ -1480,106 +1534,6 @@ namespace ERP.Controllers
 
 
 
-
-        // DTO: بيانات طلب مسح سطر من فاتورة مشتريات
-        public class RemovePiLineDto
-        {
-            public int PIId { get; set; }     // رقم فاتورة المشتريات (PurchaseInvoice.PIId)
-            public int LineNo { get; set; }   // رقم السطر داخل الفاتورة (PILine.LineNo)
-        }
-
-        [HttpPost]
-        [IgnoreAntiforgeryToken] // لأن الاستدعاء هيكون AJAX
-        public async Task<IActionResult> RemoveLine([FromBody] RemovePiLineDto dto)
-        {
-            // =========================
-            // (1) تحقق من المدخلات
-            // =========================
-            if (dto == null || dto.PIId <= 0 || dto.LineNo <= 0)
-                return BadRequest(new { ok = false, message = "بيانات المسح غير صحيحة." });
-
-            // =========================
-            // (2) Transaction واحدة (ثابت مشروع)
-            // =========================
-            await using var tx = await _context.Database.BeginTransactionAsync();
-
-            try
-            {
-                // =========================
-                // (3) تحميل الهيدر (PurchaseInvoices) بالاسم الصحيح
-                // =========================
-                var invoice = await _context.PurchaseInvoices
-                    .FirstOrDefaultAsync(x => x.PIId == dto.PIId);
-
-                // لو الفاتورة مش موجودة (ممسوحة/رقم غلط) نرجع رسالة واضحة
-                if (invoice == null)
-                    return NotFound(new { ok = false, message = $"الفاتورة رقم ({dto.PIId}) غير موجودة (قد تكون ممسوحة)." });
-
-                // =========================
-                // (4) تحميل السطر (PILines) بالاسم الصحيح
-                // =========================
-                var line = await _context.PILines
-                    .FirstOrDefaultAsync(x => x.PIId == dto.PIId && x.LineNo == dto.LineNo);
-
-                if (line == null)
-                    return NotFound(new { ok = false, message = $"السطر رقم ({dto.LineNo}) غير موجود داخل الفاتورة رقم ({dto.PIId})." });
-
-                // =========================
-                // (5) مسح قيود المخزون الخاصة بهذا السطر (StockLedger)
-                // =========================
-                // ملاحظة: اسم DbSet المعتمد: StockLedger (مفرد بدون s)  :contentReference[oaicite:0]{index=0}
-                // نفترض أن قيد الشراء تم تسجيله كـ SourceType = "Purchase" مع SourceId = PIId و SourceLine = LineNo
-                var stockEntries = await _context.StockLedger
-                    .Where(e =>
-                        e.SourceType == "Purchase" &&   // ثابت: نوع المصدر لحركات الشراء
-                        e.SourceId == dto.PIId &&       // رقم الفاتورة
-                        e.SourceLine == dto.LineNo      // رقم السطر
-                    )
-                    .ToListAsync();
-
-                if (stockEntries.Count > 0)
-                    _context.StockLedger.RemoveRange(stockEntries);
-
-                // (اختياري لاحقًا): لو عندك FIFO مفعّل للشراء/البيع، هنا نحذف أي خرائط مرتبطة بهذه القيود
-                // var fifoMaps = await _context.StockFifoMap.Where(m => stockEntryIds.Contains(m.InEntryId) || stockEntryIds.Contains(m.OutEntryId)).ToListAsync();
-                // _context.StockFifoMap.RemoveRange(fifoMaps);
-
-                // =========================
-                // (6) مسح السطر نفسه
-                // =========================
-                _context.PILines.Remove(line);
-
-                // حفظ الحذف
-                await _context.SaveChangesAsync();
-
-                // =========================
-                // (7) إعادة حساب إجماليات الفاتورة (Header Totals)
-                // =========================
-                await _docTotals.RecalcPurchaseRequestTotalsAsync(dto.PIId);
-
-
-                // =========================
-                // (8) تسجيل النشاط (UserActivityLog)
-                // =========================
-                // لو عندك Logger جاهز، سجّل عملية حذف سطر
-                // await _userActivityLogger.LogAsync(User, "Delete", $"حذف سطر رقم {dto.LineNo} من فاتورة مشتريات رقم {dto.PIId}");
-
-                await tx.CommitAsync();
-
-                return Ok(new
-                {
-                    ok = true,
-                    message = "تم حذف السطر بنجاح.",
-                    piId = dto.PIId,
-                    lineNo = dto.LineNo
-                });
-            }
-            catch
-            {
-                await tx.RollbackAsync();
-                return StatusCode(500, new { ok = false, message = "حدث خطأ أثناء حذف السطر. حاول مرة أخرى." });
-            }
-        }
 
 
 
@@ -2300,6 +2254,10 @@ namespace ERP.Controllers
 
             return null;
         }
+
+
+
+
 
 
 
