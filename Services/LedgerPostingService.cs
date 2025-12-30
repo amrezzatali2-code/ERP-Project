@@ -1,56 +1,43 @@
 ﻿using ERP.Data;                 // AppDbContext
 using ERP.Models;               // PurchaseInvoice, LedgerEntry, LedgerSourceType
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace ERP.Services
 {
     /// <summary>
     /// خدمة الترحيل المحاسبي (دفتر الأستاذ).
-    /// الفكرة: كل مستند "يُرحّل" = يُنشئ صفّين أو أكثر داخل LedgerEntries.
-    /// كل صف يمثل "سطر قيد" لحساب واحد (Debit أو Credit).
     ///
-    /// ✅ تحديث مهم حسب اتفاقنا:
-    /// - لو الفاتورة اتفتحت بعد الترحيل واتعدّلت ثم تم ترحيلها مرة أخرى:
-    ///   نقوم أولاً بعمل "قيود عكسية" لآخر ترحيل سابق (مرحلة سابقة)
-    ///   ثم نضيف القيود الجديدة (مرحلة جديدة).
-    /// - وبذلك يظل عندنا تاريخ مراحل (Stage 1 / Stage 2 / Stage 3 ...) داخل دفتر الأستاذ.
+    /// ✅ إصلاح مهم:
+    /// - عدم الاعتماد على CreatedAt في ربط سطر المدين بسطر الدائن (لأنه قد يختلف بجزء من الثانية)
+    /// - الربط الآن يتم عن طريق "رقم المرحلة" المكتوب داخل Description
+    ///   مثال: "ترحيل فاتورة مشتريات رقم 1104 (مرحلة 1)"
+    ///
+    /// منطق إعادة الترحيل بعد فتح الفاتورة:
+    /// 1) نعكس قيود آخر مرحلة (مرحلة سابقة)
+    /// 2) نخصم رصيد المورد القديم
+    /// 3) ننشئ قيود مرحلة جديدة بالقيمة الجديدة
+    /// 4) نضيف رصيد المورد الحالي
     /// </summary>
     public interface ILedgerPostingService
     {
-        /// <summary>
-        /// ترحيل فاتورة مشتريات إلى دفتر الأستاذ.
-        /// </summary>
-        /// <param name="purchaseInvoiceId">متغير: رقم فاتورة المشتريات</param>
-        /// <param name="postedBy">متغير: اسم المستخدم الذي رحّل</param>
         Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy);
     }
 
     public class LedgerPostingService : ILedgerPostingService
     {
-        private readonly AppDbContext _db;  // متغير: كائن قاعدة البيانات EF
+        private readonly AppDbContext _db; // متغير: سياق قاعدة البيانات
 
         public LedgerPostingService(AppDbContext db)
         {
             _db = db;
         }
 
-        /// <summary>
-        /// ترحيل فاتورة مشتريات (آجل) إلى LedgerEntries:
-        /// - المخزن (حساب 1105): مدين
-        /// - المورد: دائن (له فلوس عندنا)
-        ///
-        /// ✅ لو وجدنا ترحيل سابق لنفس الفاتورة (لأنها اتفتحت واتعدّلت):
-        ///   1) نعمل قيود عكسية لآخر ترحيل سابق
-        ///   2) نطرح قيمته من CurrentBalance للمورد القديم
-        ///   3) ثم نرحّل الفاتورة بالقيمة الجديدة
-        ///   4) ونضيف القيمة الجديدة لـ CurrentBalance للمورد الحالي
-        /// </summary>
         public async Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy)
         {
             // ================================
-            // 0) Transaction (ثابت مشروع)
+            // 0) Transaction لضمان سلامة العملية
             // ================================
-            // علشان نضمن: يا كل شيء يتم، يا كل شيء يتراجع
             await using var tx = await _db.Database.BeginTransactionAsync();
 
             try
@@ -66,9 +53,9 @@ namespace ERP.Services
                     throw new Exception("الفاتورة غير موجودة.");
 
                 // ================================
-                // 2) منع الترحيل لو الفاتورة مقفولة (IsPosted = true)
+                // 2) منع الترحيل لو الفاتورة مقفولة
                 // ================================
-                // الفكرة: الترحيل يقفل الفاتورة، فلازم "زر الفتح" هو اللي يحوّلها false للتعديل
+                // تعليق: الترحيل يقفل الفاتورة - لازم زر الفتح هو اللي يحولها false قبل إعادة الترحيل
                 if (invoice.IsPosted)
                     throw new Exception("هذه الفاتورة مترحّلة بالفعل. افتح الفاتورة أولاً قبل إعادة الترحيل.");
 
@@ -82,145 +69,140 @@ namespace ERP.Services
                     throw new Exception("هذا المورد ليس مرتبطًا بحساب محاسبي داخل شجرة الحسابات.");
 
                 // ================================
-                // 4) تحديد حساب المخزن (ثابت = 1105)
+                // 4) حساب المخزن (ثابت = 1105)
                 // ================================
-                // أنت قررت توحيد حساب المخزون كله في حساب واحد (1105).
                 int inventoryAccountId = await ResolveAccountIdByCodeAsync("1105"); // متغير: AccountId لحساب المخزن
 
                 // ================================
                 // 5) قيم مشتركة
                 // ================================
-                var now = DateTime.UtcNow;         // متغير: وقت التنفيذ الحالي (UTC)
-                decimal newAmount = invoice.NetTotal; // متغير: صافي الفاتورة (بعد أي تعديل)
-                string voucherNo = invoice.PIId.ToString(); // متغير: رقم الفاتورة كنص
+                var now = DateTime.UtcNow;                  // متغير: وقت التنفيذ الحالي (UTC)
+                decimal newAmount = invoice.NetTotal;        // متغير: صافي الفاتورة بعد أي تعديل
+                string voucherNo = invoice.PIId.ToString();  // متغير: رقم الفاتورة كنص
 
-                // ================================
-                // 6) تحديد رقم المرحلة (Stage)
-                // ================================
-                // نعدّ مرات الترحيل السابقة عبر "سطر المدين رقم 1" فقط
-                // (لأنه ثابت في كل ترحيل جديد)
-                int previousPostsCount = await _db.LedgerEntries
-                    .Where(e =>
-                        e.SourceType == LedgerSourceType.PurchaseInvoice &&
-                        e.SourceId == invoice.PIId &&
-                        e.LineNo == 1) // سطر المدين الأساسي في كل مرحلة
-                    .CountAsync();
+                // =========================================================
+                // 6) تحديد آخر مرحلة مُرحّلة سابقاً (بدون الاعتماد على CreatedAt)
+                // =========================================================
+                // تعليق: نقرأ رقم المرحلة من Description لسطر المدين فقط (LineNo = 1)
+                // لأن كل مرحلة ترحيل لها سطر مدين ثابت + سطر دائن ثابت.
+                int lastStage = await GetLastPurchaseInvoiceStageAsync(invoice.PIId); // متغير: آخر مرحلة موجودة
 
-                int stage = previousPostsCount + 1; // المرحلة الجديدة
+                // المرحلة الجديدة = آخر مرحلة + 1
+                int newStage = lastStage + 1;
 
-                // ================================
-                // 7) لو فيه ترحيل سابق (يعني invoice اتفتحت واتعدلت قبل كده)
-                // ================================
-                // هنا هنجيب آخر "مرحلة" اتترحلت ونعمل لها عكس قبل ما نضيف الجديد
-                var lastPostedDebit = await _db.LedgerEntries
-                    .Where(e =>
-                        e.SourceType == LedgerSourceType.PurchaseInvoice &&
-                        e.SourceId == invoice.PIId &&
-                        e.LineNo == 1) // آخر سطر مدين أساسي
-                    .OrderByDescending(e => e.CreatedAt)
-                    .FirstOrDefaultAsync();
-
-                if (lastPostedDebit != null)
+                // =========================================================
+                // 7) لو فيه مرحلة سابقة => اعكسها قبل إنشاء المرحلة الجديدة
+                // =========================================================
+                if (lastStage > 0)
                 {
-                    // متغير: وقت آخر ترحيل سابق (علشان نجيب سطر الدائن المقابل)
-                    var lastPostTime = lastPostedDebit.CreatedAt;
+                    // 7.1) جلب سطر المدين للمرحلة السابقة
+                    var lastDebit = await _db.LedgerEntries
+                        .Where(e =>
+                            e.SourceType == LedgerSourceType.PurchaseInvoice &&
+                            e.SourceId == invoice.PIId &&
+                            e.LineNo == 1 &&
+                            e.Description != null &&
+                            e.Description.Contains($"(مرحلة {lastStage})"))
+                        .OrderByDescending(e => e.Id)
+                        .FirstOrDefaultAsync();
 
-                    // سطر الدائن المقابل (LineNo = 2) لنفس وقت الترحيل
-                    var lastPostedCredit = await _db.LedgerEntries
+                    // 7.2) جلب سطر الدائن للمرحلة السابقة
+                    var lastCredit = await _db.LedgerEntries
                         .Where(e =>
                             e.SourceType == LedgerSourceType.PurchaseInvoice &&
                             e.SourceId == invoice.PIId &&
                             e.LineNo == 2 &&
-                            e.CreatedAt == lastPostTime)
+                            e.Description != null &&
+                            e.Description.Contains($"(مرحلة {lastStage})"))
+                        .OrderByDescending(e => e.Id)
                         .FirstOrDefaultAsync();
 
-                    // متغير: قيمة المرحلة السابقة (المبلغ القديم)
-                    decimal oldAmount = lastPostedDebit.Debit;
+                    // لو لأي سبب ما لقيناش السطور (بيانات غير متسقة) نوقف حفاظاً على الدقة
+                    if (lastDebit == null || lastCredit == null)
+                        throw new Exception("تعذر تحديد آخر ترحيل سابق للفواتورة (بيانات القيود غير مكتملة).");
+
+                    decimal oldAmount = lastDebit.Debit; // متغير: قيمة المرحلة السابقة
 
                     // ================================
-                    // 7.1) عمل قيود عكسية للمرحلة السابقة
+                    // 7.3) إنشاء القيود العكسية (مرحلة عكس قبل مرحلة جديدة)
                     // ================================
-                    // عكس المدين: يصبح دائن بنفس المبلغ
+                    // عكس المدين -> دائن
                     var reverseDebit = new LedgerEntry
                     {
-                        EntryDate = invoice.PIDate, // نثبتها بتاريخ الفاتورة (مش وقت الفتح)
+                        EntryDate = invoice.PIDate,
                         SourceType = LedgerSourceType.PurchaseInvoice,
                         VoucherNo = voucherNo,
                         SourceId = invoice.PIId,
 
-                        LineNo = 9001, // رقم سطر عالي حتى لا يتلخبط مع 1/2
-                        AccountId = lastPostedDebit.AccountId,
-                        CustomerId = lastPostedDebit.CustomerId,
+                        LineNo = 9001, // رقم عالي للتمييز
+                        PostVersion = lastStage, // متغير: نُسند العكس لنفس مرحلة الترحيل القديمة
+
+                        AccountId = lastDebit.AccountId,
+                        CustomerId = lastDebit.CustomerId,
 
                         Debit = 0m,
                         Credit = oldAmount,
 
-                        Description = $"عكس ترحيل فاتورة مشتريات رقم {invoice.PIId} (قبل مرحلة {stage})",
+                        Description = $"عكس ترحيل فاتورة مشتريات رقم {invoice.PIId} (عكس مرحلة {lastStage})",
                         CreatedAt = now
                     };
 
-                    // عكس الدائن: يصبح مدين بنفس المبلغ
-                    if (lastPostedCredit != null)
+                    // عكس الدائن -> مدين
+                    var reverseCredit = new LedgerEntry
                     {
-                        var reverseCredit = new LedgerEntry
-                        {
-                            EntryDate = invoice.PIDate,
-                            SourceType = LedgerSourceType.PurchaseInvoice,
-                            VoucherNo = voucherNo,
-                            SourceId = invoice.PIId,
+                        EntryDate = invoice.PIDate,
+                        SourceType = LedgerSourceType.PurchaseInvoice,
+                        VoucherNo = voucherNo,
+                        SourceId = invoice.PIId,
 
-                            LineNo = 9002,
-                            AccountId = lastPostedCredit.AccountId,
-                            CustomerId = lastPostedCredit.CustomerId,
+                        LineNo = 9002,
+                        PostVersion = lastStage, // ✅
+                        AccountId = lastCredit.AccountId,
+                        CustomerId = lastCredit.CustomerId,
 
-                            Debit = oldAmount,
-                            Credit = 0m,
+                        Debit = oldAmount,
+                        Credit = 0m,
 
-                            Description = $"عكس ترحيل فاتورة مشتريات رقم {invoice.PIId} (قبل مرحلة {stage})",
-                            CreatedAt = now
-                        };
-
-                        _db.LedgerEntries.Add(reverseCredit);
-
-                        // ================================
-                        // 7.2) طرح الرصيد من المورد القديم (لو موجود)
-                        // ================================
-                        // مهم جدًا: لو المورد اتغير في الفاتورة قبل إعادة الترحيل
-                        // لازم نطرح من المورد اللي كان مترحل عليه سابقًا (CustomerId في سطر الدائن)
-                        if (lastPostedCredit.CustomerId.HasValue && lastPostedCredit.CustomerId.Value > 0)
-                        {
-                            var oldSupplier = await _db.Customers
-                                .FirstOrDefaultAsync(c => c.CustomerId == lastPostedCredit.CustomerId.Value);
-
-                            if (oldSupplier != null)
-                            {
-                                oldSupplier.CurrentBalance -= oldAmount;
-                            }
-                        }
-                    }
+                        Description = $"عكس ترحيل فاتورة مشتريات رقم {invoice.PIId} (عكس مرحلة {lastStage})",
+                        CreatedAt = now
+                    };
 
                     _db.LedgerEntries.Add(reverseDebit);
+                    _db.LedgerEntries.Add(reverseCredit);
 
-                    // لو لأي سبب ما لقيناش سطر الدائن، هنحاول طرح من المورد الحالي (كحل احتياطي)
-                    if (lastPostedCredit == null)
+                    // ================================
+                    // 7.4) خصم رصيد المورد القديم (المذكور في سطر الدائن للمرحلة السابقة)
+                    // ================================
+                    if (lastCredit.CustomerId.HasValue && lastCredit.CustomerId.Value > 0)
                     {
+                        var oldSupplier = await _db.Customers
+                            .FirstOrDefaultAsync(c => c.CustomerId == lastCredit.CustomerId.Value);
+
+                        if (oldSupplier != null)
+                            oldSupplier.CurrentBalance -= oldAmount;
+                    }
+                    else
+                    {
+                        // حل احتياطي: لو CustomerId مش موجود في قيد الدائن لأي سبب
                         invoice.Customer.CurrentBalance -= oldAmount;
                     }
                 }
 
-                // ================================
-                // 8) إنشاء قيود المرحلة الجديدة (القيد المزدوج)
-                // ================================
+                // =========================================================
+                // 8) إنشاء قيود المرحلة الجديدة (قيدين طبيعيين)
+                // =========================================================
                 int supplierAccountId = invoice.Customer.AccountId.Value; // حساب المورد الحالي
 
-                // (1) مدين: المخزن (1105)
+                // (1) مدين: المخزن
                 var debitRow = new LedgerEntry
                 {
-                    EntryDate = invoice.PIDate,                         // تاريخ القيد = تاريخ الفاتورة
+                    EntryDate = invoice.PIDate,
                     SourceType = LedgerSourceType.PurchaseInvoice,
                     VoucherNo = voucherNo,
                     SourceId = invoice.PIId,
                     LineNo = 1,
+                    PostVersion = newStage, // ✅ متغير: مرحلة الترحيل لهذه القيود
+
 
                     AccountId = inventoryAccountId,
                     CustomerId = null,
@@ -228,7 +210,7 @@ namespace ERP.Services
                     Debit = newAmount,
                     Credit = 0m,
 
-                    Description = $"ترحيل فاتورة مشتريات رقم {invoice.PIId} (مرحلة {stage})",
+                    Description = $"ترحيل فاتورة مشتريات رقم {invoice.PIId} (مرحلة {newStage})",
                     CreatedAt = now
                 };
 
@@ -240,6 +222,8 @@ namespace ERP.Services
                     VoucherNo = voucherNo,
                     SourceId = invoice.PIId,
                     LineNo = 2,
+                    PostVersion = newStage, // ✅ مرحلة الترحيل
+
 
                     AccountId = supplierAccountId,
                     CustomerId = invoice.CustomerId,
@@ -247,25 +231,24 @@ namespace ERP.Services
                     Debit = 0m,
                     Credit = newAmount,
 
-                    Description = $"ترحيل فاتورة مشتريات رقم {invoice.PIId} (مرحلة {stage})",
+                    Description = $"ترحيل فاتورة مشتريات رقم {invoice.PIId} (مرحلة {newStage})",
                     CreatedAt = now
                 };
 
                 _db.LedgerEntries.Add(debitRow);
                 _db.LedgerEntries.Add(creditRow);
 
-                // ================================
+                // =========================================================
                 // 9) تحديث حالة الفاتورة (قفل)
-                // ================================
-                invoice.IsPosted = true;               // تم الترحيل
-                invoice.Status = $"مرحلة {stage}";     // نص الحالة: مرحلة 1 / مرحلة 2 / ...
-                invoice.PostedAt = now;                // وقت الترحيل
-                invoice.PostedBy = postedBy;           // المستخدم
+                // =========================================================
+                invoice.IsPosted = true;
+                invoice.Status = $"مرحلة {newStage}";
+                invoice.PostedAt = now;
+                invoice.PostedBy = postedBy;
 
-                // ================================
+                // =========================================================
                 // 10) تحديث رصيد المورد الحالي
-                // ================================
-                // بما أن فاتورة مشتريات آجل => المورد له فلوس عندنا => رصيده يزيد
+                // =========================================================
                 invoice.Customer.CurrentBalance += newAmount;
 
                 await _db.SaveChangesAsync();
@@ -278,10 +261,42 @@ namespace ERP.Services
             }
         }
 
-        /// <summary>
-        /// دالة: تحويل AccountCode (مثل 1105) إلى AccountId (المفتاح الأساسي داخل جدول Accounts).
-        /// مهم: LedgerEntries يخزن AccountId وليس AccountCode.
-        /// </summary>
+        // =========================================================
+        // دالة: تحديد آخر مرحلة ترحيل لفاتورة مشتريات من Description
+        // =========================================================
+        private async Task<int> GetLastPurchaseInvoiceStageAsync(int piId)
+        {
+            // تعليق: نقرأ فقط سطور الترحيل الطبيعية (LineNo=1) لأن كل مرحلة لها سطر مدين واحد
+            var entries = await _db.LedgerEntries
+                .Where(e =>
+                    e.SourceType == LedgerSourceType.PurchaseInvoice &&
+                    e.SourceId == piId &&
+                    e.LineNo == 1 &&
+                    e.Description != null &&
+                    e.Description.Contains("ترحيل فاتورة مشتريات رقم"))
+                .Select(e => e.Description!)
+                .ToListAsync();
+
+            int maxStage = 0; // متغير: أكبر مرحلة وجدناها
+
+            // Regex لالتقاط رقم المرحلة من النص: (مرحلة 1) أو (مرحلة 12)
+            var rx = new Regex(@"\(مرحلة\s+(\d+)\)", RegexOptions.Compiled);
+
+            foreach (var d in entries)
+            {
+                var m = rx.Match(d);
+                if (m.Success && int.TryParse(m.Groups[1].Value, out int stage))
+                {
+                    if (stage > maxStage) maxStage = stage;
+                }
+            }
+
+            return maxStage;
+        }
+
+        // =========================================================
+        // دالة: تحويل AccountCode (مثل 1105) إلى AccountId
+        // =========================================================
         private async Task<int> ResolveAccountIdByCodeAsync(string accountCode)
         {
             int accountId = await _db.Accounts

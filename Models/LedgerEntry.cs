@@ -35,6 +35,10 @@ namespace ERP.Models
         [Display(Name = "رقم السطر داخل القيد")]
         public int LineNo { get; set; }          // متغير: ترتيب السطر داخل نفس القيد
 
+        [Display(Name = "مرحلة الترحيل")]
+        public int PostVersion { get; set; } = 0; // متغير: رقم مرحلة الترحيل لنفس المصدر (1/2/3...) لسهولة عكس القيود بدقة
+
+
         // ===== الحساب المحاسبي =====
 
         [Required]

@@ -172,6 +172,17 @@
                         <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
                     </div>
 
+
+                    <!-- =========================================================
+                    ثابت: رقم الفاتورة + علم الترحيل (Flag)
+                    - InvoiceId: رقم الفاتورة الحالي (0 لو جديدة)
+                    - InvoiceIsPostedFlag: 1 لو مترحّلة / 0 لو مفتوحة
+                    ========================================================= -->
+                    <input type="hidden" id="InvoiceId" value="@Model.PIId" />
+                    <input type="hidden" id="InvoiceIsPostedFlag" value="@(Model.IsPosted ? "1" : "0")" />
+
+
+
                     <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
 
                         @{
@@ -271,7 +282,10 @@
                             ➕ فاتورة جديدة
                         </a>
 
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnSaveInvoiceHeader" data-lock-posted="1">
+                        <button type="button" 
+                            class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" 
+                            id="btnSaveInvoiceHeader" 
+                            data-lock-posted="1">
                             💾 حفظ الفاتورة
                         </button>
 
@@ -281,14 +295,21 @@
 
                         <div id="postInvoiceMsg" class="small mt-2"></div>
 
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnOpenInvoice">
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnOpenInvoice">
                             ⏪ فتح الفاتورة
                         </button>
+
+                        <!-- نفس بوكس الرسائل المستخدم في الترحيل -->
+                        <div id="postInvoiceMsg" class="small mt-2"></div>
+
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
                                 id="btnClearInvoiceLines"
-                                data-invoice-id="@(Model?.PIId ?? 0)" data-lock-posted="1">
+                                data-invoice-id="@(Model?.PIId ?? 0)" 
+                                data-lock-posted="1">
                             🗑️ مسح كل أصناف الفاتورة
                         </button>
 
@@ -379,7 +400,7 @@
 
                                         <input id="CustomerCodeDisplay"
                                                class="form-control form-control-sm text-center invoice-small-input"
-                                               type="number" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
+                                               type="number" data-lock-posted="1"  />
 
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
@@ -393,7 +414,9 @@
                                                placeholder="اكتب اسم المورد ثم اختره من القائمة"
                                                list="customersList"
                                                autocomplete="off"
-                                               value="@ViewBag.SelectedCustomerName" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
+                                               value="@ViewBag.SelectedCustomerName" 
+                                               data-lock-posted="1" 
+                                                />
 
                                         <datalist id="customersList">
                                             @if (ViewBag.Customers != null)
@@ -424,7 +447,8 @@
                                         <input id="InvoiceNumberDisplay"
                                                class="form-control form-control-sm text-center"
                                                value="@(Model != null && Model.PIId > 0 ? Model.PIId.ToString() : "")"
-                                               readonly />
+                                               readonly 
+                                               />
                                     </div>
 
                                     <div class="col-lg-3 col-md-6">
@@ -458,8 +482,8 @@
                                         <label class="form-label form-label-sm">مُرحَّلة؟</label>
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
-                                               value="@(Model.IsPosted ? "نعم" : "لا")"
-                                               readonly data-is-posted="@(Model.IsPosted ? "1" : "0")" />
+                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "لا" : Model.Status)"
+                                               readonly />
                                     </div>
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
@@ -473,7 +497,8 @@
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
                                         <select asp-for="WarehouseId"
                                                 asp-items="ViewBag.Warehouses"
-                                                class="form-select form-select-sm">
+                                                class="form-select form-select-sm" 
+                                                data-is-posted="@(Model.IsPosted ? "1" : "0")">
                                             <option value="">اختر المخزن</option>
                                         </select>
                                     </div>
@@ -483,7 +508,8 @@
                                         <input id="InvoiceCreatedByDisplay"
                                                class="form-control form-control-sm text-center"
                                                value="@Model.CreatedBy"
-                                               readonly />
+                                               readonly 
+                                               />
                                     </div>
 
                                 </div>
@@ -499,7 +525,8 @@
                                                ?? Model?.Customer?.Whatsapp
                                                ?? ""
                                                               )"
-                                               readonly />
+                                               readonly 
+                                               />
                                     </div>
 
                                     <div class="col-lg-3 col-md-3">
@@ -507,7 +534,8 @@
                                         <input id="CustomerGovernorate"
                                                class="form-control form-control-sm"
                                                value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")"
-                                               readonly />
+                                               readonly 
+                                               />
                                     </div>
 
                                     <div class="col-lg-3 col-md-3">
@@ -515,7 +543,8 @@
                                         <input id="CustomerDistrict"
                                                class="form-control form-control-sm"
                                                value="@(Model?.Customer?.District?.DistrictName ?? "")"
-                                               readonly />
+                                               readonly 
+                                               />
                                     </div>
 
                                     <div class="col-lg-3 col-md-3">
@@ -523,7 +552,8 @@
                                         <input id="CustomerArea"
                                                class="form-control form-control-sm"
                                                value="@(Model?.Customer?.Area?.AreaName ?? "")"
-                                               readonly />
+                                               readonly 
+                                               />
                                     </div>
 
                                 </div>
@@ -535,7 +565,8 @@
                                         <input id="CustomerAddress"
                                                class="form-control form-control-sm"
                                                value="@(Model?.Customer?.Address ?? "")"
-                                               readonly />
+                                               readonly 
+                                               data-lock-posted="1"/>
                                     </div>
 
                                     <div class="col-lg-4 col-md-2">
@@ -543,7 +574,8 @@
                                         <input id="CustomerCredit"
                                                class="form-control form-control-sm"
                                                value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))"
-                                               readonly />
+                                               readonly 
+                                               data-lock-posted="1" />
                                     </div>
 
 
@@ -624,7 +656,9 @@
                                     <label class="form-label form-label-sm">كود الصنف</label>
                                     <input type="number" id="ProdCodeInput"
                                            class="form-control form-control-sm text-center pi-input"
-                                               placeholder="بحث بالكود..." data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")"/>
+                                               placeholder="بحث بالكود..." 
+                                               data-lock-posted="1" 
+                                             />
                                 </div>
 
                                 <div class="col-lg-4 col-md-8">
@@ -634,7 +668,9 @@
                                            list="productsList"
                                            class="form-control form-control-sm pi-input"
                                            placeholder="اكتب اسم الصنف أو جزء منه..."
-                                               autocomplete="off" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
+                                               autocomplete="off" 
+                                               
+                                               data-lock-posted="1" />
 
                                     <datalist id="productsList">
                                         @if (ViewBag.ProductsAuto != null)
@@ -688,7 +724,7 @@
                                     <label class="form-label form-label-sm">الكمية</label>
                                     <input type="number" id="ProdQtyInput"
                                            class="form-control form-control-sm text-center pi-input"
-                                           placeholder="0" />
+                                           placeholder="0"                                              data-lock-posted="1" />
                                 </div>
 
                                 <div class="col-lg-2 col-md-4">
@@ -2214,10 +2250,11 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                     const statusHidden = document.getElementById('InvoiceStatusHidden');
                     if (statusHidden && data.status) statusHidden.value = data.status;
 
-                    const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
-                    if (isPostedDisplay && typeof data.isPosted === 'boolean') {
-                        isPostedDisplay.value = data.isPosted ? 'نعم' : 'لا';
-                    }
+                 const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
+if (isPostedDisplay) {
+    // تعليق: نعرض الحالة النصية (مرحلة 1/2/...) بدل نعم/لا
+    isPostedDisplay.value = (data && data.status) ? data.status : 'لا';
+}
 
                     const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');
                     if (createdByDisplay && data.createdBy) createdByDisplay.value = data.createdBy;
@@ -2398,53 +2435,69 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-                // =========================================================
+             // =========================================================
             // زر: ترحيل الفاتورة
-            // - يمنع الضغط مرتين
-            // - يعرض رسالة نجاح/خطأ
-            // - لا يفتح دفتر الأستاذ
-            // - يحدّث خانة "مُرحَّلة؟" بدون Reload
             // =========================================================
             document.addEventListener("DOMContentLoaded", function () {
 
-                const btnPost = document.getElementById("btnPostInvoice");         // متغير: زر الترحيل
-                const msg = document.getElementById("postInvoiceMsg");             // متغير: مكان الرسائل
-                const isPostedBox = document.getElementById("InvoiceIsPostedDisplay"); // متغير: خانة مُرحَّلة؟
+                const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر الترحيل
+                const msg = document.getElementById("postInvoiceMsg");                  // متغير: مكان الرسائل
+                const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة "مرحّلة؟" (عرض فقط)
 
                 if (!btnPost) return;
 
-                // متغير: رقم الفاتورة من الموديل (لا نغير الاسم)
-                const invoiceId = @Model.PIId;
+                // متغير: حالة الترحيل من السيرفر وقت فتح الصفحة (Boolean حقيقي)
+                const serverIsPosted = @Model.IsPosted.ToString().ToLower(); // true/false
 
-                // متغير: حالة الترحيل من السيرفر وقت فتح الصفحة
-                const isPosted = @Model.IsPosted.ToString().ToLower();
+                // ✅ لو مترحلة من البداية: اقفل زر الترحيل وطبق القفل
+                if (serverIsPosted) {
 
-                // لو الفاتورة مترحلة بالفعل نقفل الزر ونثبت الحالة
-                if (isPosted === "true") {
                     btnPost.disabled = true;
-                    btnPost.textContent = "✅ تم ترحيل الفاتورة";
+                    btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
 
-                    if (isPostedBox) isPostedBox.value = "نعم";
+                    // ✅ تحديث علم الترحيل + تطبيق القفل
+                    if (typeof setInvoicePosted === "function") setInvoicePosted(true);
+                    if (typeof applyPostedUiLock === "function") applyPostedUiLock();
 
                     if (msg) {
                         msg.textContent = "هذه الفاتورة مترحّلة بالفعل.";
                         msg.className = "small mt-2 text-muted";
                     }
+
+                    // ⚠️ مهم: ما تستخدمش data هنا لأنها مش موجودة في فتح الصفحة
+                    // لو عايز تعرض "مرحلة ..." عند فتح الصفحة:
+                    // الأفضل تجيبها من السيرفر مباشرة (مثلاً ViewBag.PostedLabel)
+                    // مثال:
+                    // if (isPostedBox) isPostedBox.value = "@(ViewBag.PostedLabel ?? "نعم")";
+
                     return;
                 }
 
                 btnPost.addEventListener("click", async function () {
 
-                    // حماية: لو اتضغط أثناء التنفيذ
+                    // =========================
+                    // 0) اقرأ رقم الفاتورة الآن
+                    // =========================
+                    const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+
+                    if (invoiceId <= 0) {
+                        if (msg) {
+                            msg.textContent = "⚠️ لازم تحفظ الفاتورة أولاً قبل الترحيل.";
+                            msg.className = "small mt-2 text-warning";
+                        }
+                        const saveBtn = document.getElementById("btnSaveInvoiceHeader");
+                        if (saveBtn) saveBtn.focus();
+                        return;
+                    }
+
                     if (btnPost.disabled) return;
 
-                    // تأكيد قبل الترحيل
                     const ok = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
                     if (!ok) return;
 
-                    // تجهيز حالة الزر
+                    // تجهيز الزر
                     btnPost.disabled = true;
-                    const oldHtml = btnPost.innerHTML;          // متغير: حفظ شكل الزر القديم (فيه الإيموجي)
+                    const oldHtml = btnPost.innerHTML;
                     btnPost.innerHTML = "⏳ جاري الترحيل...";
 
                     if (msg) {
@@ -2453,42 +2506,66 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     try {
-                        // إرسال طلب POST للكنترولر
+
+                        // =========================
+                        // 1) طلب الترحيل
+                        // =========================
                         const res = await fetch(`/PurchaseInvoices/PostInvoice?id=${invoiceId}`, {
                             method: "POST",
-                            headers: { "X-Requested-With": "XMLHttpRequest" }
+                            credentials: "same-origin",
+                            headers: {
+                                "X-Requested-With": "XMLHttpRequest",
+                                "Accept": "application/json"
+                            }
                         });
 
-                        // لو خطأ: نحاول نفهم الرسالة (JSON أو نص)
+                        // =========================
+                        // 2) لو فشل: اقرأ رسالة مفهومة
+                        // =========================
                         if (!res.ok) {
-                            let errText = "حدث خطأ أثناء الترحيل.";
-
+                            // اقرأ مرة واحدة فقط (عشان ما تقعش في body stream already read)
+                            const raw = await res.text();
+                            let errText = raw || "حدث خطأ أثناء الترحيل.";
                             try {
-                                const errJson = await res.json();     // لو السيرفر يرجع JSON
-                                if (errJson && errJson.message) errText = errJson.message;
-                            } catch {
-                                const text = await res.text();        // لو السيرفر يرجع نص عادي
-                                if (text) errText = text;
-                            }
-
+                                const obj = JSON.parse(raw);
+                                if (obj && obj.message) errText = obj.message;
+                            } catch { }
                             throw new Error(errText);
                         }
 
-                        // نجاح: لو السيرفر بيرجع JSON نقرأه (لو Ok بدون Body مش هتكسر)
-                        let okMsg = "تم ترحيل الفاتورة بنجاح.";
-                        try {
-                            const data = await res.json();
-                            if (data && data.message) okMsg = data.message;
-                        } catch { }
+                        // =========================
+                        // 3) نجاح: اقرأ JSON مرة واحدة
+                        // =========================
+                        const data = await res.json(); // ✅ تعريف data هنا (مرة واحدة)
 
-                        // 1) تحديث الزر
+                        const okMsg = (data && data.message) ? data.message : "تم ترحيل الفاتورة بنجاح.";
+                        const postedFlag = (data && typeof data.isPosted !== "undefined") ? !!data.isPosted : true;
+
+                        // =========================
+                        // 4) تحديث البوكس (عرض فقط)
+                        // =========================
+                        if (isPostedBox) {
+                            isPostedBox.value = (data && data.postedLabel) ? data.postedLabel : "نعم";
+                        }
+
+                        // =========================
+                        // 5) تحديث الفلاج الحقيقي + تطبيق القفل
+                        // =========================
+                        if (typeof setInvoicePosted === "function") setInvoicePosted(postedFlag);
+                        if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+
+                        // =========================
+                        // 6) بعد نجاح الترحيل: فعّل زر الفتح
+                        // =========================
+                        const btnOpen = document.getElementById("btnOpenInvoice");
+                        if (btnOpen) btnOpen.disabled = false;
+
+                        // =========================
+                        // 7) واجهة زر الترحيل
+                        // =========================
                         btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
                         btnPost.disabled = true;
 
-                        // 2) تحديث خانة "مُرحَّلة؟" بدون Reload
-                        if (isPostedBox) isPostedBox.value = "نعم";
-
-                        // 3) رسالة نجاح
                         if (msg) {
                             msg.textContent = okMsg;
                             msg.className = "small mt-2 text-success";
@@ -2496,7 +2573,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     } catch (err) {
 
-                        // فشل: نرجع الزر كما كان
                         btnPost.disabled = false;
                         btnPost.innerHTML = oldHtml;
 
@@ -2506,11 +2582,162 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     }
                 });
+            });
 
 
 
 
-                            // =========================================================
+
+
+                  // =========================
+            // سكربت زر الفتح
+            // =========================
+            document.addEventListener("DOMContentLoaded", function () {
+
+                // =========================================================
+                // دالة مساعدة: تقرأ رسالة الخطأ من Response مرة واحدة فقط
+                // =========================================================
+                async function readErrorMessage(res) {
+
+                    // متغير: النص الخام (هيتقري مرة واحدة فقط)
+                    const raw = await res.text();
+
+                    // لو السيرفر رجّع JSON نصيًا، نحاول نفكّه
+                    try {
+                        const obj = JSON.parse(raw);
+                        if (obj && obj.message) return obj.message;
+                    } catch { }
+
+                    // وإلا نرجع النص كما هو
+                    return raw || "حدث خطأ غير معروف.";
+                }
+
+                const btnOpen = document.getElementById("btnOpenInvoice");              // متغير: زر الفتح
+                const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر الترحيل (لو موجود)
+                const msg = document.getElementById("postInvoiceMsg");                  // متغير: نفس بوكس الرسائل
+                const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة مُرحَّلة؟ (لو موجودة)
+
+                if (!btnOpen) return;
+
+            
+
+                // لو مش مترحلة حالياً => زر الفتح يتقفل (لأنه ملوش معنى)
+                if (!isInvoicePosted()) {
+                    btnOpen.disabled = true;
+                }
+
+                let busy = false; // متغير: منع الضغط المتكرر
+
+                btnOpen.addEventListener("click", async function () {
+
+                    if (busy) return;
+                    if (btnOpen.disabled) return;
+
+                    // تأكيد
+                    const ok = confirm("هل تريد فتح هذه الفاتورة للتعديل؟ سيتم السماح بالتعديل حتى تقوم بترحيلها مرة أخرى.");
+                    if (!ok) return;
+
+                    busy = true;
+                    btnOpen.disabled = true;
+
+                    const oldHtml = btnOpen.innerHTML;
+                    btnOpen.innerHTML = "⏳ جاري الفتح...";
+
+                    if (msg) {
+                        msg.textContent = "جاري فتح الفاتورة للتعديل...";
+                        msg.className = "small mt-2 text-muted";
+                    }
+
+                    try {
+
+
+               // ✅ (1) اقرأ رقم الفاتورة "وقت الضغط" (ده أهم سطر)
+                 const invoiceId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
+
+            if (invoiceId <= 0) {
+                if (msg) {
+                    msg.textContent = "⚠️ لا يمكن فتح فاتورة قبل حفظها.";
+                    msg.className = "small mt-2 text-warning";
+                }
+                btnOpen.disabled = true;
+                btnOpen.innerHTML = oldHtml;
+                busy = false;
+                return;
+            }
+
+
+                        const res = await fetch(`/PurchaseInvoices/OpenInvoice?id=${invoiceId}`, {
+                            method: "POST",
+                            credentials: "same-origin",
+                            headers: { "X-Requested-With": "XMLHttpRequest" }
+                        });
+
+                        // =========================
+                        // خطأ: نقرأ الرسالة مرة واحدة فقط
+                        // =========================
+                        if (!res.ok) {
+                            const errText = await readErrorMessage(res);
+                            throw new Error(errText);
+                        }
+
+             // =========================
+            // نجاح: نقرأ JSON مرة واحدة فقط
+            // =========================
+            let okMsg = "تم فتح الفاتورة للتعديل.";
+            try {
+                const data = await res.json();
+                if (data && data.message) okMsg = data.message;
+            } catch { }
+
+            // ✅ تحديث الفلاج + فتح الواجهة
+            setInvoicePosted(false);
+            applyPostedUiLock();
+
+            // ✅ زر الفتح: بعد نجاح الفتح نخليه Disabled (مالوش معنى نضغطه تاني)
+            // ونعيد شكله الطبيعي "فتح الفاتورة" (مش "تم فتح" علشان يبقى واضح)
+            btnOpen.innerHTML = "⏪ فتح الفاتورة";
+            btnOpen.disabled = true;
+
+            // ✅ تفعيل زر الترحيل مرة أخرى (لو موجود)
+            if (btnPost) {
+                btnPost.disabled = false;
+                btnPost.innerHTML = "📌 ترحيل الفاتورة";
+            }
+
+            // ✅ تحديث نفس البوكس لحالة واحدة: "مفتوحة للتعديل"
+            if (isPostedBox) isPostedBox.value = "مفتوحة للتعديل";
+
+            // ✅ رسالة نجاح
+            if (msg) {
+                msg.textContent = okMsg;
+                msg.className = "small mt-2 text-success";
+            }
+
+                    }
+                    catch (err) {
+
+                        // رجوع شكل الزر
+                        btnOpen.disabled = false;
+                        btnOpen.innerHTML = oldHtml;
+
+                        if (msg) {
+                            msg.textContent = "فشل فتح الفاتورة: " + (err.message || "خطأ غير معروف");
+                            msg.className = "small mt-2 text-danger";
+                        }
+                    }
+                    finally {
+                        busy = false;
+                    }
+                });
+
+            });
+
+
+
+
+
+
+                        // =========================================================
             // ثابت: قراءة حالة "مُرحّلة؟" من Flag (0/1)
             // =========================================================
             function isInvoicePosted() {
@@ -2528,30 +2755,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // =========================================================
             // ثابت: تطبيق القفل على أي عنصر عليه data-lock-posted="1"
-            // - الأزرار: disabled
-            // - input/textarea: readonly (عشان الشكل ما يتبهدلش)
-            // - select: disabled
-            // - الروابط: disabled + منع الضغط
             // =========================================================
             function applyPostedUiLock() {
 
                 const posted = isInvoicePosted(); // متغير: هل الفاتورة مُرحّلة؟
-
                 const lockables = document.querySelectorAll('[data-lock-posted="1"]'); // متغير: العناصر المطلوب قفلها
 
                 lockables.forEach(el => {
 
-                    // --- أول مرة: نحفظ الحالة الأصلية عشان نرجّعها لو اتفتحت الفاتورة ---
+                    // حفظ الحالة الأصلية مرة واحدة
                     if (el.dataset.lockInit !== "1") {
                         el.dataset.lockInit = "1";
-                        el.dataset.origDisabled = el.disabled ? "1" : "0";                 // متغير: disabled الأصلي
-                        el.dataset.origReadonly = el.readOnly ? "1" : "0";                 // متغير: readonly الأصلي
-                        el.dataset.origTabIndex = el.getAttribute("tabindex") ?? "";       // متغير: tabindex الأصلي
+                        el.dataset.origDisabled = el.disabled ? "1" : "0";           // متغير: disabled الأصلي
+                        el.dataset.origReadonly = el.readOnly ? "1" : "0";           // متغير: readonly الأصلي
+                        el.dataset.origTabIndex = el.getAttribute("tabindex") ?? ""; // متغير: tabindex الأصلي
                     }
 
                     const tag = (el.tagName || "").toUpperCase(); // متغير: نوع العنصر
 
-                    // ---- حالة (مُرحّلة) ----
+                    // -------------------------
+                    // حالة: مُرحّلة (قفل)
+                    // -------------------------
                     if (posted) {
 
                         if (tag === "BUTTON") {
@@ -2580,7 +2804,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
-                    // ---- حالة (مفتوحة) = نرجّع الأصل ----
+                    // -------------------------
+                    // حالة: مفتوحة (ارجاع الأصل)
+                    // -------------------------
                     const origDisabled = el.dataset.origDisabled === "1";
                     const origReadonly = el.dataset.origReadonly === "1";
                     const origTabIndex = el.dataset.origTabIndex;
@@ -2614,7 +2840,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // تشغيل القفل مرة عند تحميل الصفحة
             document.addEventListener("DOMContentLoaded", applyPostedUiLock);
 
-            });
+
+
+
+
+                         // تعليق: لو الفاتورة مترحلة من السيرفر وقت فتح الصفحة
+              (function () {
+                  const posted = @Model.IsPosted.ToString().ToLower(); // true/false
+                  if (posted === true && typeof setInvoicePosted === "function") {
+                      setInvoicePosted(true);
+                      if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                  }
+              })();
 
 
 
@@ -3029,6 +3266,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+
+                   
 
 
 

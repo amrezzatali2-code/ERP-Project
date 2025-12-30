@@ -72,6 +72,23 @@ namespace ERP.Models
         [Display(Name = "مرحّلة بواسطة")]
         public string? PostedBy { get; set; }           // المستخدم الذي قام بالترحيل
 
+        // =========================================================
+        // ✅ إضافات "فتح الفاتورة + الترحيل المتعدد" (PostVersion)
+        // =========================================================
+
+        [Display(Name = "مرحلة الترحيل")]
+        public int PostVersion { get; set; } = 0;       // متغير: 0 قبل أي ترحيل، ثم 1، ثم 2... (للترحيل الثاني والثالث...)
+
+        [Display(Name = "تم فتحها بعد الترحيل؟")]
+        public bool WasReopened { get; set; } = false;  // متغير: هل تم فتح الفاتورة بعد أن كانت مُرحّلة؟
+
+        [Display(Name = "تاريخ الفتح")]
+        public DateTime? ReopenedAt { get; set; }       // متغير: تاريخ/وقت آخر فتح
+
+        [Display(Name = "فُتحت بواسطة")]
+        public string? ReopenedBy { get; set; }         // متغير: المستخدم الذي قام بفتح الفاتورة
+
+
         // ===== بيانات الإنشاء والتعديل =====
 
         [Display(Name = "أنشأها")]

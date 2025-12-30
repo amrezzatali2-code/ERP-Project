@@ -338,7 +338,7 @@
                     <th class="text-center no-print"
                         data-col="actions"
                         data-col-fixed="true"
-                        style="width:190px;">
+                        style="width:30px;">
                         <input type="checkbox"
                                id="selectAll"
                                class="form-check-input" />
@@ -347,7 +347,7 @@
                     <th data-col="id">@sortLink("Id", "رقم القيد")</th>
                     <th data-col="date">@sortLink("EntryDate", "تاريخ القيد")</th>
                     <th data-col="source">@sortLink("SourceType", "نوع المستند")</th>
-                    <th data-col="voucher">@sortLink("VoucherNo", "رقم المستند")</th>
+                    <th data-col="PostVersion ">@sortLink("PostVersion ", "مرحلة")</th>
                     <th data-col="sourceId">@sortLink("SourceId", "معرّف المصدر")</th>
                     <th data-col="accId">@sortLink("AccountId", "رقم الحساب")</th>
                     <th data-col="accName">@sortLink("AccountName", "اسم الحساب")</th>
@@ -380,18 +380,13 @@
                                        class="form-check-input ms-2 row-select"
                                        value="@e.Id" />
 
-                                @* زر عرض تفاصيل القيد *@
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm ms-1"
-                                   asp-action="Show"
-                                   asp-route-id="@e.Id">
-                                    عرض
-                                </a>
+                          
                             </td>
 
                             <td data-col="id">@e.Id</td>
                             <td data-col="date">@e.EntryDate.ToString("yyyy-MM-dd HH:mm")</td>
                             <td data-col="source">@e.SourceType</td>
-                            <td data-col="voucher">@e.VoucherNo</td>
+                            <td> @(e.PostVersion > 0 ? e.PostVersion.ToString() : "") </td>
                             <td data-col="sourceId">@e.SourceId</td>
                             <td data-col="accId">@e.AccountId</td>
                             <td data-col="accName">@e.Account?.AccountName</td>
