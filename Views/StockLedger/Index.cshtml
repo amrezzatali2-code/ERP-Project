@@ -397,6 +397,8 @@
                     <!-- سعر الجمهور -->
                     <th class="text-end" data-col="priceretail">@sortLink("PriceRetail", "سعر الجمهور")</th>
 
+                    <th class="text-end" data-col="PurchaseDiscount">@sortLink("PurchaseDiscount", "خصم الشراء")</th>
+
                     <!-- كمية داخلة / خارجة -->
                     <th class="text-end" data-col="qtyin">@sortLink("QtyIn", "كمية داخلة")</th>
                     <th class="text-end" data-col="qtyout">@sortLink("QtyOut", "كمية خارجة")</th>
@@ -458,6 +460,10 @@
                             <td class="text-end" data-col="priceretail">
                                 @x.Batch?.PriceRetailBatch?.ToString("0.00")
                             </td>
+
+                            <td data-col="PurchaseDiscount">@x.PurchaseDiscount</td>
+
+
 
                             <!-- كمية داخلة -->
                             <td class="text-end" data-col="qtyin">@x.QtyIn</td>

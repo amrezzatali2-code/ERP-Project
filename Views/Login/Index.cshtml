@@ -2,49 +2,113 @@
 
 @{
     ViewData["Title"] = "تسجيل الدخول";
+
+    // =========================================================
+    // متغير: قائمة المستخدمين القادمة من الكنترولر (ViewBag.Users)
+    // شكلها: { Id, Name }
+    // =========================================================
+    var users = ViewBag.Users as IEnumerable<dynamic>;
 }
 
 <div class="container mt-5" dir="rtl">
     <div class="row justify-content-center">
-        <div class="col-md-4 col-sm-8">
-            <div class="card shadow-sm">
-                <div class="card-header text-center">
-                    <h5 class="mb-0">تسجيل الدخول إلى النظام</h5>
+        <div class="col-md-5 col-sm-10 col-lg-4">
+            <div class="card shadow-lg border-0 rounded-4 overflow-hidden">
+
+                @* =========================
+                   رأس الكارت
+                   ========================= *@
+                <div class="card-header text-center py-3 login-header">
+                    <h5 class="mb-0 fw-bold">تسجيل الدخول إلى النظام</h5>
+                    <div class="small opacity-75 mt-1">اختر اسم المستخدم ثم أدخل كلمة المرور</div>
                 </div>
 
-                <div class="card-body">
-                    <form asp-action="Index" method="post">
+                <div class="card-body p-4">
+                    <form asp-action="Index" method="post" novalidate>
                         @Html.AntiForgeryToken()
 
-                        <div asp-validation-summary="ModelOnly"
-                             class="text-danger mb-2">
-                        </div>
+                        @* =========================
+                           ملخص الأخطاء
+                           ========================= *@
+                        <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 mb-3 d-none" id="valSummary"></div>
 
+                        @* =========================
+                           اسم المستخدم
+                           - datalist: usersList
+                           - autofocus: فوكس تلقائي عند فتح الصفحة
+                           ========================= *@
                         <div class="mb-3">
-                            <label asp-for="UserName" class="form-label"></label>
-                            <input asp-for="UserName"
-                                   class="form-control"
-                                   autocomplete="username" />
-                            <span asp-validation-for="UserName"
-                                  class="text-danger"></span>
+                            <label asp-for="UserName" class="form-label fw-semibold"></label>
+
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">👤</span>
+
+                                <input asp-for="UserName"
+                                       id="UserName"
+                                       class="form-control"
+                                       list="usersList"
+                                       autocomplete="off"
+                                       placeholder="اختر اسم المستخدم..."
+                                       autofocus />
+
+                                @* datalist: قائمة أسماء المستخدمين *@
+                                <datalist id="usersList">
+                                    @if (users != null)
+                                    {
+                                        foreach (var u in users)
+                                        {
+                                            <option value="@u.Name" data-id="@u.Id"></option>
+                                        }
+                                    }
+                                </datalist>
+                            </div>
+
+                            <span asp-validation-for="UserName" class="text-danger small"></span>
                         </div>
 
+                        @* =========================
+                           كلمة المرور
+                           ========================= *@
                         <div class="mb-3">
-                            <label asp-for="Password" class="form-label"></label>
-                            <input asp-for="Password"
-                                   class="form-control"
-                                   autocomplete="current-password" />
-                            <span asp-validation-for="Password"
-                                  class="text-danger"></span>
+                            <label asp-for="Password" class="form-label fw-semibold"></label>
+
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">🔒</span>
+
+                                <input asp-for="Password"
+                                       id="Password"
+                                       class="form-control"
+                                       type="password"
+                                       autocomplete="current-password"
+                                       placeholder="أدخل كلمة المرور..." />
+                            </div>
+
+                            <span asp-validation-for="Password" class="text-danger small"></span>
                         </div>
 
-                       
-
-                        <button type="submit"
-                                class="btn btn-primary w-100">
+                        @* =========================
+                           زر الدخول
+                           ========================= *@
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold rounded-3">
                             دخول
                         </button>
+
+                        @* =========================
+                           رابط رجوع (لو فيه ReturnUrl)
+                           - مش إلزامي: بس مفيد أثناء التنقل
+                           ========================= *@
+                        @if (!string.IsNullOrWhiteSpace(Model?.ReturnUrl))
+                        {
+                            <input type="hidden" asp-for="ReturnUrl" />
+                        }
                     </form>
+                </div>
+
+                @* =========================
+                   فوتر بسيط
+                   ========================= *@
+                <div class="card-footer text-center small text-muted py-2">
+                    ERP - نظام إدارة الموارد
                 </div>
             </div>
         </div>
@@ -55,4 +119,35 @@
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+
+    <script>
+        // =========================================================
+        // تحسين بسيط:
+        // - لو Summary فاضي نخفيه (Bootstrap d-none)
+        // - تأكيد فوكس على اسم المستخدم (لو أي سكربت خطف الفوكس)
+        // =========================================================
+        document.addEventListener('DOMContentLoaded', function () {
+
+            // متغير: ملخص الأخطاء
+            const summary = document.getElementById('valSummary');
+            if (summary) {
+                const hasText = (summary.textContent || '').trim().length > 0;
+                if (hasText) summary.classList.remove('d-none');
+            }
+
+            // متغير: مربع اسم المستخدم
+            const userBox = document.getElementById('UserName');
+            if (userBox) userBox.focus();
+        });
+    </script>
+
+    <style>
+        /* =========================================================
+                   تحسين شكل بسيط - بدون تغيير روح التصميم
+                   ========================================================= */
+        .login-header {
+            background: linear-gradient(90deg, #0d6efd 0%, #0dcaf0 100%);
+            color: #fff;
+        }
+    </style>
 }

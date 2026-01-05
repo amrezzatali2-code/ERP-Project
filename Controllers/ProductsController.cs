@@ -47,256 +47,331 @@ namespace ERP.Controllers
         // =========================================================
         [HttpGet]
         public async Task<IActionResult> Index(
-            string? search,                    // نص البحث
-            string? searchBy = "all",          // all|name|id|code|gen|category|comp|price|active|imported|updated
-            string? sort = "name",             // name|price|updated|category|comp|code|id|created|modified|isactive|imported
-            string? dir = "asc",               // asc | desc
-            bool useDateRange = false,         // هل فلترة التاريخ مفعلة؟
-            DateTime? fromDate = null,         // تاريخ/وقت من (CreatedAt)
-            DateTime? toDate = null,           // تاريخ/وقت إلى (CreatedAt)
-            int page = 1,                      // رقم الصفحة الحالية
-            int pageSize = 50                  // عدد السطور في الصفحة
-        )
+      string? search,                    // متغير: نص البحث العام
+      string? searchBy = "all",          // متغير: عمود البحث (all|name|id|code|gen|category|comp|price|active|imported|updated)
+      string? searchMode = "contains",   // ✅ متغير: طريقة البحث (contains | starts | equals)
+      string? sort = "name",             // متغير: عمود الترتيب
+      string? dir = "asc",               // متغير: اتجاه الترتيب asc | desc
+      bool useDateRange = false,         // متغير: هل فلترة التاريخ مفعلة؟
+      DateTime? fromDate = null,         // متغير: تاريخ/وقت من (CreatedAt)
+      DateTime? toDate = null,           // متغير: تاريخ/وقت إلى (CreatedAt)
+
+      // ✅ فلتر أرقام (من/إلى) — قابل للتوسع
+      string? numField = null,           // متغير: حقل الرقم (id | price)
+      decimal? fromNum = null,           // متغير: رقم من
+      decimal? toNum = null,             // متغير: رقم إلى
+
+      int page = 1,                      // متغير: رقم الصفحة الحالية
+      int pageSize = 50                  // متغير: عدد السطور في الصفحة
+  )
         {
+            // =========================================================
             // (1) الاستعلام الأساسي (بدون تتبّع لتحسين الأداء)
             //      + تحميل مجموعة الصنف ومجموعة البونص لعرض أسمائهما في الجدول
+            // =========================================================
             IQueryable<Product> q = _db.Products
                 .Include(p => p.ProductGroup)        // متغير: تحميل مجموعة الصنف
                 .Include(p => p.ProductBonusGroup)   // متغير: تحميل مجموعة البونص
                 .AsNoTracking();
 
+            // =========================================================
             // (2) تنظيف قيم الفلاتر
-            var s = (search ?? string.Empty).Trim();                      // نص البحث
-            var sb = (searchBy ?? "all").Trim().ToLowerInvariant();      // نوع البحث
-            var so = (sort ?? "name").Trim().ToLowerInvariant();         // عمود الترتيب
-            var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase); // هل الترتيب تنازلي؟
+            // =========================================================
+            var s = (search ?? string.Empty).Trim();                        // متغير: نص البحث بعد التنظيف
+            var sb = (searchBy ?? "all").Trim().ToLowerInvariant();         // متغير: عمود البحث
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();  // متغير: طريقة البحث
+            var so = (sort ?? "name").Trim().ToLowerInvariant();            // متغير: عمود الترتيب
+            var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase); // متغير: هل الترتيب تنازلي؟
 
-            // (3) تطبيق البحث حسب نوعه
+            // ضبط page/pageSize
+            page = page <= 0 ? 1 : page;                     // متغير: حماية رقم الصفحة
+            pageSize = pageSize <= 0 ? 50 : pageSize;         // متغير: حماية حجم الصفحة
+
+            // توحيد searchMode
+            if (sm == "startswith") sm = "starts";            // متغير: قبول startswith
+            if (sm == "eq") sm = "equals";                    // متغير: قبول eq
+            if (sm != "contains" && sm != "starts" && sm != "equals")
+                sm = "contains";                              // متغير: fallback
+
+            bool modeStarts = sm == "starts";                 // متغير: وضع يبدأ بـ
+            bool modeEquals = sm == "equals";                 // متغير: وضع يساوي
+
+            // =========================================================
+            // (3) تطبيق البحث (يدعم: يحتوي/يبدأ بـ/يساوي)
+            // =========================================================
             if (!string.IsNullOrWhiteSpace(s))
             {
+                bool isInt = int.TryParse(s, out int intVal);        // متغير: هل النص رقم صحيح؟
+                bool isDec = decimal.TryParse(s, out decimal decVal);// متغير: هل النص رقم عشري؟
+
+                string likeContains = $"%{s}%";   // متغير: LIKE يحتوي
+                string likeStarts = $"{s}%";      // متغير: LIKE يبدأ بـ
+
                 switch (sb)
                 {
-                    case "id":   // البحث برقم الصنف (ProdId كـ int)
-                        if (int.TryParse(s, out var prodIdVal))
-                        {
-                            q = q.Where(p => p.ProdId == prodIdVal);
-                        }
+                    case "id":
+                        if (isInt)
+                            q = q.Where(p => p.ProdId == intVal);
                         else
-                        {
-                            // لو المستخدم كتب نص مش رقم نبحث داخل ProdId كنص
                             q = q.Where(p => p.ProdId.ToString().Contains(s));
-                        }
                         break;
 
-                    case "name": // البحث باسم الصنف
-                        q = q.Where(p => p.ProdName != null && p.ProdName.Contains(s));
-                        break;
-
-                    case "code": // البحث بالباركود
-                        q = q.Where(p => p.Barcode != null && p.Barcode.Contains(s));
-                        break;
-
-                    case "gen":  // البحث بالاسم العلمي
-                        q = q.Where(p => p.GenericName != null && p.GenericName.Contains(s));
-                        break;
-
-                    case "category":   // البحث برقم الفئة (CategoryId كـ int?)
-                        if (int.TryParse(s, out var catIdVal))
-                        {
-                            q = q.Where(p => p.CategoryId == catIdVal);
-                        }
+                    case "code":
+                        if (modeEquals)
+                            q = q.Where(p => p.Barcode != null && p.Barcode == s);
+                        else if (modeStarts)
+                            q = q.Where(p => p.Barcode != null && EF.Functions.Like(p.Barcode, likeStarts));
                         else
-                        {
-                            q = q.Where(p =>
-                                p.CategoryId.HasValue &&
-                                p.CategoryId.Value.ToString().Contains(s));
-                        }
+                            q = q.Where(p => p.Barcode != null && EF.Functions.Like(p.Barcode, likeContains));
                         break;
 
-                    case "comp": // البحث باسم الشركة
-                        q = q.Where(p => p.Company != null && p.Company.Contains(s));
-                        break;
-
-                    case "price":   // البحث بسعر الجمهور
-                        if (decimal.TryParse(s, out var priceVal))
-                            q = q.Where(p => p.PriceRetail == priceVal);
+                    case "name":
+                        if (modeEquals)
+                            q = q.Where(p => p.ProdName != null && p.ProdName == s);
+                        else if (modeStarts)
+                            q = q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, likeStarts));
                         else
-                            q = q.Where(p => p.PriceRetail.ToString().Contains(s));
+                            q = q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, likeContains));
                         break;
 
-                    case "active":  // البحث في حالة التفعيل (فعال/متوقف)
-                        {
-                            var yes = new[] { "1", "نعم", "yes", "true", "صح" };
-                            var no = new[] { "0", "لا", "no", "false" };
+                    case "gen":
+                        if (modeEquals)
+                            q = q.Where(p => p.GenericName != null && p.GenericName == s);
+                        else if (modeStarts)
+                            q = q.Where(p => p.GenericName != null && EF.Functions.Like(p.GenericName, likeStarts));
+                        else
+                            q = q.Where(p => p.GenericName != null && EF.Functions.Like(p.GenericName, likeContains));
+                        break;
 
-                            if (yes.Contains(s, StringComparer.OrdinalIgnoreCase))
-                                q = q.Where(p => p.IsActive);
-                            else if (no.Contains(s, StringComparer.OrdinalIgnoreCase))
-                                q = q.Where(p => !p.IsActive);
+                    case "category":
+                        if (modeEquals)
+                            q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name == s);
+                        else if (modeStarts)
+                            q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeStarts));
+                        else
+                            q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeContains));
+                        break;
+
+                    case "comp":
+                        if (modeEquals)
+                            q = q.Where(p => p.Company != null && p.Company == s);
+                        else if (modeStarts)
+                            q = q.Where(p => p.Company != null && EF.Functions.Like(p.Company, likeStarts));
+                        else
+                            q = q.Where(p => p.Company != null && EF.Functions.Like(p.Company, likeContains));
+                        break;
+
+                    case "price":
+                        if (isDec)
+                            q = q.Where(p => p.PriceRetail == decVal);
+                        else
+                            q = q.Where(p => p.PriceRetail != null && p.PriceRetail.ToString().Contains(s));
+                        break;
+
+                    case "active":
+                        if (s == "1" || s == "true" || s == "نعم") q = q.Where(p => p.IsActive);
+                        else if (s == "0" || s == "false" || s == "لا") q = q.Where(p => !p.IsActive);
+                        break;
+                    case "imported":
+                        {
+                            // =========================
+                            // فلتر "محلي/مستورد"
+                            // - Product.Imported نوعه string? وليس bool
+                            // - نقبل إدخال المستخدم: (1/true/نعم) = مستورد
+                            // - و (0/false/لا) = محلي
+                            // - أو يكتب النص مباشرة: "محلي" / "مستورد"
+                            // =========================
+
+                            var val = (s ?? "").Trim().ToLower(); // متغير: قيمة البحث بعد تنظيفها
+
+                            // لو المستخدم كتب "1" أو "true" أو "نعم" => نعتبره "مستورد"
+                            if (val == "1" || val == "true" || val == "نعم" || val == "yes")
+                            {
+                                q = q.Where(p => (p.Imported ?? "").Contains("مستورد"));
+                            }
+                            // لو المستخدم كتب "0" أو "false" أو "لا" => نعتبره "محلي"
+                            else if (val == "0" || val == "false" || val == "لا" || val == "no")
+                            {
+                                q = q.Where(p => (p.Imported ?? "").Contains("محلي"));
+                            }
+                            else
+                            {
+                                // لو المستخدم كتب نص مباشر (مثلاً: محلي / مستورد / imported / local)
+                                // نفلتر بـ Contains
+                                q = q.Where(p => (p.Imported ?? "").ToLower().Contains(val));
+                            }
 
                             break;
                         }
 
-                    case "imported": // البحث في حقل محلي/مستورد
-                        q = q.Where(p => p.Imported != null && p.Imported.Contains(s));
+
+                    case "updated":
+                        q = q.Where(p => p.UpdatedAt.ToString().Contains(s));
                         break;
 
-                    case "updated":  // البحث في تاريخ آخر تغيير سعر
-                        if (DateTime.TryParse(s, out var d))
+                    default:
+                        // all: بحث عام في الأعمدة المهمة
+                        if (modeEquals)
                         {
-                            q = q.Where(p => p.LastPriceChangeDate.HasValue &&
-                                             p.LastPriceChangeDate.Value.Date == d.Date);
+                            q = q.Where(p =>
+                                (isInt && p.ProdId == intVal) ||
+                                (p.Barcode != null && p.Barcode == s) ||
+                                (p.ProdName != null && p.ProdName == s) ||
+                                (p.GenericName != null && p.GenericName == s) ||
+                                (p.Company != null && p.Company == s) ||
+                                (p.ProductGroup != null && p.ProductGroup.Name != null && p.ProductGroup.Name == s) ||
+                                (p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && p.ProductBonusGroup.Name == s) ||
+                                (isDec && p.PriceRetail == decVal)
+                            );
+                        }
+                        else if (modeStarts)
+                        {
+                            q = q.Where(p =>
+                                p.ProdId.ToString().StartsWith(s) ||
+                                (p.Barcode != null && EF.Functions.Like(p.Barcode, likeStarts)) ||
+                                (p.ProdName != null && EF.Functions.Like(p.ProdName, likeStarts)) ||
+                                (p.GenericName != null && EF.Functions.Like(p.GenericName, likeStarts)) ||
+                                (p.Company != null && EF.Functions.Like(p.Company, likeStarts)) ||
+                                (p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeStarts)) ||
+                                (p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeStarts)) ||
+                                (p.PriceRetail != null && p.PriceRetail.ToString().StartsWith(s))
+                            );
                         }
                         else
                         {
-                            q = q.Where(p => p.LastPriceChangeDate.HasValue &&
-                                             p.LastPriceChangeDate.Value.ToString().Contains(s));
+                            q = q.Where(p =>
+                                p.ProdId.ToString().Contains(s) ||
+                                (p.Barcode != null && EF.Functions.Like(p.Barcode, likeContains)) ||
+                                (p.ProdName != null && EF.Functions.Like(p.ProdName, likeContains)) ||
+                                (p.GenericName != null && EF.Functions.Like(p.GenericName, likeContains)) ||
+                                (p.Company != null && EF.Functions.Like(p.Company, likeContains)) ||
+                                (p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeContains)) ||
+                                (p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeContains)) ||
+                                (p.PriceRetail != null && p.PriceRetail.ToString().Contains(s))
+                            );
                         }
                         break;
-
-                    case "all":
-                    default:         // بحث شامل في أهم الحقول
-                        q = q.Where(p =>
-                            p.ProdId.ToString().Contains(s) ||                            // رقم الصنف
-                            (p.ProdName != null && p.ProdName.Contains(s)) ||            // اسم الصنف
-                            (p.Barcode != null && p.Barcode.Contains(s)) ||             // الباركود
-                            (p.GenericName != null && p.GenericName.Contains(s)) ||     // الاسم العلمي
-                            (p.Company != null && p.Company.Contains(s)) ||             // الشركة
-                            (p.Description != null && p.Description.Contains(s)) ||     // الوصف
-                            (p.CategoryId.HasValue &&
-                             p.CategoryId.Value.ToString().Contains(s)) ||              // رقم الفئة
-                            (p.Imported != null && p.Imported.Contains(s))              // محلي/مستورد
-                        );
-                        break;
                 }
             }
 
-            // (4) فلترة بالتاريخ (تاريخ إنشاء الصنف CreatedAt)
-            DateTime? from = null;
-            DateTime? to = null;
+            // =========================================================
+            // (4) ✅ فلتر الأرقام (من/إلى) — يدعم id/price حالياً
+            // =========================================================
+            var nf = (numField ?? "").Trim().ToLowerInvariant(); // متغير: حقل الرقم
 
+            // لو من > إلى نبدّلهم
+            if (fromNum.HasValue && toNum.HasValue && fromNum.Value > toNum.Value)
+            {
+                var tmp = fromNum;
+                fromNum = toNum;
+                toNum = tmp;
+            }
+
+            if (nf == "id")
+            {
+                if (fromNum.HasValue) q = q.Where(p => p.ProdId >= (int)fromNum.Value);
+                if (toNum.HasValue) q = q.Where(p => p.ProdId <= (int)toNum.Value);
+            }
+            else if (nf == "price")
+            {
+                if (fromNum.HasValue) q = q.Where(p => p.PriceRetail != null && p.PriceRetail >= fromNum.Value);
+                if (toNum.HasValue) q = q.Where(p => p.PriceRetail != null && p.PriceRetail <= toNum.Value);
+            }
+
+            // =========================================================
+            // (5) فلتر التاريخ/الوقت (CreatedAt)
+            // =========================================================
             if (useDateRange)
             {
-                if (fromDate.HasValue)
-                {
-                    from = fromDate.Value;
-                    q = q.Where(p => p.CreatedAt >= from.Value);
-                }
-
-                if (toDate.HasValue)
-                {
-                    to = toDate.Value;
-                    q = q.Where(p => p.CreatedAt <= to.Value);
-                }
+                if (fromDate.HasValue) q = q.Where(p => p.CreatedAt >= fromDate.Value);
+                if (toDate.HasValue) q = q.Where(p => p.CreatedAt <= toDate.Value);
             }
 
-            // (5) الترتيب حسب العمود المطلوب
+            // =========================================================
+            // (6) الترتيب
+            // =========================================================
             q = so switch
             {
-                "id" => (desc ? q.OrderByDescending(p => p.ProdId)
-                              : q.OrderBy(p => p.ProdId)),
-
-                "name" => (desc ? q.OrderByDescending(p => p.ProdName)
-                                : q.OrderBy(p => p.ProdName)),
-
-                "code" => (desc ? q.OrderByDescending(p => p.Barcode)
-                                : q.OrderBy(p => p.Barcode)),
-
-                "gen" => (desc ? q.OrderByDescending(p => p.GenericName)
-                               : q.OrderBy(p => p.GenericName)),
-
-                "category" => (desc ? q.OrderByDescending(p => p.CategoryId)
-                                    : q.OrderBy(p => p.CategoryId)),
-
-                "comp" => (desc ? q.OrderByDescending(p => p.Company)
-                                : q.OrderBy(p => p.Company)),
-
-                "price" => (desc ? q.OrderByDescending(p => p.PriceRetail)
-                                 : q.OrderBy(p => p.PriceRetail)),
-
-                "created" => (desc ? q.OrderByDescending(p => p.CreatedAt)
-                                   : q.OrderBy(p => p.CreatedAt)),
-
-                "modified" => (desc ? q.OrderByDescending(p => p.UpdatedAt)
-                                    : q.OrderBy(p => p.UpdatedAt)),
-
-                "updated" => (desc ? q.OrderByDescending(p => p.LastPriceChangeDate)
-                                   : q.OrderBy(p => p.LastPriceChangeDate)),
-
-                // 🔹 ترتيب حسب الحالة
-                "isactive" => (desc ? q.OrderByDescending(p => p.IsActive)
-                                    : q.OrderBy(p => p.IsActive)),
-
-                // 🔹 ترتيب حسب محلي/مستورد
-                "imported" => (desc ? q.OrderByDescending(p => p.Imported)
-                                    : q.OrderBy(p => p.Imported)),
-
-                _ => (desc ? q.OrderByDescending(p => p.ProdName)
-                           : q.OrderBy(p => p.ProdName)),
+                "id" => desc ? q.OrderByDescending(p => p.ProdId) : q.OrderBy(p => p.ProdId),
+                "code" => desc ? q.OrderByDescending(p => p.Barcode) : q.OrderBy(p => p.Barcode),
+                "name" => desc ? q.OrderByDescending(p => p.ProdName) : q.OrderBy(p => p.ProdName),
+                "price" => desc ? q.OrderByDescending(p => p.PriceRetail) : q.OrderBy(p => p.PriceRetail),
+                "category" => desc ? q.OrderByDescending(p => p.ProductGroup!.Name) : q.OrderBy(p => p.ProductGroup!.Name),
+                "comp" => desc ? q.OrderByDescending(p => p.Company) : q.OrderBy(p => p.Company),
+                "created" => desc ? q.OrderByDescending(p => p.CreatedAt) : q.OrderBy(p => p.CreatedAt),
+                "updated" => desc ? q.OrderByDescending(p => p.UpdatedAt) : q.OrderBy(p => p.UpdatedAt),
+                "imported" => desc ? q.OrderByDescending(p => p.Imported) : q.OrderBy(p => p.Imported),
+                "active" => desc ? q.OrderByDescending(p => p.IsActive) : q.OrderBy(p => p.IsActive),
+                _ => desc ? q.OrderByDescending(p => p.ProdName) : q.OrderBy(p => p.ProdName)
             };
 
-            // (6) الترقيم (Paging)
-            if (page < 1) page = 1;
-            if (pageSize < 1) pageSize = 50;
+            // =========================================================
+            // (7) الترقيم (Paging)
+            // =========================================================
+            int total = await q.CountAsync(); // متغير: إجمالي النتائج بعد الفلاتر
 
-            int total = await q.CountAsync();                               // إجمالي عدد الأصناف
-            int pages = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
-            if (page > pages) page = pages;
+            var items = await q
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
-            var items = await q.Skip((page - 1) * pageSize)
-                               .Take(pageSize)
-                               .ToListAsync();                              // بيانات الصفحة الحالية
-
+            // =========================================================
+            // (8) تجهيز PagedResult + تثبيت حالة البحث/الترتيب/التاريخ
+            // =========================================================
             var model = new PagedResult<Product>(items, page, pageSize, total)
             {
-                // قيم الفلاتر لنظام القوائم الموحد
                 Search = s,
+                SearchBy = sb,
                 SortColumn = so,
                 SortDescending = desc,
                 UseDateRange = useDateRange,
-                FromDate = from,
-                ToDate = to
+                FromDate = fromDate,
+                ToDate = toDate
             };
 
-            // تمرير القيم للفيو (للمحافظة على التكامل مع البارشال)
-            ViewBag.Search = s;
-            ViewBag.SearchBy = sb;
-            ViewBag.Sort = so;
-            ViewBag.Dir = desc ? "desc" : "asc";
-            ViewBag.Page = page;
-            ViewBag.PageSize = pageSize;
-            ViewBag.Total = total;
+            // =========================================================
+            // (9) ViewBag: تثبيت قيم الواجهة
+            // =========================================================
+            ViewBag.SearchMode = sm;
+            ViewBag.NumField = nf;
+            ViewBag.FromNum = fromNum;
+            ViewBag.ToNum = toNum;
 
-            // (7) خيارات البحث للبارشال _IndexFilters
-            ViewBag.SearchOptions = new[]
+            ViewBag.SearchByOptions = new List<SelectListItem>
             {
-                new SelectListItem{ Text="الكل",        Value="all",      Selected = sb=="all"      },
-                new SelectListItem{ Text="الاسم",       Value="name",     Selected = sb=="name"     },
-                new SelectListItem{ Text="المعرّف",     Value="id",       Selected = sb=="id"       },
-                new SelectListItem{ Text="الباركود",    Value="code",     Selected = sb=="code"     },
-                new SelectListItem{ Text="الاسم العلمي",Value="gen",      Selected = sb=="gen"      },
-                new SelectListItem{ Text="الفئة",       Value="category", Selected = sb=="category" },
-                new SelectListItem{ Text="الشركة",      Value="comp",     Selected = sb=="comp"     },
-                new SelectListItem{ Text="السعر",       Value="price",    Selected = sb=="price"    },
-                new SelectListItem{ Text="فعال",        Value="active",   Selected = sb=="active"   },
-                new SelectListItem{ Text="مستورد",      Value="imported", Selected = sb=="imported" },
-                new SelectListItem{ Text="تاريخ السعر", Value="updated",  Selected = sb=="updated"  },
+                new SelectListItem("الكل", "all"),
+                new SelectListItem("كود الصنف (ID)", "id"),
+                new SelectListItem("باركود", "code"),
+                new SelectListItem("اسم الصنف", "name"),
+                new SelectListItem("المادة الفعالة", "gen"),
+                new SelectListItem("المجموعة", "category"),
+                new SelectListItem("الشركة", "comp"),
+                new SelectListItem("سعر الجمهور", "price"),
+                new SelectListItem("نشط؟", "active"),
+                new SelectListItem("مستورَد؟", "imported"),
+                new SelectListItem("تاريخ التعديل", "updated")
             };
 
-            // (8) خيارات الترتيب
-            ViewBag.SortOptions = new[]
+            ViewBag.SortOptions = new List<SelectListItem>
             {
-                new SelectListItem{ Text="الاسم",             Value="name",      Selected = so=="name"      },
-                new SelectListItem{ Text="السعر",             Value="price",     Selected = so=="price"     },
-                new SelectListItem{ Text="تاريخ الإنشاء",     Value="created",   Selected = so=="created"   },
-                new SelectListItem{ Text="آخر تعديل",         Value="modified",  Selected = so=="modified"  },
-                new SelectListItem{ Text="آخر تغيير سعر",     Value="updated",   Selected = so=="updated"   },
-                new SelectListItem{ Text="الفئة",             Value="category",  Selected = so=="category"  },
-                new SelectListItem{ Text="الشركة",            Value="comp",      Selected = so=="comp"      },
-                new SelectListItem{ Text="الباركود",          Value="code",      Selected = so=="code"      },
-                new SelectListItem{ Text="المعرّف",           Value="id",        Selected = so=="id"        },
-                new SelectListItem{ Text="الحالة",            Value="isactive",  Selected = so=="isactive"  },
-                new SelectListItem{ Text="محلي/مستورد",      Value="imported",  Selected = so=="imported"  },
+                new SelectListItem("الاسم", "name"),
+                new SelectListItem("الكود", "id"),
+                new SelectListItem("الباركود", "code"),
+                new SelectListItem("السعر", "price"),
+                new SelectListItem("المجموعة", "category"),
+                new SelectListItem("الشركة", "comp"),
+                new SelectListItem("تاريخ الإنشاء", "created"),
+                new SelectListItem("آخر تعديل", "updated"),
+                new SelectListItem("نشط؟", "active"),
+                new SelectListItem("مستورَد؟", "imported")
+            };
+
+            ViewBag.PageSizeOptions = new List<SelectListItem>
+            {
+                new SelectListItem("25", "25"),
+                new SelectListItem("50", "50"),
+                new SelectListItem("100", "100"),
+                new SelectListItem("200", "200")
             };
 
             return View(model);

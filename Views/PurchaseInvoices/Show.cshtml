@@ -144,6 +144,76 @@
             min-width: 80px;
             text-align: center;
         }
+
+        /* =========================================================
+           ERP — Print Template (Purchase Invoice)
+           محلي داخل Show فقط
+        ========================================================= */
+
+        /* مخفي في الشاشة */
+        .print-only {
+            display: none;
+        }
+
+        @@media print {
+            /* يظهر في الطباعة فقط */
+            .print-only {
+                display: block !important;
+            }
+            /* مهم: فك أي Scroll أثناء الطباعة */
+            .erp-table-wrapper {
+                max-height: none !important;
+                overflow: visible !important;
+            }
+            /* تنسيق جدول الطباعة لو اتنسخ */
+            #piPrintArea table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 12px;
+            }
+
+            #piPrintArea th, #piPrintArea td {
+                border: 1px solid #d0d0d0;
+                padding: 6px;
+                vertical-align: middle;
+                white-space: nowrap;
+            }
+
+            #piPrintArea thead {
+                display: table-header-group;
+            }
+
+            #piPrintArea tr {
+                break-inside: avoid;
+            }
+        }
+
+
+
+        /* =========================================================
+   اختيار سطر من جدول السطور (Click Row)
+   - عند الضغط على أي سطر في جدول السطور: يتم تمييزه
+   - وتعبئة بياناته في جزء (إضافة صنف للفاتورة) أعلى الصفحة
+   ========================================================= */
+#PILinesTbody tr[data-prodid] {
+    cursor: pointer; /* تعليق: السطر قابل للضغط */
+}
+
+#PILinesTbody tr.pi-row-selected td {
+    outline: 2px solid rgba(13, 110, 253, 0.35);
+    outline-offset: -2px;
+    background: rgba(13, 110, 253, 0.06);
+}
+
+@@media print {
+    #PILinesTbody tr.pi-row-selected td {
+        outline: none !important;
+        background: transparent !important;
+    }
+}
+
+
+
     </style>
 }
 
@@ -315,9 +385,14 @@
 
                       
 
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" onclick="window.print();" data-lock-posted="1">
-                            🖨️ طباعة الفاتورة
-                        </button>
+                       <button type="button"
+        id="btnPrintInvoice"
+        class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+        >
+    🖨️ طباعة الفاتورة
+</button>
+
+
 
                     </div>
                 </div>
@@ -395,7 +470,7 @@
 
                                 <div class="row g-3 align-items-end">
 
-                                    <div class="col-lg-2 col-md-3">
+                                    <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">كود المورد</label>
 
                                         <input id="CustomerCodeDisplay"
@@ -405,7 +480,7 @@
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
 
-                                    <div class="col-lg-4 col-md-6">
+                                    <div class="col-lg-3 col-md-3">
                                         <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
 
                                         <input id="CustomerNameInput"
@@ -763,14 +838,14 @@
                     @* =====================================================
                        5) جدول السطور
                        ===================================================== *@
-                    <div class="card shadow-sm mb-3 invoice-lines-card">
-                        <div class="card-header py-2 invoice-lines-header">
+                    @* <div class="card shadow-sm mb-3 invoice-lines-card"> *@
+                        @* <div class="card-header py-2 invoice-lines-header">
                             <div class="d-flex justify-content-between align-items-center">
                                 <span class="fw-semibold">سطور فاتورة المشتريات</span>
                             </div>
-                        </div>
+                        </div> *@
 
-                        <div class="card-body p-0">
+                        @* <div class="card-body p-0"> *@
                             <div class="erp-table-wrapper mb-0">
                                 <table class="table table-sm table-striped table-hover mb-0 erp-table">
                                     <thead>
@@ -783,7 +858,7 @@
                                             <th class="text-center">سعر الجمهور</th>
                                             <th class="text-center">خصم الشراء %</th>
                                             <th class="text-center">قيمة السطر</th>
-                                            <th class="text-center">مسح</th>
+                                        <th class="text-center no-print">مسح</th>
                                         </tr>
                                     </thead>
 
@@ -843,7 +918,7 @@
 
                                                         <td class="text-center">@lineValue.ToString("0.00")</td>
 
-                                                        <td class="text-center">
+                                                    <td class="text-center no-print">
                                                             <button type="button"
                                                                     class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
                                                                         data-line-no="@line.LineNo" data-lock-posted="1">
@@ -887,7 +962,7 @@
                                                             <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
                                                             <td class="text-center">@line.PurchaseDiscountPct.ToString("0.##")</td>
                                                             <td class="text-center">@lineValue.ToString("0.00")</td>
-                                                            <td class="text-center">
+                                                        <td class="text-center no-print" ">
                                                                 <button type="button"
                                                                         class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
                                                                         data-line-no="@line.LineNo">
@@ -902,8 +977,8 @@
                                     </tbody>
                                 </table>
                             </div>
-                        </div>
-                    </div>
+                    @*     </div>
+                    </div> *@
 
                     @* =====================================================
                        6) ملخص الفاتورة
@@ -1011,6 +1086,64 @@
         </div> @* نهاية row *@
     </div> @* نهاية container *@
 </div> @* نهاية invoice-page *@
+
+
+
+
+
+
+
+
+
+    <!-- =========================================================
+         ERP — منطقة طباعة فاتورة المشتريات (ثابت معتمد)
+         ملاحظة: الـ site.css عندك بيطبع فقط .erp-print-area
+    ========================================================= -->
+    <div id="piPrintArea" class="erp-print-area print-only">
+
+        <!-- ===== هيدر الطباعة (قابل للتخصيص لاحقاً: لوجو/بيانات شركة) ===== -->
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="small text-muted" id="piPrintNow"></div>
+
+                <div class="text-center">
+                    @* <div class="fw-bold">فاتورة مشتريات</div> *@
+                    <div class="small text-muted" id="piPrintTitle"></div>
+                </div>
+
+                <div class="text-end">
+                    <div class="fw-bold">شركة الهدى</div>
+                    <div class="small text-muted">العنوان / الهاتف</div>
+                </div>
+            </div>
+
+            <hr class="my-2" />
+
+            <div class="row g-2 small">
+                <div class="col-6">رقم الفاتورة: <strong id="piPrintInvoiceNo"></strong></div>
+                <div class="col-6 text-end">التاريخ: <strong id="piPrintInvoiceDate"></strong></div>
+
+                <div class="col-6">المورد: <strong id="piPrintSupplier"></strong></div>
+                <div class="col-6 text-end">المخزن: <strong id="piPrintWarehouse"></strong></div>
+            </div>
+        </div>
+
+        <!-- ===== السطور ===== -->
+        <div id="piPrintLinesWrap"></div>
+
+        @* <hr class="my-3" /> *@
+
+        <!-- ===== الإجماليات ===== -->
+        <div id="piPrintTotalsWrap"></div>
+
+    </div>
+
+
+
+
+
+
+
 
 
 
@@ -2277,7 +2410,126 @@ if (isPostedDisplay) {
 
 
 
-        //زر “مسح الصنف
+
+
+
+
+                    // =========================================================
+            // اختيار سطر من جدول السطور (Click Row)
+            // - عند الضغط على أي سطر: تعبئة بياناته في الحقول العلوية
+            // - لازم يكون الصف فيه data-prodid
+            // =========================================================
+            document.addEventListener('click', function (e) {
+
+                // متغير: الصف الذي تم الضغط عليه داخل tbody
+                const row = e.target.closest('#PILinesTbody tr[data-prodid]');
+                if (!row) return;
+
+                // حماية: لو الضغط على زر (مسح) أو أي زر داخل السطر لا نختار السطر
+                if (e.target.closest('.btnRemoveProductFromInvoice') ||
+                    e.target.closest('.btnRemoveLineFromInvoice') ||
+                    e.target.closest('button') ||
+                    e.target.closest('a')) {
+                    return;
+                }
+
+                // 1) تمييز الصف المختار
+                const tbody = document.getElementById('PILinesTbody');
+                if (tbody) {
+                    tbody.querySelectorAll('tr.pi-row-selected')
+                        .forEach(r => r.classList.remove('pi-row-selected'));
+                }
+                row.classList.add('pi-row-selected');
+
+                // 2) قراءة ProdId من data-prodid
+                const prodId = (row.getAttribute('data-prodid') || '').trim();
+                if (!prodId) return;
+
+
+
+
+                        // =========================================================
+            // (3) ✅ تعبئة بيانات السطر في الحقول العلوية (باستخدام IDs الحقيقية من Show.cshtml)
+            // =========================================================
+
+            // متغيرات: الحقول العلوية
+            const ProdIdEl       = document.getElementById('ProdId');         // متغير: hidden ProdId
+            const ProdNameEl     = document.getElementById('ProdNameInput');  // متغير: اسم الصنف (بحث)
+            const ProdCodeEl     = document.getElementById('ProdCodeInput');  // متغير: كود الصنف
+            const ProdBatchEl    = document.getElementById('ProdBatchInput'); // متغير: التشغيلة
+            const ProdExpiryEl   = document.getElementById('ProdExpiryInput');// متغير: الصلاحية (MM/YYYY)
+            const ProdQtyEl      = document.getElementById('ProdQtyInput');   // متغير: الكمية
+            const ProdPriceEl    = document.getElementById('ProdPriceInput'); // متغير: سعر الجمهور
+            const ProdDiscEl     = document.getElementById('ProdDisc1Input'); // متغير: الخصم
+
+            // دالة صغيرة: تكتب قيمة وتطلق input/change (علشان أي كود مرتبط بالحسابات يشتغل)
+            function setVal(el, value) {
+                if (!el) return;
+                el.value = value ?? '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+
+            // 1) تعبئة الـ ProdId + الكود
+            setVal(ProdIdEl, prodId);
+            setVal(ProdCodeEl, prodId);
+
+            // 2) جلب اسم الصنف من الخلية الثانية (فيها strong)
+            let prodName = '';
+            const nameStrong = row.querySelector('td:nth-child(2) strong');
+            if (nameStrong) prodName = (nameStrong.innerText || '').trim();
+            if (!prodName) prodName = (row.cells[1]?.innerText || '').trim(); // fallback
+
+            setVal(ProdNameEl, prodName);
+
+            // 3) لو السطر "تجميعي" (Multi-Batch) => نملأ الاسم/الكود فقط ونفضي باقي الحقول
+            const isGroupRow = row.classList.contains('pi-group-row');
+            if (isGroupRow) {
+                setVal(ProdBatchEl, '');
+                setVal(ProdExpiryEl, '');
+                setVal(ProdQtyEl, '');
+                setVal(ProdDiscEl, '');
+                // السعر ممكن نسيبه كما هو أو نفضيه، أنا سيبته كما هو حفاظًا على المدخلات
+                if (ProdNameEl) ProdNameEl.focus();
+                return;
+            }
+
+            // 4) قراءة بقية القيم من أعمدة الجدول (حسب ترتيب Show.cshtml عندك)
+            // الأعمدة: 0 رقم السطر، 1 الاسم، 2 التشغيلة، 3 الصلاحية yyyy-MM-dd، 4 الكمية، 5 السعر، 6 الخصم
+            const batchText = (row.cells[2]?.innerText || '').trim();
+            const expRaw    = (row.cells[3]?.innerText || '').trim();
+            const qtyText   = (row.cells[4]?.innerText || '').trim();
+            const priceText = (row.cells[5]?.innerText || '').trim();
+            const discText  = (row.cells[6]?.innerText || '').trim();
+
+            // 5) تحويل الصلاحية من yyyy-MM-dd إلى MM/YYYY
+            let expMMYYYY = expRaw;
+            if (expRaw && expRaw.includes('-')) {
+                const parts = expRaw.split('-'); // [yyyy, MM, dd]
+                if (parts.length >= 2) expMMYYYY = `${parts[1]}/${parts[0]}`;
+            }
+
+            // 6) تعبئة باقي الحقول
+            setVal(ProdBatchEl, batchText);
+            setVal(ProdExpiryEl, expMMYYYY);
+            setVal(ProdQtyEl, qtyText);
+            setVal(ProdPriceEl, priceText);
+            setVal(ProdDiscEl, discText);
+
+            // 7) فوكس سريع على الكمية لسهولة التعديل
+            if (ProdQtyEl) ProdQtyEl.focus();
+
+            });
+
+
+
+
+
+
+
+            // ==========================
+            // زر مسح الصنف
+            // ==========================
 
         document.addEventListener('click', async function (e) {
 
@@ -2311,6 +2563,151 @@ if (isPostedDisplay) {
     if (data.lines) renderGroupedLines(data.lines);
     if (data.totals) updateSummaryBadges(data.totals);
 });
+
+
+
+
+
+
+
+            // =========================================================
+            // سكربت زر: مسح جميع أصناف الفاتورة (AJAX)
+            // - نفس منطق RemoveLineJson: Token + Guard + رسالة
+            // =========================================================
+            document.addEventListener("DOMContentLoaded", function () {
+
+                            const btnClearAll = document.getElementById("btnClearInvoiceLines"); // متغير: زر مسح كل الأصناف (غيّر الـ id لو مختلف عندك)
+                const msg = document.getElementById("postInvoiceMsg");           // متغير: صندوق الرسائل
+
+                if (!btnClearAll) return;
+
+                // ✅ ربط مرة واحدة
+                if (btnClearAll.dataset.boundClearAll) return;
+                btnClearAll.dataset.boundClearAll = "1";
+
+                btnClearAll.type = "button";
+
+                let busy = false; // متغير: منع الضغط المتكرر
+
+                // دالة: جلب AntiForgeryToken من الصفحة
+                function getAntiForgeryToken() {
+                    return document.querySelector('input[name="__RequestVerificationToken"]')?.value || "";
+                }
+
+                // دالة: قراءة رسالة خطأ مرة واحدة
+                async function readErrorMessage(res) {
+                    const raw = await res.text();
+                    try {
+                        const obj = JSON.parse(raw);
+                        if (obj && obj.message) return obj.message;
+                    } catch { }
+                    return raw || "حدث خطأ غير معروف.";
+                }
+
+                btnClearAll.addEventListener("click", async function () {
+
+                    if (busy) return;
+                    if (btnClearAll.disabled) return;
+
+                    // ✅ اقرأ رقم الفاتورة وقت الضغط
+                    const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+
+                    if (invoiceId <= 0) {
+                        if (msg) {
+                            msg.textContent = "⚠️ لا يمكن مسح الأصناف قبل حفظ الفاتورة.";
+                            msg.className = "small mt-2 text-warning";
+                        }
+                        return;
+                    }
+
+                    // ✅ منع المسح لو الفاتورة مُرحّلة (نفس سياسة البرنامج)
+                    if (typeof isInvoicePosted === "function" && isInvoicePosted()) {
+                        if (msg) {
+                            msg.textContent = "الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.";
+                            msg.className = "small mt-2 text-danger";
+                        }
+                        return;
+                    }
+
+                    const ok = confirm("هل تريد مسح جميع الأصناف من الفاتورة؟");
+                    if (!ok) return;
+
+                    busy = true;
+                    const oldHtml = btnClearAll.innerHTML;
+                    btnClearAll.disabled = true;
+                    btnClearAll.innerHTML = "⏳ جاري المسح...";
+
+                    if (msg) {
+                        msg.textContent = "جاري مسح جميع الأصناف...";
+                        msg.className = "small mt-2 text-muted";
+                    }
+
+                    try {
+
+                        const dto = { PIId: invoiceId }; // ✅ نفس اسم الخاصية في DTO
+
+                        const res = await fetch(`/PurchaseInvoices/ClearAllLinesJson`, {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                                "RequestVerificationToken": getAntiForgeryToken(), // ✅ نفس ValidateAntiForgeryToken
+                                "X-Requested-With": "XMLHttpRequest"
+                            },
+                            body: JSON.stringify(dto),
+                            credentials: "same-origin"
+                        });
+
+                        if (!res.ok) {
+                            const errText = await readErrorMessage(res);
+                            throw new Error(errText);
+                        }
+
+                        const data = await res.json();
+
+                        if (!data || !data.ok) {
+                            throw new Error((data && data.message) ? data.message : "تعذر مسح الأصناف.");
+                        }
+
+                        // ✅ إعادة رسم السطور (بنفس فلسفة RemoveLineJson)
+                        if (typeof renderGroupedLines === "function") {
+                            renderGroupedLines(data.lines || []);
+                        } else {
+                            // لو مفيش ريندر موجود عندك: Reload كحل مضمون
+                            location.reload();
+                            return;
+                        }
+
+                        // ✅ تحديث الإجماليات لو عندك دالة (اختياري)
+                        // لو عندك نفس دالة تحديث totals المستخدمة بعد حذف سطر واحد، نادِيها هنا
+                        // مثال:
+                        // if (typeof applyTotals === "function" && data.totals) applyTotals(data.totals);
+
+                        if (msg) {
+                            msg.textContent = data.message || "تم مسح جميع الأصناف.";
+                            msg.className = "small mt-2 text-success";
+                        }
+
+                    } catch (err) {
+
+                        btnClearAll.disabled = false;
+                        btnClearAll.innerHTML = oldHtml;
+
+                        if (msg) {
+                            msg.textContent = "فشل مسح الأصناف: " + (err.message || "خطأ غير معروف");
+                            msg.className = "small mt-2 text-danger";
+                        }
+
+                    } finally {
+                        busy = false;
+                        btnClearAll.disabled = false;
+                        btnClearAll.innerHTML = oldHtml;
+                    }
+                });
+            });
+
+
+
+
 
 
 
@@ -2560,6 +2957,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const btnOpen = document.getElementById("btnOpenInvoice");
                         if (btnOpen) btnOpen.disabled = false;
 
+                        const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
+                        if (btnPrint) btnPrint.disabled = false;                     // ✅ بعد الترحيل: الطباعة تتفتح
+
+
                         // =========================
                         // 7) واجهة زر الترحيل
                         // =========================
@@ -2589,7 +2990,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
-                  // =========================
+              // =========================
             // سكربت زر الفتح
             // =========================
             document.addEventListener("DOMContentLoaded", function () {
@@ -2702,6 +3103,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (btnPost) {
                 btnPost.disabled = false;
                 btnPost.innerHTML = "📌 ترحيل الفاتورة";
+
+                const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
+                if (btnPrint) btnPrint.disabled = true;                      // ✅ بعد فتح الفاتورة: الطباعة تتقفل
+
+
             }
 
             // ✅ تحديث نفس البوكس لحالة واحدة: "مفتوحة للتعديل"
@@ -3234,6 +3640,227 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 loadInvoiceBody(url);
             }
+
+
+
+
+
+
+
+
+            // =========================================================
+// ERP — زر طباعة الفاتورة (Purchase Invoice) [ثابت معتمد]
+// - ممنوع الطباعة إلا لو الفاتورة مُرحّلة (مغلقة)
+// - نقرأ InvoiceId وقت الضغط
+// - نطبع فقط .erp-print-area (حسب site.css)
+// - نجهز (الهيدر + السطور + الإجماليات) قبل الطباعة
+// =========================================================
+document.addEventListener("DOMContentLoaded", function () {
+
+    const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الفاتورة
+    const msg = document.getElementById("postInvoiceMsg");       // متغير: صندوق الرسائل
+
+    if (!btnPrint) return;
+
+    // ✅ ربط مرة واحدة
+    if (btnPrint.dataset.boundPrint) return;
+    btnPrint.dataset.boundPrint = "1";
+
+    // ✅ عند فتح الصفحة: لو الفاتورة مش مُرحّلة نقفل زر الطباعة
+    if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
+        btnPrint.disabled = true;
+    }
+
+    // متغير: منع فتح نافذة الطباعة مرتين
+    let printing = false;
+
+    // =========================================================
+    // دالة: تجهيز منطقة الطباعة من القيم الظاهرة في الشاشة
+    // =========================================================
+    function preparePurchaseInvoicePrint() {
+
+        // متغير: منطقة الطباعة
+        const printArea = document.getElementById("piPrintArea");
+        if (!printArea) return false;
+
+        // =========================
+        // (1) هيدر الطباعة
+        // =========================
+
+        // متغير: رقم الفاتورة
+        const invoiceId = (document.getElementById("InvoiceId")?.value || "").trim();
+
+        // متغير: تاريخ الفاتورة (لو عندك input اسمه PIDate)
+        const invoiceDate =
+            (document.getElementById("PIDate")?.value || "").trim() ||
+            "";
+
+        // متغير: اسم المورد من الـ Select (CustomerId)
+        let supplierName = "";
+        const customerSel = document.getElementById("CustomerId");
+        if (customerSel && customerSel.options && customerSel.selectedIndex >= 0) {
+            supplierName = (customerSel.options[customerSel.selectedIndex].text || "").trim();
+        }
+
+        // متغير: اسم المخزن من الـ Select (WarehouseId)
+        let warehouseName = "";
+        const whSel = document.getElementById("WarehouseId");
+        if (whSel && whSel.options && whSel.selectedIndex >= 0) {
+            warehouseName = (whSel.options[whSel.selectedIndex].text || "").trim();
+        }
+
+        // تعبئة عناصر الهيدر
+        document.getElementById("piPrintNow").textContent = new Date().toLocaleString();
+        document.getElementById("piPrintTitle").textContent = `ERP — فاتورة مشتريات رقم ${invoiceId || ""}`;
+        document.getElementById("piPrintInvoiceNo").textContent = invoiceId || "";
+        document.getElementById("piPrintInvoiceDate").textContent = invoiceDate || "";
+        document.getElementById("piPrintSupplier").textContent = supplierName || "";
+        document.getElementById("piPrintWarehouse").textContent = warehouseName || "";
+
+        // =========================
+        // (2) السطور: ننسخ جدول السطور الموجود
+        // =========================
+        const linesWrap = document.getElementById("piPrintLinesWrap");
+        if (!linesWrap) return false;
+
+        linesWrap.innerHTML = "";
+
+        const tbody = document.getElementById("PILinesTbody"); // متغير: tbody الخاص بسطور الفاتورة
+        if (!tbody) {
+            linesWrap.innerHTML = `<div class="text-muted small">لا توجد سطور للطباعة.</div>`;
+        } else {
+            const table = tbody.closest("table");
+            if (!table) {
+                linesWrap.innerHTML = `<div class="text-muted small">تعذر العثور على جدول السطور.</div>`;
+            } else {
+                // استنساخ الجدول
+                const clone = table.cloneNode(true);
+
+                // إزالة أي أزرار داخل الجدول (مسح/تعديل)
+                clone.querySelectorAll("button, a").forEach(x => x.remove());
+
+                linesWrap.appendChild(clone);
+            }
+        }
+
+        // =========================
+        // (3) الإجماليات: نقرأها من IDs التي عندك
+        // =========================
+        const totalsWrap = document.getElementById("piPrintTotalsWrap");
+        if (!totalsWrap) return false;
+
+        const totalLines = document.getElementById("TotalLinesValue")?.textContent?.trim() || "0";
+        const totalItems = document.getElementById("TotalItemsValue")?.textContent?.trim() || "0";
+        const totalQty = document.getElementById("TotalQtyValue")?.textContent?.trim() || "0";
+        const totalRetail = document.getElementById("TotalRetailValue")?.textContent?.trim() || "0";
+        const totalAfterDiscount = document.getElementById("TotalAfterDiscountValue")?.textContent?.trim() || "0";
+        const tax = (document.getElementById("TaxAmountInput")?.value || "").trim() || "0";
+        const totalAfterDiscountAndTax = document.getElementById("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
+        const netTotal = document.getElementById("NetTotalValue")?.textContent?.trim() || "0";
+
+        totalsWrap.innerHTML = `
+            <table>
+                <thead><tr><th colspan="4">الإجماليات</th></tr></thead>
+                <tbody>
+                    <tr>
+                        <td>عدد السطور</td><td><strong>${totalLines}</strong></td>
+                        <td>عدد الأصناف</td><td><strong>${totalItems}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>إجمالي الكمية</td><td><strong>${totalQty}</strong></td>
+                        <td>إجمالي سعر الجمهور</td><td><strong>${totalRetail}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>الإجمالي بعد الخصم</td><td><strong>${totalAfterDiscount}</strong></td>
+                        <td>قيمة الضريبة</td><td><strong>${tax}</strong></td>
+                    </tr>
+                    <tr>
+                        <td>الإجمالي بعد الخصم والضريبة</td><td><strong>${totalAfterDiscountAndTax}</strong></td>
+                        <td>الصافي النهائي</td><td><strong>${netTotal}</strong></td>
+                    </tr>
+                </tbody>
+            </table>
+        `;
+
+        return true;
+    }
+
+    btnPrint.addEventListener("click", function () {
+
+        // ✅ اقرأ رقم الفاتورة وقت الضغط
+        const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+
+        if (invoiceId <= 0) {
+            if (msg) {
+                msg.textContent = "⚠️ لا يمكن طباعة فاتورة قبل حفظها.";
+                msg.className = "small mt-2 text-warning";
+            }
+            return;
+        }
+
+        // ✅ شرط البرنامج: لا طباعة إلا بعد الترحيل
+        if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
+            if (msg) {
+                msg.textContent = "❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة).";
+                msg.className = "small mt-2 text-danger";
+            }
+            document.getElementById("btnPostInvoice")?.focus();
+            return;
+        }
+
+        // منع تكرار الطباعة
+        if (printing) return;
+        printing = true;
+
+        // ✅ تجهيز منطقة الطباعة
+        const ok = preparePurchaseInvoicePrint();
+        if (!ok) {
+            printing = false;
+            if (msg) {
+                msg.textContent = "تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.";
+                msg.className = "small mt-2 text-danger";
+            }
+            return;
+        }
+
+                    // =========================
+            // (ERP ثابت) تجهيز بيانات الهيدر داخل منطقة الطباعة قبل التنفيذ
+            // =========================
+
+            // متغير: اسم المورد من نفس Input في الهيدر
+            const supplierName = (document.getElementById("CustomerNameInput")?.value || "").trim();
+
+            // متغير: تاريخ الفاتورة من نفس Input في الهيدر
+            const invoiceDate = (document.getElementById("InvoiceDateDisplay")?.value || "").trim();
+
+            // دالة صغيرة: تكتب نص في عنصر طباعة لو موجود
+            function setPrintText(id, text) {
+                const el = document.getElementById(id);
+                if (el) el.textContent = text || "";
+            }
+
+            // ✅ املأ القيم داخل الطباعة
+            setPrintText("piPrintSupplier", supplierName);
+            setPrintText("piPrintInvoiceDate", invoiceDate);
+
+
+        // ✅ اطبع مرة واحدة
+        setTimeout(() => window.print(), 50);
+    });
+
+    // بعد إغلاق نافذة الطباعة
+    window.addEventListener("afterprint", function () {
+        printing = false;
+    });
+});
+
+
+
+
+
+
+
+
 
 
             // =========================

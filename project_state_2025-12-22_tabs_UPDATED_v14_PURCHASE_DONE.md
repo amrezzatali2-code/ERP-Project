@@ -1344,3 +1344,173 @@ if (invoice.IsPosted)
   - الحذف يعمل بدون كسر إجماليات أو تعطيل UI
 
 > (لو حبيت لاحقًا نضيف ملخص “أين كان الخطأ بالضبط” نكتبه هنا بس بعد ما ترسل جزء الكود النهائي للحذف.)
+
+---
+
+## ✅ ثوابت “الطباعة” لفاتورة المشتريات (PurchaseInvoice Print)
+
+### 1) الهدف
+نطبع **جزء محدد فقط** من صفحة `Show`:
+- جزء مختار من الهيدر
+- **السطور بكل الأعمدة المطلوبة**
+- **الإجماليات**
+ونخفي أي عناصر تعديل (أزرار/مودال/بحث… إلخ).
+
+### 2) شرط الطباعة (ثابت)
+- **ممنوع الطباعة** إلا لو الفاتورة **مُرحّلة** (`IsPosted = true`).
+- عند “فتح الفاتورة / Unpost” ⇒ زر الطباعة يرجع **مغلق**.
+- ملاحظة: تكرار التاريخ/الوقت أعلى الورقة غالبًا من **Headers/Footers في المتصفح**. الحل من نافذة الطباعة: **إلغاء** خيار *Headers and footers*.
+
+### 3) CSS ثابت للطباعة (مكانه الصحيح)
+**أفضل مكان:** `wwwroot/css/site.css` (ثابت عام لكل الفواتير).
+
+> ⚠️ لو كتبت `@page` داخل `Show.cshtml` (داخل `<style>`)، لازم تكتبها: `@@page` عشان Razor.
+
+```css
+/* ثابت: طباعة الفواتير */
+.print-only{display:none;}
+
+@media print{
+  @page{size:A4; margin:10mm;}
+
+  .print-only{display:block!important;}
+  .no-print,[data-print-hide="1"]{display:none!important;}
+
+  body *{visibility:hidden;}
+  .erp-print-area,.erp-print-area *{visibility:visible;}
+  .erp-print-area{position:absolute; inset:0; margin:0!important; padding:0!important;}
+
+  /* لو السطور داخل wrapper سكرول */
+  .erp-table-wrapper{max-height:none!important; overflow:visible!important; border:none!important;}
+  .card,.shadow,.shadow-sm{box-shadow:none!important;}
+}
+```
+
+### 4) منطقة طباعة مخصصة داخل Show.cshtml (ثابت)
+نضيف منطقة واحدة فقط **تظهر في الطباعة**:
+
+```html
+<div id="piPrintArea" class="erp-print-area print-only">
+  <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+    <div class="text-end" style="min-width:280px;">
+      <div class="fw-bold">اسم الشركة</div>
+      <div class="small text-muted">العنوان / الهاتف</div>
+      <div class="small text-muted">بيانات إضافية</div>
+    </div>
+
+    <div class="text-center flex-grow-1">
+      <div class="fw-bold">فاتورة مشتريات</div>
+      <div class="small text-muted">ERP — فاتورة مشتريات رقم <span id="piPrintInvoiceNo"></span></div>
+    </div>
+
+    <div class="text-start" style="min-width:140px;">
+      <div class="border rounded text-center py-2 small text-muted">LOGO</div>
+    </div>
+  </div>
+
+  <hr class="my-2" />
+
+  <div class="row g-2 small mb-2">
+    <div class="col-6 text-end">رقم الفاتورة: <strong id="piPrintInvoiceNo2"></strong></div>
+    <div class="col-6 text-end">التاريخ: <strong id="piPrintInvoiceDate"></strong></div>
+    <div class="col-6 text-end">المورد: <strong id="piPrintSupplier"></strong></div>
+    <div class="col-6 text-end">المخزن: <strong id="piPrintWarehouse"></strong></div>
+  </div>
+
+  <hr class="my-2" />
+
+  <div id="piPrintLinesWrap"></div>
+  <hr class="my-2" />
+  <div id="piPrintTotalsWrap"></div>
+</div>
+```
+
+### 5) إخفاء عمود “مسح” في الطباعة (حل الفراغ الزيادة)
+الطريقة القياسية: ضع `no-print` على `<th>` و `<td>` الخاصة بالمسح.
+
+```html
+<th class="no-print">مسح</th>
+<td class="text-center no-print">
+  <button type="button" class="btn btn-danger btn-sm btnRemoveLineFromInvoice" data-line-no="@line.LineNo" data-lock-posted="1">مسح</button>
+</td>
+```
+
+### 6) زر الطباعة (JS ثابت)
+- يقرأ `InvoiceId` وقت الضغط.
+- يمنع الطباعة قبل الترحيل.
+
+```js
+// ثابت: زر طباعة الفاتورة (PurchaseInvoice)
+document.addEventListener("DOMContentLoaded", function () {
+  const btnPrint = document.getElementById("btnPrintInvoice");
+  const msg = document.getElementById("postInvoiceMsg");
+  if (!btnPrint) return;
+  if (btnPrint.dataset.boundPrint) return;
+  btnPrint.dataset.boundPrint = "1";
+
+  if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
+    btnPrint.disabled = true;
+  }
+
+  btnPrint.addEventListener("click", function () {
+    const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+    if (invoiceId <= 0) {
+      if (msg) { msg.textContent = "⚠️ لا يمكن طباعة فاتورة قبل حفظها."; msg.className = "small mt-2 text-warning"; }
+      return;
+    }
+    if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
+      if (msg) { msg.textContent = "❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة)."; msg.className = "small mt-2 text-danger"; }
+      document.getElementById("btnPostInvoice")?.focus();
+      return;
+    }
+    window.print();
+  });
+});
+```
+
+### 7) قابلية “تخصيص تصميم الطباعة” (خطة ثابتة)
+لتغيير اللوجو/بيانات الشركة/الحقول المطبوعة حسب كل شركة:
+- نفصل قالب الطباعة في Partial: `Views/PurchaseInvoices/_PrintTemplate.cshtml`
+- بيانات الشركة من جدول Settings أو من `appsettings.json` (مرحلة أولى)
+- أي عميل يريد تعديل ⇒ نعدل الـ Partial فقط بدون لمس منطق الفاتورة.
+
+### 8) الحالة الحالية
+- ✅ الطباعة تعمل بشرط الترحيل.
+- ✅ بداية هيدر + سطور + إجماليات.
+- ⏳ التالي: تثبيت الأعمدة كلها + التأكد أن “الإجماليات” تظهر دائمًا، ثم ننتقل لفكرة **فاتورتين في صفحة واحدة**.
+---
+
+## ✅ تحديث الحالة — فاتورة المشتريات (اعتماد نهائي)
+
+تم اعتماد وتنفيذ جميع النقاط التالية والحمد لله، وتُعتبر **ثوابت لا يُسمح بكسرها لاحقًا**:
+
+### ✔️ ما تم تنفيذه واعتماده
+- نظام التابات (Tabs) مستقر مع `frame=1` و `data-tab-id`
+- Shell ثابت + Body ديناميكي (بدون Reload)
+- أسهم التنقل (أول / سابق / التالي / آخر) تعمل بـ Fetch
+- البحث داخل الفاتورة بدون فتح Tab جديد
+- الأزرار لا تختفي (Disabled فقط حسب الحالة)
+- Tooltips على الأسهم فقط
+- زر تحديث التاب النشط
+- قفل الفاتورة بعد الترحيل باستخدام حالة من قاعدة البيانات
+- فتح الفاتورة لا يكسر رقم المرحلة
+- منع التعديل على فاتورة مُرحّلة برسالة واضحة
+- مسح السطر يعمل بدون كسر الواجهة
+- تحديد السطر بالضغط عليه (Row Click) بدون تعارض مع زر المسح
+- الطباعة تعمل فقط بعد الترحيل
+- إخفاء عمود (مسح) في الطباعة
+- الإجماليات صحيحة ومتطابقة بين UI و DB
+- الخصم المرجّح غير مخزَّن (يُحسب تقريريًا فقط)
+
+### ⏸️ المؤجل عن قصد
+- تعديل داخل السطر (Edit Line)
+  - مؤجل
+  - غير مطلوب حاليًا
+  - لن يُنفذ إلا عند الحاجة التشغيلية
+
+📌 **هذه النقطة تمثل Checkpoint مستقر لبرنامج ERP — فاتورة المشتريات.**
+أي تطوير لاحق يجب أن يحافظ على هذه الثوابت دون استثناء.
+
+---
+
+آخر تحديث: اعتماد نهائي بعد إكمال فاتورة المشتريات.

@@ -82,8 +82,8 @@ namespace ERP.Controllers
             // الاستعلام الأساسي
             IQueryable<StockLedger> q = context.StockLedger
                 .AsNoTracking()
-                .Include(x => x.Product)     // تحميل اسم الصنف
-                .Include(x => x.Batch);      // تحميل بيانات التشغيلة لو موجودة
+                .Include(x => x.Product)     // تعليق: تحميل اسم الصنف
+                .Include(x => x.Batch);      // تعليق: تحميل بيانات التشغيلة (لا نزيلها)
 
             // تطبيق نظام البحث/الترتيب الموحد
             q = q.ApplySearchSort(
@@ -107,6 +107,69 @@ namespace ERP.Controllers
             // إنشاء PagedResult (نظام القوائم الموحد)
             var model = await PagedResult<StockLedger>.CreateAsync(q, page, pageSize);
 
+            // =========================================================
+            // ✅ (جديد) تعبئة خصم الشراء من "سطور الشراء" PILines
+            // الفكرة:
+            // - StockLedger فيه: SourceType + SourceId + SourceLine
+            // - الخصم موجود في جدول PILines داخل PurchaseDiscountPct
+            // - نملأ PurchaseDiscount في Rows الخاصة بالشراء فقط (لصفحة النتائج الحالية)
+            // =========================================================
+            var pageRows = model.Items; // متغير: صفوف الصفحة الحالية (اسمها Items عندك)
+
+            // متغير: صفوف الشراء الظاهرة في الصفحة (اللي ينفع نجيب خصمها)
+            var purchaseRows = pageRows
+                .Where(x =>
+                    x.SourceType == "Purchase" &&   // تعليق: حركة شراء
+                    x.SourceId > 0 &&               // تعليق: رقم فاتورة الشراء
+                    x.SourceLine > 0)               // ✅ مهم: اسم الحقل عندك SourceLine وليس SourceLineNo
+                .Select(x => new { x.EntryId, PIId = x.SourceId, LineNo = x.SourceLine })
+                .ToList();
+
+            if (purchaseRows.Any())
+            {
+                // متغير: كل فواتير الشراء الموجودة في الصفحة
+                var piIds = purchaseRows.Select(x => x.PIId).Distinct().ToList();
+
+                // متغير: نجلب خصومات سطور الشراء لهذه الفواتير فقط (أسرع)
+                // ⚠️ أسماء الأعمدة من ملف PILine.cs عندك: PIId, LineNo, PurchaseDiscountPct
+                var piLines = await context.PILines
+                    .AsNoTracking()
+                    .Where(l => piIds.Contains(l.PIId))
+                    .Select(l => new
+                    {
+                        l.PIId,
+                        l.LineNo,
+                        Disc = (decimal?)l.PurchaseDiscountPct ?? 0m   // متغير: خصم الشراء %
+                    })
+                    .ToListAsync();
+
+                // متغير: Lookup سريع (PIId + LineNo) => Disc
+                var discLookup = piLines.ToDictionary(
+                    x => (x.PIId, x.LineNo),
+                    x => x.Disc
+                );
+
+                // تعليق: نملأ PurchaseDiscount داخل صفوف StockLedger في الذاكرة
+                // بدون أي Update للـ DB (عرض فقط)
+                foreach (var row in pageRows)
+                {
+                    if (row.SourceType == "Purchase" && row.SourceId > 0 && row.SourceLine > 0)
+                    {
+                        if (discLookup.TryGetValue((row.SourceId, row.SourceLine), out var disc))
+                        {
+                            // ✅ اكتبها في العمود الموجود بالفعل في StockLedger
+                            // (حتى لو كانت Null هتظهر الآن في الجدول)
+                            row.PurchaseDiscount = disc;
+                        }
+                        else
+                        {
+                            // لو السطر مش موجود لأي سبب
+                            row.PurchaseDiscount = 0m;
+                        }
+                    }
+                }
+            }
+
             // تخزين قيم الفلاتر داخل الموديل
             var s = (search ?? "").Trim();
             var sb = (searchBy ?? "all").Trim();
@@ -123,29 +186,29 @@ namespace ERP.Controllers
 
             // خيارات البحث
             ViewBag.SearchOptions = new List<SelectListItem>
-            {
-                new("الكل",              "all")       { Selected = sb.Equals("all",        StringComparison.OrdinalIgnoreCase) },
-                new("رقم القيد",         "entry")     { Selected = sb.Equals("entry",      StringComparison.OrdinalIgnoreCase) },
-                new("المخزن",           "warehouse") { Selected = sb.Equals("warehouse",   StringComparison.OrdinalIgnoreCase) },
-                new("الصنف",            "product")   { Selected = sb.Equals("product",     StringComparison.OrdinalIgnoreCase) },
-                new("التشغيلة",         "batch")     { Selected = sb.Equals("batch",       StringComparison.OrdinalIgnoreCase) },
-                new("نوع المصدر",       "source")    { Selected = sb.Equals("source",      StringComparison.OrdinalIgnoreCase) },
-                new("رقم المصدر",       "sourceid")  { Selected = sb.Equals("sourceid",    StringComparison.OrdinalIgnoreCase) },
-                new("سطر المصدر (رقم)", "sourceline"){ Selected = sb.Equals("sourceline",  StringComparison.OrdinalIgnoreCase) }
-            };
+    {
+        new("الكل",              "all")       { Selected = sb.Equals("all",        StringComparison.OrdinalIgnoreCase) },
+        new("رقم القيد",         "entry")     { Selected = sb.Equals("entry",      StringComparison.OrdinalIgnoreCase) },
+        new("المخزن",           "warehouse") { Selected = sb.Equals("warehouse",   StringComparison.OrdinalIgnoreCase) },
+        new("الصنف",            "product")   { Selected = sb.Equals("product",     StringComparison.OrdinalIgnoreCase) },
+        new("التشغيلة",         "batch")     { Selected = sb.Equals("batch",       StringComparison.OrdinalIgnoreCase) },
+        new("نوع المصدر",       "source")    { Selected = sb.Equals("source",      StringComparison.OrdinalIgnoreCase) },
+        new("رقم المصدر",       "sourceid")  { Selected = sb.Equals("sourceid",    StringComparison.OrdinalIgnoreCase) },
+        new("سطر المصدر (رقم)", "sourceline"){ Selected = sb.Equals("sourceline",  StringComparison.OrdinalIgnoreCase) }
+    };
 
             // خيارات الترتيب
             ViewBag.SortOptions = new List<SelectListItem>
-            {
-                new("التاريخ",        "TranDate")  { Selected = so.Equals("TranDate",  StringComparison.OrdinalIgnoreCase) },
-                new("رقم القيد",      "EntryId")   { Selected = so.Equals("EntryId",   StringComparison.OrdinalIgnoreCase) },
-                new("المخزن",        "Warehouse") { Selected = so.Equals("Warehouse", StringComparison.OrdinalIgnoreCase) },
-                new("الصنف",         "Product")   { Selected = so.Equals("Product",   StringComparison.OrdinalIgnoreCase) },
-                new("الصلاحية",      "Expiry")    { Selected = so.Equals("Expiry",    StringComparison.OrdinalIgnoreCase) },
-                new("كمية داخلة",    "QtyIn")     { Selected = so.Equals("QtyIn",     StringComparison.OrdinalIgnoreCase) },
-                new("كمية خارجة",    "QtyOut")    { Selected = so.Equals("QtyOut",    StringComparison.OrdinalIgnoreCase) },
-                new("تكلفة الوحدة",  "UnitCost")  { Selected = so.Equals("UnitCost",  StringComparison.OrdinalIgnoreCase) }
-            };
+    {
+        new("التاريخ",        "TranDate")  { Selected = so.Equals("TranDate",  StringComparison.OrdinalIgnoreCase) },
+        new("رقم القيد",      "EntryId")   { Selected = so.Equals("EntryId",   StringComparison.OrdinalIgnoreCase) },
+        new("المخزن",        "Warehouse") { Selected = so.Equals("Warehouse", StringComparison.OrdinalIgnoreCase) },
+        new("الصنف",         "Product")   { Selected = so.Equals("Product",   StringComparison.OrdinalIgnoreCase) },
+        new("الصلاحية",      "Expiry")    { Selected = so.Equals("Expiry",    StringComparison.OrdinalIgnoreCase) },
+        new("كمية داخلة",    "QtyIn")     { Selected = so.Equals("QtyIn",     StringComparison.OrdinalIgnoreCase) },
+        new("كمية خارجة",    "QtyOut")    { Selected = so.Equals("QtyOut",    StringComparison.OrdinalIgnoreCase) },
+        new("تكلفة الوحدة",  "UnitCost")  { Selected = so.Equals("UnitCost",  StringComparison.OrdinalIgnoreCase) }
+    };
 
             // تمرير القيم الحالية (احتياطى)
             ViewBag.Search = s;
@@ -159,6 +222,7 @@ namespace ERP.Controllers
 
             return View(model);
         }
+
 
 
 

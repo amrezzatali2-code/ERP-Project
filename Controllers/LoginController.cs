@@ -28,17 +28,43 @@ namespace ERP.Controllers
         }
 
         // ================================================================
+        // دالة مساعدة: تحميل أسماء المستخدمين (لاستخدامها فى datalist)
+        // - نفس فكرة العميل فى الفواتير
+        // - نظهر فقط المستخدمين النشطين IsActive = true
+        // ================================================================
+        private async Task LoadUsersForLoginAsync()
+        {
+            // تحميل أسماء المستخدمين النشطين فقط (مرتبة)
+            var users = await _db.Users
+                .AsNoTracking()
+                .Where(u => u.IsActive)                 // تعليق: نظهر المستخدمين النشطين فقط
+                .OrderBy(u => u.UserName)               // تعليق: ترتيب أبجدي
+                .Select(u => new
+                {
+                    Id = u.UserId,                      // متغير: كود المستخدم
+                    Name = u.UserName                   // متغير: اسم المستخدم
+                })
+                .ToListAsync();
+
+            // متغير: إرسال الأسماء للـ View (للاستخدام فى datalist)
+            ViewBag.Users = users;
+        }
+
+        // ================================================================
         // GET: /Login
         // عرض شاشة تسجيل الدخول
         // ================================================================
         [HttpGet]
-        public IActionResult Index(string? returnUrl = null)
+        public async Task<IActionResult> Index(string? returnUrl = null)
         {
             // متغير: موديل شاشة الدخول
             var model = new LoginViewModel
             {
                 ReturnUrl = returnUrl     // تعليق: يتم حفظ الصفحة المطلوب الرجوع لها بعد الـ Login
             };
+
+            // ✅ تجهيز قائمة أسماء المستخدمين لشاشة الدخول (مثل العميل)
+            await LoadUsersForLoginAsync();
 
             return View("Index", model);   // تعليق: نرجع View باسم Index.cshtml
         }
@@ -51,6 +77,9 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Index(LoginViewModel model)
         {
+            // ✅ لازم نحمل الأسماء أيضًا عند أي رجوع للشاشة بسبب خطأ
+            await LoadUsersForLoginAsync();
+
             // تحقق من صحة البيانات في الفورم
             if (!ModelState.IsValid)
             {
@@ -58,7 +87,7 @@ namespace ERP.Controllers
             }
 
             // متغير: اسم المستخدم بعد إزالة الفراغات الزائدة
-            var userName = model.UserName.Trim();
+            var userName = (model.UserName ?? string.Empty).Trim();
 
             // البحث عن المستخدم في قاعدة البيانات (يكون نشط)
             var user = await _db.Users
@@ -138,7 +167,6 @@ namespace ERP.Controllers
                 CookieAuthenticationDefaults.AuthenticationScheme,
                 principal,
                 authProps);
-
 
             // لو فيه ReturnUrl نرجع له، وإلا نذهب للصفحة الرئيسية
             if (!string.IsNullOrWhiteSpace(model.ReturnUrl) &&

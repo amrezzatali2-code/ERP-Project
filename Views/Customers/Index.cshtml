@@ -353,7 +353,7 @@
                     <th data-col="name">@sortLink("name", "اسم العميل")</th>
                     <th data-col="type">@sortLink("type", "نوع الطرف")</th>
                     <th data-col="phone">هاتف</th>
-                    <th data-col="address">العنوان</th>
+                    <th data-col="Address">العنوان</th>
 
                     @* الأعمدة الجديدة: المحافظة / الحي / المنطقة *@
                     <th data-col="governorate">@sortLink("governorate", "المحافظة")</th>
@@ -362,16 +362,20 @@
 
                     <th data-col="account">@sortLink("account", "الحساب المحاسبي")</th>
 
-                    @* الأعمدة الجديدة الخاصة بالسياسة والكوتة *@
-                    <th data-col="policy">كود السياسة</th>
-                    <th data-col="user">كود المستخدم</th>
-                    <th data-col="ordercontact">مسئول الطلب</th>
+                    <th data-col="PolicyId">سياسة العميل</th>
+                    
+                    
                     <th data-col="credit">الحد الائتماني</th>
-                    <th data-col="quota">مضاعفة الكوتة</th>
 
                     <th data-col="isactive">@sortLink("isactive", "الحالة")</th>
+                    <th data-col="CurrentBalance">مديونية العميل</th>
+                   
+                    <th data-col="ordercontact">مسئول الطلب</th>
                     <th data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
                     <th data-col="updated">@sortLink("updated", "آخر تعديل")</th>
+                    <th data-col="quota">الكوتة</th>
+                   
+                    
                    
 
 
@@ -379,6 +383,8 @@
                         data-col="actions"
                         data-col-fixed="true"
                         style="width:220px;"></th>
+
+                    
                 </tr>
             </thead>
             <tbody>
@@ -406,7 +412,7 @@
                             <td data-col="name">@c.CustomerName</td>
                             <td data-col="type">@c.PartyCategory</td>
                             <td data-col="phone">@(c.Phone1 ?? c.Phone2 ?? c.Whatsapp)</td>
-                            <td data-col="address">@c.Address</td>
+                            <td data-col="Address">@c.Address</td>
                             <td data-col="governorate">
                                 @* المحافظة: لو موجودة اطبع الاسم، لو مش موجودة خلية فاضية *@
                                 @(c.Governorate?.GovernorateName ?? "")
@@ -426,30 +432,35 @@
                                 @if (c.Account != null)
                                 {
                                     @($"{c.Account.AccountCode} — {c.Account.AccountName}")
-                                }
-                    </td>
-
-                    @* عرض الأعمدة الجديدة *@
+                                }</td>
                     <td data-col="policy">@c.PolicyId</td>
-                    <td data-col="user">@c.UserId</td>
-                    <td data-col="ordercontact">@c.OrderContactName</td>
                     <td data-col="credit" class="text-end">
                         @c.CreditLimit.ToString("0.00")
                     </td>
+                    <td data-col="isactive">@((c.IsActive) ? "نشط" : "موقوف")</td>
+                    <td data-col="CurrentBalance">@c.CurrentBalance</td>
+                    <td data-col="ordercontact">@c.OrderContactName</td>
+                    <td data-col="created">@c.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                    <td data-col="updated">@c.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                     <td data-col="quota">
                         @(c.IsQuotaMultiplierEnabled
                                                 ? $"مفعّلة ×{c.QuotaMultiplier}"
                                                 : "غير مفعّلة")
                             </td>
+                            
 
-                            <td data-col="isactive">@((c.IsActive) ? "نشط" : "موقوف")</td>
-                            <td data-col="created">@c.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td data-col="updated">@c.UpdatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td data-col="balance" class="text-end">
-                                @c.CurrentBalance.ToString("0.00")
-                            </td>
 
                             <td class="text-nowrap no-print" data-col="actions">
+                    
+                    
+                    
+                    
+                    
+                 
+                   
+
+                            
+                         
 
                                 @* زر حجم التعامل / التفاصيل يفتح فى تاب مستقل *@
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"

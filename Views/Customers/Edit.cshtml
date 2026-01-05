@@ -127,44 +127,7 @@
 
         </div>
 
-        <select asp-for="GovernorateId"
-                asp-items="ViewBag.Governorates"
-                class="form-select form-select-sm">
-            @if (Model?.GovernorateId == null)
-            {
-                <option value="" selected>-- اختر المحافظة --</option>
-            }
-            else
-            {
-                <option value="">-- اختر المحافظة --</option>
-            }
-        </select>
-
-        <select asp-for="DistrictId"
-                asp-items="ViewBag.Districts"
-                class="form-select form-select-sm">
-            @if (Model?.DistrictId == null)
-            {
-                <option value="" selected>-- اختر الحي / المركز --</option>
-            }
-            else
-            {
-                <option value="">-- اختر الحي / المركز --</option>
-            }
-        </select>
-
-         <select asp-for="AreaId"
-                        asp-items="ViewBag.Areas"
-                        class="form-select form-select-sm">
-                    @if (Model?.AreaId == null)
-                    {
-                        <option value="" selected>-- اختر المنطقة --</option>
-                    }
-                    else
-                    {
-                        <option value="">-- اختر المنطقة --</option>
-                    }
-         </select>
+      
 
 
 

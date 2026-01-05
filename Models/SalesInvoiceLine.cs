@@ -129,5 +129,12 @@ namespace ERP.Models
 
         [Display(Name = "فاتورة البيع")]
         public virtual SalesInvoice SalesInvoice { get; set; } = null!; // متغير: رأس الفاتورة التي ينتمي لها هذا السطر
+
+        // ===== علاقة السطر مع الصنف =====
+
+        [Display(Name = "الصنف")]
+        [ForeignKey(nameof(ProdId))] // تعليق: ربط ProdId بـ Product.ProdId
+        public virtual Product? Product { get; set; } // متغير: كيان الصنف المرتبط بالسطر (لجلب الاسم/السعر... إلخ)
+
     }
 }

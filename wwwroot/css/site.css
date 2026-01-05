@@ -418,6 +418,23 @@ body {
     font-size: 0.75rem;
 }
 
+
+
+
+/* =========================================================
+   ✅ منطقة الطباعة تظهر وقت الطباعة فقط
+   ========================================================= */
+.print-only {
+    display: none !important; /* تعليق: مخفية في وضع الشاشة */
+}
+
+@media print {
+    .print-only {
+        display: block !important; /* تعليق: تظهر فقط أثناء الطباعة */
+    }
+}
+
+
 /* ===================== طباعة القوائم ===================== */
 @media print {
 
@@ -449,4 +466,68 @@ body {
         margin: 0;
         padding: 0;
     }
+
+
+    /* تظهر فقط في الطباعة */
+    .print-only {
+        display: none;
+    }
+
+    @media print {
+        .print-only {
+            display: block !important;
+        }
+
+        /* لو جدول السطور داخل wrapper سكرول: نخليه يطبع كله */
+        .erp-table-wrapper {
+            max-height: none !important;
+            overflow: visible !important;
+        }
+    }
+
+
+
+    /* =========================================================
+   (ERP ثابت) نظام طباعة الفواتير — Invoice Print Mode
+   - يطبع منطقة واحدة فقط (#piPrintArea) ويخفي باقي الصفحة
+   - يمنع صفحات فاضية (بدل visibility نستخدم display)
+   - يفك سكرول جداول السطور أثناء الطباعة
+   - يعتمد على كلاس body: printing-invoice
+   ========================================================= */
+
+    
+    .print-only {
+        display: none;
+    }
+
+    @media print {
+
+        /* وضع طباعة الفاتورة فقط: نخفي كل حاجة بـ display */
+        body.printing-invoice * {
+            display: none !important;
+        }
+
+        /* ونظهر منطقة الفاتورة فقط */
+        body.printing-invoice #piPrintArea,
+        body.printing-invoice #piPrintArea * {
+            display: block !important;
+        }
+
+        /* مهم: نفك سكرول جدول السطور أثناء الطباعة */
+        body.printing-invoice .erp-table-wrapper {
+            max-height: none !important;
+            overflow: visible !important;
+        }
+
+        /* تقليل احتمالات صفحات فاضية */
+        body.printing-invoice #piPrintArea {
+            position: static !important;
+        }
+
+        /* هوامش الورقة */
+        @page {
+            margin: 10mm;
+        }
+    }
+
 }
