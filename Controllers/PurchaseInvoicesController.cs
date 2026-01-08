@@ -1867,14 +1867,14 @@ namespace ERP.Controllers
 
 
 
-
-
-
-
-
-
-
         #endregion
+
+
+
+
+
+
+
 
         #region Delete / DeleteConfirmed (حذف فاتورة واحدة)
 
@@ -1888,45 +1888,171 @@ namespace ERP.Controllers
                 .FirstOrDefaultAsync(p => p.PIId == id);
 
             if (invoice == null)
-            {
                 return NotFound();
-            }
 
             return View(invoice);   // View: Views/PurchaseInvoices/Delete.cshtml
         }
 
-
-
-
-
-
-
-
-
-
         /// <summary>
-        /// تنفيذ الحذف الفعلي بعد التأكيد.
+        /// تنفيذ الحذف الفعلي بعد التأكيد (حذف عميق من الهيدر).
+        /// ✅ نفس المبدأ:
+        /// 1) (اختياري) شرط أمان FIFO
+        /// 2) تحديث StockBatches (إنقاص) بدون حذف صف الباتش
+        /// 3) حذف StockLedger الخاص بالفاتورة
+        /// 4) عكس الأثر المحاسبي (Reverse) بدل حذف LedgerEntries
+        /// 5) حذف الهيدر (Cascade يحذف السطور)
+        /// 6) SaveChanges + Commit مرة واحدة
         /// </summary>
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
+            // =========================
+            // 0) تحميل الفاتورة (Tracked)
+            // =========================
             var invoice = await _context.PurchaseInvoices
-                .FirstOrDefaultAsync(p => p.PIId == id);
+                .FirstOrDefaultAsync(x => x.PIId == id);
 
-            if (invoice != null)
+            if (invoice == null)
+                return NotFound();
+
+            // =========================
+            // 1) تحميل سطور الفاتورة
+            // =========================
+            var lines = await _context.PILines
+                .Where(l => l.PIId == id)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            // =========================
+            // 2) تحميل StockLedger المرتبط بالفاتورة
+            // =========================
+            var allLedgers = await _context.StockLedger
+                .Where(x => x.SourceType == "Purchase" && x.SourceId == id)
+                .ToListAsync();
+
+            // =========================
+            // 3) شرط الأمان FIFO (لو عايز تفعّله)
+            // =========================
+            // ملاحظة: لو أنت بتجرب دلوقتي بدون الشرط، سيبه مُعلّق.
+            /*
+            foreach (var lg in allLedgers)
             {
+                if (lg.QtyIn > 0)
+                {
+                    var rem = lg.RemainingQty ?? 0; // متغير: المتبقي من سطر الدخول
+                    if (rem < lg.QtyIn)
+                    {
+                        TempData["ErrorMessage"] = "لا يمكن حذف الفاتورة لأن جزءًا من كمية أحد السطور تم البيع/الصرف منه بالفعل.";
+                        return RedirectToAction(nameof(Index));
+                    }
+                }
+            }
+            */
+
+            // =========================
+            // 4) Transaction (مجموعة عمليات كأنها خطوة واحدة)
+            // =========================
+            await using var tx = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // =========================
+                // 5) تحديث StockBatches (إنقاص الكمية)
+                // =========================
+                foreach (var line in lines)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim(); // متغير: التشغيلة
+                    var expDate = line.Expiry?.Date;                                                    // متغير: الصلاحية
+
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+
+                        var sbRow = await _context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == invoice.WarehouseId &&  // متغير: المخزن
+                                x.ProdId == line.ProdId &&               // متغير: الصنف
+                                x.BatchNo == batchNo &&                  // متغير: التشغيلة
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand -= line.Qty; // متغير: إنقاص كمية الشراء
+                            if (sbRow.QtyOnHand < 0) sbRow.QtyOnHand = 0;
+
+                            sbRow.UpdatedAt = DateTime.UtcNow;
+                            sbRow.Note = $"PI:{id} DeleteFromHeader (Line:{line.LineNo}) (-{line.Qty})";
+                        }
+                    }
+                }
+
+                // =========================
+                // 6) حذف StockLedger الخاص بالفاتورة
+                // =========================
+                if (allLedgers.Count > 0)
+                    _context.StockLedger.RemoveRange(allLedgers);
+
+                // =========================
+                // 7) عكس الأثر المحاسبي (Reverse) بدل الحذف
+                // ✅ مهم: هذه الدالة (حسب الاتفاق) لا تعمل Transaction ولا SaveChanges وحدها
+                // =========================
+                await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                    LedgerSourceType.PurchaseInvoice,
+                    id,
+                    postedBy: User?.Identity?.Name,
+                    reason: $"حذف فاتورة مشتريات من قائمة الهيدر PIId={id}"
+                );
+
+                // =========================
+                // 8) حذف الهيدر نفسه (PurchaseInvoices)
+                // =========================
                 _context.PurchaseInvoices.Remove(invoice);
 
-                // TODO: لاحقاً ممكن نستدعي خدمة DocumentTotalsService لإعادة حساب الإجماليات
+                // =========================
+                // 9) SaveChanges مرة واحدة + Commit
+                // =========================
                 await _context.SaveChangesAsync();
-            }
+                await tx.CommitAsync();
 
-            TempData["SuccessMessage"] = "تم حذف فاتورة المشتريات بنجاح.";
-            return RedirectToAction(nameof(Index));
+                // =========================
+                // 10) LogActivity (اختياري)
+                // =========================
+                try
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "PurchaseInvoices",
+                        id,
+                        $"PIId={id} | DeleteFromHeader | Lines={lines.Count} | StockLedger={allLedgers.Count}"
+                    );
+                }
+                catch { }
+
+                TempData["SuccessMessage"] = "تم حذف الفاتورة بنجاح (مع تحديث المخزون وعكس الأثر المحاسبي).";
+                return RedirectToAction(nameof(Index));
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+
+                // ✅ هنا بقى هتشوف “السبب الحقيقي” في صفحة الـ Index بدل ما تحس إنه ما حذفش وخلاص
+                TempData["ErrorMessage"] = $"تعذر حذف الفاتورة رقم {id}: {ex.Message}";
+                return RedirectToAction(nameof(Index));
+            }
         }
 
         #endregion
+
+
+
+
+
+
+
+
+
 
         #region BulkDelete (حذف مجموعة فواتير دفعة واحدة)
 
@@ -1980,6 +2106,13 @@ namespace ERP.Controllers
         }
 
         #endregion
+
+
+
+
+
+
+
 
         #region DeleteAll (حذف جميع فواتير المشتريات)
 

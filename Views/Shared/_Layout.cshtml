@@ -766,6 +766,37 @@
         <div id="appTabsContainer" class="app-tabs-container">
         </div>
 
+
+        @* =========================================================
+   رسائل عامة (TempData) تظهر في كل الصفحات
+   - SuccessMessage: رسالة نجاح
+   - ErrorMessage  : رسالة خطأ
+   - WarningMessage: تحذير (اختياري)
+   ========================================================= *@
+        @if (TempData["ErrorMessage"] != null)
+        {
+            <div class="alert alert-danger alert-dismissible fade show mt-2" role="alert" dir="rtl">
+                <strong>خطأ:</strong> @TempData["ErrorMessage"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="alert alert-success alert-dismissible fade show mt-2" role="alert" dir="rtl">
+                <strong>تم:</strong> @TempData["SuccessMessage"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+        @if (TempData["WarningMessage"] != null)
+        {
+            <div class="alert alert-warning alert-dismissible fade show mt-2" role="alert" dir="rtl">
+                <strong>تنبيه:</strong> @TempData["WarningMessage"]
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        }
+
+
+
         <div id="homeContent" class="mt-1">
             @RenderBody()
         </div>

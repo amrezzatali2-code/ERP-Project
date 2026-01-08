@@ -419,11 +419,17 @@
 
 
 
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@pi.PIId">
-                                    حذف
-                                </a>
+                                <form asp-action="Delete"
+                                      asp-route-id="@pi.PIId"
+                                      method="post"
+                                      class="d-inline"
+                                      onsubmit="return confirm('تأكيد حذف الفاتورة رقم @pi.PIId ؟');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-danger btn-sm">
+                                        حذف
+                                    </button>
+                                </form>
+
                             </td>
                         </tr>
                     }

@@ -21,7 +21,10 @@ namespace ERP.Services
     /// </summary>
     public interface ILedgerPostingService
     {
+        Task ReverseForHeaderDeleteAsync(LedgerSourceType sourceType, int sourceId, string? postedBy, string? reason = null);
         Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy);
+
+
     }
 
     public class LedgerPostingService : ILedgerPostingService
@@ -57,7 +60,7 @@ namespace ERP.Services
                 // ================================
                 // تعليق: الترحيل يقفل الفاتورة - لازم زر الفتح هو اللي يحولها false قبل إعادة الترحيل
                 if (invoice.IsPosted)
-                    throw new Exception("هذه الفاتورة مترحّلة بالفعل. افتح الفاتورة أولاً قبل إعادة الترحيل.");
+                    throw new Exception("هذه الفاتورة مرحلة بالفعل. افتح الفاتورة أولاً قبل إعادة الترحيل.");
 
                 // ================================
                 // 3) تأكد أن المورد مرتبط بحساب محاسبي
@@ -308,5 +311,172 @@ namespace ERP.Services
 
             throw new Exception($"لم يتم العثور على حساب بالكود ({accountCode}) داخل شجرة الحسابات. برجاء إضافته.");
         }
+
+
+
+
+
+
+
+
+        // =========================================================
+        // ✅ دالة عامة: عكس آخر ترحيل لمستند بهدف الحذف من قوائم الهيدر
+        // - لا تنشئ ترحيل جديد
+        // - تعكس آخر مرحلة مُرحّلة فقط (LineNo 1 و 2)
+        // - تُعدّل رصيد الطرف (Customer.CurrentBalance) بإلغاء أثر آخر ترحيل
+        // ✅ مهم: لا تبدأ Transaction ولا تعمل SaveChanges هنا
+        //        لأن DeleteConfirmed هو الذي يدير Transaction و SaveChanges مرة واحدة
+        // =========================================================
+        public async Task ReverseForHeaderDeleteAsync(
+            LedgerSourceType sourceType,
+            int sourceId,
+            string? postedBy,
+            string? reason = null)
+        {
+            // ================================
+            // 1) تحديد آخر PostVersion (آخر مرحلة مُرحّلة)
+            // ✅ تعديل مهم: كتابة الاستعلام بشكل قابل للترجمة في EF Core
+            // - نتجنب DefaultIfEmpty(0).MaxAsync() لأنها أحياناً لا تُترجم
+            // - نستخدم OrderByDescending + FirstOrDefaultAsync بدل Max
+            // - نستخدم EF.Functions.Like بدل Contains لثبات أفضل في SQL
+            // ================================
+            int lastStage = await _db.LedgerEntries
+                .Where(e =>
+                    e.SourceType == sourceType &&
+                    e.SourceId == sourceId &&
+                    (e.LineNo == 1 || e.LineNo == 2) &&
+                    e.PostVersion > 0 &&
+                    e.Description != null &&
+                    EF.Functions.Like(e.Description, "%ترحيل%"))
+                .OrderByDescending(e => e.PostVersion)          // متغير: ترتيب من الأكبر للأصغر
+                .Select(e => e.PostVersion)                     // متغير: قيمة نسخة الترحيل
+                .FirstOrDefaultAsync();                         // متغير: 0 لو مفيش نتائج
+
+            // تعليق: لو مفيش ترحيل سابق => مفيش حاجة تتعمل
+            if (lastStage <= 0)
+                return;
+
+
+            // ================================
+            // 2) جلب سطر المدين/الدائن للمرحلة الأخيرة
+            // ================================
+            var lastDebit = await _db.LedgerEntries
+                .Where(e =>
+                    e.SourceType == sourceType &&
+                    e.SourceId == sourceId &&
+                    e.LineNo == 1 &&
+                    e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            var lastCredit = await _db.LedgerEntries
+                .Where(e =>
+                    e.SourceType == sourceType &&
+                    e.SourceId == sourceId &&
+                    e.LineNo == 2 &&
+                    e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            if (lastDebit == null || lastCredit == null)
+                throw new Exception("تعذر تحديد آخر مرحلة مُرحّلة (قيود غير مكتملة).");
+
+            // متغير: قيمة المرحلة الأخيرة
+            decimal amount = lastDebit.Debit > 0 ? lastDebit.Debit : lastCredit.Credit;
+
+            // ================================
+            // 3) تجهيز سبب العكس
+            // ================================
+            var now = DateTime.UtcNow;
+
+            string finalReason = string.IsNullOrWhiteSpace(reason)
+                ? $"عكس ترحيل بسبب حذف من قائمة الهيدر (SourceType={sourceType}, SourceId={sourceId}, Stage={lastStage})"
+                : reason.Trim();
+
+            // ================================
+            // 4) إنشاء القيود العكسية (Reverse)
+            // ================================
+            var reverseDebit = new LedgerEntry
+            {
+                EntryDate = lastDebit.EntryDate,
+                SourceType = sourceType,
+                VoucherNo = lastDebit.VoucherNo,
+                SourceId = sourceId,
+
+                LineNo = 9001,
+                PostVersion = lastStage,
+
+                AccountId = lastDebit.AccountId,
+                CustomerId = lastDebit.CustomerId,
+
+                Debit = 0m,
+                Credit = amount,
+
+                Description = $"{finalReason} | (عكس مرحلة {lastStage})",
+                CreatedAt = now
+            };
+
+            var reverseCredit = new LedgerEntry
+            {
+                EntryDate = lastCredit.EntryDate,
+                SourceType = sourceType,
+                VoucherNo = lastCredit.VoucherNo,
+                SourceId = sourceId,
+
+                LineNo = 9002,
+                PostVersion = lastStage,
+
+                AccountId = lastCredit.AccountId,
+                CustomerId = lastCredit.CustomerId,
+
+                Debit = amount,
+                Credit = 0m,
+
+                Description = $"{finalReason} | (عكس مرحلة {lastStage})",
+                CreatedAt = now
+            };
+
+            _db.LedgerEntries.Add(reverseDebit);
+            _db.LedgerEntries.Add(reverseCredit);
+
+            // ================================
+            // 5) إلغاء أثر الرصيد للطرف (Customer.CurrentBalance)
+            // ================================
+            var balanceDeltas = new Dictionary<int, decimal>();
+
+            if (lastDebit.CustomerId.HasValue && lastDebit.CustomerId.Value > 0 && lastDebit.Debit > 0)
+            {
+                int cid = lastDebit.CustomerId.Value;
+                balanceDeltas[cid] = balanceDeltas.ContainsKey(cid)
+                    ? balanceDeltas[cid] + lastDebit.Debit
+                    : lastDebit.Debit;
+            }
+
+            if (lastCredit.CustomerId.HasValue && lastCredit.CustomerId.Value > 0 && lastCredit.Credit > 0)
+            {
+                int cid = lastCredit.CustomerId.Value;
+                balanceDeltas[cid] = balanceDeltas.ContainsKey(cid)
+                    ? balanceDeltas[cid] + lastCredit.Credit
+                    : lastCredit.Credit;
+            }
+
+            foreach (var kv in balanceDeltas)
+            {
+                int customerId = kv.Key;
+                decimal delta = kv.Value;
+
+                var party = await _db.Customers.FirstOrDefaultAsync(c => c.CustomerId == customerId);
+                if (party != null)
+                    party.CurrentBalance -= delta;
+            }
+
+            // ❌ لا SaveChanges هنا
+            // ✅ SaveChanges + Commit يتموا مرة واحدة في DeleteConfirmed داخل نفس Transaction
+        }
+
+
+
+
+
     }
 }

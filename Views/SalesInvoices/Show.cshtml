@@ -703,10 +703,10 @@
                                     </div>
 
                                     @* =========================
-   ✅ جديد: قائمة تشغيلات الصنف (FEFO)
-   - تظهر عندما يكون للصنف تشغيلات متعددة
-   - مرتبة بالأقدم صلاحية أولاً
-   ========================= *@
+                                      ✅ جديد: قائمة تشغيلات الصنف (FEFO)
+                                          - تظهر عندما يكون للصنف تشغيلات متعددة
+                                      - مرتبة بالأقدم صلاحية أولاً
+                                           ========================= *@
                                     <div class="mt-3">
                                         <div class="d-flex justify-content-between align-items-center mb-2">
                                             <label class="form-label form-label-sm mb-0">تشغيلات الصنف (حسب FEFO)</label>
@@ -717,7 +717,7 @@
                                             <table class="table table-sm table-bordered align-middle text-center mb-0">
                                                 <thead class="table-light">
                                                     <tr>
-                                                        <th style="width:80px;">الدور</th>
+                                                        <th style="width:80px;">المسلسل</th>
                                                         <th>التشغيلة</th>
                                                         <th style="width:120px;">الصلاحية</th>
                                                         <th style="width:110px;">الكمية</th>
@@ -1712,6 +1712,10 @@
                             });
                         }
 
+
+
+
+
              // =========================================================
             // ✅ السعر في المبيعات ليس اختياريًا
             // - السعر يأتي من التشغيلة FEFO (Batch.PriceRetailBatch)
@@ -1731,94 +1735,317 @@
             forcePriceLocked();
 
 
-                        // =========================================================
-                        // قفل / فتح خصم البيع (بالضغط على اللابل)
-                        // =========================================================
-                        const disc1Label     = document.getElementById('ProdDisc1Label');      // متغير: Label الخصم
-                        const disc1LockState = document.getElementById('ProdDisc1LockState');  // متغير: (مغلق/مفتوح)
-                        let disc1Locked = true; // متغير: حالة قفل الخصم
 
-                        function applyDisc1LockUI() {
-                            if (!prodDisc1Input) return;
 
-                            prodDisc1Input.readOnly = disc1Locked;
 
-                            if (disc1Locked) {
-                                prodDisc1Input.classList.add('bg-light', 'text-muted');
-                                if (disc1LockState) disc1LockState.textContent = '(مغلق)';
-                            } else {
-                                prodDisc1Input.classList.remove('bg-light', 'text-muted');
-                                if (disc1LockState) disc1LockState.textContent = '(مفتوح)';
-                            }
+
+
+
+
+             // =========================================================
+            // قفل / فتح خصم البيع (بالضغط على اللابل)
+            // ✅ المطلوب:
+            // - الخصم ييجي أوتوماتيك من السيرفيس (GetSalesProductInfo) ويتكتب في البوكس
+            // - افتراضيًا يكون "مقفول" (ReadOnly)
+            // - لو المستخدم ضغط على كلمة "الخصم" → يفتح/يقفل
+            // - عند الفتح: يعمل Focus + Select للبوكس
+            // - كل مرة يتغير القفل: ننادي rebuildEnterNav() علشان Enter يتخطى المقفول
+            // =========================================================
+            const disc1Label     = document.getElementById('ProdDisc1Label');      // متغير: Label الخصم
+            const disc1LockState = document.getElementById('ProdDisc1LockState');  // متغير: (مغلق/مفتوح)
+            let disc1Locked = true;                                                // متغير: حالة قفل الخصم (افتراضي مقفول)
+
+            // دالة: تطبيق شكل القفل على UI
+            function applyDisc1LockUI() {
+                if (!prodDisc1Input) return;
+
+                // ✅ قفل/فتح
+                prodDisc1Input.readOnly = disc1Locked;
+
+                // ✅ شكل مقفول/مفتوح
+                if (disc1Locked) {
+                    prodDisc1Input.classList.add('bg-light', 'text-muted');
+                    prodDisc1Input.style.cursor = 'not-allowed';
+                    if (disc1LockState) disc1LockState.textContent = '(مغلق)';
+                } else {
+                    prodDisc1Input.classList.remove('bg-light', 'text-muted');
+                    prodDisc1Input.style.cursor = 'text';
+                    if (disc1LockState) disc1LockState.textContent = '(مفتوح)';
+
+                    // ✅ عند الفتح: فوكس + تحديد كامل
+                    setTimeout(() => {
+                        prodDisc1Input.focus();
+                        if (typeof prodDisc1Input.select === 'function') prodDisc1Input.select();
+                    }, 0);
+                }
+            }
+
+            // ✅ تطبيق الحالة الافتراضية
+            applyDisc1LockUI();
+
+            // ✅ الضغط على اللابل يفتح/يقفل
+            if (disc1Label) {
+                disc1Label.style.cursor = 'pointer';
+
+                // ملاحظة: لو السكربت بيتنفذ أكتر من مرة، ده يمنع تكرار الربط
+                if (disc1Label.dataset.boundDisc1Toggle !== '1') {
+                    disc1Label.dataset.boundDisc1Toggle = '1';
+
+                    disc1Label.addEventListener('click', function () {
+                        disc1Locked = !disc1Locked;  // قلب الحالة
+                        applyDisc1LockUI();          // طبّق UI
+
+                        // ✅ مهم: تحديث مسار Enter (لا يمر على المقفول)
+                        if (typeof rebuildEnterNav === 'function') {
+                            rebuildEnterNav();
                         }
+                    });
 
-                        applyDisc1LockUI();
 
-                        if (disc1Label) {
-                            disc1Label.style.cursor = 'pointer';
-                            disc1Label.addEventListener('click', function () {
-                                disc1Locked = !disc1Locked;
-                                applyDisc1LockUI();
-                            });
-                        }
 
-                        // =========================================================
-                        // التنقل بالإنتر (داخل كارت إضافة الصنف)
-                        // =========================================================
-                        const lineInputs = [
-                            prodCodeInput,
-                            prodNameInput,
-                           // prodPriceInput,
-                            prodQtyInput,
-                           // prodDisc1Input,
-                           // prodBatchInput,
-                           // prodExpiryInput
-                        ].filter(Boolean);
+                }
+            }
 
-                        lineInputs.forEach((input, index) => {
+                        // -------------------------
+            // (2) قفل/فتح التشغيلة (Batch)
+            // -------------------------
+            const batchLabel     = document.getElementById('ProdBatchLabel');       // متغير: Label التشغيلة
+            const batchLockState = document.getElementById('ProdBatchLockState');   // متغير: (مغلق/مفتوح)
+            let batchLocked = true; // متغير: حالة قفل التشغيلة (افتراضي مغلق)
 
-                            // أول ما يدخل الفوكس → تحديد النص
-                            input.addEventListener('focus', function () {
-                                if (typeof this.select === 'function') {
-                                    setTimeout(() => this.select(), 0);
-                                }
-                            });
+            function applyBatchLockUI() {
+                if (!prodBatchInput) return;
 
-                            // Enter → يروح للحقل اللي بعده
-                            input.addEventListener('keydown', function (e) {
-                                if (e.key !== 'Enter') return;
+                prodBatchInput.readOnly = batchLocked;
 
-                                e.preventDefault();
+                if (batchLocked) {
+                    prodBatchInput.classList.add('bg-light', 'text-muted');
+                    if (batchLockState) batchLockState.textContent = '(مغلق)';
+                } else {
+                    prodBatchInput.classList.remove('bg-light', 'text-muted');
+                    if (batchLockState) batchLockState.textContent = '(مفتوح)';
+                }
+            }
+            applyBatchLockUI();
 
-                                // لو المستخدم داخل اسم الصنف → نحاول نثبّت الصنف
-                                if (input === prodNameInput) {
-                                    fillProductFromOption(findProductByName(prodNameInput.value));
-                                }
+            if (batchLabel) {
+                batchLabel.style.cursor = 'pointer';
+                batchLabel.addEventListener('click', function () {
+                    batchLocked = !batchLocked;
+                    applyBatchLockUI();
+                    if (typeof rebuildEnterNav === 'function') rebuildEnterNav(); // ✅ مهم
+                    if (!batchLocked && prodBatchInput) {
+                        prodBatchInput.focus();
+                        prodBatchInput.select?.();
+                    }
+                });
+            }
 
-                                // لو المستخدم داخل كود الصنف → نحاول نثبّت الصنف
-                                if (input === prodCodeInput) {
-                                    fillProductFromOption(findProductByCode(prodCodeInput.value));
-                                }
+                        // -------------------------
+            // (3) قفل/فتح الصلاحية (Expiry)
+            // -------------------------
+            const expiryLabel     = document.getElementById('ProdExpiryLabel');       // متغير: Label الصلاحية
+            const expiryLockState = document.getElementById('ProdExpiryLockState');   // متغير: (مغلق/مفتوح)
+            let expiryLocked = true; // متغير: حالة قفل الصلاحية (افتراضي مغلق)
 
-                                const next = lineInputs[index + 1];
-                                if (next) {
-                                    next.focus();
-                                    next.select?.();
-                                } else if (btnAddLine) {
-                                    btnAddLine.focus();
-                                }
-                            });
-                        });
+            function applyExpiryLockUI() {
+                if (!prodExpiryInput) return;
 
-                        // زر الإضافة: Enter يعمل Click
-                        if (btnAddLine) {
-                            btnAddLine.addEventListener('keydown', function (e) {
-                                if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    btnAddLine.click();
-                                }
-                            });
-                        }
+                prodExpiryInput.readOnly = expiryLocked;
+
+                if (expiryLocked) {
+                    prodExpiryInput.classList.add('bg-light', 'text-muted');
+                    if (expiryLockState) expiryLockState.textContent = '(مغلق)';
+                } else {
+                    prodExpiryInput.classList.remove('bg-light', 'text-muted');
+                    if (expiryLockState) expiryLockState.textContent = '(مفتوح)';
+                }
+            }
+            applyExpiryLockUI();
+
+            if (expiryLabel) {
+                expiryLabel.style.cursor = 'pointer';
+                expiryLabel.addEventListener('click', function () {
+                    expiryLocked = !expiryLocked;
+                    applyExpiryLockUI();
+                    if (typeof rebuildEnterNav === 'function') rebuildEnterNav(); // ✅ مهم
+                    if (!expiryLocked && prodExpiryInput) {
+                        prodExpiryInput.focus();
+                        prodExpiryInput.select?.();
+                    }
+                });
+            }
+
+
+
+
+            // =========================================================
+            // ✅ غلق/فتح الحقول + تنقل Enter ذكي
+            // المطلوب:
+            // - السعر/الباتش/الصلاحية/الكود: مقفولين دائمًا (ReadOnly)
+            // - الخصم: افتراضيًا مقفول، ويتفتح/يتقفل بالضغط على اللابل
+            // - Enter: يمر فقط على الحقول "المفتوحة" (مش ReadOnly ومش Disabled)
+            // =========================================================
+
+            // =========================
+            // (1) غلق دائم لبعض الحقول
+            // =========================
+            function forceAlwaysLockedFields() {
+                // ✅ الكود (مقفول)
+                if (prodCodeInput) {
+                    prodCodeInput.readOnly = true;
+                    prodCodeInput.classList.add('bg-light', 'text-muted');
+                    prodCodeInput.style.cursor = 'not-allowed';
+                }
+
+                // ✅ السعر (مقفول دائمًا)
+                if (prodPriceInput) {
+                    prodPriceInput.readOnly = true;
+                    prodPriceInput.classList.add('bg-light', 'text-muted');
+                    prodPriceInput.style.cursor = 'not-allowed';
+                }
+
+                // ✅ الباتش (مقفول)
+                if (prodBatchInput) {
+                    prodBatchInput.readOnly = true;
+                    prodBatchInput.classList.add('bg-light', 'text-muted');
+                    prodBatchInput.style.cursor = 'not-allowed';
+                }
+
+                // ✅ الصلاحية (مقفولة)
+                if (prodExpiryInput) {
+                    prodExpiryInput.readOnly = true;
+                    prodExpiryInput.classList.add('bg-light', 'text-muted');
+                    prodExpiryInput.style.cursor = 'not-allowed';
+                }
+            }
+
+            // نفّذ الغلق فورًا عند تحميل الصفحة
+            forceAlwaysLockedFields();
+
+            // =========================
+            // (2) تحديد هل الحقل ينفع يدخل في مسار Enter أم لا
+            // =========================
+            function isEnterEligible(el) {
+                if (!el) return false;
+
+                // لو مخفي أو مش ظاهر
+                if (el.offsetParent === null) return false;
+
+                // لو Disabled
+                if (el.disabled) return false;
+
+                // ✅ أهم شرط: لو ReadOnly يبقى يتشال من مسار Enter
+                // (عشان مايروحش للسعر وهو مقفول)
+                if (el.readOnly) return false;
+
+                return true;
+            }
+
+            // =========================
+            // (3) بناء مسار Enter ديناميكي
+            // =========================
+            let enterInputs = []; // متغير: قائمة الحقول اللي Enter يتحرك عليها
+
+            function rebuildEnterNav() {
+                // ✅ تأكد إن الحقول المقفولة مقفولة فعلًا
+                forceAlwaysLockedFields();
+
+                // ✅ ابنِ المسار فقط من الحقول "المفتوحة"
+                // ملاحظة: اسم الصنف عادةً مفتوح (للبحث)
+                // والكمية مفتوحة
+                // والخصم يعتمد على disc1Locked
+                enterInputs = [
+                    prodNameInput,   // متغير: البحث بالاسم
+                    prodQtyInput,    // متغير: الكمية
+                    prodDisc1Input   // متغير: الخصم (يدخل فقط لو مفتوح)
+                ].filter(isEnterEligible);
+            }
+
+            // ابنِ المسار أول مرة
+            rebuildEnterNav();
+
+            // =========================
+            // (4) ربط Enter على الحقول (مرة واحدة بدون تكرار)
+            // =========================
+            function bindEnterNavigationOnce(el) {
+                if (!el) return;
+                if (el.dataset.boundEnterNav === '1') return; // يمنع التكرار
+                el.dataset.boundEnterNav = '1';
+
+                // عند الفوكس: تحديد النص
+                el.addEventListener('focus', function () {
+                    if (typeof this.select === 'function') {
+                        setTimeout(() => this.select(), 0);
+                    }
+                });
+
+                // Enter: يروح للي بعده حسب enterInputs الحالي
+                el.addEventListener('keydown', function (e) {
+                    if (e.key !== 'Enter') return;
+
+                    e.preventDefault();
+
+                    // لو داخل اسم الصنف: ثبت الاختيار
+                    if (el === prodNameInput) {
+                        fillProductFromOption(findProductByName(prodNameInput.value));
+                    }
+
+                    // ابحث عن موقع الحقل الحالي في المسار
+                    const idx = enterInputs.indexOf(el);
+                    const next = (idx >= 0) ? enterInputs[idx + 1] : null;
+
+                    if (next) {
+                        next.focus();
+                        next.select?.();
+                    } else if (btnAddLine) {
+                        btnAddLine.focus();
+                    }
+                });
+            }
+
+            // اربط على العناصر الأساسية
+            bindEnterNavigationOnce(prodNameInput);
+            bindEnterNavigationOnce(prodQtyInput);
+            bindEnterNavigationOnce(prodDisc1Input);
+
+            // زر الإضافة: Enter يعمل Click
+            if (btnAddLine && btnAddLine.dataset.boundEnterClick !== '1') {
+                btnAddLine.dataset.boundEnterClick = '1';
+                btnAddLine.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        btnAddLine.click();
+                    }
+                });
+            }
+
+            // =========================
+            // (5) ✅ تعديل قفل/فتح الخصم بحيث يعيد بناء مسار Enter
+            // =========================
+            function setDisc1LockState(isLocked) {
+                disc1Locked = !!isLocked;
+
+                if (!prodDisc1Input) return;
+
+                prodDisc1Input.readOnly = disc1Locked;
+
+                if (disc1Locked) {
+                    prodDisc1Input.classList.add('bg-light', 'text-muted');
+                    if (disc1LockState) disc1LockState.textContent = '(مغلق)';
+                } else {
+                    prodDisc1Input.classList.remove('bg-light', 'text-muted');
+                    if (disc1LockState) disc1LockState.textContent = '(مفتوح)';
+                    setTimeout(() => {
+                        prodDisc1Input.focus();
+                        prodDisc1Input.select?.();
+                    }, 0);
+                }
+
+                // ✅ مهم: تحديث Enter
+                rebuildEnterNav();
+            }
+
 
 
 
@@ -2177,10 +2404,231 @@
                     }
 
 
+                               // =========================================================
+                     // ✅ دالة: تحديث بيانات الصنف بعد الإضافة
+                     // - تعالج مشكلة: الكمية/الخصم لا تتحدث إلا عند اختيار الصنف مرة أخرى
+                     // - تعتمد على IDs الفعلية الموجودة في Show.cshtml عندك
+                     // =========================================================
+                     async function refreshProductInfoAfterAddLine(prodId) {
+
+                         // =========================
+                         // 0) تأكيد بداية التنفيذ (للتتبع)
+                         // =========================
+                         console.log('refreshProductInfoAfterAddLine START - prodId =', prodId);
+
+                         // =========================
+                         // 1) قراءة المخزن المختار
+                         // =========================
+                         const whEl = document.getElementById('WarehouseId');          // متغير: كود المخزن (Select)
+                         const warehouseId = whEl ? parseInt(whEl.value || '0', 10) : 0; // متغير: رقم المخزن كـ int
+
+                         // تأكيدات حماية
+                         const pid = parseInt((prodId || '0').toString(), 10) || 0;    // متغير: رقم الصنف كـ int
+                         if (pid <= 0) {
+                             console.warn('refreshProductInfoAfterAddLine: prodId invalid =', prodId);
+                             return;
+                         }
+                         if (warehouseId <= 0) {
+                             console.warn('refreshProductInfoAfterAddLine: warehouseId invalid =', warehouseId);
+                             return;
+                         }
+
+                         // =========================
+                         // 2) استدعاء API بيانات الصنف (GET)
+                         // =========================
+                         const url = `/SalesInvoices/GetSalesProductInfo?prodId=${pid}&warehouseId=${warehouseId}`;
+                         console.log('refreshProductInfoAfterAddLine URL =', url);
+
+                         try {
+                             const resp = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
+
+                             if (!resp.ok) {
+                                 console.warn('GetSalesProductInfo HTTP error:', resp.status);
+                                 return;
+                             }
+
+                             const info = await resp.json();
+                             console.log('GetSalesProductInfo JSON =', info);
+
+                             // لو عندك شكل response: { ok: true, ... }
+                             if (!info || info.ok === false) {
+                                 console.warn('GetSalesProductInfo returned not ok:', info?.message);
+                                 return;
+                             }
+
+                             // =========================
+                             // 3) تحديث بوكسات "بيانات الصنف" (IDs الصحيحة)
+                             // =========================
+
+                             // متغير: الكمية في هذا المخزن
+                             const qtyWhBox = document.getElementById('ProdQtyCurrentWarehouse');
+                             if (qtyWhBox) qtyWhBox.value = (info.qtyCurrentWarehouse ?? 0).toString();
+
+                             // متغير: إجمالي الكمية في كل المخازن
+                             const qtyAllBox = document.getElementById('ProdQtyAllWarehouses');
+                             if (qtyAllBox) qtyAllBox.value = (info.qtyAllWarehouses ?? 0).toString();
+
+                             // متغير: الصنف عليه كوتة؟
+                             const quotaBox = document.getElementById('ProdQuotaText');
+                             if (quotaBox) quotaBox.value = (info.quotaText ?? 'بدون كوتة').toString();
+
+                             // متغير: الخصم المرجح للصنف %
+                             const wdBox = document.getElementById('ProdWeightedDiscount');
+                             if (wdBox) {
+                                 // ✅ تنسيق رقم بسيط بدل أرقام طويلة
+                                 const wd = Number(info.weightedDiscountPct ?? 0);
+                                 wdBox.value = (Number.isFinite(wd) ? wd.toFixed(2) : '0.00');
+                             }
+
+                             // =========================
+                             // 4) تحديث جدول التشغيلات FEFO (BatchQueueBody)
+                             // =========================
+                             const batchesTbody = document.getElementById('BatchQueueBody');
+                             if (batchesTbody && Array.isArray(info.batches)) {
+
+                                 batchesTbody.innerHTML = '';
+
+                                 if (info.batches.length === 0) {
+                                     batchesTbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">لا توجد تشغيلات بعد.</td></tr>`;
+                                 } else {
+                                     info.batches.forEach((b, i) => {
+
+                                         // متغير: دور التشغيلة (FEFO)
+                                         const role = (b.role != null) ? b.role : (i + 1);
+
+                                         // ملاحظة: escapeHtml و fmt2 موجودين عندك بالفعل في الملف
+                                         const tr = document.createElement('tr');
+                                         tr.innerHTML = `
+                                             <td class="text-center">${role}</td>
+                                             <td class="text-center">${escapeHtml(b.batchNo || '')}</td>
+                                             <td class="text-center">${escapeHtml(b.expiryText || '')}</td>
+                                             <td class="text-center">${Number(b.qtyOnHand || 0)}</td>
+                                             <td class="text-center">${fmt2(b.priceRetailBatch || 0)}</td>
+                                         `;
+                                         batchesTbody.appendChild(tr);
+                                     });
+                                 }
+                             }
+
+                             console.log('refreshProductInfoAfterAddLine DONE');
+
+                         } catch (err) {
+                             console.error('refreshProductInfoAfterAddLine error:', err);
+                         }
+                     }
 
 
 
-                         // =========================================================
+             // =========================================================
+            // ✅ نظام حماية من تداخل طلبات التحديث (Race Condition)
+            // - أي Refresh قديم يرجع متأخر لا يغيّر الشاشة
+            // =========================================================
+          let __productInfoReqSeq = 0;         // متغير: رقم تسلسلي لآخر طلب
+            let __productInfoAbort = null;       // متغير: لإلغاء الطلب السابق لو شغال
+
+
+
+
+
+            // =========================================================
+            // ✅ دالة: تحديث بيانات الصنف بعد الإضافة / أو بعد اختيار الصنف
+            // =========================================================
+            async function refreshProductInfoAfterAddLine(prodId) {
+
+                const pid = parseInt((prodId || '0').toString(), 10) || 0;
+                if (pid <= 0) return;
+
+                const whEl = document.getElementById('WarehouseId');
+                const warehouseId = whEl ? (parseInt(whEl.value || '0', 10) || 0) : 0;
+                if (warehouseId <= 0) return;
+
+                // ✅ ارفع رقم الطلب
+                const mySeq = ++__productInfoReqSeq;
+
+                // ✅ الغي أي طلب سابق شغال
+                try { if (__productInfoAbort) __productInfoAbort.abort(); } catch { }
+                __productInfoAbort = new AbortController();
+
+                // ✅ كسر الكاش + منع التخزين
+                const url = `/SalesInvoices/GetSalesProductInfo?prodId=${pid}&warehouseId=${warehouseId}&_ts=${Date.now()}`;
+
+                try {
+                    const resp = await fetch(url, {
+                        method: 'GET',
+                        cache: 'no-store', // ✅ مهم جدًا
+                        headers: { 'Accept': 'application/json', 'Cache-Control': 'no-cache' },
+                        signal: __productInfoAbort.signal
+                    });
+
+                    if (!resp.ok) return;
+
+                    const info = await resp.json();
+
+                    // ✅ لو ده مش آخر طلب.. تجاهله
+                    if (mySeq !== __productInfoReqSeq) return;
+
+                    if (!info || info.ok === false) return;
+
+                    // =========================
+                    // 1) تحديث بوكسات بيانات الصنف (IDs الصحيحة عندك)
+                    // =========================
+                    const qtyWhBox = document.getElementById('ProdQtyCurrentWarehouse');
+                    if (qtyWhBox) qtyWhBox.value = (info.qtyCurrentWarehouse ?? 0).toString();
+
+                    const qtyAllBox = document.getElementById('ProdQtyAllWarehouses');
+                    if (qtyAllBox) qtyAllBox.value = (info.qtyAllWarehouses ?? 0).toString();
+
+                    const quotaBox = document.getElementById('ProdQuotaText');
+                    if (quotaBox) quotaBox.value = (info.quotaText ?? 'بدون كوتة').toString();
+
+                    const wdBox = document.getElementById('ProdWeightedDiscount');
+                    if (wdBox) {
+                                 const wd = Number(info.weightedDiscount ?? 0); // ✅ الاسم الصحيح القادم من الـ API
+
+                        wdBox.value = (Number.isFinite(wd) ? wd.toFixed(2) : '0.00');
+                    }
+
+                    // =========================
+                    // 2) تحديث جدول التشغيلات (BatchQueueBody)
+                    // =========================
+                    const batchesTbody = document.getElementById('BatchQueueBody');
+                    if (batchesTbody && Array.isArray(info.batches)) {
+
+                        batchesTbody.innerHTML = '';
+
+                        if (info.batches.length === 0) {
+                            batchesTbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">لا توجد تشغيلات بعد.</td></tr>`;
+                        } else {
+                            info.batches.forEach((b, i) => {
+                                const role = (b.role != null) ? b.role : (i + 1);
+
+                                const tr = document.createElement('tr');
+
+                                // ✅ هنا مصدر اللون الأخضر
+                                     //if (isAuto) tr.classList.add('table-success');
+
+                                tr.innerHTML = `
+                                    <td class="text-center">${role}</td>
+                                    <td class="text-center">${escapeHtml(b.batchNo || '')}</td>
+                                    <td class="text-center">${escapeHtml(b.expiryText || '')}</td>
+                                    <td class="text-center">${Number(b.qty ?? 0)}</td>  
+
+                                    <td class="text-center">${fmt2(b.priceRetailBatch || 0)}</td>
+                                `;
+                                batchesTbody.appendChild(tr);
+                            });
+                        }
+                    }
+
+                } catch (err) {
+                    // لو اتلغى بسبب AbortController مش مشكلة
+                    if (err?.name !== 'AbortError') console.error('refreshProductInfoAfterAddLine error:', err);
+                }
+            }
+
+
+
+                     // =========================================================
                     // إضافة سطر (AJAX) — مع حماية من أخطاء الدوال غير المعرفة
                     // =========================================================
                     async function addLineAjax() {
@@ -2312,11 +2760,28 @@
                                     updateSummaryBadges(data.totals);
                                 }
 
+                                         
+
                             } catch (uiErr) {
                                 // تعليق: لو حصل خطأ في تحديث الواجهة، ما نعتبره مشكلة سيرفر
                                 console.error('UI Update Error after AddLineJson:', uiErr);
                                 alert('تمت الإضافة في السيرفر، لكن حدث خطأ أثناء تحديث الجدول في الصفحة. راجع Console.');
                             }
+          
+
+
+
+             // =========================================================
+            // 6.5) ✅ تحديث بيانات الصنف بعد الإضافة (منفصل عن تحديث الجدول)
+            // - علشان لو renderGroupedLines غلط ما يمنعش التحديث
+            // =========================================================
+            try {
+                await refreshProductInfoAfterAddLine(prodId); // متغير: رقم الصنف الذي تم إضافته
+            } catch (e) {
+                console.warn('refreshProductInfoAfterAddLine failed:', e);
+            }
+
+
 
                             // =========================================================
                             // 7) تنظيف الخانات + فوكس على اسم الصنف
@@ -2498,11 +2963,11 @@
                             const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
 
                             // متغير: طلب شراء مرجعي (اختياري)
-                            let refPrId = null;
-                            const refPrInput = document.getElementById('RefPRId'); // متغير: حقل طلب البيع
+                            let SOId = null;
+                            const refPrInput = document.getElementById('SOId'); // متغير: حقل طلب البيع
                             if (refPrInput && refPrInput.value.trim() !== '') {
                                 const parsed = parseInt(refPrInput.value.trim(), 10);
-                                if (!isNaN(parsed)) refPrId = parsed;
+                                         if (!isNaN(parsed)) SOId = parsed;
                             }
 
                             // تحقق: لازم العميل والمخزن
@@ -2517,7 +2982,7 @@
                                 siId: invoiceId,          // متغير: رقم الفاتورة
                                 customerId: customerId,   // متغير: رقم العميل
                                 warehouseId: warehouseId, // متغير: رقم المخزن
-                                refPrId: refPrId          // متغير: طلب شراء مرجعي
+                                  SOId: SOId          // متغير: طلب شراء مرجعي
                             };
 
                             try {
@@ -2543,7 +3008,7 @@
                                 }
 
                                 // تحديث رقم الفاتورة في hidden + display
-                                const newId = data.siId || 0; // متغير: رقم الفاتورة بعد الحفظ
+                                         const newId = (data.siId || data.invoiceId || data.id || 0); // متغير: رقم الفاتورة بعد الحفظ
                                 const invoiceIdInput = document.getElementById('InvoiceId');
                                 if (newId > 0 && invoiceIdInput) invoiceIdInput.value = newId.toString();
 

@@ -517,6 +517,593 @@ namespace ERP.Controllers
 
 
 
+        // ================================================================
+        // DTO: بيانات إضافة سطر بيع (جاية من AJAX)
+        // ملاحظة:
+        // - أنت في الـ JS الحالي ما زلت ترسل purchaseDiscountPct (من كود المشتريات)
+        // - لذلك هنا سأستقبلها لكن سأعتبرها "خصم البيع" (Disc1Percent)
+        // ================================================================
+        public class AddLineJsonDto
+        {
+            public int SIId { get; set; }                 // متغير: رقم فاتورة البيع
+            public int prodId { get; set; }               // متغير: كود الصنف
+            public int qty { get; set; }                  // متغير: الكمية المطلوبة
+
+            public decimal priceRetail { get; set; }      // متغير: سعر بيع (لن نعتمد عليه إلا fallback)
+            public decimal purchaseDiscountPct { get; set; } // متغير: خصم البيع % (مرسل من UI باسم قديم)
+
+            public string? BatchNo { get; set; }          // متغير: رقم التشغيلة (جاية من الواجهة)
+            public string? expiryText { get; set; }       // متغير: الصلاحية كنص MM/YYYY أو yyyy-MM-dd حسب الواجهة
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
+        {
+            // تعليق: Transaction مهم لأننا نكتب في أكتر من جدول (SalesLines + StockLedger + FIFOMap + StockBatches)
+            await using var tx = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // =========================
+                // 0) فحص سريع للمدخلات
+                // =========================
+                if (dto == null)
+                    return BadRequest(new { ok = false, message = "لم يتم إرسال بيانات." });
+
+                // متغير: رقم الفاتورة (نقبل SIId أو invoiceId لو الواجهة بتبعته)
+                int siId = dto.SIId > 0 ? dto.SIId : 0;
+                if (siId <= 0 || dto.prodId <= 0)
+                    return BadRequest(new { ok = false, message = "بيانات الفاتورة/الصنف غير صحيحة." });
+
+                if (dto.qty <= 0)
+                    return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
+
+                // =========================
+                // 0.1) تنظيف خصم البيع (Disc1)
+                // =========================
+                decimal saleDisc1 = dto.purchaseDiscountPct; // متغير: خصم البيع %
+                if (saleDisc1 < 0) saleDisc1 = 0;
+                if (saleDisc1 > 100) saleDisc1 = 100;
+
+                // =========================
+                // 1) تحويل expiryText إلى DateTime? (مرن)
+                // - نقبل MM/YYYY أو yyyy-MM-dd
+                // =========================
+                DateTime? expDate = null; // متغير: الصلاحية (Date فقط)
+                if (!string.IsNullOrWhiteSpace(dto.expiryText))
+                {
+                    var s = dto.expiryText.Trim();
+
+                    // (أ) محاولة yyyy-MM-dd
+                    if (DateTime.TryParse(s, out var parsed))
+                    {
+                        expDate = parsed.Date;
+                    }
+                    else
+                    {
+                        // (ب) محاولة MM/YYYY
+                        var parts = s.Split('/');
+                        if (parts.Length == 2 &&
+                            int.TryParse(parts[0], out int mm) &&
+                            int.TryParse(parts[1], out int yyyy) &&
+                            mm >= 1 && mm <= 12)
+                        {
+                            expDate = new DateTime(yyyy, mm, 1).Date;
+                        }
+                    }
+                }
+
+                // متغير: التشغيلة بعد تنظيف المسافات
+                var startBatchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
+
+                // =========================
+                // 2) تحميل الفاتورة + السطور
+                // =========================
+                var invoice = await _context.SalesInvoices
+                    .Include(x => x.Lines)
+                    .FirstOrDefaultAsync(x => x.SIId == siId);
+
+                if (invoice == null)
+                    return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+                if (invoice.WarehouseId <= 0)
+                    return BadRequest(new { ok = false, message = "يجب اختيار مخزن قبل إضافة سطور." });
+
+                // =========================
+                // 2.1) منع التعديل على فاتورة مُرحّلة/مقفولة
+                // =========================
+                bool isLocked = invoice.IsPosted || invoice.Status == "Posted" || invoice.Status == "Closed";
+                if (isLocked)
+                {
+                    await tx.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        ok = false,
+                        message = "لا يمكن إضافة/تعديل سطور: هذه الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً."
+                    });
+                }
+
+                // =========================
+                // 3) التأكد أن الصنف موجود
+                // =========================
+                var product = await _context.Products
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.ProdId == dto.prodId);
+
+                if (product == null)
+                    return BadRequest(new { ok = false, message = "الصنف غير موجود." });
+
+                // =========================
+                // 4) تجهيز قائمة التشغيلات التي سنسحب منها (Auto Split)
+                // - نبدأ من التشغيلة/الصلاحية القادمة من الواجهة
+                // - ثم نكمل تلقائيًا على باقي التشغيلات FEFO إذا الكمية المطلوبة أكبر من المتاح
+                // =========================
+
+                // متغير: الكمية المتبقية التي نريد بيعها
+                int remainingToSell = dto.qty;
+
+                // متغير: قائمة segments (كل segment = تشغيلة + كمية ستباع منها)
+                var segments = new List<(string BatchNo, DateTime Expiry, int Qty)>();
+
+                // دالة محلية: قراءة المتاح من StockBatches لتشغيلة محددة
+                async Task<int> GetOnHandAsync(string bno, DateTime exp)
+                {
+                    var sb = await _context.StockBatches
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(x =>
+                            x.WarehouseId == invoice.WarehouseId &&
+                            x.ProdId == dto.prodId &&
+                            x.BatchNo == bno &&
+                            x.Expiry.HasValue &&
+                            x.Expiry.Value.Date == exp.Date);
+
+                    return sb?.QtyOnHand ?? 0;
+                }
+
+                // (أ) نحاول نستخدم التشغيلة المرسلة أولاً (لازم تكون موجودة وإلا هنكمل على FEFO)
+                if (!string.IsNullOrWhiteSpace(startBatchNo) && expDate.HasValue)
+                {
+                    int onHand = await GetOnHandAsync(startBatchNo!, expDate.Value);
+                    if (onHand > 0)
+                    {
+                        int take = Math.Min(remainingToSell, onHand);
+                        segments.Add((startBatchNo!, expDate.Value.Date, take));
+                        remainingToSell -= take;
+                    }
+                }
+
+                // (ب) لو لسه في كمية متبقية → نكمل على باقي التشغيلات FEFO
+                if (remainingToSell > 0)
+                {
+                    // متغير: التشغيلات المتاحة FEFO من StockBatches (QtyOnHand > 0)
+                    var candidates = await _context.StockBatches
+                        .AsNoTracking()
+                        .Where(x =>
+                            x.WarehouseId == invoice.WarehouseId &&
+                            x.ProdId == dto.prodId &&
+                            x.QtyOnHand > 0 &&
+                            x.Expiry.HasValue)
+                        .OrderBy(x => x.Expiry)     // FEFO
+                        .ThenBy(x => x.BatchNo)     // تثبيت ترتيب
+                        .Select(x => new { x.BatchNo, Expiry = x.Expiry!.Value, x.QtyOnHand })
+                        .ToListAsync();
+
+                    foreach (var c in candidates)
+                    {
+                        if (remainingToSell <= 0) break;
+
+                        // نتخطى التشغيلة الأولى لو هي نفسها التي أخذنا منها بالفعل
+                        if (!string.IsNullOrWhiteSpace(startBatchNo) && expDate.HasValue)
+                        {
+                            if ((c.BatchNo ?? "").Trim() == startBatchNo!.Trim() && c.Expiry.Date == expDate.Value.Date)
+                                continue;
+                        }
+
+                        int take = Math.Min(remainingToSell, c.QtyOnHand);
+                        if (take <= 0) continue;
+
+                        segments.Add(((c.BatchNo ?? "").Trim(), c.Expiry.Date, take));
+                        remainingToSell -= take;
+                    }
+                }
+
+                // لو بعد كل ده لسه في كمية متبقية → المخزون غير كافي
+                if (remainingToSell > 0)
+                {
+                    await tx.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        ok = false,
+                        message = $"المخزون غير كافي لهذا الصنف. المتاح أقل من المطلوب. (المتبقي غير متاح: {remainingToSell})"
+                    });
+                }
+
+                // =========================
+                // 5) تنفيذ كل Segment:
+                // - Merge/Insert في SalesInvoiceLines
+                // - StockLedger (QtyOut)
+                // - FIFO Map + تقليل RemainingQty من الدُخلات
+                // - تحديث StockBatches (QtyOnHand -=)
+                // =========================
+
+                foreach (var seg in segments)
+                {
+                    string batchNo = seg.BatchNo;          // متغير: التشغيلة الحالية
+                    DateTime expiry = seg.Expiry.Date;     // متغير: الصلاحية الحالية
+                    int qtySeg = seg.Qty;                  // متغير: كمية هذا الجزء
+
+                    // -------------------------
+                    // 5.1) جلب سعر التشغيلة (الأفضل من جدول Batches)
+                    // -------------------------
+                    decimal unitSalePrice = 0m; // متغير: سعر بيع الوحدة للتشغيلة
+
+                    var batchRow = await _context.Batches
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(b =>
+                            b.ProdId == dto.prodId &&
+                            b.BatchNo == batchNo &&
+                            b.Expiry.Date == expiry.Date);
+
+                    if (batchRow != null)
+                    {
+                        unitSalePrice = batchRow.PriceRetailBatch ?? dto.priceRetail; // تعليق: لو سعر التشغيلة Null نستخدم السعر القادم من الفاتورة كـ fallback
+
+                    }
+                    else
+                    {
+                        // fallback: السعر القادم من الواجهة (لعدم تعطيل الإضافة)
+                        unitSalePrice = dto.priceRetail;
+                    }
+
+                    if (unitSalePrice < 0) unitSalePrice = 0;
+
+                    // -------------------------
+                    // 5.2) حسابات السطر (بيع)
+                    // -------------------------
+                    decimal totalBeforeDisc = qtySeg * unitSalePrice; // متغير: إجمالي قبل الخصم
+                    decimal discountValue = totalBeforeDisc * (saleDisc1 / 100m); // متغير: قيمة الخصم
+                    decimal totalAfterDisc = totalBeforeDisc - discountValue; // متغير: بعد الخصم
+
+                    // (مبدئياً) الضريبة صفر (يمكن ربطها لاحقًا)
+                    decimal taxPercent = 0m; // متغير: نسبة الضريبة
+                    decimal taxValue = 0m;   // متغير: قيمة الضريبة
+                    decimal netLine = totalAfterDisc + taxValue; // متغير: صافي السطر
+
+                    // -------------------------
+                    // 5.3) Merge في SalesInvoiceLines
+                    // شرط الميرج: نفس prod + نفس batch + نفس expiry + نفس السعر + نفس الخصم
+                    // -------------------------
+                    var existingLine = await _context.SalesInvoiceLines.FirstOrDefaultAsync(l =>
+                        l.SIId == invoice.SIId &&
+                        l.ProdId == dto.prodId &&
+                        (l.BatchNo ?? "").Trim() == (batchNo ?? "").Trim() &&
+                        (l.Expiry.HasValue ? l.Expiry.Value.Date : (DateTime?)null) == expiry.Date &&
+                        l.UnitSalePrice == unitSalePrice 
+                    
+                    );
+
+                    SalesInvoiceLine affectedLine; // متغير: السطر الذي تأثر
+                    int qtyDelta = qtySeg;         // متغير: كمية هذا الجزء (هتخرج من المخزن)
+
+                    if (existingLine != null)
+                    {
+                        // ✅ زيادة الكمية على نفس السطر
+                        existingLine.Qty += qtySeg;
+
+                        // إعادة حساب قيم السطر بعد زيادة الكمية
+                        var newTotalBefore = existingLine.Qty * unitSalePrice;
+                        var newDiscVal = newTotalBefore * (saleDisc1 / 100m);
+                        var newAfter = newTotalBefore - newDiscVal;
+
+                        existingLine.PriceRetail = unitSalePrice;              // تثبيت سعر الجمهور للتشغيلة
+                        existingLine.UnitSalePrice = unitSalePrice;            // سعر البيع الفعلي
+                        existingLine.DiscountValue = newDiscVal;               // قيمة الخصم
+                        existingLine.LineTotalAfterDiscount = newAfter;        // بعد الخصم
+                        existingLine.TaxPercent = taxPercent;
+                        existingLine.TaxValue = 0m;
+                        existingLine.LineNetTotal = newAfter;
+
+                        affectedLine = existingLine;
+                    }
+                    else
+                    {
+                        // ✅ إنشاء سطر جديد
+                        var nextLineNo = (invoice.Lines.Any() ? invoice.Lines.Max(x => x.LineNo) : 0) + 1;
+
+                        affectedLine = new SalesInvoiceLine
+                        {
+                            SIId = invoice.SIId,
+                            LineNo = nextLineNo,
+                            ProdId = dto.prodId,
+                            Qty = qtySeg,
+
+                            // تسعير
+                            PriceRetail = unitSalePrice,
+                            UnitSalePrice = unitSalePrice,
+
+                            // خصومات البيع (نستخدم Disc1 فقط الآن)
+                            Disc1Percent = saleDisc1,
+                            Disc2Percent = 0m,
+                            Disc3Percent = 0m,
+                            DiscountValue = discountValue,
+
+                            // إجماليات السطر
+                            LineTotalAfterDiscount = totalAfterDisc,
+                            TaxPercent = taxPercent,
+                            TaxValue = taxValue,
+                            LineNetTotal = netLine,
+
+                            // تشغيلات
+                            BatchNo = batchNo,
+                            Expiry = expiry,
+
+                            // (تكلفة/ربح سيتم ملؤها بعد FIFO)
+                            CostPerUnit = 0m,
+                            CostTotal = 0m,
+                            ProfitValue = 0m,
+                            ProfitPercent = 0m
+                        };
+
+                        _context.SalesInvoiceLines.Add(affectedLine);
+                    }
+
+                    // لازم نحفظ هنا لو السطر جديد علشان يبقى موجود في DB قبل ربط StockLedger.SourceLine
+                    await _context.SaveChangesAsync();
+
+                    // -------------------------
+                    // 5.4) إنشاء حركة خروج في StockLedger (Sales)
+                    // - UnitCost هيتحسب من FIFO بعد ما نستهلك من الدخلات
+                    // -------------------------
+                    var outLedger = new StockLedger
+                    {
+                        TranDate = DateTime.UtcNow,
+                        WarehouseId = invoice.WarehouseId,
+                        ProdId = dto.prodId,
+                        BatchNo = batchNo,
+                        Expiry = expiry,
+                        BatchId = null,
+
+                        QtyIn = 0,
+                        QtyOut = qtyDelta,
+
+                        UnitCost = 0m, // سيتم ملؤه بعد FIFO
+                        RemainingQty = null, // خروج لا يحتاج RemainingQty
+
+                        SourceType = "Sales",
+                        SourceId = invoice.SIId,
+                        SourceLine = affectedLine.LineNo,
+
+                        Note = $"Sales Line: {product.ProdName}"
+                    };
+
+                    _context.StockLedger.Add(outLedger);
+                    await _context.SaveChangesAsync(); // مهم للحصول على EntryId
+
+                    // -------------------------
+                    // 5.5) FIFO: استهلاك من دخلات StockLedger (QtyIn + RemainingQty > 0)
+                    // - نفس الصنف + نفس المخزن + نفس التشغيلة/الصلاحية
+                    // - ننقص RemainingQty
+                    // - نضيف StockFifoMap
+                    // -------------------------
+                    int need = qtyDelta;           // متغير: كمية نحتاج نسحبها من الدخلات
+                    decimal costTotal = 0m;        // متغير: إجمالي تكلفة الكمية المباعة (COGS)
+
+                    // الدخلات المتاحة لنفس التشغيلة
+                    var inLedgers = await _context.StockLedger
+                        .Where(x =>
+                            x.WarehouseId == invoice.WarehouseId &&
+                            x.ProdId == dto.prodId &&
+                            x.QtyIn > 0 &&
+                            (x.RemainingQty ?? 0) > 0 &&
+                            (x.BatchNo ?? "").Trim() == (batchNo ?? "").Trim() &&
+                            ((x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null) == expiry.Date))
+                        .OrderBy(x => x.Expiry)     // FEFO
+                        .ThenBy(x => x.EntryId)     // تثبيت
+                        .ToListAsync();
+
+                    foreach (var inL in inLedgers)
+                    {
+                        if (need <= 0) break;
+
+                        int avail = (inL.RemainingQty ?? 0);
+                        if (avail <= 0) continue;
+
+                        int take = Math.Min(need, avail);
+
+                        // تقليل المتبقي في الدخلة
+                        inL.RemainingQty = avail - take;
+
+                        // تسجيل الربط في FIFO Map
+                        var mapRow = new StockFifoMap
+                        {
+                            OutEntryId = outLedger.EntryId,
+                            InEntryId = inL.EntryId,
+                            Qty = take,
+                            UnitCost = inL.UnitCost // لقطة تكلفة الدخلة
+                        };
+                        _context.Set<StockFifoMap>().Add(mapRow);
+
+                        // تجميع التكلفة
+                        costTotal += (take * inL.UnitCost);
+
+                        need -= take;
+                    }
+
+                    // لو لسه في احتياج → ده خطأ منطقي (StockBatches قالت متاح لكن StockLedger مفيهوش RemainingQty كفاية)
+                    if (need > 0)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            ok = false,
+                            message = "حدث تعارض في FIFO: لا توجد دخلات كافية لاستهلاك الكمية (RemainingQty غير كافي)."
+                        });
+                    }
+
+                    // حساب تكلفة الوحدة من FIFO
+                    decimal costPerUnit = qtyDelta > 0 ? (costTotal / qtyDelta) : 0m;
+                    costPerUnit = Math.Round(costPerUnit, 2);
+
+                    // تحديث حركة الخروج بتكلفة الوحدة (اختياري لكنه مفيد)
+                    outLedger.UnitCost = costPerUnit;
+
+                    // تحديث السطر بتكلفة وربحية
+                    decimal revenueSeg = qtyDelta * unitSalePrice * (1m - (saleDisc1 / 100m));
+                    decimal profitValue = revenueSeg - costTotal;
+                    decimal profitPercent = revenueSeg > 0 ? (profitValue / revenueSeg) * 100m : 0m;
+
+                    // ملء حقول التكلفة/الربح في SalesInvoiceLine
+                    affectedLine.CostPerUnit = costPerUnit;
+                    affectedLine.CostTotal = Math.Round(costTotal, 2);
+                    affectedLine.ProfitValue = Math.Round(profitValue, 2);
+                    affectedLine.ProfitPercent = Math.Round(profitPercent, 2);
+
+                    // -------------------------
+                    // 5.6) تحديث StockBatches (QtyOnHand -= qtyDelta)
+                    // -------------------------
+                    var sbRow = await _context.StockBatches.FirstOrDefaultAsync(x =>
+                        x.WarehouseId == invoice.WarehouseId &&
+                        x.ProdId == dto.prodId &&
+                        x.BatchNo == batchNo &&
+                        x.Expiry.HasValue &&
+                        x.Expiry.Value.Date == expiry.Date);
+
+                    if (sbRow == null)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new { ok = false, message = "تعذر تحديث رصيد التشغيلة: StockBatch غير موجود." });
+                    }
+
+                    if (sbRow.QtyOnHand < qtyDelta)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new { ok = false, message = "المخزون غير كافي داخل StockBatch لهذه التشغيلة." });
+                    }
+
+                    sbRow.QtyOnHand -= qtyDelta;
+                    sbRow.UpdatedAt = DateTime.UtcNow;
+                    sbRow.Note = $"SI:{invoice.SIId} Line:{affectedLine.LineNo} (-{qtyDelta})";
+
+                    // حفظ تأثير هذا الجزء قبل الانتقال للجزء التالي
+                    await _context.SaveChangesAsync();
+                }
+
+                // =========================
+                // 6) تحديث إجماليات الهيدر يدويًا (بدون الاعتماد على اسم دالة في السيرفيس)
+                // =========================
+                var linesNow = await _context.SalesInvoiceLines
+                    .AsNoTracking()
+                    .Where(l => l.SIId == invoice.SIId)
+                    .OrderBy(l => l.LineNo)
+                    .ToListAsync();
+
+                // متغير: إجمالي قبل الخصم (سعر بيع * كمية)
+                decimal totalRetail = linesNow.Sum(x => x.Qty * x.UnitSalePrice);
+
+                // متغير: إجمالي الخصم (نجمع DiscountValue المخزن لكل سطر)
+                decimal totalDiscount = linesNow.Sum(x => x.DiscountValue);
+
+                // متغير: الإجمالي بعد الخصم وقبل الضريبة
+                decimal totalAfterDiscount = totalRetail - totalDiscount;
+
+                // متغير: الضريبة الحالية (لو عندك لاحقًا، اجمع TaxValue)
+                decimal taxAmount = linesNow.Sum(x => x.TaxValue);
+
+                // متغير: الصافي
+                decimal netTotal = totalAfterDiscount + taxAmount;
+
+                // تحديث هيدر الفاتورة
+                invoice.TotalBeforeDiscount = Math.Round(totalRetail, 2);
+                invoice.TotalAfterDiscountBeforeTax = Math.Round(totalAfterDiscount, 2);
+                invoice.TaxAmount = Math.Round(taxAmount, 2);
+                invoice.NetTotal = Math.Round(netTotal, 2);
+
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                // =========================
+                // 7) LogActivity
+                // =========================
+                await _activityLogger.LogAsync(
+                    UserActionType.Create,
+                    "SalesInvoiceLine",
+                    invoice.SIId,
+                    $"SIId={invoice.SIId} | ProdId={dto.prodId} | Qty={dto.qty} | Segments={segments.Count}"
+                );
+
+                // =========================
+                // 8) تجهيز DTO للرجوع للواجهة (lines + totals)
+                // =========================
+                var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+                var prodMap = await _context.Products
+                    .AsNoTracking()
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .Select(p => new { p.ProdId, p.ProdName })
+                    .ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+                int totalLines = linesNow.Count;
+                int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
+                int totalQty = linesNow.Sum(x => x.Qty);
+
+                var linesDto = linesNow.Select(l =>
+                {
+                    var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+
+                    // متغير: قيمة السطر (بعد الخصم)
+                    var lv = l.LineTotalAfterDiscount;
+
+                    return new
+                    {
+                        lineNo = l.LineNo,
+                        prodId = l.ProdId,
+                        prodName = name,
+
+                        qty = l.Qty,
+                        priceRetail = l.UnitSalePrice, // في البيع نعرض سعر التشغيلة
+                        discPct = l.Disc1Percent,      // خصم البيع
+
+                        batchNo = l.BatchNo,
+                        expiry = l.Expiry?.ToString("yyyy-MM-dd"),
+
+                        // لتسهيل العرض
+                        lineValue = lv,
+                        expiryText = l.Expiry?.ToString("yyyy-MM-dd")
+                    };
+                }).ToList();
+
+                return Json(new
+                {
+                    ok = true,
+                    message = "تم إضافة السطر بنجاح.",
+                    lines = linesDto,
+                    totals = new
+                    {
+                        totalLines,
+                        totalItems,
+                        totalQty,
+                        totalRetail,
+                        totalDiscount,
+                        totalAfterDiscount,
+                        taxAmount,
+                        totalAfterDiscountAndTax = totalAfterDiscount + taxAmount,
+                        netTotal
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return BadRequest(new { ok = false, message = ex.Message });
+            }
+        }
+
+
+
+
+
+
+
 
 
         // =========================
@@ -580,6 +1167,135 @@ namespace ERP.Controllers
 
             return q;
         }
+
+
+
+
+
+        // =========================================================
+        // Show — عرض فاتورة المبيعات (Shell كامل أو Body فقط)
+        // - يدعم frag=body (لتبديل جسم الفاتورة بسرعة بدون Reload كامل)
+        // - يدعم frame=1 (نمط التابات)
+        // - لو رقم الفاتورة غير موجود:
+        //   - لو frag=body => NotFound برسالة (الـ JS يتعامل)
+        //   - لو فتح عادي => يفتح أقرب فاتورة (التالي ثم السابق) بدل صفحة فاضية
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        {
+            // =========================================
+            // متغير: هل هذا الطلب يطلب "Body فقط"؟
+            // - frag=body معناها: نريد جزء الصفحة المتغير فقط (بدون Layout)
+            // =========================================
+            bool isBodyOnly = string.Equals(frag, "body", StringComparison.OrdinalIgnoreCase); // متغير: هل نعرض الجسم فقط؟
+
+            // =========================================
+            // ✅ Frame Guard (لنمط التابات)
+            // - لو frag=body (Fetch) => ممنوع Redirect عشان مايحصلش Reload كامل
+            // - لو فتح عادي => نُجبر frame=1 عشان يفتح داخل التابات دائمًا
+            // =========================================
+            if (!isBodyOnly && frame != 1)
+                return RedirectToAction(nameof(Show), new { id = id, frag = frag, frame = 1 });
+
+            // =========================================
+            // 0) تمرير حالة الـ Fragment للـ View
+            // - الـ View سيقرر: يعرض Shell كامل أو Body فقط
+            // =========================================
+            ViewBag.Fragment = frag; // متغير: نوع العرض (null أو body)
+
+            // =========================================
+            // 1) تحميل فاتورة المبيعات المطلوبة (قراءة فقط لتحسين الأداء)
+            // =========================================
+            var invoice = await _context.SalesInvoices
+                .Include(s => s.Customer)                    // متغير: العميل
+                    .ThenInclude(c => c.Governorate)         // متغير: المحافظة
+                .Include(s => s.Customer)
+                    .ThenInclude(c => c.District)            // متغير: الحي/المركز
+                .Include(s => s.Customer)
+                    .ThenInclude(c => c.Area)                // متغير: المنطقة
+                .Include(s => s.Lines)                       // متغير: سطور الفاتورة
+                    .ThenInclude(l => l.Product)             // متغير: الصنف داخل السطر
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.SIId == id);     // ✅ المفتاح عندك SIId
+
+            // =========================================
+            // 2) لو الفاتورة غير موجودة (ممسوحة / رقم غلط)
+            // =========================================
+            if (invoice == null)
+            {
+                // ✅ لو Body فقط: نرجع NotFound برسالة واضحة (بدون Redirect)
+                if (isBodyOnly)
+                    return NotFound($"فاتورة المبيعات رقم ({id}) غير موجودة (قد تكون ممسوحة).");
+
+                // -----------------------------------------
+                // منطق فتح أقرب فاتورة بدل صفحة فاضية
+                // -----------------------------------------
+
+                // متغير: أقرب "التالي" (أصغر رقم أكبر من id)
+                int? nearestNext = await _context.SalesInvoices
+                    .AsNoTracking()
+                    .Where(x => x.SIId > id)
+                    .OrderBy(x => x.SIId)
+                    .Select(x => (int?)x.SIId)
+                    .FirstOrDefaultAsync();
+
+                if (nearestNext.HasValue && nearestNext.Value > 0)
+                {
+                    TempData["Error"] = $"رقم فاتورة المبيعات ({id}) غير موجود (قد تكون ممسوحة). تم فتح الفاتورة التالية رقم ({nearestNext.Value}).";
+                    return RedirectToAction(nameof(Show), new { id = nearestNext.Value, frag = (string?)null, frame = 1 });
+                }
+
+                // متغير: أقرب "السابق" (أكبر رقم أقل من id)
+                int? nearestPrev = await _context.SalesInvoices
+                    .AsNoTracking()
+                    .Where(x => x.SIId < id)
+                    .OrderByDescending(x => x.SIId)
+                    .Select(x => (int?)x.SIId)
+                    .FirstOrDefaultAsync();
+
+                if (nearestPrev.HasValue && nearestPrev.Value > 0)
+                {
+                    TempData["Error"] = $"رقم فاتورة المبيعات ({id}) غير موجود (قد تكون ممسوحة). تم فتح الفاتورة السابقة رقم ({nearestPrev.Value}).";
+                    return RedirectToAction(nameof(Show), new { id = nearestPrev.Value, frag = (string?)null, frame = 1 });
+                }
+
+                // لو مفيش فواتير أصلًا
+                TempData["Error"] = "لا توجد فواتير مبيعات مسجلة حالياً.";
+                return RedirectToAction(nameof(Create), new { frame = 1 });
+            }
+
+            // =========================================
+            // 3) تجهيز القوائم + الأوتوكومبليت (نفس أسلوبك الحالي)
+            // ملاحظة: في مرجع المشتريات كنت عامل شرط لتفادي تحميل تقيل مع frag=body،
+            // لكن بما إنك لم تثبّت هذا الشرط هنا بعد، سنلتزم بسلوكك الحالي بدون تغيير.
+            // =========================================
+            await PopulateDropDownsAsync(invoice.CustomerId, invoice.WarehouseId); // متغير: تثبيت العميل/المخزن المختارين
+            await LoadProductsForAutoCompleteAsync();                               // متغير: تجهيز الداتا ليست للأصناف
+
+            // =========================================
+            // 4) حالة القفل (مقفولة لو IsPosted أو Status Posted/Closed)
+            // =========================================
+            ViewBag.IsLocked = invoice.IsPosted || invoice.Status == "Posted" || invoice.Status == "Closed"; // متغير: هل الفاتورة مقفولة؟
+
+            // متغير: هل العرض داخل frame (في العرض الكامل فقط)
+            ViewBag.Frame = (!isBodyOnly) ? 1 : 0; // متغير: frame flag
+
+            // =========================================
+            // 5) تجهيز نظام الأسهم (نفس نظام المشتريات)
+            // - أنت قلت: نفس نظام الأسهم => نفس أسماء الـ ViewBag
+            // ⚠️ نفترض عندك دالة FillSalesInvoiceNavAsync جاهزة أو ستضيفها بنفس نمط المشتريات
+            // =========================================
+          //  await FillSalesInvoiceNavAsync(invoice.SIId); // متغير: تجهيز First/Prev/Next/Last
+
+            // =========================================
+            // 6) عرض View "Show"
+            // =========================================
+            return View("Show", invoice);
+        }
+
+
+
+
 
         // =========================
         // Index — عرض قائمة فواتير البيع
