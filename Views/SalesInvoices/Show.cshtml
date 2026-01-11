@@ -549,10 +549,10 @@
                                 <div class="row g-3">
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">مُرحَّلة؟</label>
+                                        <label class="form-label form-label-sm">حالة الفاتورة</label>
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
-                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "لا" : Model.Status)"
+                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "غير مرحلة" : Model.Status)"
                                                readonly />
                                     </div>
 
@@ -3031,7 +3031,7 @@
                              const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
             if (isPostedDisplay) {
                 // تعليق: نعرض الحالة النصية (مرحلة 1/2/...) بدل نعم/لا
-                isPostedDisplay.value = (data && data.status) ? data.status : 'لا';
+                isPostedDisplay.value = (data && data.status) ? data.status : 'غير مرحلة';
             }
 
                                 const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');

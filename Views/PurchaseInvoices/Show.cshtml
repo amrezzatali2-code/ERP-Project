@@ -554,10 +554,10 @@
                                 <div class="row g-3">
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">مُرحَّلة؟</label>
+                                        <label class="form-label form-label-sm">حالة الفاتورة</label>
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
-                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "لا" : Model.Status)"
+                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "غير مرحلة" : Model.Status)"
                                                readonly />
                                     </div>
 
@@ -2386,7 +2386,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                  const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
 if (isPostedDisplay) {
     // تعليق: نعرض الحالة النصية (مرحلة 1/2/...) بدل نعم/لا
-    isPostedDisplay.value = (data && data.status) ? data.status : 'لا';
+    isPostedDisplay.value = (data && data.status) ? data.status : 'غير مرحلة';
 }
 
                     const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');
@@ -2414,7 +2414,7 @@ if (isPostedDisplay) {
 
 
 
-                    // =========================================================
+             // =========================================================
             // اختيار سطر من جدول السطور (Click Row)
             // - عند الضغط على أي سطر: تعبئة بياناته في الحقول العلوية
             // - لازم يكون الصف فيه data-prodid
@@ -2526,43 +2526,6 @@ if (isPostedDisplay) {
 
 
 
-
-            // ==========================
-            // زر مسح الصنف
-            // ==========================
-
-        document.addEventListener('click', async function (e) {
-
-    const btn = e.target.closest('.btnRemoveProductFromInvoice');
-    if (!btn) return;
-
-    const prodId = parseInt(btn.getAttribute('data-prodid') || '0', 10);
-    if (!prodId) return;
-
-    if (!confirm('هل تريد مسح هذا الصنف بكل تشغيلاته من الفاتورة؟')) return;
-
-    const token = getAntiForgeryToken();
-    const invoiceId = parseInt('@(Model.PIId)', 10);
-
-    const res = await fetch('@Url.Action("RemoveProductLinesJson", "PurchaseInvoices")', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'RequestVerificationToken': token
-        },
-        body: JSON.stringify({ PIId: invoiceId, prodId: prodId })
-    });
-
-    const data = await res.json();
-
-    if (!data.ok) {
-        alert(data.message || 'حدث خطأ أثناء مسح الصنف.');
-        return;
-    }
-
-    if (data.lines) renderGroupedLines(data.lines);
-    if (data.totals) updateSummaryBadges(data.totals);
-});
 
 
 
@@ -3506,9 +3469,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
             // ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
             const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
+
+
+
             if (navBtn) return;
 
-                        // =========================
+
+
+
+
+             // =========================
             // (0) زر مسح سطر من الفاتورة
             // =========================
             const removeBtn = t.closest('.btnRemoveLineFromInvoice');
@@ -3521,8 +3491,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // متغير: رقم السطر داخل الفاتورة
                 const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
 
-                // متغير: رقم الفاتورة الحالية (موجود في hidden input داخل الـ body)
-                const piId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10);
+                              // ✅ رقم الفاتورة (لازم يتقري وقت الضغط من الـ DOM لأنه بيتغير مع الـ Reload الجزئي)
+            const piId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
+
 
                 if (!piId || piId <= 0) { alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.'); return; }
                 if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
@@ -3572,6 +3543,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
+
+                    // =========================================================
+// ✅ إظهار رسالة "تم الحذف" بدل ما تضيع
+// =========================================================
+const msgBox = document.getElementById('postInvoiceMsg'); // متغير: مكان الرسائل (لو عندك عنصر آخر غيّره)
+if (msgBox) {
+    msgBox.textContent = data.message || 'تم حذف السطر.';
+    msgBox.className = 'small mt-2 text-success';
+}
+
+
                     // ✅ بعد المسح: Reload جزئي للفاتورة (frag=body)
                     const baseUrl =
                         document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
@@ -3579,8 +3561,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     const url = setOrReplaceParam(baseUrl, 'id', piId);
 
+
+                    // =========================================================
+                    // ✅ حفظ حالة الفاتورة الحالية قبل Reload
+                    // =========================================================
+                        const statusBox = document.getElementById('InvoiceIsPostedDisplay');      // متغير: بوكس حالة الفاتورة الظاهر
+                        const statusHidden = document.getElementById('InvoiceStatusHidden');      // متغير: الحالة المخفية (لـ JS)
+                        const prevStatus = statusBox ? statusBox.value : '';                      // متغير: الحالة قبل المسح
+
+
                     // ✅ مهم: ننتظر التحميل قبل إعادة تفعيل الزر
                     await loadInvoiceBody(url);
+
+
+             // =========================================================
+            // ✅ بعد Reload: رجّع نفس الحالة كما كانت (المسح لا يغير الحالة)
+            // =========================================================
+            const statusBox2 = document.getElementById('InvoiceIsPostedDisplay');     // متغير: بوكس الحالة بعد Reload
+            const statusHidden2 = document.getElementById('InvoiceStatusHidden');     // متغير: hidden بعد Reload
+
+            if (statusBox2) statusBox2.value = prevStatus || statusBox2.value;        // تعليق: لا نسمح لـ OPEN أن يحل محل الحالة القديمة
+            if (statusHidden2) statusHidden2.value = prevStatus || statusHidden2.value;
+
 
                 } catch (e) {
                     console.error(e);

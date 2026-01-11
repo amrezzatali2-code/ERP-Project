@@ -61,7 +61,8 @@ namespace ERP.Models
         // ===== حالة الفاتورة والترحيل =====
 
         [Display(Name = "الحالة")]
-        public string Status { get; set; } = "Draft";   // الحالة: Draft/Posted/Cancelled
+        public string Status { get; set; } = "فاتورة مفتوحة";   // متغير: نص الحالة المعروض للمستخدم (فاتورة مفتوحة / مرحلة 1..3)
+
 
         [Display(Name = "مرحّلة؟")]
         public bool IsPosted { get; set; }              // هل تم ترحيلها للمخزون والحسابات؟

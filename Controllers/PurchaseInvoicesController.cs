@@ -1516,7 +1516,7 @@ namespace ERP.Controllers
             {
                 PIDate = DateTime.Today,      // متغير: تاريخ الفاتورة الافتراضى = تاريخ اليوم
                 CreatedAt = DateTime.UtcNow,     // متغير: وقت إنشاء السجل (UTC)               
-                Status = "لا",             // متغير: حالة الفاتورة = مسودة
+                Status = "غير مرحلة",             // متغير: حالة الفاتورة = مسودة
                 IsPosted = false,                // متغير: الفاتورة غير مُرحّلة عند الإنشاء
                 CreatedBy = GetCurrentUserDisplayName()   // متغير: اسم كاتب الفاتورة من اليوزر الحالي
             };
@@ -1607,7 +1607,7 @@ namespace ERP.Controllers
             model.CreatedAt = DateTime.UtcNow;
 
             // متغير: حالة الفاتورة (لو لم تُرسل من الفورم نضعها Draft تلقائياً)
-            model.Status = string.IsNullOrWhiteSpace(model.Status) ? "Draft" : model.Status;
+            model.Status = string.IsNullOrWhiteSpace(model.Status) ? "غير مرحلة" : model.Status;
 
             // متغير: الفاتورة عند الإنشاء غير مرحّلة
             model.IsPosted = false;
@@ -1935,7 +1935,7 @@ namespace ERP.Controllers
             // 3) شرط الأمان FIFO (لو عايز تفعّله)
             // =========================
             // ملاحظة: لو أنت بتجرب دلوقتي بدون الشرط، سيبه مُعلّق.
-            /*
+            
             foreach (var lg in allLedgers)
             {
                 if (lg.QtyIn > 0)
@@ -1948,7 +1948,7 @@ namespace ERP.Controllers
                     }
                 }
             }
-            */
+            
 
             // =========================
             // 4) Transaction (مجموعة عمليات كأنها خطوة واحدة)
@@ -2053,13 +2053,15 @@ namespace ERP.Controllers
 
 
 
-
         #region BulkDelete (حذف مجموعة فواتير دفعة واحدة)
 
-        /// <summary>
-        /// حذف مجموعة فواتير مشتريات بناءً على قائمة أرقام (selectedIds = "1,2,3")
-        /// يُستدعى من زر "حذف فواتير المشتريات المحددة".
-        /// </summary>
+        // ============================================================================
+        // ✅ BulkDelete (حذف مجموعة فواتير مشتريات)
+        // - يحذف "المسموح فقط" (حسب اختيارك B)
+        // - يمنع الحذف لو تم البيع/الصرف من كمية الفاتورة (FIFO RemainingQty < QtyIn)
+        // - يحذف آثار المخزون + يعكس الأثر المحاسبي + يحذف الهيدر (Cascade يحذف السطور)
+        // - يعرض ملخص بالأرقام: (تم حذف / تم منع / فشل بسبب خطأ)
+        // ============================================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
@@ -2070,12 +2072,13 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // نحول "1,2,3" إلى List<int>
+            // تحويل "1,2,3" إلى List<int>
             var ids = selectedIds
                 .Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => TryParseNullableInt(s))
                 .Where(id => id.HasValue)
                 .Select(id => id!.Value)
+                .Distinct()
                 .ToList();
 
             if (!ids.Any())
@@ -2084,22 +2087,67 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var invoices = await _context.PurchaseInvoices
+            // نجيب الفواتير الموجودة فقط (علشان لو فيه أرقام مش موجودة)
+            var existingIds = await _context.PurchaseInvoices
                 .Where(p => ids.Contains(p.PIId))
+                .Select(p => p.PIId)
                 .ToListAsync();
 
-            if (invoices.Any())
+            if (!existingIds.Any())
             {
-                _context.PurchaseInvoices.RemoveRange(invoices);
+                TempData["ErrorMessage"] = "لم يتم العثور على الفواتير المحددة في قاعدة البيانات.";
+                return RedirectToAction(nameof(Index));
+            }
 
-                // TODO: استدعاء خدمة إعادة حساب الإجماليات لو هنربطها بالحسابات/المخزون
-                await _context.SaveChangesAsync();
+            int deletedCount = 0;     // متغير: عدد الفواتير التي تم حذفها
+            int blockedCount = 0;     // متغير: عدد الفواتير الممنوع حذفها (FIFO)
+            int failedCount = 0;      // متغير: عدد الفواتير التي فشل حذفها بسبب خطأ
 
-                TempData["SuccessMessage"] = $"تم حذف {invoices.Count} فاتورة مشتريات بنجاح.";
+            var blockedIds = new List<int>(); // متغير: أرقام الفواتير الممنوعة
+            var failedIds = new List<int>();  // متغير: أرقام الفواتير التي فشلت
+
+            // ✅ حذف كل فاتورة لوحدها داخل Transaction مستقل
+            // علشان لو فاتورة فشلت/ممنوعة ما توقفش باقي العملية
+            foreach (var id in existingIds)
+            {
+                var result = await TryDeletePurchaseInvoiceDeepAsync(id);
+
+                if (result.Status == DeleteInvoiceStatus.Deleted)
+                {
+                    deletedCount++;
+                }
+                else if (result.Status == DeleteInvoiceStatus.BlockedByFifo)
+                {
+                    blockedCount++;
+                    blockedIds.Add(id);
+                }
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(id);
+                }
+            }
+
+            // ✅ ملخص للمستخدم
+            // تعليق: نستخدم SuccessMessage لو حصل حذف فعلاً، وإلا ErrorMessage
+            var summary = $"تم حذف: {deletedCount} | تم منع: {blockedCount} | فشل: {failedCount}";
+
+            if (deletedCount > 0)
+            {
+                TempData["SuccessMessage"] = summary;
+                // لو تحب نضيف تفاصيل (اختياري):
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"فواتير فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
             }
             else
             {
-                TempData["ErrorMessage"] = "لم يتم العثور على الفواتير المحددة في قاعدة البيانات.";
+                TempData["ErrorMessage"] = $"لم يتم حذف أي فاتورة. {summary}";
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | فواتير فشل حذفها: {string.Join(", ", failedIds)}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -2114,37 +2162,248 @@ namespace ERP.Controllers
 
 
 
+
         #region DeleteAll (حذف جميع فواتير المشتريات)
 
-        /// <summary>
-        /// حذف جميع فواتير المشتريات (عملية خطيرة) — يفضل ربطها بصلاحيات.
-        /// </summary>
+        // ============================================================================
+        // ✅ DeleteAll (حذف جميع فواتير المشتريات)
+        // - يحذف "المسموح فقط" ويترك الممنوع/الفاشل
+        // - Transaction مستقل لكل فاتورة حتى لا يضيع الشغل كله بسبب واحدة
+        // ============================================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            var allInvoices = await _context.PurchaseInvoices.ToListAsync();
+            // نجيب كل IDs فقط لتقليل الذاكرة
+            var allIds = await _context.PurchaseInvoices
+                .Select(x => x.PIId)
+                .ToListAsync();
 
-            if (!allInvoices.Any())
+            if (!allIds.Any())
             {
                 TempData["ErrorMessage"] = "لا توجد فواتير مشتريات لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
-            _context.PurchaseInvoices.RemoveRange(allInvoices);
+            int deletedCount = 0;  // متغير: عدد المحذوف
+            int blockedCount = 0;  // متغير: عدد الممنوع (FIFO)
+            int failedCount = 0;   // متغير: عدد الفاشل
 
-            // TODO: إعادة حساب أرصدة/حسابات لو في ربط مباشر
-            await _context.SaveChangesAsync();
+            var blockedIds = new List<int>(); // متغير: أرقام الممنوع
+            var failedIds = new List<int>();  // متغير: أرقام الفاشل
 
-            TempData["SuccessMessage"] = "تم حذف جميع فواتير المشتريات بنجاح.";
+            foreach (var id in allIds)
+            {
+                var result = await TryDeletePurchaseInvoiceDeepAsync(id);
+
+                if (result.Status == DeleteInvoiceStatus.Deleted)
+                    deletedCount++;
+                else if (result.Status == DeleteInvoiceStatus.BlockedByFifo)
+                {
+                    blockedCount++;
+                    blockedIds.Add(id);
+                }
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(id);
+                }
+            }
+
+            var summary = $"تم حذف: {deletedCount} | تم منع: {blockedCount} | فشل: {failedCount}";
+
+            if (deletedCount > 0)
+            {
+                TempData["SuccessMessage"] = summary;
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"فواتير فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = $"لم يتم حذف أي فاتورة. {summary}";
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | فواتير فشل حذفها: {string.Join(", ", failedIds)}";
+            }
+
             return RedirectToAction(nameof(Index));
+        }
+
+        #endregion
+
+
+
+
+
+
+
+
+        // ============================================================================
+        // ✅ دالة مساعدة: تحاول حذف فاتورة مشتريات واحدة "حذف عميق" مثل زر Delete
+        // - ترجع حالة: Deleted / BlockedByFifo / Failed
+        // - كل فاتورة لها Transaction مستقل (حتى لا نفشل العملية كلها)
+        // ============================================================================
+        private async Task<DeleteInvoiceResult> TryDeletePurchaseInvoiceDeepAsync(int id)
+        {
+            // =========================
+            // 0) تحميل الفاتورة (Tracked)
+            // =========================
+            var invoice = await _context.PurchaseInvoices
+                .FirstOrDefaultAsync(x => x.PIId == id);
+
+            if (invoice == null)
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed, "الفاتورة غير موجودة.");
+
+            // =========================
+            // 1) تحميل سطور الفاتورة
+            // =========================
+            var lines = await _context.PILines
+                .Where(l => l.PIId == id)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            // =========================
+            // 2) تحميل StockLedger المرتبط بالفاتورة
+            // =========================
+            var allLedgers = await _context.StockLedger
+                .Where(x => x.SourceType == "Purchase" && x.SourceId == id)
+                .ToListAsync();
+
+            // =========================
+            // 3) شرط الأمان FIFO (إجباري)
+            // =========================
+            foreach (var lg in allLedgers)
+            {
+                if (lg.QtyIn > 0)
+                {
+                    var rem = lg.RemainingQty ?? 0; // متغير: المتبقي من سطر الدخول
+                    if (rem < lg.QtyIn)
+                    {
+                        return new DeleteInvoiceResult(DeleteInvoiceStatus.BlockedByFifo,
+                            "ممنوع الحذف: تم البيع/الصرف من كمية الفاتورة.");
+                    }
+                }
+            }
+
+            // =========================
+            // 4) Transaction لكل فاتورة
+            // =========================
+            await using var tx = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // =========================
+                // 5) تحديث StockBatches (إنقاص الكمية)
+                // =========================
+                foreach (var line in lines)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim(); // متغير: التشغيلة
+                    var expDate = line.Expiry?.Date;                                                    // متغير: الصلاحية
+
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+
+                        var sbRow = await _context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == invoice.WarehouseId &&  // متغير: المخزن
+                                x.ProdId == line.ProdId &&               // متغير: الصنف
+                                x.BatchNo == batchNo &&                  // متغير: التشغيلة
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand -= line.Qty; // متغير: إنقاص كمية الشراء
+                            if (sbRow.QtyOnHand < 0) sbRow.QtyOnHand = 0;
+
+                            sbRow.UpdatedAt = DateTime.UtcNow;
+                            sbRow.Note = $"PI:{id} DeleteFromHeader (Line:{line.LineNo}) (-{line.Qty})";
+                        }
+                    }
+                }
+
+                // =========================
+                // 6) حذف StockLedger الخاص بالفاتورة
+                // =========================
+                if (allLedgers.Count > 0)
+                    _context.StockLedger.RemoveRange(allLedgers);
+
+                // =========================
+                // 7) عكس الأثر المحاسبي (Reverse) بدل الحذف
+                // =========================
+                await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                    LedgerSourceType.PurchaseInvoice,
+                    id,
+                    postedBy: User?.Identity?.Name,
+                    reason: $"حذف فاتورة مشتريات من قائمة الهيدر PIId={id}"
+                );
+
+                // =========================
+                // 8) حذف الهيدر (Cascade يحذف السطور)
+                // =========================
+                _context.PurchaseInvoices.Remove(invoice);
+
+                // =========================
+                // 9) SaveChanges + Commit
+                // =========================
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                // =========================
+                // 10) LogActivity (اختياري)
+                // =========================
+                try
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "PurchaseInvoices",
+                        id,
+                        $"PIId={id} | Bulk/DeleteAll | Lines={lines.Count} | StockLedger={allLedgers.Count}"
+                    );
+                }
+                catch { }
+
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.Deleted, "تم الحذف.");
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed, ex.Message);
+            }
+        }
+
+
+        // ============================================================================
+        // ✅ Enum + Result صغيرين لتحديد نتيجة حذف الفاتورة
+        // ============================================================================
+        private enum DeleteInvoiceStatus
+        {
+            Deleted = 1,        // تم حذف الفاتورة
+            BlockedByFifo = 2,  // ممنوع الحذف بسبب FIFO (تم البيع/الصرف)
+            Failed = 3          // فشل بسبب خطأ/قيود/استثناء
+        }
+
+        private sealed class DeleteInvoiceResult
+        {
+            public DeleteInvoiceStatus Status { get; }
+            public string? Message { get; }
+
+            public DeleteInvoiceResult(DeleteInvoiceStatus status, string? message)
+            {
+                Status = status;   // متغير: حالة النتيجة
+                Message = message; // متغير: رسالة تفصيلية
+            }
         }
 
 
 
 
 
-[HttpPost]
+        [HttpPost]
     [IgnoreAntiforgeryToken]  // استدعاء من AJAX بدون AntiForgery
     public async Task<IActionResult> SaveHeader([FromBody] PurchaseInvoiceHeaderDto dto)
     {
@@ -2176,7 +2435,7 @@ namespace ERP.Controllers
                 WarehouseId = dto.WarehouseId,             // كود المخزن
                 RefPRId = dto.RefPRId,                  // طلب الشراء المرجعي (لو موجود)
 
-                Status = "Draft",                      // حالة الفاتورة
+                Status = "غير مرحلة",                      // حالة الفاتورة
                 IsPosted = false,
 
                 CreatedAt = now,                          // وقت الإنشاء
@@ -2594,6 +2853,11 @@ namespace ERP.Controllers
 
 
 
+
+
+
+
+
         [HttpPost]
         [IgnoreAntiforgeryToken] // تعليق: لو انت بتستدعيه بـ fetch بدون توكن (زي بقية أزرار AJAX عندك)
         public async Task<IActionResult> PostInvoice(int id)
@@ -2649,6 +2913,10 @@ namespace ERP.Controllers
                 // ================================
                 await _ledgerPostingService.PostPurchaseInvoiceAsync(invoice.PIId, User.Identity?.Name);
 
+
+        
+
+
                 // ================================
                 // 5) تسجيل نشاط
                 // ================================
@@ -2660,41 +2928,30 @@ namespace ERP.Controllers
                 );
 
                 // ================================
-                // 6) إعادة تحميل الحالة (لـ JS)
-                // ================================
-                var updated = await _context.PurchaseInvoices
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(x => x.PIId == id);
-
-                if (isAjax)
-                {
-                    return Ok(new
-                    {
-                        ok = true,
-                        message = "تم ترحيل الفاتورة بنجاح.",
-                        isPosted = updated?.IsPosted ?? true,
-
-                        // ✅ هنا هنرجّع النص اللي هيتكتب في البوكس مباشرةً
-                        postedLabel = updated?.Status ?? "نعم",
-
-                        postedAt = updated?.PostedAt,
-                        postedBy = updated?.PostedBy
-                    });
-                }
-
-
-                // ================================
-                // 6.1) جلب رقم المرحلة الحالية من القيود (PostVersion)
+                // 6) حساب رقم المرحلة الحالية (PostVersion) ثم تحديث Status في جدول PurchaseInvoices
                 // ================================
                 int postVersion = await _context.LedgerEntries
                     .Where(e =>
                         e.SourceType == LedgerSourceType.PurchaseInvoice &&   // متغير: نوع المصدر (فاتورة مشتريات)
                         e.SourceId == id)                                     // متغير: رقم الفاتورة
                     .MaxAsync(e => (int?)e.PostVersion) ?? 1;                 // متغير: أكبر مرحلة، ولو مفيش يبقى 1
-                                                                             
-                string postedLabel = postVersion <= 1 ? "نعم" : $"مرحلة {postVersion}";   // ✅ نفس شكل القائمة
 
+                // ✅ النص المعروض في البوكس (مصدر الحقيقة = عمود Status)
+                string postedLabel = $"مرحلة {postVersion}";                 // متغير: النص الذي سيظهر للمستخدم
 
+                invoice.Status = postedLabel;                                // تعليق: تحديث حالة الفاتورة داخل نفس الجدول
+                await _context.SaveChangesAsync();                           // تعليق: حفظ الحالة بعد الترحيل
+
+                // ================================
+                // 6.1) إعادة تحميل الفاتورة بعد الحفظ (عشان نرجّع بيانات حديثة للـ JS)
+                // ================================
+                var updated = await _context.PurchaseInvoices
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.PIId == id);
+
+                // ================================
+                // 6.2) Ajax Response (تحديث فوري للواجهة)
+                // ================================
                 if (isAjax)
                 {
                     return Ok(new
@@ -2702,14 +2959,17 @@ namespace ERP.Controllers
                         ok = true,
                         message = "تم ترحيل الفاتورة بنجاح.",
                         isPosted = updated?.IsPosted ?? true,
-                        status = updated?.Status ?? "Posted",
-                        postedAt = updated?.PostedAt,
-                        postedBy = updated?.PostedBy,
-                        postedLabel = postedLabel,
-                        postVersion = postVersion
 
+                        // ✅ الأهم: الحالة النصية الصحيحة فورًا (بدون قيم قديمة)
+                        status = postedLabel,
+                        postedLabel = postedLabel,
+                        postVersion = postVersion,
+
+                        postedAt = updated?.PostedAt,
+                        postedBy = updated?.PostedBy
                     });
                 }
+
 
                 TempData["Success"] = "تم ترحيل الفاتورة بنجاح";
                 return RedirectToAction("Show", new { id = invoice.PIId });
@@ -2733,6 +2993,15 @@ namespace ERP.Controllers
 
 
 
+
+
+
+
+
+
+        // ================================
+        //      فتح الفاتورة المرحلة   
+        // ================================
 
         [HttpPost]
         [IgnoreAntiforgeryToken]
@@ -2781,7 +3050,7 @@ namespace ERP.Controllers
                 // 4) فتح الفاتورة للتعديل (إلغاء الترحيل)
                 // ================================
                 invoice.IsPosted = false;                 // متغير: إلغاء حالة الترحيل
-                invoice.Status = "Open";                  // متغير: حالة عرضية
+                invoice.Status = "مفتوحة للتعديل";                  // متغير: حالة عرضية
                 invoice.PostedAt = null;                  // متغير: مسح وقت الترحيل
                 invoice.PostedBy = null;                  // متغير: مسح من قام بالترحيل
                 invoice.UpdatedAt = DateTime.Now;         // متغير: آخر تعديل
@@ -2839,7 +3108,7 @@ namespace ERP.Controllers
 
 
 
-    #endregion
+    
 
 
 }

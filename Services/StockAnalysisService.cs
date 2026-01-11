@@ -41,20 +41,23 @@ namespace ERP.Services
         }
 
         // ============================================================
-        // 2) الخصم المرجّح القديم (قبل البيع = على كل الكميات الداخلة)
-        // يعتمد على StockLedger (حركات الدخول) بشرط أن PurchaseDiscount = نسبة خصم الشراء
+        // 2) الخصم المرجّح القديم (قبل البيع = على كل كميات الشراء الداخلة)
+        // ✅ تعديل: يعتمد على كميات المشتريات فقط (SourceType == "Purchase")
         // ============================================================
         public async Task<decimal> GetWeightedPurchaseDiscountOldAsync(int prodId)
         {
-            // تعليق: نجمع الدخلات فقط (QtyIn > 0)
+            // تعليق: نجمع "مشتريات فقط" + الدخلات فقط (QtyIn > 0)
             // ونحسب المتوسط الموزون على QtyIn
             var rows = await _context.StockLedger
                 .AsNoTracking()
-                .Where(x => x.ProdId == prodId && x.QtyIn > 0)
+                .Where(x =>
+                    x.ProdId == prodId &&
+                    x.SourceType == "Purchase" &&   // ✅ فلترة: مشتريات فقط
+                    x.QtyIn > 0)
                 .Select(x => new
                 {
-                    qty = x.QtyIn,                               // متغير: كمية الدخلة
-                    discPct = (decimal?)(x.PurchaseDiscount) ?? 0m // متغير: نسبة الخصم للدخلة (لازم تكون محفوظة وقت الترحيل)
+                    qty = x.QtyIn,                                 // متغير: كمية الشراء الداخلة
+                    discPct = (decimal?)(x.PurchaseDiscount) ?? 0m // متغير: نسبة خصم الشراء لهذه الدخلة
                 })
                 .ToListAsync();
 
@@ -70,18 +73,22 @@ namespace ERP.Services
 
         // ============================================================
         // 3) الخصم المرجح الحالي بعد البيع
-        // يعتمد فقط على الدُخلات المتبقية (RemainingQty > 0)
+        // ✅ تعديل: يعتمد فقط على "مشتريات" المتبقية (RemainingQty > 0) + SourceType == "Purchase"
         // ============================================================
         public async Task<decimal> GetWeightedPurchaseDiscountCurrentAsync(int prodId)
         {
             // تعليق: RemainingQty تُملأ فقط لسطور الدخول
+            // ✅ هنا نضمن إننا ناخد المتبقي من "المشتريات" فقط
             var rows = await _context.StockLedger
                 .AsNoTracking()
-                .Where(x => x.ProdId == prodId && (x.RemainingQty ?? 0) > 0)
+                .Where(x =>
+                    x.ProdId == prodId &&
+                    x.SourceType == "Purchase" &&            // ✅ فلترة: مشتريات فقط
+                    (x.RemainingQty ?? 0) > 0)
                 .Select(x => new
                 {
-                    remaining = (decimal)(x.RemainingQty ?? 0),      // متغير: المتبقي من الدخلة
-                    discPct = (decimal?)(x.PurchaseDiscount) ?? 0m   // متغير: نسبة الخصم لنفس الدخلة
+                    remaining = (decimal)(x.RemainingQty ?? 0),      // متغير: المتبقي من دخلة الشراء
+                    discPct = (decimal?)(x.PurchaseDiscount) ?? 0m   // متغير: نسبة خصم الشراء لنفس الدخلة
                 })
                 .ToListAsync();
 
@@ -93,6 +100,7 @@ namespace ERP.Services
             decimal weighted = rows.Sum(r => r.remaining * r.discPct);
             return weighted / totalRemaining;
         }
+
 
         // ============================================================
         // 4) متوسط تكلفة الوحدة (حسب FIFO)
