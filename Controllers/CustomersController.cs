@@ -552,30 +552,36 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> Show(int? id, DateTime? fromDate, DateTime? toDate)
         {
+            // =========================================================
             // 1) تجهيز قائمة العملاء للأوتوكومبليت
+            // =========================================================
             var customersList = await _context.Customers
                 .AsNoTracking()
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new SelectListItem
                 {
-                    Value = c.CustomerId.ToString(),   // الكود
-                    Text = c.CustomerName            // الاسم
+                    Value = c.CustomerId.ToString(),   // متغير: كود العميل
+                    Text = c.CustomerName              // متغير: اسم العميل
                 })
                 .ToListAsync();
 
             ViewBag.CustomersList = customersList;
 
-            // 2) حفظ فترة التاريخ فى الـ ViewBag علشان نعرضها فى الفيو
+            // =========================================================
+            // 2) حفظ فترة التاريخ فى ViewBag لعرضها فى الفيو
+            // =========================================================
             ViewBag.FromDate = fromDate;
             ViewBag.ToDate = toDate;
 
-            // 3) لو مفيش عميل مختار → نعرض رسالة الاختيار
+            // =========================================================
+            // 3) لو مفيش عميل مختار → نعرض الصفحة بدون بيانات
+            // =========================================================
             if (!id.HasValue)
-            {
                 return View(model: null);
-            }
 
-            // 4) قراءة بيانات العميل
+            // =========================================================
+            // 4) قراءة بيانات العميل + الحساب المحاسبي
+            // =========================================================
             var customer = await _context.Customers
                 .Include(c => c.Account)
                 .FirstOrDefaultAsync(c => c.CustomerId == id.Value);
@@ -586,15 +592,94 @@ namespace ERP.Controllers
                 return View(model: null);
             }
 
-            // 5) قيم حجم التعامل (هنربطها فعلياً بجدول الفواتير لاحقاً)
-            ViewBag.TotalSales = 0m;
-            ViewBag.TotalReturns = 0m;
-            ViewBag.TotalPurchases = 0m;
-            ViewBag.InvoiceCount = 0;
-            ViewBag.LastTransactionDate = (DateTime?)null;
+            // =========================================================
+            // 5) تجهيز فلتر التاريخ لحجم التعامل فقط (شامل لليوم الأخير)
+            // - from inclusive
+            // - to inclusive (نحوّلها toExclusive باستخدام +1 يوم)
+            // =========================================================
+            DateTime? from = fromDate?.Date;                 // متغير: بداية المدة
+            DateTime? toExclusive = toDate?.Date.AddDays(1); // متغير: نهاية المدة (حصري)
+
+            // =========================================================
+            // 6) إجمالي المبيعات (من فواتير البيع المُرحّلة فقط)
+            // =========================================================
+            var salesQ = _context.SalesInvoices
+                .AsNoTracking()
+                .Where(x => x.CustomerId == customer.CustomerId && x.IsPosted);
+
+            if (from.HasValue) salesQ = salesQ.Where(x => x.SIDate >= from.Value);
+            if (toExclusive.HasValue) salesQ = salesQ.Where(x => x.SIDate < toExclusive.Value);
+
+            decimal totalSales = await salesQ.SumAsync(x => (decimal?)x.NetTotal) ?? 0m;
+
+            // =========================================================
+            // 7) إجمالي المشتريات (من فواتير الشراء المُرحّلة فقط)
+            // =========================================================
+            var purchasesQ = _context.PurchaseInvoices
+                .AsNoTracking()
+                .Where(x => x.CustomerId == customer.CustomerId && x.IsPosted);
+
+            if (from.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate >= from.Value);
+            if (toExclusive.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate < toExclusive.Value);
+
+            decimal totalPurchases = await purchasesQ.SumAsync(x => (decimal?)x.NetTotal) ?? 0m;
+
+            // =========================================================
+            // 8) إجمالي المرتجعات
+            // تعليق: مؤقتًا = 0 لحد ما تربط SalesReturns / PurchaseReturns
+            // =========================================================
+            decimal totalReturns = 0m;
+
+            // =========================================================
+            // 9) عدد الفواتير + آخر تاريخ حركة (داخل نفس فترة البحث)
+            // =========================================================
+            int salesCount = await salesQ.CountAsync();       // متغير: عدد فواتير البيع في الفترة
+            int purchasesCount = await purchasesQ.CountAsync();// متغير: عدد فواتير الشراء في الفترة
+            int invoiceCount = salesCount + purchasesCount;   // متغير: إجمالي عدد الفواتير
+
+            // ✅ طريقة آمنة بدل MaxAsync (علشان لو مفيش بيانات)
+            DateTime? lastSalesDate = await salesQ
+                .OrderByDescending(x => x.SIDate)
+                .Select(x => (DateTime?)x.SIDate)
+                .FirstOrDefaultAsync();
+
+            DateTime? lastPurchaseDate = await purchasesQ
+                .OrderByDescending(x => x.PIDate)
+                .Select(x => (DateTime?)x.PIDate)
+                .FirstOrDefaultAsync();
+
+            DateTime? lastTransactionDate =
+                (lastSalesDate == null && lastPurchaseDate == null) ? null :
+                (lastSalesDate == null) ? lastPurchaseDate :
+                (lastPurchaseDate == null) ? lastSalesDate :
+                (lastSalesDate > lastPurchaseDate ? lastSalesDate : lastPurchaseDate);
+
+            // =========================================================
+            // 10) الرصيد الحالي (مصدر الحقيقة = LedgerEntries) ✅ بدون فلتر تاريخ
+            // - الرصيد الحالي = Sum(Debit - Credit) لكل قيود العميل عبر كل الزمن
+            // - نعتمد على CustomerId فقط لتفادي اختلاف AccountId
+            // =========================================================
+            decimal currentBalance = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId == customer.CustomerId)
+                .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
+
+            // ✅ نعرضه في الكارت
+            customer.CurrentBalance = currentBalance;
+
+            // =========================================================
+            // 11) تمرير النتائج للفيو
+            // =========================================================
+            ViewBag.TotalSales = totalSales;
+            ViewBag.TotalPurchases = totalPurchases;
+            ViewBag.TotalReturns = totalReturns;
+            ViewBag.InvoiceCount = invoiceCount;
+            ViewBag.LastTransactionDate = lastTransactionDate;
 
             return View(customer);
         }
+
+
 
 
 

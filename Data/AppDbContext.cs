@@ -1005,7 +1005,7 @@ namespace ERP.Data
 
                 e.Property(x => x.Status)
                     .HasMaxLength(20)
-                    .HasDefaultValue("Draft"); // متغير: حالة الفاتورة
+                    .HasDefaultValue("غير مرحلة"); // متغير: حالة الفاتورة
 
                 e.Property(x => x.RefPRId); // متغير: مرجع طلب شراء (اختياري)
 

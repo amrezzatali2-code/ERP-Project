@@ -1,4 +1,4 @@
-﻿using DocumentFormat.OpenXml.VariantTypes;
+using DocumentFormat.OpenXml.VariantTypes;
 using ERP.Data;
 using ERP.Infrastructure;
 using ERP.Models;
@@ -272,6 +272,10 @@ namespace ERP.Controllers
 
 
 
+
+
+
+
         // =========================================================
         // دالة مساعدة: تحميل قائمة الأصناف للأوتوكومبليت فى سطر الفاتورة (المبيعات)
         // ثابت مهم:
@@ -304,6 +308,10 @@ namespace ERP.Controllers
             // متغير: نرسل القائمة إلى الواجهة لتغذية الـ datalist
             ViewBag.ProductsAuto = products;
         }
+
+
+
+
 
 
 
@@ -1105,6 +1113,173 @@ namespace ERP.Controllers
 
 
 
+        [HttpPost]
+        [IgnoreAntiforgeryToken] // تعليق: لأن الاستدعاء من fetch بدون توكن
+        public async Task<IActionResult> PostInvoice(int id)
+        {
+            // ================================
+            // 0) معرفة هل الطلب Ajax أم لا
+            // ================================
+            bool isAjax =
+                string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+                || Request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                // ================================
+                // 1) تحميل الفاتورة (للتحقق السريع فقط)
+                // ================================
+                var invoice = await _context.SalesInvoices
+                    .AsNoTracking() // تعليق: هنا قراءة فقط
+                    .FirstOrDefaultAsync(x => x.SIId == id);
+
+                if (invoice == null)
+                {
+                    if (isAjax) return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+                    TempData["Error"] = "الفاتورة غير موجودة.";
+                    return RedirectToAction("Index");
+                }
+
+                // ================================
+                // 2) منع الترحيل لو مترحّلة بالفعل
+                // ================================
+                if (invoice.IsPosted)
+                {
+                    if (isAjax) return BadRequest(new { ok = false, message = "هذه الفاتورة مترحّلة بالفعل." });
+                    TempData["Error"] = "هذه الفاتورة مترحّلة بالفعل.";
+                    return RedirectToAction("Show", new { id = invoice.SIId });
+                }
+
+                // ================================
+                // 3) تحقق سريع قبل الترحيل
+                // ================================
+                if (invoice.CustomerId <= 0)
+                {
+                    var m = "يجب اختيار العميل قبل الترحيل.";
+                    if (isAjax) return BadRequest(new { ok = false, message = m });
+                    TempData["Error"] = m;
+                    return RedirectToAction("Show", new { id = invoice.SIId });
+                }
+
+                if (invoice.WarehouseId <= 0)
+                {
+                    var m = "يجب اختيار المخزن قبل الترحيل.";
+                    if (isAjax) return BadRequest(new { ok = false, message = m });
+                    TempData["Error"] = m;
+                    return RedirectToAction("Show", new { id = invoice.SIId });
+                }
+
+                // ================================
+                // 4) تنفيذ الترحيل (كل المنطق داخل السيرفيس)
+                // - السيرفيس هو اللي يكتب: IsPosted + Status(مرحلة X) + PostedAt/PostedBy
+                // ================================
+                await _ledgerPostingService.PostSalesInvoiceAsync(id, User.Identity?.Name);
+
+                // ================================
+                // 5) تسجيل نشاط
+                // ================================
+                await _activityLogger.LogAsync(
+                    actionType: UserActionType.Post,
+                    entityName: "SalesInvoice",
+                    entityId: id,
+                    description: $"ترحيل فاتورة مبيعات رقم {id}"
+                );
+
+                // ================================
+                // 6) إعادة تحميل الفاتورة بعد الترحيل (نأخذ الحالة من DB)
+                // ================================
+                var updated = await _context.SalesInvoices
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.SIId == id);
+
+                // متغير: الليبل المعروض للمستخدم
+                string postedLabel = updated?.Status ?? "مرحلة 1";
+
+                if (isAjax)
+                {
+                    return Ok(new
+                    {
+                        ok = true,
+                        message = "تم ترحيل الفاتورة بنجاح.",
+                        isPosted = updated?.IsPosted ?? true,
+
+                        // مهم: نخلي الواجهة تعتمد على Status الحقيقي في الجدول
+                        status = postedLabel,
+                        postedLabel = postedLabel
+                    });
+                }
+
+                TempData["Success"] = "تم ترحيل الفاتورة بنجاح";
+                return RedirectToAction("Show", new { id });
+            }
+            catch (Exception ex)
+            {
+                // =========================================================
+                // تعليق: تجميع رسالة خطأ واضحة (Message + InnerException)
+                // الهدف: نعرف "السبب الحقيقي" لفشل SaveChanges داخل EF
+                // =========================================================
+
+                // متغير: الرسالة الأساسية
+                var msg = string.IsNullOrWhiteSpace(ex.Message) ? "حدث خطأ أثناء الترحيل." : ex.Message;
+
+                // متغير: رسالة الـ InnerException (لو موجودة)
+                var inner1 = ex.InnerException?.Message;
+
+                // متغير: رسالة InnerException داخل InnerException (أحيانًا EF بيحط التفاصيل هنا)
+                var inner2 = ex.InnerException?.InnerException?.Message;
+
+                // متغير: تجميع الرسائل
+                var details = msg;
+
+                if (!string.IsNullOrWhiteSpace(inner1))
+                    details += " | INNER: " + inner1;
+
+                if (!string.IsNullOrWhiteSpace(inner2))
+                    details += " | INNER2: " + inner2;
+
+                // =========================================================
+                // تعليق: لو الخطأ من EF DbUpdateException نطلع أعمق رسالة
+                // =========================================================
+                if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
+                {
+                    var dbInner1 = dbEx.InnerException?.Message;
+                    var dbInner2 = dbEx.InnerException?.InnerException?.Message;
+
+                    if (!string.IsNullOrWhiteSpace(dbInner1) && (inner1 != dbInner1))
+                        details += " | DB-INNER: " + dbInner1;
+
+                    if (!string.IsNullOrWhiteSpace(dbInner2) && (inner2 != dbInner2))
+                        details += " | DB-INNER2: " + dbInner2;
+                }
+
+                // =========================================================
+                // تعليق: لو فيه تعارض تحديث (Concurrency) نوضح ده
+                // =========================================================
+                if (ex is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
+                {
+                    details = "فشل الترحيل بسبب تعارض تحديث (Concurrency). حاول إعادة تحميل الفاتورة ثم الترحيل مرة أخرى."
+                              + " | DETAILS: " + details;
+                }
+
+                // =========================================================
+                // (نفس سلوكك) Ajax / غير Ajax
+                // =========================================================
+                if (isAjax)
+                    return BadRequest(new { ok = false, message = "فشل الترحيل: " + details });
+
+                TempData["Error"] = "فشل الترحيل: " + details;
+                return RedirectToAction("Show", new { id });
+            }
+
+        }
+
+
+
+
+
+
+
+
 
         // =========================
         // دالة مشتركة لبناء استعلام فواتير المبيعات
@@ -1339,6 +1514,12 @@ namespace ERP.Controllers
         }
 
 
+       
+        
+        
+        
+        
+        
         // =========================================================
         // Create — GET: فتح شاشة إنشاء فاتورة مبيعات جديدة
         // =========================================================
@@ -1353,7 +1534,7 @@ namespace ERP.Controllers
                 SIDate = DateTime.Today,           // متغير: تاريخ الفاتورة
                 SITime = DateTime.Now.TimeOfDay,   // متغير: وقت الفاتورة
                 IsPosted = false,                  // متغير: لسه مش مرحّلة
-                Status = "مسودة"                   // متغير: حالة مبدئية
+                Status = "غير مرحلة"                   // متغير: حالة مبدئية
             };
 
             // =========================================================

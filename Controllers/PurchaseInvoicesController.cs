@@ -2761,6 +2761,12 @@ namespace ERP.Controllers
             return query;
         }
 
+       
+        
+        
+        
+        
+        
         /// <summary>
         /// دالة الترتيب الموحدة بحسب اسم العمود المنطقي القادم من الواجهة.
         /// </summary>
@@ -2835,6 +2841,13 @@ namespace ERP.Controllers
             return query;
         }
 
+       
+        
+        
+        
+        
+        
+        
         /// <summary>
         /// دالة مساعدة لتحويل نص إلى int? بأمان.
         /// ترجع null لو التحويل فشل.

@@ -34,6 +34,12 @@ namespace ERP
 
                 // إضافة الفلتر على مستوى كل الكنترولرات
                 options.Filters.Add(new AuthorizeFilter(policy));
+            })
+            .AddJsonOptions(options =>
+            {
+                // ✅ إعدادات JSON للتأكد من أن الـ property name matching يعمل بشكل صحيح
+                options.JsonSerializerOptions.PropertyNameCaseInsensitive = true; // مهم: يجعل الـ binding case-insensitive
+                options.JsonSerializerOptions.PropertyNamingPolicy = null; // استخدام أسماء الخصائص كما هي (PascalCase)
             });
 
             // =========================================================

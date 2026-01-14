@@ -1,4 +1,4 @@
-﻿// Models/SalesInvoice.cs
+// Models/SalesInvoice.cs
 // كيان هيدر فاتورة البيع (بدون السطور). جميع الخصائص عليها شروح عربية.
 
 using System;
@@ -77,7 +77,7 @@ namespace ERP.Models
         // ========== الحالة والترحيل ==========
         [Display(Name = "الحالة")]
         [Required, StringLength(20)]
-        public string Status { get; set; } = "مسودة";           // مسودة / مرحل / ملغى (تتحكم فيها الشاشة)
+        public string Status { get; set; } = "غير مرحلة";           // مسودة / مرحل / ملغى (يجب أن تطابق CHECK constraint: CK_SalesInvoices_Status)
 
         [Display(Name = "مرحل؟")]
         public bool IsPosted { get; set; }                      // هل الفاتورة مرحّلة للمخزون/الحسابات؟

@@ -121,9 +121,17 @@ namespace ERP.Controllers
             return q;
         }
 
+
+
+
+
+
+
+
         // =========================================================
         // Index — عرض قائمة القيود (نظام القوائم الموحد)
         // شاشة قراءة فقط لعرض دفتر الأستاذ.
+        // ✅ إضافة: إجمالي المدين + إجمالي الدائن (يتفلتر مع الفلترة)
         // =========================================================
         public async Task<IActionResult> Index(
             string? search,
@@ -138,7 +146,9 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 50)
         {
-            // تجهيز الاستعلام مع كل الفلاتر
+            // =========================================================
+            // 1) تجهيز الاستعلام مع كل الفلاتر (قبل الـ Paging)
+            // =========================================================
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -150,15 +160,34 @@ namespace ERP.Controllers
                 fromCode,
                 toCode);
 
-            // إنشاء موديل التقسيم PagedResult
+            // =========================================================
+            // 2) حساب الإجماليات من نفس الاستعلام (بعد الفلاتر)
+            // ✅ مهم: لازم قبل الـ PagedResult علشان ما تتحسبش على الصفحة بس
+            // =========================================================
+            // متغير: إجمالي المدين بعد الفلاتر
+            decimal totalDebit = await q.SumAsync(e => (decimal?)e.Debit) ?? 0m;
+
+            // متغير: إجمالي الدائن بعد الفلاتر
+            decimal totalCredit = await q.SumAsync(e => (decimal?)e.Credit) ?? 0m;
+
+            // متغير: صافي الحركة داخل الفلتر (مدين - دائن)
+            decimal netBalance = totalDebit - totalCredit;
+
+            // =========================================================
+            // 3) إنشاء موديل التقسيم PagedResult (يعرض صفحة فقط)
+            // =========================================================
             var model = await PagedResult<LedgerEntry>.CreateAsync(q, page, pageSize);
 
-            // حفظ قيم الفلترة الزمنية داخل الموديل (لنظام القوائم الموحد)
+            // =========================================================
+            // 4) حفظ قيم الفلاتر داخل الموديل (لنظام القوائم الموحد)
+            // =========================================================
             model.UseDateRange = useDateRange;
             model.FromDate = fromDate;
             model.ToDate = toDate;
 
-            // تمرير القيم للـ ViewBag لاستخدامها في الواجهة
+            // =========================================================
+            // 5) تمرير القيم للواجهة
+            // =========================================================
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "EntryDate";
@@ -167,14 +196,28 @@ namespace ERP.Controllers
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
 
-            ViewBag.DateField = "EntryDate";       // نستخدم تاريخ القيد للفلترة
-            ViewBag.Page = page;
-            ViewBag.PageSize = pageSize;
+            ViewBag.DateField = "EntryDate";       // متغير: اسم حقل التاريخ المستخدم في الفلترة
+            ViewBag.Page = page;                   // متغير: رقم الصفحة الحالية
+            ViewBag.PageSize = pageSize;           // متغير: حجم الصفحة
 
-            ViewBag.TotalCount = model.TotalCount; // إجمالي عدد القيود
+            ViewBag.TotalCount = model.TotalCount; // متغير: إجمالي عدد القيود بعد الفلاتر
+
+            // ✅ الإجماليات التي نريد التأكد منها
+            ViewBag.TotalDebit = totalDebit;       // متغير: إجمالي المدين بعد الفلاتر
+            ViewBag.TotalCredit = totalCredit;     // متغير: إجمالي الدائن بعد الفلاتر
+            ViewBag.NetBalance = netBalance;       // متغير: صافي الحركة داخل الفلتر
 
             return View(model); // يعرض Views/LedgerEntries/Index.cshtml
         }
+
+
+
+
+
+
+
+
+
 
         // =========================================================
         // Show — عرض تفاصيل سطر قيد واحد (قراءة فقط)

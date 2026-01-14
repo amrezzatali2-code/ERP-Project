@@ -1,4 +1,4 @@
-﻿using ERP.Data;                 // AppDbContext
+using ERP.Data;                 // AppDbContext
 using ERP.Models;               // PurchaseInvoice, LedgerEntry, LedgerSourceType
 using Microsoft.EntityFrameworkCore;
 using System.Text.RegularExpressions;
@@ -23,6 +23,9 @@ namespace ERP.Services
     {
         Task ReverseForHeaderDeleteAsync(LedgerSourceType sourceType, int sourceId, string? postedBy, string? reason = null);
         Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy);
+        Task PostSalesInvoiceAsync(int salesInvoiceId, string? postedBy);
+
+
 
 
     }
@@ -35,6 +38,11 @@ namespace ERP.Services
         {
             _db = db;
         }
+
+
+
+
+
 
         public async Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy)
         {
@@ -250,12 +258,23 @@ namespace ERP.Services
                 invoice.PostedBy = postedBy;
 
                 // =========================================================
-                // 10) تحديث رصيد المورد الحالي
+                // 10) حفظ القيود + حالة الفاتورة أولاً
+                // ✅ لازم SaveChanges هنا قبل حساب الرصيد
+                // لأن RecalcCustomerCurrentBalanceAsync بيقرأ من LedgerEntries من قاعدة البيانات.
                 // =========================================================
-                invoice.Customer.CurrentBalance += newAmount;
-
                 await _db.SaveChangesAsync();
+
+                // =========================================================
+                // 11) تحديث رصيد المورد/العميل (مصدر الحقيقة = LedgerEntries)
+                // =========================================================
+                if (invoice.CustomerId > 0)
+                {
+                    await RecalcCustomerCurrentBalanceAsync(invoice.CustomerId);
+                    await _db.SaveChangesAsync(); // تعليق: حفظ رصيد العميل بعد إعادة الحساب
+                }
+
                 await tx.CommitAsync();
+
             }
             catch
             {
@@ -263,6 +282,12 @@ namespace ERP.Services
                 throw;
             }
         }
+
+
+
+
+
+
 
         // =========================================================
         // دالة: تحديد آخر مرحلة ترحيل لفاتورة مشتريات من Description
@@ -475,6 +500,459 @@ namespace ERP.Services
         }
 
 
+
+
+
+
+        // ================================
+        // ثوابت أكواد الحسابات (حسب شجرة الحسابات عندك)
+        // ================================
+        private const string SalesRevenueAccountCode = "4100"; // متغير: كود حساب إيرادات المبيعات
+        private const string InventoryAccountCode = "1105"; // متغير: كود حساب المخزون
+        private const string CogsAccountCode = "5100"; // متغير: كود حساب تكلفة البضاعة المباعة
+
+        // ================================
+        // ثابت: SourceType المستخدم في StockLedger للمبيعات
+        // (لازم يطابق اللي بتسجله في حركات المخزون عند البيع)
+        // ================================
+        private const string StockSourceType_Sales = "Sales"; // متغير: قيمة SourceType للمبيعات في StockLedger
+
+
+        // =========================================================
+        // ترحيل فاتورة مبيعات إلى LedgerEntries + تحديث رصيد العميل
+        // ✅ نفس منطق المشتريات:
+        // - لو فيه مرحلة قديمة => يعمل عكس (Reverse) للمرحلة الأخيرة
+        // - ثم ينشئ مرحلة جديدة
+        // - ويحدّث Customer.CurrentBalance
+        //
+        // ✅ قيد المبيعات الصحيح (آجل):
+        // (1) العميل    مدين   = صافي الفاتورة (NetTotal)
+        // (2) إيرادات   دائن   = صافي الفاتورة
+        //
+        // ✅ قيد تكلفة المبيعات (من StockLedger):
+        // (3) COGS      مدين   = إجمالي تكلفة الخروج (costTotal)
+        // (4) مخزون     دائن   = إجمالي تكلفة الخروج
+        // =========================================================
+        public async Task PostSalesInvoiceAsync(int salesInvoiceId, string? postedBy)
+        {
+            // ================================
+            // 0) Transaction لضمان سلامة العملية
+            // ================================
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                // ================================
+                // 1) تحميل الفاتورة + العميل
+                // ================================
+                var invoice = await _db.SalesInvoices
+                    .Include(x => x.Customer) // تعليق: نحتاج العميل + AccountId (للتأكد)
+                    .FirstOrDefaultAsync(x => x.SIId == salesInvoiceId);
+
+                if (invoice == null)
+                    throw new Exception("الفاتورة غير موجودة.");
+
+                // ================================
+                // 2) منع الترحيل لو مترحّلة بالفعل
+                // ================================
+                // تعليق: إعادة الترحيل تكون بعد "فتح الفاتورة" (Open) وإرجاع IsPosted = false
+                if (invoice.IsPosted)
+                    throw new Exception("هذه الفاتورة مترحّلة بالفعل. افتح الفاتورة أولاً قبل إعادة الترحيل.");
+
+                // ================================
+                // 3) تأكد أن العميل مربوط بحساب محاسبي
+                // ================================
+                if (invoice.Customer == null)
+                    throw new Exception("بيانات العميل غير محمّلة.");
+
+                if (invoice.Customer.AccountId == null || invoice.Customer.AccountId <= 0)
+                    throw new Exception("هذا العميل ليس مرتبطًا بحساب محاسبي داخل شجرة الحسابات.");
+
+                // ================================
+                // 4) حل AccountId من الأكواد
+                // ================================
+                int salesRevenueAccountId = await ResolveAccountIdByCodeAsync(SalesRevenueAccountCode); // متغير: حساب الإيرادات
+                int inventoryAccountId = await ResolveAccountIdByCodeAsync(InventoryAccountCode);   // متغير: حساب المخزون
+                int cogsAccountId = await ResolveAccountIdByCodeAsync(CogsAccountCode);        // متغير: حساب تكلفة المبيعات
+
+                // ================================
+                // 5) قيم مشتركة
+                // ================================
+                var now = DateTime.UtcNow;                 // متغير: وقت التنفيذ الحالي
+                decimal newAmount = invoice.NetTotal;      // متغير: صافي الفاتورة
+                string voucherNo = invoice.SIId.ToString();// متغير: رقم المستند
+
+                // ================================
+                // 6) حساب تكلفة البضاعة المباعة من StockLedger
+                // ================================
+                decimal costTotal = await GetSalesInvoiceCostTotalAsync(invoice.SIId); // متغير: إجمالي التكلفة (COGS)
+
+                // =========================================================
+                // 7) تحديد آخر مرحلة مُرحّلة سابقاً (PostVersion)
+                // - نعتمد على سطور المرحلة الأساسية 1..4 فقط
+                // =========================================================
+                int lastStage = await _db.LedgerEntries
+                    .Where(e =>
+                        e.SourceType == LedgerSourceType.SalesInvoice &&
+                        e.SourceId == invoice.SIId &&
+                        (e.LineNo == 1 || e.LineNo == 2 || e.LineNo == 3 || e.LineNo == 4) &&
+                        e.PostVersion > 0)
+                    .OrderByDescending(e => e.PostVersion)
+                    .Select(e => e.PostVersion)
+                    .FirstOrDefaultAsync(); // 0 لو مفيش
+
+                int newStage = lastStage + 1; // متغير: المرحلة الجديدة
+
+                // =========================================================
+                // 8) لو فيه مرحلة سابقة => اعكسها قبل إنشاء المرحلة الجديدة
+                // =========================================================
+                if (lastStage > 0)
+                {
+                    // --------------------------
+                    // (A) قيود البيع (العميل / الإيراد)
+                    // --------------------------
+                    var lastDebitCustomer = await _db.LedgerEntries
+                        .Where(e =>
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.SourceId == invoice.SIId &&
+                            e.LineNo == 1 &&
+                            e.PostVersion == lastStage)
+                        .OrderByDescending(e => e.Id)
+                        .FirstOrDefaultAsync();
+
+                    var lastCreditRevenue = await _db.LedgerEntries
+                        .Where(e =>
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.SourceId == invoice.SIId &&
+                            e.LineNo == 2 &&
+                            e.PostVersion == lastStage)
+                        .OrderByDescending(e => e.Id)
+                        .FirstOrDefaultAsync();
+
+                    if (lastDebitCustomer == null || lastCreditRevenue == null)
+                        throw new Exception("تعذر تحديد آخر ترحيل سابق للفاتورة (قيود البيع غير مكتملة).");
+
+                    // متغير: صافي البيع في المرحلة السابقة
+                    decimal oldSalesAmount = lastDebitCustomer.Debit > 0
+                        ? lastDebitCustomer.Debit
+                        : lastCreditRevenue.Credit;
+
+                    // (1) عكس سطر العميل (كان مدين -> يصبح دائن)
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = invoice.SIDate,
+                        SourceType = LedgerSourceType.SalesInvoice,
+                        VoucherNo = voucherNo,
+                        SourceId = invoice.SIId,
+
+                        LineNo = 9001,
+                        PostVersion = lastStage,
+
+                        AccountId = lastDebitCustomer.AccountId,
+                        CustomerId = lastDebitCustomer.CustomerId,
+
+                        Debit = 0m,
+                        Credit = oldSalesAmount,
+
+                        Description = $"عكس ترحيل فاتورة مبيعات رقم {invoice.SIId} (عكس مرحلة {lastStage})",
+                        CreatedAt = now
+                    });
+
+                    // (2) عكس سطر الإيراد (كان دائن -> يصبح مدين)
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = invoice.SIDate,
+                        SourceType = LedgerSourceType.SalesInvoice,
+                        VoucherNo = voucherNo,
+                        SourceId = invoice.SIId,
+
+                        LineNo = 9002,
+                        PostVersion = lastStage,
+
+                        AccountId = lastCreditRevenue.AccountId,
+                        CustomerId = null,
+
+                        Debit = oldSalesAmount,
+                        Credit = 0m,
+
+                        Description = $"عكس ترحيل فاتورة مبيعات رقم {invoice.SIId} (عكس مرحلة {lastStage})",
+                        CreatedAt = now
+                    });
+
+                    // ❌ ممنوع تعديل CurrentBalance يدويًا هنا (مصدر الحقيقة = LedgerEntries)
+
+                    // --------------------------
+                    // (B) قيود التكلفة (COGS / Inventory) — لو موجودة
+                    // --------------------------
+                    var lastDebitCogs = await _db.LedgerEntries
+                        .Where(e =>
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.SourceId == invoice.SIId &&
+                            e.LineNo == 3 &&
+                            e.PostVersion == lastStage)
+                        .OrderByDescending(e => e.Id)
+                        .FirstOrDefaultAsync();
+
+                    var lastCreditInv = await _db.LedgerEntries
+                        .Where(e =>
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.SourceId == invoice.SIId &&
+                            e.LineNo == 4 &&
+                            e.PostVersion == lastStage)
+                        .OrderByDescending(e => e.Id)
+                        .FirstOrDefaultAsync();
+
+                    // تعليق: ممكن تكون مش موجودة لو كنت بتجرب قبل ما نضيف التكلفة
+                    if (lastDebitCogs != null && lastCreditInv != null)
+                    {
+                        decimal oldCostAmount = lastDebitCogs.Debit > 0
+                            ? lastDebitCogs.Debit
+                            : lastCreditInv.Credit;
+
+                        // (3) عكس COGS (كان مدين -> يصبح دائن)
+                        _db.LedgerEntries.Add(new LedgerEntry
+                        {
+                            EntryDate = invoice.SIDate,
+                            SourceType = LedgerSourceType.SalesInvoice,
+                            VoucherNo = voucherNo,
+                            SourceId = invoice.SIId,
+
+                            LineNo = 9003,
+                            PostVersion = lastStage,
+
+                            AccountId = lastDebitCogs.AccountId,
+                            CustomerId = null,
+
+                            Debit = 0m,
+                            Credit = oldCostAmount,
+
+                            Description = $"عكس تكلفة فاتورة مبيعات رقم {invoice.SIId} (عكس مرحلة {lastStage})",
+                            CreatedAt = now
+                        });
+
+                        // (4) عكس المخزون (كان دائن -> يصبح مدين)
+                        _db.LedgerEntries.Add(new LedgerEntry
+                        {
+                            EntryDate = invoice.SIDate,
+                            SourceType = LedgerSourceType.SalesInvoice,
+                            VoucherNo = voucherNo,
+                            SourceId = invoice.SIId,
+
+                            LineNo = 9004,
+                            PostVersion = lastStage,
+
+                            AccountId = lastCreditInv.AccountId,
+                            CustomerId = null,
+
+                            Debit = oldCostAmount,
+                            Credit = 0m,
+
+                            Description = $"عكس تكلفة فاتورة مبيعات رقم {invoice.SIId} (عكس مرحلة {lastStage})",
+                            CreatedAt = now
+                        });
+                    }
+                }
+
+                // =========================================================
+                // 9) إنشاء قيود المرحلة الجديدة
+                // =========================================================
+                int customerAccountId = invoice.Customer.AccountId.Value; // متغير: حساب العميل
+
+                // (1) مدين: العميل
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = invoice.SIDate,
+                    SourceType = LedgerSourceType.SalesInvoice,
+                    VoucherNo = voucherNo,
+                    SourceId = invoice.SIId,
+
+                    LineNo = 1,
+                    PostVersion = newStage,
+
+                    AccountId = customerAccountId,
+                    CustomerId = invoice.CustomerId,
+
+                    Debit = newAmount,
+                    Credit = 0m,
+
+                    Description = $"ترحيل فاتورة مبيعات رقم {invoice.SIId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // (2) دائن: الإيراد
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = invoice.SIDate,
+                    SourceType = LedgerSourceType.SalesInvoice,
+                    VoucherNo = voucherNo,
+                    SourceId = invoice.SIId,
+
+                    LineNo = 2,
+                    PostVersion = newStage,
+
+                    AccountId = salesRevenueAccountId,
+                    CustomerId = null,
+
+                    Debit = 0m,
+                    Credit = newAmount,
+
+                    Description = $"ترحيل فاتورة مبيعات رقم {invoice.SIId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // (3) مدين: COGS + (4) دائن: Inventory لو التكلفة > 0
+                if (costTotal > 0m)
+                {
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = invoice.SIDate,
+                        SourceType = LedgerSourceType.SalesInvoice,
+                        VoucherNo = voucherNo,
+                        SourceId = invoice.SIId,
+
+                        LineNo = 3,
+                        PostVersion = newStage,
+
+                        AccountId = cogsAccountId,
+                        CustomerId = null,
+
+                        Debit = costTotal,
+                        Credit = 0m,
+
+                        Description = $"إثبات تكلفة مبيعات فاتورة رقم {invoice.SIId} (مرحلة {newStage})",
+                        CreatedAt = now
+                    });
+
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = invoice.SIDate,
+                        SourceType = LedgerSourceType.SalesInvoice,
+                        VoucherNo = voucherNo,
+                        SourceId = invoice.SIId,
+
+                        LineNo = 4,
+                        PostVersion = newStage,
+
+                        AccountId = inventoryAccountId,
+                        CustomerId = null,
+
+                        Debit = 0m,
+                        Credit = costTotal,
+
+                        Description = $"خصم مخزون مقابل مبيعات فاتورة رقم {invoice.SIId} (مرحلة {newStage})",
+                        CreatedAt = now
+                    });
+                }
+
+                // =========================================================
+                // 10) تحديث حالة الفاتورة
+                // =========================================================
+                invoice.IsPosted = true;
+                invoice.Status = $"مرحلة {newStage}";
+                invoice.PostedAt = now;
+                invoice.PostedBy = string.IsNullOrWhiteSpace(postedBy) ? "SYSTEM" : postedBy;
+
+                // =========================================================
+                // 11) حفظ القيود + حالة الفاتورة أولاً
+                // (مهم جدًا) لأن Recalc سيقرأ من DB ولا يرى الإضافات قبل SaveChanges
+                // =========================================================
+                await _db.SaveChangesAsync();
+
+                // =========================================================
+                // 12) تحديث رصيد العميل (مصدر الحقيقة = LedgerEntries)
+                // =========================================================
+                if (invoice.CustomerId > 0)
+                {
+                    await RecalcCustomerCurrentBalanceAsync(invoice.CustomerId);
+                    await _db.SaveChangesAsync(); // تعليق: حفظ تحديث الرصيد فقط
+                }
+
+                // =========================================================
+                // 13) Commit
+                // =========================================================
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+        // =========================================================
+        // دالة: حساب إجمالي تكلفة فاتورة المبيعات من StockLedger (FIFO/FEFO)
+        // - نجمع تكلفة كل حركات الخروج المرتبطة بالفاتورة
+        // - مصدر التكلفة الحقيقي: TotalCost أو (QtyOut * UnitCost)
+        // =========================================================
+        private async Task<decimal> GetSalesInvoiceCostTotalAsync(int siId)
+        {
+            // =========================
+            // 0) تحقق من المدخلات
+            // =========================
+            if (siId <= 0) return 0m;
+
+            // =========================
+            // 1) جمع تكلفة الخروج من StockLedger
+            // =========================
+            decimal costTotal = await _db.StockLedger
+                .Where(x =>
+                    x.SourceType == StockSourceType_Sales && // تعليق: لازم تساوي "Sales" أو القيمة الفعلية عندك
+                    x.SourceId == siId &&                    // تعليق: ربط الحركة برقم الفاتورة
+                    x.QtyOut > 0)                            // تعليق: نتأكد أنها حركة خروج
+                .SumAsync(x => x.TotalCost ?? (x.QtyOut * x.UnitCost));
+
+            return costTotal;
+        }
+
+
+
+
+        // =========================================================
+        // دالة: إعادة حساب رصيد العميل/المورد من القيود LedgerEntries
+        // الرصيد = مجموع المدين - مجموع الدائن
+        // =========================================================
+        private async Task RecalcCustomerCurrentBalanceAsync(int customerId)
+        {
+            // تعليق: تحميل العميل ومعرفة رقم الحساب المحاسبي المرتبط به
+            var customer = await _db.Customers
+                .FirstOrDefaultAsync(c => c.CustomerId == customerId);
+
+            if (customer == null)
+                return;
+
+            // متغير: رقم الحساب المحاسبي
+            int? accountId = customer.AccountId;
+
+            // تعليق: لو لا يوجد حساب مرتبط نثبت الرصيد = 0
+            if (!accountId.HasValue || accountId.Value <= 0)
+            {
+                customer.CurrentBalance = 0m;
+                customer.UpdatedAt = DateTime.UtcNow;
+                return; // مفيش SaveChanges هنا، هنسيبه في نهاية العملية
+            }
+
+            // تعليق: حساب الصافي من LedgerEntries (مصدر الحقيقة)
+            decimal balance = await _db.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.AccountId == accountId.Value)
+               .SumAsync(e => e.Debit - e.Credit);
+
+
+            // تعليق: تحديث الرصيد داخل جدول العملاء
+            customer.CurrentBalance = balance;
+            customer.UpdatedAt = DateTime.UtcNow;
+        }
 
 
 

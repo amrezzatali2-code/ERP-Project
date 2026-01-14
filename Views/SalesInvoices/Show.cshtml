@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.SalesInvoice
 
 @{
@@ -552,12 +552,12 @@
                                         <label class="form-label form-label-sm">حالة الفاتورة</label>
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
-                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "غير مرحلة" : Model.Status)"
+                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "مسودة" : Model.Status)"
                                                readonly />
                                     </div>
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">طلب البيع المرجعي</label>
+                                        <label class="form-label form-label-sm">أمر البيع المرجعي</label>
                                         <input id="RefPRId" class="form-control form-control-sm text-center"
                                                value="@((ViewBag.RefDocId?.ToString() ?? ""))"
                                                readonly />
@@ -567,6 +567,7 @@
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
                                         <select asp-for="WarehouseId"
                                                 asp-items="ViewBag.Warehouses"
+                                                data-lock-posted="1"
                                                 class="form-select form-select-sm"
                                                 data-is-posted="@(Model.IsPosted ? "1" : "0")">
                                             <option value="">اختر المخزن</option>
@@ -1067,7 +1068,8 @@
                                                step="0.01"
                                                id="TaxAmountInput"
                                                class="form-control form-control-sm text-center pi-input"
-                                               value="@taxAmount.ToString("0.00")" />
+                                               value="@taxAmount.ToString("0.00")" 
+                                               data-lock-posted="1"/>
                                     </div>
 
                                 </div>
@@ -2979,7 +2981,7 @@
                             }
 
                             const dto = {
-                                siId: invoiceId,          // متغير: رقم الفاتورة
+                                         invoiceId: invoiceId,          // متغير: رقم الفاتورة
                                 customerId: customerId,   // متغير: رقم العميل
                                 warehouseId: warehouseId, // متغير: رقم المخزن
                                   SOId: SOId          // متغير: طلب شراء مرجعي
@@ -2993,22 +2995,40 @@
                                     body: JSON.stringify(dto)
                                 });
 
+                                // محاولة قراءة الرد كـ JSON أولاً
+                                let data = null;
+                                try {
+                                    const responseText = await response.text();
+                                    if (responseText) {
+                                        data = JSON.parse(responseText);
+                                    }
+                                } catch (parseErr) {
+                                    console.error('Failed to parse response:', parseErr);
+                                }
+
                                 if (!response.ok) {
-                                    const txt = await response.text().catch(() => '');
-                                    console.error('SaveHeader HTTP Error:', response.status, txt);
-                                    alert('حدث خطأ غير متوقع أثناء حفظ الفاتورة.');
+                                    const errorMsg = (data && data.message) 
+                                        ? data.message 
+                                        : (data && data.error) 
+                                            ? data.error 
+                                            : `حدث خطأ أثناء حفظ الفاتورة (${response.status}).`;
+                                    console.error('SaveHeader HTTP Error:', response.status, data);
+                                    alert(errorMsg);
                                     return;
                                 }
 
-                                const data = await response.json().catch(() => null);
-
                                 if (!data || !data.success) {
-                                    alert((data && data.message) ? data.message : 'تعذر حفظ الفاتورة.');
+                                    const errorMsg = (data && data.message) 
+                                        ? data.message 
+                                        : (data && data.error) 
+                                            ? data.error 
+                                            : 'تعذر حفظ الفاتورة.';
+                                    alert(errorMsg);
                                     return;
                                 }
 
                                 // تحديث رقم الفاتورة في hidden + display
-                                         const newId = (data.siId || data.invoiceId || data.id || 0); // متغير: رقم الفاتورة بعد الحفظ
+                                      const newId = (data.invoiceId || data.siId || data.id || 0);
                                 const invoiceIdInput = document.getElementById('InvoiceId');
                                 if (newId > 0 && invoiceIdInput) invoiceIdInput.value = newId.toString();
 
@@ -3028,11 +3048,11 @@
                                 const statusHidden = document.getElementById('InvoiceStatusHidden');
                                 if (statusHidden && data.status) statusHidden.value = data.status;
 
-                             const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
-            if (isPostedDisplay) {
-                // تعليق: نعرض الحالة النصية (مرحلة 1/2/...) بدل نعم/لا
-                isPostedDisplay.value = (data && data.status) ? data.status : 'غير مرحلة';
-            }
+                              const isPostedDisplay = document.getElementById('InvoiceIsPostedDisplay');
+                             if (isPostedDisplay) {
+                              // تعليق: نعرض الحالة النصية (مرحلة 1/2/...) بدل نعم/لا
+                                 isPostedDisplay.value = (data && data.status) ? data.status : 'مسودة';
+                             }
 
                                 const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');
                                 if (createdByDisplay && data.createdBy) createdByDisplay.value = data.createdBy;
@@ -3102,7 +3122,7 @@
                         // =========================================================
                         document.addEventListener("DOMContentLoaded", function () {
 
-                                        const btnClearAll = document.getElementById("btnClearInvoiceLines"); // متغير: زر مسح كل الأصناف (غيّر الـ id لو مختلف عندك)
+                             const btnClearAll = document.getElementById("btnClearInvoiceLines"); // متغير: زر مسح كل الأصناف (غيّر الـ id لو مختلف عندك)
                             const msg = document.getElementById("postInvoiceMsg");           // متغير: صندوق الرسائل
 
                             if (!btnClearAll) return;

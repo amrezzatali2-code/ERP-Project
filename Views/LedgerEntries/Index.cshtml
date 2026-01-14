@@ -16,6 +16,15 @@
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "EntryDate";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
 
+
+    // =========================
+    // إجماليات الفلاتر (جاية من الكنترولر)
+    // =========================
+    decimal totalDebit = ViewBag.TotalDebit != null ? (decimal)ViewBag.TotalDebit : 0m;   // متغير: إجمالي المدين بعد الفلاتر
+    decimal totalCredit = ViewBag.TotalCredit != null ? (decimal)ViewBag.TotalCredit : 0m; // متغير: إجمالي الدائن بعد الفلاتر
+    decimal netBalance = ViewBag.NetBalance != null ? (decimal)ViewBag.NetBalance : (totalDebit - totalCredit); // متغير: الصافي
+
+
     // بيانات الترقيم
     int ps = Model.PageSize;
     int total = Model.TotalCount;
@@ -233,7 +242,7 @@
                     <div class="erp-toolbar justify-content-lg-end">
 
                         @* حذف القيود المحددة (BulkDelete) *@
-                        @* <form id="formBulkDelete"
+                        <form id="formBulkDelete"
                               asp-action="BulkDelete"
                               asp-controller="LedgerEntries"
                               method="post"
@@ -243,10 +252,10 @@
                                     class="btn btn-erp btn-erp-danger btn-erp-sm">
                                 حذف القيود المحددة
                             </button>
-                        </form> *@
+                        </form>
 
                         @* حذف جميع القيود (DeleteAll) *@
-                        @* <form id="formDeleteAll"
+                        <form id="formDeleteAll"
                               asp-action="DeleteAll"
                               asp-controller="LedgerEntries"
                               method="post"
@@ -256,7 +265,7 @@
                                     onclick="return confirm('هل أنت متأكد من حذف جميع القيود؟ يُنصح باستخدام هذا الزر في بيئة تجريبية فقط.');">
                                 حذف جميع القيود
                             </button>
-                        </form> *@
+                        </form>
 
                         @* فلترة بالتاريخ/الوقت (تاريخ القيد) *@
                         <button type="button"
@@ -347,7 +356,7 @@
                     <th data-col="id">@sortLink("Id", "رقم القيد")</th>
                     <th data-col="date">@sortLink("EntryDate", "تاريخ القيد")</th>
                     <th data-col="source">@sortLink("SourceType", "نوع المستند")</th>
-                    <th data-col="PostVersion ">@sortLink("PostVersion ", "مرحلة")</th>
+                    <th data-col="PostVersion ">@sortLink("PostVersion", "مرحلة")</th>
                     <th data-col="sourceId">@sortLink("SourceId", "معرّف المصدر")</th>
                     <th data-col="accId">@sortLink("AccountId", "رقم الحساب")</th>
                     <th data-col="accName">@sortLink("AccountName", "اسم الحساب")</th>
@@ -386,7 +395,7 @@
                             <td data-col="id">@e.Id</td>
                             <td data-col="date">@e.EntryDate.ToString("yyyy-MM-dd HH:mm")</td>
                             <td data-col="source">@e.SourceType</td>
-                            <td> @(e.PostVersion > 0 ? e.PostVersion.ToString() : "") </td>
+                            <td data-col="postVersion">@(e.PostVersion > 0 ? e.PostVersion.ToString() : "")</td>
                             <td data-col="sourceId">@e.SourceId</td>
                             <td data-col="accId">@e.AccountId</td>
                             <td data-col="accName">@e.Account?.AccountName</td>
@@ -398,6 +407,56 @@
                     }
                 }
             </tbody>
+
+
+
+            <tfoot class="table-light">
+                <tr class="fw-bold">
+                    @* عمود التشيك بوكس *@
+                    <td class="text-center no-print"
+                        data-col="actions"
+                        data-col-fixed="true"
+                        style="width:30px;">
+                        @* فاضي *@
+                    </td>
+
+                    @* رقم القيد *@
+                    <td data-col="id" class="text-muted">إجمالي</td>
+
+                    @* تاريخ القيد *@
+                    <td data-col="date"></td>
+
+                    @* نوع المستند *@
+                    <td data-col="source"></td>
+
+                    @* مرحلة *@
+                    <td data-col="PostVersion"></td>
+
+                    @* معرّف المصدر *@
+                    <td data-col="sourceId"></td>
+
+                    @* رقم الحساب *@
+                    <td data-col="accId"></td>
+
+                    @* اسم الحساب *@
+                    <td data-col="accName"></td>
+
+                    @* العميل / الطرف *@
+                    <td data-col="customer" class="text-muted">صافي: @netBalance.ToString("0.00")</td>
+
+                    @* ✅ المدين تحت عمود المدين *@
+                    <td data-col="debit">@totalDebit.ToString("0.00")</td>
+
+                    @* ✅ الدائن تحت عمود الدائن *@
+                    <td data-col="credit">@totalCredit.ToString("0.00")</td>
+
+                    @* البيان *@
+                    <td data-col="desc"></td>
+                </tr>
+            </tfoot>
+
+
+
         </table>
     </div>
 
