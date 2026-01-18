@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.PILine>
 
@@ -393,6 +393,52 @@
                     }
                 }
             </tbody>
+            <tfoot class="table-light">
+                <tr class="fw-bold">
+                    @* عمود التشيك بوكس *@
+                    <td class="text-center no-print" data-col="select"></td>
+
+                    @* رقم الفاتورة *@
+                    <td data-col="piid" class="text-muted">إجمالي</td>
+
+                    @* رقم السطر *@
+                    <td data-col="lineno"></td>
+
+                    @* كود الصنف *@
+                    <td data-col="prod"></td>
+
+                    @* اسم الصنف *@
+                    <td data-col="prodname"></td>
+
+                    @* الكمية *@
+                    <td data-col="qty"></td>
+
+                    @* تكلفة الوحدة *@
+                    <td data-col="unitcost"></td>
+
+                    @* خصم الشراء % *@
+                    <td data-col="disc"></td>
+
+                    @* سعر الجمهور *@
+                    <td data-col="retail"></td>
+
+                    @* ✅ قيمة السطر *@
+                    <td data-col="linevalue">@((ViewBag.TotalLineValue != null ? (decimal)ViewBag.TotalLineValue : 0m).ToString("0.00"))</td>
+
+                    @* التشغيلة *@
+                    <td data-col="batch"></td>
+
+                    @* الصلاحية *@
+                    <td data-col="expiry"></td>
+
+                    @* تاريخ الفاتورة *@
+                    <td data-col="date"></td>
+
+                    @* الأكشن (عمودين) *@
+                    <td class="text-center no-print" data-col="actions"></td>
+                    <td class="text-center no-print" data-col="actions"></td>
+                </tr>
+            </tfoot>
         </table>
 
     </div>

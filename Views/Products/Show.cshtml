@@ -1,6 +1,7 @@
-﻿@model ERP.Models.Product?
+@model ERP.Models.Product?
 
 @using Microsoft.AspNetCore.Mvc.Rendering
+@using System.Text.Json
 
 @{
     ViewData["Title"] = "حركة صنف";
@@ -49,590 +50,344 @@
     var purchaseLines = ViewBag.PurchaseLines as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();         // فواتير المشتريات
     var purchaseReturnLines = ViewBag.PurchaseReturnLines as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>(); // مرتجعات المشتريات
 
+    var adjustmentLines = ViewBag.AdjustmentLines as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();     // تسويات جردية
+    var purchaseRequestLines = ViewBag.PurchaseRequestLines as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>(); // طلبات الشراء
+    var transferLines = ViewBag.TransferLines as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();         // تحويلات بين المخازن
+
     var yearlySummary = ViewBag.YearlySummary as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();         // ملخص سنوات
     var warehouseSummary = ViewBag.WarehouseSummary as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();   // ملخص مخازن
 }
 
-<div class="container-fluid mt-3" dir="rtl">
+<style>
+    /* تحسينات التصميم لشاشة بدون سكرول - نفس نمط حجم التعامل */
+    .product-dashboard {
+        max-height: calc(100vh - 120px);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .dashboard-header {
+        flex-shrink: 0;
+        padding: 0.5rem 0;
+    }
+    
+    .dashboard-content {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    
+    .compact-card {
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .compact-stat {
+        font-size: 1.1rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+    
+    .compact-label {
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .product-info-compact {
+        font-size: 0.85rem;
+    }
+    
+    .table-compact {
+        font-size: 0.85rem;
+    }
+    
+    .table-compact th,
+    .table-compact td {
+        padding: 0.35rem 0.5rem;
+    }
+    
+    .nav-tabs-compact {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* ✅ إصلاح عرض التبويبات مع Flexbox */
+    #productMovementTabsContent.tab-content {
+        position: relative;
+        min-height: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    #productMovementTabsContent .tab-pane {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        min-height: 0;
+        display: none !important;
+    }
+    
+    /* ✅ Bootstrap tabs يعيد display: block للـ .tab-pane.active، لذا نستخدم !important */
+    #productMovementTabsContent .tab-pane:not(.active):not(.show) {
+        display: none !important;
+        visibility: hidden;
+    }
+    
+    #productMovementTabsContent .tab-pane.active,
+    #productMovementTabsContent .tab-pane.active.show {
+        display: flex !important;
+        flex-direction: column;
+        visibility: visible;
+        position: relative;
+    }
+    
+    /* ✅ تخصيص عرض الكروت لتدخل كلها في سطر واحد */
+    .stats-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .stat-card {
+        flex: 1 1 calc(14.28% - 0.5rem); /* 7 كروت في الصف - 14.28% لكل واحد */
+        min-width: 100px;
+    }
+    
+    @@media (max-width: 1200px) {
+        .stat-card {
+            flex: 1 1 calc(33.33% - 0.5rem); /* 3 كروت في الصف */
+        }
+    }
+    
+    @@media (max-width: 768px) {
+        .stat-card {
+            flex: 1 1 calc(50% - 0.5rem); /* كرتان في الصف */
+        }
+    }
+</style>
 
-    <!-- ================== شريط اختيار الصنف / المخزن / التاريخ / الطرف ================== -->
-    <div class="card mb-4 shadow-sm">
-        <div class="card-body">
-            <h4 class="mb-3">اختيار صنف لعرض حركته</h4>
+<div class="container-fluid product-dashboard" dir="rtl">
 
-            <form method="get"
-                  asp-action="Show"
-                  asp-controller="Products"
-                  id="productMovementForm"
-                  class="row g-3 align-items-end">
+    @* =====================================================
+       1) شريط اختيار الصنف + فترة التاريخ (مدمج ومضغوط)
+       ===================================================== *@
+    <div class="dashboard-header">
+        <div class="card compact-card shadow-sm mb-2">
+            <div class="card-body p-2">
+                <form id="productMovementForm"
+                      method="get"
+                      asp-action="Show"
+                      asp-controller="Products"
+                      class="row g-2 align-items-end">
 
-                <!-- اختيار الصنف (اسم + كود) -->
-                <div class="col-12 col-lg-4">
-                    <label class="form-label">الصنف</label>
+                    <input type="hidden" id="productSearchId" name="prodId" value="@(selectedProdId?.ToString() ?? "")" />
+                    <input type="hidden" id="customerSearchId" name="customerId" value="@(selectedCustomerId?.ToString() ?? "")" />
 
-                    <!-- هيدن لكود الصنف -->
-                    <input type="hidden"
-                           name="prodId"
-                           id="productSearchId"
-                           value="@(selectedProdId?.ToString() ?? "")" />
-
-                    <!-- بحث باسم الصنف -->
-                    <div class="mb-1 position-relative">
-                        <input type="text"
-                               id="productSearchInput"
+                    <div class="col-lg-3 col-md-4">
+                        <label class="form-label compact-label mb-1">بحث بالكود أو الاسم</label>
+                        <input id="productSearchInput"
+                               list="productsList"
+                               type="text"
                                class="form-control form-control-sm"
-                               placeholder="اكتب جزء من اسم الصنف ثم اختر من الاقتراحات..."
+                               placeholder="اكتب اسم الصنف أو جزء منه..."
                                value="@selectedProdName"
                                autocomplete="off" />
-
-                        <!-- قائمة الاقتراحات بالاسم -->
-                        <div id="productSuggestions"
-                             class="list-group position-absolute w-100 z-3"
-                             style="max-height:260px; overflow-y:auto; display:none; top:100%;">
-                        </div>
+                        <datalist id="productsList">
+                            @if (ViewBag.ProductsAuto != null)
+                            {
+                                foreach (var p in ViewBag.ProductsAuto)
+                                {
+                                    <option value="@p.Name"
+                                            data-id="@p.Id"
+                                            data-code="@p.Id"
+                                            data-generic="@p.GenericName"
+                                            data-company="@p.Company"
+                                            data-price="@p.PriceRetail"
+                                            data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                    </option>
+                                }
+                            }
+                        </datalist>
                     </div>
 
-                    <!-- بحث بكود الصنف / الباركود -->
-                    <div class="position-relative">
-                        <input type="text"
-                               id="productCodeInput"
+                    <div class="col-lg-2 col-md-3">
+                        <label class="form-label compact-label mb-1">المخزن</label>
+                        <select name="warehouseId" class="form-select form-select-sm">
+                            <option value="">كل المخازن</option>
+                            @foreach (var w in warehousesList)
+                            {
+                                var selected = (selectedWarehouseId.HasValue && w.Value == selectedWarehouseId.Value.ToString()) ? "selected" : null;
+                                <option value="@w.Value" selected="@selected">@w.Text</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="col-lg-2 col-md-3">
+                        <label class="form-label compact-label mb-1">من تاريخ</label>
+                        <input type="date"
+                               name="from"
                                class="form-control form-control-sm"
-                               placeholder="كود الصنف / الباركود..."
-                               value="@(selectedProdId?.ToString() ?? "")"
-                               autocomplete="off" />
-
-                        <!-- قائمة الاقتراحات للكود/الباركود -->
-                        <div id="productCodeSuggestions"
-                             class="list-group position-absolute w-100 z-3"
-                             style="max-height:260px; overflow-y:auto; display:none; top:100%;">
-                        </div>
+                               value="@(from?.ToString("yyyy-MM-dd") ?? "")" />
                     </div>
-                </div>
 
-                <!-- فلتر الطرف (عميل / مورد) -->
-                <div class="col-12 col-lg-4">
-                    <label class="form-label">الطرف</label>
-
-                    <!-- هيدن لكود الطرف -->
-                    <input type="hidden"
-                           name="customerId"
-                           id="customerSearchId"
-                           value="@(selectedCustomerId?.ToString() ?? "")" />
-
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="flex-grow-1 position-relative">
-                            <input type="text"
-                                   id="customerSearchInput"
-                                   class="form-control form-control-sm"
-                                   placeholder="اكتب اسم العميل أو المورد..."
-                                   value="@selectedCustomerName"
-                                   autocomplete="off" />
-
-                            <!-- قائمة الاقتراحات للطرف -->
-                            <div id="customerSuggestions"
-                                 class="list-group position-absolute w-100 z-3"
-                                 style="max-height:260px; overflow-y:auto; display:none; top:100%;">
-                            </div>
-                        </div>
-
-                        <!-- نوع الطرف: عميل / مورد / الكل -->
-                      <select name="partyKind"
-        class="form-select form-select-sm"
-        style="width:120px;">
-    <option value="all"
-            selected="@(partyKind == "all" ? "selected" : null)">
-        الكل
-    </option>
-
-    <option value="customer"
-            selected="@(partyKind == "customer" ? "selected" : null)">
-        عميل
-    </option>
-
-    <option value="supplier"
-            selected="@(partyKind == "supplier" ? "selected" : null)">
-        مورد
-    </option>
-</select>
-
-
-
-                        <!-- تفعيل الفلتر -->
-                        <div class="form-check mt-1">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   id="chkFilterByCustomer"
-                                   name="filterByCustomer"
-                                   value="true"
-                                   @(filterByCustomer && selectedCustomerId.HasValue ? "checked" : null) />
-                            <label class="form-check-label small" for="chkFilterByCustomer">
-                                فلتر
-                            </label>
-                        </div>
+                    <div class="col-lg-2 col-md-3">
+                        <label class="form-label compact-label mb-1">إلى تاريخ</label>
+                        <input type="date"
+                               name="to"
+                               class="form-control form-control-sm"
+                               value="@(to?.ToString("yyyy-MM-dd") ?? "")" />
                     </div>
-                </div>
 
-                <!-- المخزن -->
-                <div class="col-12 col-lg-4">
-                    <label class="form-label">المخزن</label>
-                    <select name="warehouseId"
-                            class="form-select form-select-sm">
-                        <option value="">كل المخازن</option>
-                        @foreach (var w in warehousesList)
-                        {
-                            var selected = (selectedWarehouseId.HasValue && w.Value == selectedWarehouseId.Value.ToString())
-                                ? "selected"
-                                : null;
-
-                            <option value="@w.Value" selected="@selected">@w.Text</option>
-                        }
-                    </select>
-                </div>
-
-                <!-- من تاريخ -->
-                <div class="col-6 col-md-3 col-lg-2">
-                    <label class="form-label">من تاريخ</label>
-                    <input type="date"
-                           name="from"
-                           value="@(from.HasValue ? from.Value.ToString("yyyy-MM-dd") : "")"
-                           class="form-control form-control-sm" />
-                </div>
-
-                <!-- إلى تاريخ -->
-                <div class="col-6 col-md-3 col-lg-2">
-                    <label class="form-label">إلى تاريخ</label>
-                    <input type="date"
-                           name="to"
-                           value="@(to.HasValue ? to.Value.ToString("yyyy-MM-dd") : "")"
-                           class="form-control form-control-sm" />
-                </div>
-
-                <!-- زر عرض -->
-                <div class="col-12 col-md-3 col-lg-2 d-grid">
-                    <button class="btn btn-erp btn-erp-primary btn-erp-sm">
-                        عرض
-                    </button>
-                </div>
-
-            </form>
+                    <div class="col-lg-2 col-md-2">
+                        <label class="form-label compact-label mb-1 d-none d-md-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            عرض
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
-    @* لو مفيش صنف مختار *@
+    @* =====================================================
+       2) لو لم يتم اختيار صنف بعد
+       ===================================================== *@
     @if (Model == null)
     {
-        <div class="alert alert-light border text-muted">
-            برجاء اختيار صنف من أعلى الصفحة ثم الضغط على زر <strong>عرض</strong> لظهور حركة الصنف.
+        <div class="alert alert-light border text-muted text-center">
+            برجاء اختيار صنف من أعلى الصفحة ثم اضغط زر <strong>عرض</strong>.
         </div>
     }
     else
     {
-        <!-- ================== بطاقة بيانات الصنف ================== -->
-        <div class="card mb-3 shadow-sm">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <h3 class="mb-1">@Model.ProdName</h3>
-                        <p class="text-muted mb-2">
-                            كود الصنف:
-                            <strong>@Model.ProdId</strong>
-                            @if (Model.Category != null)
-                            {
-                                @: &nbsp;|&nbsp;
-                                @:التصنيف:
-                                <strong>@Model.Category.CategoryName</strong>
-                            }
-                        </p>
+    <div class="dashboard-content">
+        @* =====================================================
+           3) معلومات الصنف الأساسية (مدمجة في صف واحد)
+           ===================================================== *@
+        <div class="card compact-card shadow-sm mb-2">
+            <div class="card-body p-2">
+                <div class="row g-2 align-items-center">
+                    <div class="col-lg-4 col-md-4">
+                        <h5 class="mb-0 product-info-compact">@Model.ProdName</h5>
+                        <small class="text-muted">كود: @Model.ProdId @(Model.Category != null ? $"| التصنيف: {Model.Category.CategoryName}" : "")</small>
                     </div>
-
-                    <div class="col-md-4 text-md-end mt-3 mt-md-0">
-                       
+                    <div class="col-lg-4 col-md-4 product-info-compact">
+                        <div><strong>سعر الجمهور:</strong> @((decimal)priceRetail).ToString("N2")</div>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ================== كروت الملخص (سعر/خصم/مشتريات/مبيعات...) ================== -->
-
-        <!-- سعر الجمهور + الخصم المرجح -->
-        <div class="row g-3 mb-3">
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">سعر الجمهور</div>
-                        <div class="fs-4 fw-bold">
-                            @((decimal)priceRetail)
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">الخصم المرجّح</div>
-                        <div class="fs-4 fw-bold">
-                            @(((decimal)weightedDiscount).ToString("0.00")) %
-                        </div>
-                        <div class="small text-muted mt-1">
-                            (سيتم حسابه لاحقاً من بيانات المبيعات)
+                    <div class="col-lg-4 col-md-12">
+                        <div class="d-flex flex-wrap gap-1">
+                            <a asp-action="Edit" asp-route-id="@Model.ProdId" 
+                               class="btn btn-outline-secondary btn-sm action-btn-compact app-menu-link"
+                               data-tab-id="product-edit-tab"
+                               data-tab-title="تعديل صنف">✏️ تعديل</a>
                         </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- مشتريات + مرتجعات مشتريات -->
-        <div class="row g-3 mb-3">
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">كمية المشتريات</div>
-                        <div class="fs-4 fw-bold">@totalQtyPurchased</div>
+        @* =====================================================
+           4) بطاقات الملخص الإجمالية (كلها في سطر واحد مضغوط)
+           ===================================================== *@
+        <div class="stats-row mb-2">
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">كمية المبيعات</div>
+                        <div class="compact-stat text-success" style="font-size: 0.95rem;">@totalQtySold</div>
                     </div>
                 </div>
             </div>
-
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">مبلغ المشتريات</div>
-                        <div class="fs-4 fw-bold">
-                            @(((decimal)totalAmountPurchased).ToString("0.00"))
-                        </div>
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مبلغ المبيعات</div>
+                        <div class="compact-stat text-success" style="font-size: 0.85rem;">@(((decimal)totalAmountSold).ToString("N2"))</div>
                     </div>
                 </div>
             </div>
-
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">كمية مرتجعات المشتريات</div>
-                        <div class="fs-4 fw-bold">@totalQtyPurchaseReturned</div>
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">كمية المشتريات</div>
+                        <div class="compact-stat text-primary" style="font-size: 0.95rem;">@totalQtyPurchased</div>
                     </div>
                 </div>
             </div>
-
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">مبلغ مرتجعات المشتريات</div>
-                        <div class="fs-4 fw-bold">
-                            @(((decimal)totalAmountPurchaseReturned).ToString("0.00"))
-                        </div>
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مبلغ المشتريات</div>
+                        <div class="compact-stat text-primary" style="font-size: 0.85rem;">@(((decimal)totalAmountPurchased).ToString("N2"))</div>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- مبيعات + مرتجعات مبيعات -->
-        <div class="row g-3 mb-3">
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">كمية المبيعات</div>
-                        <div class="fs-4 fw-bold">@totalQtySold</div>
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">المرتجعات</div>
+                        <div class="compact-stat text-danger" style="font-size: 0.95rem;">@(totalQtyReturned + totalQtyPurchaseReturned)</div>
                     </div>
                 </div>
             </div>
-
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">مبلغ المبيعات</div>
-                        <div class="fs-4 fw-bold">
-                            @(((decimal)totalAmountSold).ToString("0.00"))
-                        </div>
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">الخصم المرجّح</div>
+                        <div class="compact-stat text-info" style="font-size: 0.95rem;">@(((decimal)weightedDiscount).ToString("0.00"))%</div>
                     </div>
                 </div>
             </div>
-
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">كمية مرتجعات المبيعات</div>
-                        <div class="fs-4 fw-bold text-danger">@totalQtyReturned</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-md-3">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">مبلغ مرتجعات المبيعات</div>
-                        <div class="fs-4 fw-bold text-danger">
-                            @(((decimal)totalAmountReturned).ToString("0.00"))
-                        </div>
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm" style="border: 3px solid #ff9800 !important; box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3) !important;">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">صافى الكمية</div>
+                        <div class="compact-stat" style="font-size: 1.1rem;">@netQty</div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- إجمالى وصافى -->
-        <div class="row g-3 mb-4">
-            <div class="col-12 col-md-4">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">إجمالى الكمية</div>
-                        <div class="fs-4 fw-bold">@totalQtyAll</div>
+        @* =====================================================
+           5) التبويبات والجداول (مدمجة ومضغوطة)
+           ===================================================== *@
+        <div class="card compact-card shadow-sm mb-2" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+            <div class="card-header p-2" style="flex-shrink: 0;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong class="small">حركة الصنف</strong>
+                    <div style="overflow-x: auto; white-space: nowrap;">
+                        <ul class="nav nav-pills nav-sm flex-nowrap" id="productMovementTabs" role="tablist">
+                            <li class="nav-item"><button class="nav-link active nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-sales">المبيعات</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-purchases">المشتريات</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-salesReturns">مرتجعات البيع</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-purchaseReturns">مرتجعات الشراء</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-adjustments">تسويات جردية</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-purchaseRequests">طلب شراء</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-transfers">تحويل بين المخازن</button></li>
+                        </ul>
                     </div>
                 </div>
             </div>
 
-            <div class="col-6 col-md-4">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">صافى الكمية</div>
-                        <div class="fs-4 fw-bold">@netQty</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-6 col-md-4">
-                <div class="card text-center shadow-sm">
-                    <div class="card-body">
-                        <div class="text-muted small mb-1">صافى المبلغ</div>
-                        <div class="fs-4 fw-bold">
-                            @(((decimal)netAmount).ToString("0.00"))
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ================== التابات: حركة / مبيعات / مشتريات ================== -->
-        <ul class="nav nav-tabs mb-3" id="movementTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active"
-                        id="tab-all-tab"
-                        data-bs-toggle="tab"
-                        data-bs-target="#tab-all"
-                        type="button"
-                        role="tab">
-                    الحركة المجمّعة
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link"
-                        id="tab-sales-tab"
-                        data-bs-toggle="tab"
-                        data-bs-target="#tab-sales"
-                        type="button"
-                        role="tab">
-                    فواتير المبيعات
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link"
-                        id="tab-salesret-tab"
-                        data-bs-toggle="tab"
-                        data-bs-target="#tab-salesret"
-                        type="button"
-                        role="tab">
-                    مرتجعات المبيعات
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link"
-                        id="tab-purch-tab"
-                        data-bs-toggle="tab"
-                        data-bs-target="#tab-purch"
-                        type="button"
-                        role="tab">
-                    فواتير المشتريات
-                </button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link"
-                        id="tab-purchret-tab"
-                        data-bs-toggle="tab"
-                        data-bs-target="#tab-purchret"
-                        type="button"
-                        role="tab">
-                    مرتجعات المشتريات
-                </button>
-            </li>
-        </ul>
-
-        <div class="tab-content mb-4" id="movementTabsContent">
-            <!-- تبويب: الحركة المجمعة -->
-            <div class="tab-pane fade show active" id="tab-all" role="tabpanel">
-                <div class="card shadow-sm mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <strong>تفاصيل الحركة المجمّعة</strong>
-                        <small class="text-muted">
-                            @(from.HasValue ? from.Value.ToString("yyyy/MM/dd") : "بداية المدة")
-                            -
-                            @(to.HasValue ? to.Value.ToString("yyyy/MM/dd") : "نهاية المدة")
-                        </small>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light">
+            <div class="card-body p-2" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;">
+                <div class="tab-content h-100" id="productMovementTabsContent" style="overflow: hidden; display: flex; flex-direction: column;">
+                    @* --- تبويب: المبيعات --- *@
+                    <div class="tab-pane fade show active h-100" id="tab-sales" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
-                                        <th style="width:130px;">التاريخ</th>
-                                        <th style="width:140px;">رقم المستند</th>
-                                        <th>الطرف</th>
-                                        <th class="text-end" style="width:130px;">الكمية</th>
-                                        <th class="text-end" style="width:150px;">المبلغ</th>
-                                        <th style="width:100px;">نوع الحركة</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @if (lines.Any())
-                                    {
-                                        foreach (var r in lines)
-                                        {
-                                            <tr>
-                                                <td>@r.Date.ToString("yyyy/MM/dd")</td>
-                                                <td>@r.DocNo</td>
-                                                <td>@r.Customer</td>
-                                                <td class="text-end">@r.Qty</td>
-                                                <td class="text-end">
-                                                    @(((decimal)r.Amount).ToString("0.00"))
-                                                </td>
-                                                <td>@r.Kind</td>
-                                            </tr>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <tr>
-                                            <td colspan="6" class="text-center text-muted py-4">
-                                                لا توجد بيانات حركة فى المدى المحدد.
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ملخصات السنوات والمخازن داخل نفس التاب -->
-                <div class="row g-3">
-                    <div class="col-12 col-lg-7">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header">
-                                ملخص الحركة حسب السنوات
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive mb-0">
-                                    <table class="table table-sm table-striped mb-0">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th>السنة</th>
-                                                <th class="text-end">كمية المبيعات</th>
-                                                <th class="text-end">كمية المرتجعات</th>
-                                                <th class="text-end">صافى الكمية</th>
-                                                <th class="text-end">صافى المبلغ</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @if (yearlySummary.Any())
-                                            {
-                                                foreach (var y in yearlySummary)
-                                                {
-                                                    <tr>
-                                                        <td>@y.Year</td>
-                                                        <td class="text-end">@y.QtySold</td>
-                                                        <td class="text-end">@y.QtyReturned</td>
-                                                        <td class="text-end">@y.NetQty</td>
-                                                        <td class="text-end">
-                                                            @(((decimal)y.NetAmount).ToString("0.00"))
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            }
-                                            else
-                                            {
-                                                <tr>
-                                                    <td colspan="5" class="text-center text-muted py-3">
-                                                        لم يتم إعداد ملخص السنوات بعد.
-                                                        <br />
-                                                        <small>سيتم ربطه لاحقاً من بيانات StockLedger.</small>
-                                                    </td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="col-12 col-lg-5">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header">
-                                رصيد الصنف حسب المخازن
-                            </div>
-                            <div class="card-body p-0">
-                                <div class="table-responsive mb-0">
-                                    <table class="table table-sm table-striped mb-0">
-                                        <thead class="table-light">
-                                            <tr>
-                                                <th>المخزن</th>
-                                                <th class="text-end">الكمية</th>
-                                                <th class="text-end">صافى المبلغ</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            @if (warehouseSummary.Any())
-                                            {
-                                                foreach (var w in warehouseSummary)
-                                                {
-                                                    <tr>
-                                                        <td>@w.WarehouseName</td>
-                                                        <td class="text-end">@w.NetQty</td>
-                                                        <td class="text-end">
-                                                            @(((decimal)w.NetAmount).ToString("0.00"))
-                                                        </td>
-                                                    </tr>
-                                                }
-                                            }
-                                            else
-                                            {
-                                                <tr>
-                                                    <td colspan="3" class="text-center text-muted py-3">
-                                                        لم يتم إعداد ملخص المخازن بعد.
-                                                        <br />
-                                                        <small>لاحقاً سيُحسب من StockLedger / StockBatch.</small>
-                                                    </td>
-                                                </tr>
-                                            }
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- تبويب: فواتير المبيعات -->
-            <div class="tab-pane fade" id="tab-sales" role="tabpanel">
-                <div class="card shadow-sm">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <strong>فواتير المبيعات لهذا الصنف</strong>
-                        <small class="text-muted">
-                            @(from.HasValue ? from.Value.ToString("yyyy/MM/dd") : "بداية المدة")
-                            -
-                            @(to.HasValue ? to.Value.ToString("yyyy/MM/dd") : "نهاية المدة")
-                        </small>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light">
-                                    <tr>
-                                        <th style="width:130px;">التاريخ</th>
-                                        <th style="width:140px;">رقم الفاتورة</th>
+                                        <th>التاريخ</th>
+                                        <th>رقم الفاتورة</th>
                                         <th>العميل</th>
-                                        <th class="text-end" style="width:110px;">الكمية</th>
-                                        <th class="text-end" style="width:110px;">سعر الوحدة</th>
-                                        <th class="text-end" style="width:110px;">الخصم %</th>
-                                        <th class="text-end" style="width:140px;">صافى القيمة</th>
+                                        <th class="text-end">الكمية</th>
+                                        <th class="text-end">سعر الوحدة</th>
+                                        <th class="text-end">الخصم %</th>
+                                        <th class="text-end">صافى القيمة</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -653,36 +408,25 @@
                                     }
                                     else
                                     {
-                                        <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">
-                                                لم يتم تحميل تفاصيل فواتير المبيعات بعد.
-                                            </td>
-                                        </tr>
+                                        <tr><td colspan="7" class="text-center text-muted py-3"><small>لم يتم تحميل تفاصيل فواتير المبيعات بعد.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- تبويب: مرتجعات المبيعات -->
-            <div class="tab-pane fade" id="tab-salesret" role="tabpanel">
-                <div class="card shadow-sm">
-                    <div class="card-header">
-                        مرتجعات المبيعات لهذا الصنف
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light">
+                    @* --- تبويب: مرتجعات المبيعات --- *@
+                    <div class="tab-pane fade h-100" id="tab-salesReturns" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
-                                        <th style="width:130px;">التاريخ</th>
-                                        <th style="width:140px;">رقم الإشعار</th>
+                                        <th>التاريخ</th>
+                                        <th>رقم الإشعار</th>
                                         <th>العميل</th>
-                                        <th class="text-end" style="width:110px;">الكمية</th>
-                                        <th class="text-end" style="width:110px;">سعر الوحدة</th>
-                                        <th class="text-end" style="width:140px;">قيمة المرتجع</th>
+                                        <th class="text-end">الكمية</th>
+                                        <th class="text-end">سعر الوحدة</th>
+                                        <th class="text-end">قيمة المرتجع</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -702,36 +446,25 @@
                                     }
                                     else
                                     {
-                                        <tr>
-                                            <td colspan="6" class="text-center text-muted py-4">
-                                                لا توجد مرتجعات مبيعات محمّلة حتى الآن.
-                                            </td>
-                                        </tr>
+                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مبيعات محمّلة حتى الآن.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- تبويب: فواتير المشتريات -->
-            <div class="tab-pane fade" id="tab-purch" role="tabpanel">
-                <div class="card shadow-sm">
-                    <div class="card-header">
-                        فواتير المشتريات لهذا الصنف
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light">
+                    @* --- تبويب: المشتريات --- *@
+                    <div class="tab-pane fade h-100" id="tab-purchases" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
-                                        <th style="width:130px;">التاريخ</th>
-                                        <th style="width:140px;">رقم الفاتورة</th>
+                                        <th>التاريخ</th>
+                                        <th>رقم الفاتورة</th>
                                         <th>المورد</th>
-                                        <th class="text-end" style="width:110px;">الكمية</th>
-                                        <th class="text-end" style="width:110px;">سعر الشراء</th>
-                                        <th class="text-end" style="width:140px;">قيمة الفاتورة</th>
+                                        <th class="text-end">الكمية</th>
+                                        <th class="text-end">سعر الشراء</th>
+                                        <th class="text-end">قيمة الفاتورة</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -751,36 +484,25 @@
                                     }
                                     else
                                     {
-                                        <tr>
-                                            <td colspan="6" class="text-center text-muted py-4">
-                                                لم يتم تحميل تفاصيل فواتير المشتريات بعد.
-                                            </td>
-                                        </tr>
+                                        <tr><td colspan="6" class="text-center text-muted py-3"><small>لم يتم تحميل تفاصيل فواتير المشتريات بعد.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- تبويب: مرتجعات المشتريات -->
-            <div class="tab-pane fade" id="tab-purchret" role="tabpanel">
-                <div class="card shadow-sm">
-                    <div class="card-header">
-                        مرتجعات المشتريات لهذا الصنف
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light">
+                    @* --- تبويب: مرتجعات المشتريات --- *@
+                    <div class="tab-pane fade h-100" id="tab-purchaseReturns" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
-                                        <th style="width:130px;">التاريخ</th>
-                                        <th style="width:140px;">رقم الإشعار</th>
+                                        <th>التاريخ</th>
+                                        <th>رقم الإشعار</th>
                                         <th>المورد</th>
-                                        <th class="text-end" style="width:110px;">الكمية</th>
-                                        <th class="text-end" style="width:110px;">سعر الشراء</th>
-                                        <th class="text-end" style="width:140px;">قيمة المرتجع</th>
+                                        <th class="text-end">الكمية</th>
+                                        <th class="text-end">سعر الشراء</th>
+                                        <th class="text-end">قيمة المرتجع</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -800,11 +522,117 @@
                                     }
                                     else
                                     {
-                                        <tr>
-                                            <td colspan="6" class="text-center text-muted py-4">
-                                                لا توجد مرتجعات مشتريات محمّلة حتى الآن.
-                                            </td>
-                                        </tr>
+                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مشتريات محمّلة حتى الآن.</small></td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    @* --- تبويب: تسويات جردية --- *@
+                    <div class="tab-pane fade h-100" id="tab-adjustments" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>التاريخ</th>
+                                        <th>رقم التسوية</th>
+                                        <th>المخزن</th>
+                                        <th class="text-end">الكمية قبل</th>
+                                        <th class="text-end">الكمية بعد</th>
+                                        <th class="text-end">الفرق</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (adjustmentLines.Any())
+                                    {
+                                        foreach (var a in adjustmentLines)
+                                        {
+                                            <tr>
+                                                <td>@a.Date.ToString("yyyy/MM/dd")</td>
+                                                <td>@a.DocNo</td>
+                                                <td>@a.Warehouse</td>
+                                                <td class="text-end">@a.QtyBefore</td>
+                                                <td class="text-end">@a.QtyAfter</td>
+                                                <td class="text-end">@a.QtyDiff</td>
+                                            </tr>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد تسويات جردية محمّلة حتى الآن.</small></td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    @* --- تبويب: طلب شراء --- *@
+                    <div class="tab-pane fade h-100" id="tab-purchaseRequests" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>التاريخ</th>
+                                        <th>رقم الطلب</th>
+                                        <th>المورد</th>
+                                        <th class="text-end">الكمية المطلوبة</th>
+                                        <th class="text-end">الكمية المستلمة</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (purchaseRequestLines.Any())
+                                    {
+                                        foreach (var pr in purchaseRequestLines)
+                                        {
+                                            <tr>
+                                                <td>@pr.Date.ToString("yyyy/MM/dd")</td>
+                                                <td>@pr.DocNo</td>
+                                                <td>@pr.Supplier</td>
+                                                <td class="text-end">@pr.QtyRequested</td>
+                                                <td class="text-end">@pr.QtyReceived</td>
+                                            </tr>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد طلبات شراء محمّلة حتى الآن.</small></td></tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    @* --- تبويب: تحويل بين المخازن --- *@
+                    <div class="tab-pane fade h-100" id="tab-transfers" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>التاريخ</th>
+                                        <th>رقم التحويل</th>
+                                        <th>من مخزن</th>
+                                        <th>إلى مخزن</th>
+                                        <th class="text-end">الكمية</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (transferLines.Any())
+                                    {
+                                        foreach (var t in transferLines)
+                                        {
+                                            <tr>
+                                                <td>@t.Date.ToString("yyyy/MM/dd")</td>
+                                                <td>@t.DocNo</td>
+                                                <td>@t.FromWarehouse</td>
+                                                <td>@t.ToWarehouse</td>
+                                                <td class="text-end">@t.Qty</td>
+                                            </tr>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد تحويلات بين المخازن محمّلة حتى الآن.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -812,198 +640,269 @@
                     </div>
                 </div>
             </div>
+        </div>
 
-        </div> <!-- /tab-content -->
+        @* =====================================================
+           6) الرسوم البيانية والتقارير (تحت الجدول)
+           ===================================================== *@
+        @if (Model != null && salesLines.Any())
+        {
+            <div class="row g-2 mb-2">
+                <div class="col-12 col-lg-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header">
+                            <strong class="small">توزيع المبيعات حسب التاريخ</strong>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="salesByDateChart" height="150"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card shadow-sm">
+                        <div class="card-header">
+                            <strong class="small">مقارنة المبيعات والمشتريات</strong>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="salesPurchasesComparisonChart" height="150"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
     }
 </div>
 
 @section Scripts {
+    @* Chart.js Library *@
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
-        // =========================
-        // أوتوكمبليت بحث عن الصنف + تحكم بالأسهم
-        // =========================
-        document.addEventListener('DOMContentLoaded', function () {
-            const input = document.getElementById('productSearchInput');   // متغير: بوكس كتابة اسم الصنف
-            const hiddenId = document.getElementById('productSearchId');   // متغير: الهيدن اللى فيه كود الصنف
-            const box = document.getElementById('productSuggestions');     // متغير: صندوق الاقتراحات
-            const form = document.getElementById('productMovementForm');   // متغير: فورم حركة الصنف
+        (function () {
+            // =========================================================
+            // بوكس البحث عن الصنف باستخدام datalist (مثل فاتورة المبيعات)
+            // =========================================================
+            const prodNameInput = document.getElementById('productSearchInput');
+            const prodIdHidden = document.getElementById('productSearchId');
+            const form = document.getElementById('productMovementForm');
 
-            if (!input || !hiddenId || !box || !form) return;
+            if (!prodNameInput || !prodIdHidden || !form) return;
 
-            let timer = null;                // متغير: تايمر لتأخير طلب السيرفر
-            let currentIndex = -1;           // متغير: رقم العنصر المحدد حالياً فى الليست
-            let currentItems = [];           // متغير: مصفوفة عناصر الاقتراحات (buttons)
+            // الحصول على datalist الخاصة بالأصناف
+            const prodDataList = prodNameInput && prodNameInput.list ? prodNameInput.list : null;
 
-            // دالة: مسح الاقتراحات وإخفاء الليست
-            function clearSuggestions() {
-                box.innerHTML = '';
-                box.style.display = 'none';
-                currentIndex = -1;
-                currentItems = [];
+            if (!prodDataList) {
+                console.warn('⚠️ Products datalist not found for productSearchInput');
+                return;
             }
 
-            // دالة: تظليل عنصر معين وتحريك الـ scroll لو خارج الجزء الظاهر
-            function highlightItem(index) {
-                if (!currentItems.length) return;
-
-                // التأكد من أن الفهرس داخل الحدود
-                if (index < 0) index = 0;
-                if (index >= currentItems.length) index = currentItems.length - 1;
-
-                // تمييز العنصر الفعال
-                currentItems.forEach((el, i) => {
-                    if (i === index) {
-                        el.classList.add('active');    // Bootstrap يلوّن العنصر المختار
-                    } else {
-                        el.classList.remove('active');
-                    }
-                });
-
-                currentIndex = index;
-
-                // -------- تحريك الـ scroll بحيث العنصر المختار يبقى داخل الجزء الظاهر --------
-                const item = currentItems[currentIndex];        // متغير: العنصر المحدد
-                const itemTop = item.offsetTop;                 // موضع العنصر من أعلى الليست
-                const itemBottom = itemTop + item.offsetHeight; // أسفل العنصر
-                const boxScrollTop = box.scrollTop;             // الموضع الحالى للـ scroll
-                const boxHeight = box.clientHeight;             // ارتفاع الجزء الظاهر من الليست
-
-                // لو العنصر فوق الجزء الظاهر → نطلع الـ scroll لفوق
-                if (itemTop < boxScrollTop) {
-                    box.scrollTop = itemTop;
-                }
-                // لو العنصر تحت الجزء الظاهر → ننزل الـ scroll لتحت
-                else if (itemBottom > boxScrollTop + boxHeight) {
-                    box.scrollTop = itemBottom - boxHeight;
-                }
+            // تعليق: توحيد النص (وتجاهل الألف في أول الكلمة)
+            function normalizeText(txt) {
+                return (txt || '')
+                    .trim()
+                    .toLowerCase()
+                    .replace(/^[اأإآ]/, '')
+                    .replace(/\s+/g, ' ');
             }
 
-            // دالة: اختيار عنصر (سواء بالسهم + Enter أو بالماوس)
-            function chooseItem(index) {
-                if (!currentItems.length) return;
-                if (index < 0 || index >= currentItems.length) return;
+            // تعليق: بحث بالاسم (تطابق كامل أو يبدأ بـ أو يحتوي على)
+            function findProductByName(name) {
+                const search = normalizeText(name);
+                if (!search) return null;
 
-                const btn = currentItems[index];                  // متغير: العنصر المختار
-                const prodId = btn.getAttribute('data-id');       // متغير: كود الصنف
-                const prodName = btn.getAttribute('data-name');   // متغير: اسم الصنف
+                const opts = prodDataList.options;
 
-                input.value = prodName;       // نعرض اسم الصنف فى البوكس
-                hiddenId.value = prodId;      // نخزن الكود فى الهيدن
-                clearSuggestions();           // نقفل الليست
-
-                // تركيز على بوكس الطرف (العميل/المورد) لو موجود لتسريع الإدخال
-                const partyInput = document.getElementById('partySearchInput');  // متغير: بوكس بحث الطرف
-                if (partyInput) {
-                    partyInput.focus();
-                    partyInput.select();
+                // 1) تطابق تام
+                for (let i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value) === search) return opts[i];
                 }
+
+                // 2) يبدأ بـ
+                for (let i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value).startsWith(search)) return opts[i];
+                }
+
+                // 3) يحتوي على
+                for (let i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value).includes(search)) return opts[i];
+                }
+
+                return null;
             }
 
-            // ======= جلب الاقتراحات أثناء الكتابة =======
-            input.addEventListener('input', function () {
-                const term = input.value.trim();
-                hiddenId.value = '';   // نفرّغ الكود لحد ما المستخدم يختار صنف فعلاً
+            // تعليق: بحث بالكود (data-id أو data-code)
+            function findProductByCode(code) {
+                const search = (code || '').toString().trim();
+                if (!search) return null;
 
-                if (term.length < 2) {
-                    clearSuggestions();
+                const opts = prodDataList.options;
+                for (let i = 0; i < opts.length; i++) {
+                    const idAttr = (opts[i].getAttribute('data-id') || '').toString();
+                    const codeAttr = (opts[i].getAttribute('data-code') || '').toString();
+                    if (idAttr === search || codeAttr === search) return opts[i];
+                }
+                return null;
+            }
+
+            // عند تغيير اسم الصنف (من datalist أو يدوياً)
+            prodNameInput.addEventListener('input', function () {
+                const txt = prodNameInput.value.trim();
+
+                // لو المستخدم حذف كل شيء → نفرّغ الكود
+                if (!txt) {
+                    prodIdHidden.value = '';
                     return;
                 }
 
-                if (timer) clearTimeout(timer);
-
-                timer = setTimeout(function () {
-                    const url = '@Url.Action("SearchProducts", "Products")' + '?term=' + encodeURIComponent(term);
-
-                    fetch(url)
-                        .then(r => r.ok ? r.json() : [])
-                        .then(data => {
-                            box.innerHTML = '';
-                            currentItems = [];
-                            currentIndex = -1;
-
-                            if (!data || !data.length) {
-                                clearSuggestions();
-                                return;
-                            }
-
-                            data.forEach(item => {
-                                const btn = document.createElement('button');
-                                btn.type = 'button';
-                                btn.className = 'list-group-item list-group-item-action';
-                                btn.textContent = item.name + ' — (' + item.id + ')';
-                                btn.setAttribute('data-id', item.id);
-                                btn.setAttribute('data-name', item.name);
-
-                                // كليك بالماوس يختار الصنف
-                                btn.addEventListener('click', function () {
-                                    chooseItem(currentItems.indexOf(btn));
-                                });
-
-                                box.appendChild(btn);
-                                currentItems.push(btn);
-                            });
-
-                            box.style.display = 'block';
-                            box.scrollTop = 0;   // نرجّع السكرول لفوق أول الليست
-                        })
-                        .catch(() => {
-                            clearSuggestions();
-                        });
-                }, 250);   // تأخير بسيط علشان ما نكترش الـ Requests على السيرفر
-            });
-
-            // ======= التحكم بلوحة المفاتيح على بوكس الصنف =======
-            input.addEventListener('keydown', function (e) {
-                // لو الليست مش ظاهرة نسيب الكيز تشتغل عادى
-                if (box.style.display !== 'block' || !currentItems.length) {
+                // محاولة 1: البحث بالاسم
+                const optByName = findProductByName(txt);
+                if (optByName) {
+                    const prodId = optByName.getAttribute('data-id');
+                    prodIdHidden.value = prodId || '';
                     return;
                 }
 
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    if (currentIndex < currentItems.length - 1) {
-                        highlightItem(currentIndex + 1);
-                    } else {
-                        highlightItem(0);  // لو وصلنا لآخر عنصر نرجع لأول واحد
+                // محاولة 2: لو المستخدم كتب رقم فقط → بحث بالكود
+                if (/^\d+$/.test(txt)) {
+                    const optByCode = findProductByCode(txt);
+                    if (optByCode) {
+                        prodIdHidden.value = optByCode.getAttribute('data-id') || '';
+                        prodNameInput.value = optByCode.value; // نعرض الاسم الكامل
+                        return;
                     }
                 }
-                else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    if (currentIndex > 0) {
-                        highlightItem(currentIndex - 1);
-                    } else {
-                        highlightItem(currentItems.length - 1);  // من أول واحد لآخر واحد
-                    }
-                }
-                else if (e.key === 'Enter') {
-                    // Enter يختار العنصر الحالى
-                    if (currentIndex >= 0) {
-                        e.preventDefault();
-                        chooseItem(currentIndex);
-                    }
-                }
-                else if (e.key === 'Escape') {
-                    // Esc يقفل الليست
-                    clearSuggestions();
-                }
+
+                // لو لم نجد تطابق → نفرّغ الكود
+                prodIdHidden.value = '';
             });
 
-            // إخفاء الليست لو ضغطنا خارجها
-            document.addEventListener('click', function (e) {
-                if (!box.contains(e.target) && e.target !== input) {
-                    clearSuggestions();
-                }
-            });
+            // عند تغيير الكود مباشرة (لو كان هناك بوكس كود منفصل لاحقاً)
+            // يمكن إضافة ذلك لاحقاً
 
             // منع إرسال الفورم لو مفيش كود صنف
             form.addEventListener('submit', function (e) {
-                if (!hiddenId.value) {
+                if (!prodIdHidden.value) {
                     e.preventDefault();
-                    alert('من فضلك اختر صنف من قائمة الاقتراحات.');
-                    input.focus();
+                    alert('من فضلك اختر صنف من قائمة الاقتراحات أو أدخل كوده الرقمى.');
+                    prodNameInput.focus();
                 }
             });
-        });
+
+            // ✅ Focus على بوكس البحث عند تحميل الصفحة (لو مفيش صنف مختار)
+            @if (Model == null)
+            {
+                <text>
+                setTimeout(function() {
+                    if (prodNameInput) {
+                        prodNameInput.focus();
+                    }
+                }, 100);
+                </text>
+            }
+        })();
+
+        // =========================================================
+        // الرسوم البيانية (Chart.js)
+        // =========================================================
+        @if (Model != null && salesLines.Any())
+        {
+            <text>
+            document.addEventListener('DOMContentLoaded', function() {
+                // بيانات المبيعات
+                var salesData = @Html.Raw(Json.Serialize(salesLines.Select(s => new { Date = s.Date.ToString("yyyy-MM-dd"), Amount = (decimal)s.NetAmount })));
+                
+                // رسم بياني: توزيع المبيعات حسب التاريخ
+                var ctx1 = document.getElementById('salesByDateChart');
+                if (ctx1) {
+                    var dates = salesData.map(s => s.Date);
+                    var amounts = salesData.map(s => s.Amount);
+                    
+                    new Chart(ctx1, {
+                        type: 'line',
+                        data: {
+                            labels: dates,
+                            datasets: [{
+                                label: 'المبيعات',
+                                data: amounts,
+                                borderColor: 'rgb(40, 167, 69)',
+                                backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'top'
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toFixed(2);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+
+                // رسم بياني: مقارنة المبيعات والمشتريات
+                var ctx2 = document.getElementById('salesPurchasesComparisonChart');
+                if (ctx2) {
+                    new Chart(ctx2, {
+                        type: 'bar',
+                        data: {
+                            labels: ['المبيعات', 'المشتريات', 'المرتجعات'],
+                            datasets: [{
+                                label: 'المبلغ',
+                                data: [
+                                    @((decimal)totalAmountSold),
+                                    @((decimal)totalAmountPurchased),
+                                    @((decimal)(totalAmountReturned + totalAmountPurchaseReturned))
+                                ],
+                                backgroundColor: [
+                                    'rgba(40, 167, 69, 0.7)',
+                                    'rgba(0, 123, 255, 0.7)',
+                                    'rgba(220, 53, 69, 0.7)'
+                                ],
+                                borderColor: [
+                                    'rgb(40, 167, 69)',
+                                    'rgb(0, 123, 255)',
+                                    'rgb(220, 53, 69)'
+                                ],
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: false
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: {
+                                        callback: function(value) {
+                                            return value.toFixed(2);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                }
+            });
+            </text>
+        }
     </script>
 }
-

@@ -24,6 +24,7 @@ namespace ERP.Services
         Task ReverseForHeaderDeleteAsync(LedgerSourceType sourceType, int sourceId, string? postedBy, string? reason = null);
         Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy);
         Task PostSalesInvoiceAsync(int salesInvoiceId, string? postedBy);
+        Task RecalcAllCustomerBalancesAsync();
 
 
 
@@ -679,7 +680,22 @@ namespace ERP.Services
                         CreatedAt = now
                     });
 
-                    // ❌ ممنوع تعديل CurrentBalance يدويًا هنا (مصدر الحقيقة = LedgerEntries)
+                    // ================================
+                    // خصم رصيد العميل القديم (المذكور في سطر المدين للمرحلة السابقة)
+                    // ================================
+                    if (lastDebitCustomer.CustomerId.HasValue && lastDebitCustomer.CustomerId.Value > 0)
+                    {
+                        var oldCustomer = await _db.Customers
+                            .FirstOrDefaultAsync(c => c.CustomerId == lastDebitCustomer.CustomerId.Value);
+
+                        if (oldCustomer != null)
+                            oldCustomer.CurrentBalance -= oldSalesAmount;
+                    }
+                    else
+                    {
+                        // حل احتياطي: لو CustomerId مش موجود في قيد المدين لأي سبب
+                        invoice.Customer.CurrentBalance -= oldSalesAmount;
+                    }
 
                     // --------------------------
                     // (B) قيود التكلفة (COGS / Inventory) — لو موجودة
@@ -921,38 +937,82 @@ namespace ERP.Services
         // =========================================================
         // دالة: إعادة حساب رصيد العميل/المورد من القيود LedgerEntries
         // الرصيد = مجموع المدين - مجموع الدائن
+        // ✅ مهم: نستخدم CustomerId وليس AccountId لأن:
+        // - AccountId قد يشمل قيود عملاء آخرين على نفس الحساب
+        // - CustomerId يربط القيود بالعميل المحدد مباشرة
         // =========================================================
         private async Task RecalcCustomerCurrentBalanceAsync(int customerId)
         {
-            // تعليق: تحميل العميل ومعرفة رقم الحساب المحاسبي المرتبط به
+            // تعليق: تحميل العميل
             var customer = await _db.Customers
                 .FirstOrDefaultAsync(c => c.CustomerId == customerId);
 
             if (customer == null)
                 return;
 
-            // متغير: رقم الحساب المحاسبي
-            int? accountId = customer.AccountId;
-
-            // تعليق: لو لا يوجد حساب مرتبط نثبت الرصيد = 0
-            if (!accountId.HasValue || accountId.Value <= 0)
-            {
-                customer.CurrentBalance = 0m;
-                customer.UpdatedAt = DateTime.UtcNow;
-                return; // مفيش SaveChanges هنا، هنسيبه في نهاية العملية
-            }
-
-            // تعليق: حساب الصافي من LedgerEntries (مصدر الحقيقة)
+            // ✅ حساب الصافي من LedgerEntries باستخدام CustomerId (مصدر الحقيقة)
+            // - نعتمد على CustomerId فقط لتفادي اختلاف AccountId
+            // - هذا يضمن أننا نحسب فقط القيود المرتبطة بهذا العميل المحدد
             decimal balance = await _db.LedgerEntries
                 .AsNoTracking()
-                .Where(e => e.AccountId == accountId.Value)
-               .SumAsync(e => e.Debit - e.Credit);
-
+                .Where(e => e.CustomerId == customerId)
+                .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
 
             // تعليق: تحديث الرصيد داخل جدول العملاء
             customer.CurrentBalance = balance;
             customer.UpdatedAt = DateTime.UtcNow;
         }
+
+
+
+
+        // =========================================================
+        // دالة: إعادة حساب جميع أرصدة العملاء/الموردين من القيود LedgerEntries
+        // ✅ مهم: تستخدم CustomerId وليس AccountId لضمان الدقة
+        // - تحسب الرصيد لكل عميل من قيوده في LedgerEntries
+        // - تحدث CurrentBalance لكل عميل
+        // =========================================================
+        public async Task RecalcAllCustomerBalancesAsync()
+        {
+            // ================================
+            // 1) حساب الرصيد لكل عميل من LedgerEntries في استعلام واحد (أفضل أداء)
+            // ================================
+            var balances = await _db.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId.HasValue && e.CustomerId.Value > 0)
+                .GroupBy(e => e.CustomerId!.Value)
+                .Select(g => new
+                {
+                    CustomerId = g.Key,
+                    Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.CustomerId, x => x.Balance);
+
+            // ================================
+            // 2) جلب جميع العملاء/الموردين وتحديث أرصدتهم
+            // ================================
+            var customers = await _db.Customers.ToListAsync();
+
+            if (!customers.Any())
+                return;
+
+            var now = DateTime.UtcNow;
+            foreach (var customer in customers)
+            {
+                // ✅ إذا كان العميل له قيود في LedgerEntries، نستخدم الرصيد المحسوب
+                // ✅ إذا لم يكن له قيود، نضع الرصيد = 0
+                customer.CurrentBalance = balances.TryGetValue(customer.CustomerId, out decimal balance) 
+                    ? balance 
+                    : 0m;
+                customer.UpdatedAt = now;
+            }
+
+            // ================================
+            // 3) حفظ التغييرات
+            // ================================
+            await _db.SaveChangesAsync();
+        }
+
 
 
 

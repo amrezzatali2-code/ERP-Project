@@ -1,4 +1,4 @@
-﻿using ERP.Data;                                 // AppDbContext
+using ERP.Data;                                 // AppDbContext
 using ERP.Infrastructure;                       // كلاس PagedResult لتقسيم الصفحات
 using ERP.Models;                               // الموديل PurchaseInvoice
 using ERP.Services;
@@ -252,6 +252,12 @@ namespace ERP.Controllers
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             query = ApplySort(query, sort, sortDesc);
 
+            // =========================================================
+            // حساب إجمالي الصافي من نفس الاستعلام (بعد الفلاتر)
+            // ✅ مهم: لازم قبل الـ Paging علشان ما تتحسبش على الصفحة بس
+            // =========================================================
+            decimal totalNet = await query.SumAsync(pi => (decimal?)pi.NetTotal) ?? 0m;
+
             // 3) حساب العدد الكلي بعد الفلاتر
             int totalCount = await query.CountAsync();
 
@@ -292,6 +298,9 @@ namespace ERP.Controllers
             ViewBag.ToCode = finalToCode;
             ViewBag.CodeFrom = finalFromCode;
             ViewBag.CodeTo = finalToCode;
+
+            // إجمالي الصافي
+            ViewBag.TotalNet = totalNet;
 
             return View(model);
         }
@@ -518,10 +527,9 @@ namespace ERP.Controllers
                 DateTime? expDate = expiry?.Date;
 
                 // =========================
-                // 2) تحميل الفاتورة + السطور
+                // 2) تحميل الفاتورة
                 // =========================
                 var invoice = await _context.PurchaseInvoices
-                    .Include(p => p.Lines)
                     .FirstOrDefaultAsync(p => p.PIId == dto.PIId);
 
                 if (invoice == null)
@@ -556,6 +564,13 @@ namespace ERP.Controllers
                     return BadRequest(new { ok = false, message = "الصنف غير موجود." });
 
                 // =========================
+                // 3.1) تحميل السطور الحالية من قاعدة البيانات (بدلاً من invoice.Lines المحمّل في الذاكرة)
+                // =========================
+                var currentLines = await _context.PILines
+                    .Where(l => l.PIId == dto.PIId)
+                    .ToListAsync();
+
+                // =========================
                 // 4) Merge في PILines (نفس الصنف + نفس التشغيلة + نفس الصلاحية + نفس الأسعار + نفس الخصم + نفس تكلفة الوحدة)
                 // =========================
                 var existingLine = await _context.PILines.FirstOrDefaultAsync(x =>
@@ -584,7 +599,8 @@ namespace ERP.Controllers
                 }
                 else
                 {
-                    var nextLineNo = (invoice.Lines.Any() ? invoice.Lines.Max(l => l.LineNo) : 0) + 1;
+                    // ✅ حساب LineNo من السطور المحمّلة من قاعدة البيانات (وليس من invoice.Lines)
+                    var nextLineNo = (currentLines.Any() ? currentLines.Max(l => l.LineNo) : 0) + 1;
 
                     affectedLine = new PILine
                     {

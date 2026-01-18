@@ -1,4 +1,4 @@
-﻿@* Views/SalesInvoiceLines/Index.cshtml — قائمة أصناف المبيعات بنفس نموذج الفواتير *@
+@* Views/SalesInvoiceLines/Index.cshtml — قائمة أصناف المبيعات بنفس نموذج الفواتير *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesInvoiceLine>
@@ -386,6 +386,51 @@
                     }
                 }
             </tbody>
+            <tfoot class="table-light">
+                <tr class="fw-bold">
+                    @* الأكشن *@
+                    <td class="text-nowrap no-print" data-col="actions"></td>
+
+                    @* رقم الفاتورة *@
+                    <td data-col="siId" class="text-muted">إجمالي</td>
+
+                    @* رقم السطر *@
+                    <td data-col="lineNo"></td>
+
+                    @* كود الصنف *@
+                    <td data-col="prodId"></td>
+
+                    @* ✅ الكمية *@
+                    <td data-col="qty">@((ViewBag.TotalQty != null ? (int)ViewBag.TotalQty : 0))</td>
+
+                    @* سعر الجمهور *@
+                    <td data-col="price"></td>
+
+                    @* خصم 1% *@
+                    <td data-col="disc1"></td>
+
+                    @* خصم 2% *@
+                    <td data-col="disc2"></td>
+
+                    @* خصم 3% *@
+                    <td data-col="disc3"></td>
+
+                    @* ✅ خصم (قيمة) *@
+                    <td data-col="discVal">@((ViewBag.TotalDiscountValue != null ? (decimal)ViewBag.TotalDiscountValue : 0m).ToString("0.00"))</td>
+
+                    @* ✅ الإجمالي بعد الخصم *@
+                    <td data-col="totalAfterDisc">@((ViewBag.TotalAfterDiscount != null ? (decimal)ViewBag.TotalAfterDiscount : 0m).ToString("0.00"))</td>
+
+                    @* ✅ الصافي بعد الضريبة *@
+                    <td data-col="net">@((ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m).ToString("0.00"))</td>
+
+                    @* التشغيلة *@
+                    <td data-col="batch"></td>
+
+                    @* الصلاحية *@
+                    <td data-col="expiry"></td>
+                </tr>
+            </tfoot>
         </table>
     </div>
 

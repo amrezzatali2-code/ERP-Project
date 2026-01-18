@@ -1,4 +1,4 @@
-﻿@* Views/SalesInvoices/Index.cshtml — قائمة فواتير المبيعات بنفس نموذج المحافظات *@
+@* Views/SalesInvoices/Index.cshtml — قائمة فواتير المبيعات بنفس نموذج المحافظات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesInvoice>
@@ -388,6 +388,20 @@
                     }
                 }
             </tbody>
+            <tfoot class="table-light">
+                <tr class="fw-bold">
+                    <td class="text-center no-print" data-col="select"></td>
+                    <td data-col="id" class="text-muted">إجمالي</td>
+                    <td data-col="date"></td>
+                    <td data-col="time"></td>
+                    <td data-col="customer"></td>
+                    <td data-col="warehouse"></td>
+                    <td data-col="net">@((ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m).ToString("0.00"))</td>
+                    <td data-col="status"></td>
+                    <td data-col="posted"></td>
+                    <td class="text-nowrap no-print" data-col="actions"></td>
+                </tr>
+            </tfoot>
         </table>
     </div>
 

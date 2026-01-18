@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // CultureInfo لتنسيق الأرقام فى التصدير
 using System.Linq;                                // أوامر LINQ
@@ -153,6 +153,15 @@ namespace ERP.Controllers
             // تجهيز الاستعلام باستخدام الدالة الموحدة
             var q = BuildQuery(siId, search, searchBy, sort, dir);
 
+            // =========================================================
+            // حساب الإجماليات من نفس الاستعلام (بعد الفلاتر)
+            // ✅ مهم: لازم قبل الـ PagedResult علشان ما تتحسبش على الصفحة بس
+            // =========================================================
+            int totalQty = await q.SumAsync(line => (int?)line.Qty) ?? 0;
+            decimal totalDiscountValue = await q.SumAsync(line => (decimal?)line.DiscountValue) ?? 0m;
+            decimal totalAfterDiscount = await q.SumAsync(line => (decimal?)line.LineTotalAfterDiscount) ?? 0m;
+            decimal totalNet = await q.SumAsync(line => (decimal?)line.LineNetTotal) ?? 0m;
+
             // تطبيع اتجاه الترتيب وتحويله إلى bool
             var dirNorm = (dir?.ToLower() == "asc") ? "asc" : "desc";
             bool descending = dirNorm == "desc";
@@ -179,6 +188,12 @@ namespace ERP.Controllers
 
             // نمرّر رقم الفاتورة المُرشَّح (لو موجود) لعرضه في الفيو أو للروابط
             ViewBag.SIId = siId;
+
+            // إجماليات الأعمدة (بعد الفلاتر)
+            ViewBag.TotalQty = totalQty;
+            ViewBag.TotalDiscountValue = totalDiscountValue;
+            ViewBag.TotalAfterDiscount = totalAfterDiscount;
+            ViewBag.TotalNet = totalNet;
 
             // (7) خيارات البحث (القائمة المنسدلة في البارشال _IndexFilters)
             ViewBag.SearchOptions = new List<SelectListItem>

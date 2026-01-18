@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // List, Dictionary
 using System.Globalization;                       // CultureInfo للتواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -6,6 +6,7 @@ using System.Linq.Expressions;                    // Expression<Func<...>>
 using System.Text;                                // StringBuilder للتصدير
 using System.Threading.Tasks;                     // async / await
 using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
+using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
@@ -28,6 +29,47 @@ namespace ERP.Controllers
         public CashPaymentsController(AppDbContext context)
         {
             _context = context;
+        }
+
+        // =========================================================
+        // دالة مساعدة: تجهيز القوائم المنسدلة (الطرف + الحسابات)
+        // تُستخدم فى Create و Edit (GET + POST لو حصل خطأ).
+        // =========================================================
+        private void PopulateDropdowns(int? customerId = null,
+                                       int? cashAccountId = null,
+                                       int? counterAccountId = null)
+        {
+            // قائمة العملاء / الأطراف
+            ViewData["CustomerId"] = new SelectList(
+                _context.Customers
+                        .AsNoTracking()
+                        .OrderBy(c => c.CustomerName),
+                "CustomerId",
+                "CustomerName",
+                customerId
+            );
+
+            // حسابات نشطة للصندوق / البنك
+            ViewData["CashAccountId"] = new SelectList(
+                _context.Accounts
+                        .AsNoTracking()
+                        .Where(a => a.IsActive)
+                        .OrderBy(a => a.AccountName),
+                "AccountId",
+                "AccountName",
+                cashAccountId
+            );
+
+            // حسابات نشطة للطرف المقابل
+            ViewData["CounterAccountId"] = new SelectList(
+                _context.Accounts
+                        .AsNoTracking()
+                        .Where(a => a.IsActive)
+                        .OrderBy(a => a.AccountName),
+                "AccountId",
+                "AccountName",
+                counterAccountId
+            );
         }
 
         // =========================================================
@@ -200,9 +242,9 @@ namespace ERP.Controllers
         // =========================================================
         // Create — GET: عرض فورم إضافة إذن جديد
         // =========================================================
-        public IActionResult Create()
+        public IActionResult Create(int? customerId = null)
         {
-            // هنا لاحقاً ممكن نحمّل DropDown للحسابات والعملاء
+            PopulateDropdowns(customerId);  // تجهيز القوائم المنسدلة مع اختيار العميل إذا تم تمريره
             return View();
         }
 

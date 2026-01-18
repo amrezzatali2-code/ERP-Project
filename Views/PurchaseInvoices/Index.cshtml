@@ -1,4 +1,4 @@
-﻿@* Views/PurchaseInvoices/Index.cshtml — قائمة فواتير المشتريات بنفس نموذج فواتير المبيعات *@
+@* Views/PurchaseInvoices/Index.cshtml — قائمة فواتير المشتريات بنفس نموذج فواتير المبيعات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.PurchaseInvoice>
@@ -435,6 +435,30 @@
                     }
                 }
             </tbody>
+            <tfoot class="table-light">
+                <tr class="fw-bold">
+                    <td class="text-center no-print" data-col="select"></td>
+                    <td data-col="piid" class="text-muted">إجمالي</td>
+                    <td data-col="pidate"></td>
+                    <td data-col="customerid"></td>
+                    <td data-col="customername"></td>
+                    <td data-col="warehouseid"></td>
+                    <td data-col="refprid"></td>
+                    <td data-col="itemstotal"></td>
+                    <td data-col="discounttotal"></td>
+                    <td data-col="taxtotal"></td>
+                    <td data-col="nettotal">@((ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m).ToString("0.00"))</td>
+                    <td data-col="status"></td>
+                    <td data-col="isposted"></td>
+                    <td data-col="postedat"></td>
+                    <td data-col="postedby"></td>
+                    <td data-col="createdby"></td>
+                    <td data-col="createdat"></td>
+                    <td data-col="updatedat"></td>
+                    <td data-col="linescount"></td>
+                    <td class="text-nowrap no-print" data-col="actions"></td>
+                </tr>
+            </tfoot>
         </table>
 
     </div>

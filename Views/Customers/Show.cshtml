@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Customer?
+@model ERP.Models.Customer?
 @using System.Text.Json
 @using Microsoft.AspNetCore.Mvc.Rendering
 
@@ -6,566 +6,371 @@
     ViewData["Title"] = "حجم تعامل عميل";
 
     // قائمة العملاء للأوتوكومبليت
-    // Value = كود العميل ، Text = اسم العميل
     var customersList = ViewBag.CustomersList as IEnumerable<SelectListItem>
                         ?? Enumerable.Empty<SelectListItem>();
 
-    // تجهيز بيانات العملاء فى شكل JSON للجافاسكربت (id, code, name, phone)
-    // متغير: مصفوفة كائنات جاهزة للتحويل إلى JSON
+    // تجهيز بيانات العملاء فى شكل JSON للجافاسكربت
     var customersJsModel = customersList.Select(c => new
     {
-        id = int.TryParse(c.Value, out var tmpId) ? tmpId : 0, // رقم العميل
-        code = c.Value,                                          // الكود كنص
-        name = c.Text,                                           // اسم العميل
-        phone = ""                                                // هنسيبها فاضية حالياً
+        id = int.TryParse(c.Value, out var tmpId) ? tmpId : 0,
+        code = c.Value,
+        name = c.Text,
+        phone = ""
     });
 
-    // متغير: سترينج JSON هيتحقن فى الجافاسكربت (customersData)
     var customersJson = JsonSerializer.Serialize(customersJsModel);
 
-    // متغيرات: فترة البحث (من / إلى) لو المستخدم اختارها
+    // متغيرات: فترة البحث
     DateTime? fromDate = ViewBag.FromDate as DateTime?;
     DateTime? toDate = ViewBag.ToDate as DateTime?;
 
     // متغيرات: ملخص حجم التعامل
-    decimal totalSales = ViewBag.TotalSales as decimal? ?? 0m; // إجمالي المبيعات
-    decimal totalReturns = ViewBag.TotalReturns as decimal? ?? 0m; // إجمالي المرتجعات
-    decimal totalPurchases = ViewBag.TotalPurchases as decimal? ?? 0m; // إجمالي المشتريات
-    int invoiceCount = ViewBag.InvoiceCount as int? ?? 0;  // عدد الفواتير
-    DateTime? lastTransDate = ViewBag.LastTransactionDate as DateTime?;  // آخر عملية
+    decimal totalSales = ViewBag.TotalSales as decimal? ?? 0m;
+    decimal totalReturns = ViewBag.TotalReturns as decimal? ?? 0m;
+    decimal totalPurchases = ViewBag.TotalPurchases as decimal? ?? 0m;
+    int invoiceCount = ViewBag.InvoiceCount as int? ?? 0;
+    DateTime? lastTransDate = ViewBag.LastTransactionDate as DateTime?;
+    
+    // متغيرات: قوائم الفواتير والمخازن (للعرض في التبويبات)
+    var salesInvoices = ViewBag.SalesInvoicesList as IEnumerable<ERP.Models.SalesInvoice> ?? Enumerable.Empty<ERP.Models.SalesInvoice>();
+    var purchaseInvoices = ViewBag.PurchaseInvoicesList as IEnumerable<ERP.Models.PurchaseInvoice> ?? Enumerable.Empty<ERP.Models.PurchaseInvoice>();
+    var warehouses = ViewBag.Warehouses as Dictionary<int, string> ?? new Dictionary<int, string>();
 }
 
+<style>
+    /* تحسينات التصميم لشاشة بدون سكرول */
+    .customer-dashboard {
+        max-height: calc(100vh - 120px);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    .dashboard-header {
+        flex-shrink: 0;
+        padding: 0.5rem 0;
+    }
+    
+    .dashboard-content {
+        flex: 1;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+    
+    .compact-card {
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .compact-stat {
+        font-size: 1.1rem;
+        font-weight: 600;
+        line-height: 1.2;
+    }
+    
+    .compact-label {
+        font-size: 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+    
+    .action-btn-compact {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+        line-height: 1.3;
+    }
+    
+    .customer-info-compact {
+        font-size: 0.85rem;
+    }
+    
+    .table-compact {
+        font-size: 0.85rem;
+    }
+    
+    .table-compact th,
+    .table-compact td {
+        padding: 0.35rem 0.5rem;
+    }
+    
+    .nav-tabs-compact {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+    
+    /* ✅ إصلاح عرض التبويبات مع Flexbox */
+    #customerMovementTabsContent.tab-content {
+        position: relative;
+        min-height: 0;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+    
+    #customerMovementTabsContent .tab-pane {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        min-height: 0;
+        display: none !important;
+    }
+    
+    /* ✅ Bootstrap tabs يعيد display: block للـ .tab-pane.active، لذا نستخدم !important */
+    #customerMovementTabsContent .tab-pane:not(.active):not(.show) {
+        display: none !important;
+        visibility: hidden;
+    }
+    
+    #customerMovementTabsContent .tab-pane.active,
+    #customerMovementTabsContent .tab-pane.active.show {
+        display: flex !important;
+        flex-direction: column;
+        visibility: visible;
+        position: relative;
+    }
+</style>
 
-<div class="container-fluid mt-3" dir="rtl">
+<div class="container-fluid customer-dashboard" dir="rtl">
 
     @* =====================================================
-       1) شريط اختيار العميل + فترة التاريخ
+       1) شريط اختيار العميل + فترة التاريخ (مدمج ومضغوط)
        ===================================================== *@
-    <div class="card mb-4 shadow-sm">
-        <div class="card-body">
-            <h4 class="mb-3">اختيار عميل لعرض حجم التعامل</h4>
+    <div class="dashboard-header">
+        <div class="card compact-card shadow-sm mb-2">
+            <div class="card-body p-2">
+                <form id="customerSearchForm"
+                      method="get"
+                      asp-action="Show"
+                      asp-controller="Customers"
+                      class="row g-2 align-items-end">
 
-            @* ✅ فورم واحد فقط للبحث بالكود أو الاسم + فترة التاريخ *@
-            <form id="customerSearchForm"
-                  method="get"
-                  asp-action="Show"
-                  asp-controller="Customers"
-                  class="row g-3 align-items-end">
+                    <input type="hidden" id="partySearchId" name="id" />
 
-                @* متغير مخفى: هنا يتخزن كود العميل قبل الإرسال *@
-                <input type="hidden"
-                       id="partySearchId"
-                       name="id" /> @* مهم: name="id" عشان توصل للكنترولر *@
-
-                @* تكست بوكس البحث بالكود أو الاسم مع الأوتوكومبليت *@
-                <div class="col-lg-6 col-md-6">
-                    <label class="form-label">بحث بالكود أو الاسم</label>
-
-                    <div class="position-relative">
-                        <input id="partySearchInput"
-                               type="text"
-                               class="form-control"
-                               placeholder="اكتب جزء من اسم العميل أو الكود..." />
-
-                        @* قائمة الاقتراحات (تظهر تحت البوكس) *@
-                        <div id="partySuggestions"
-                             class="list-group position-absolute w-100 shadow-sm"
-                             style="z-index: 1050; max-height: 220px; overflow-y: auto; display: none;">
+                    <div class="col-lg-4 col-md-4">
+                        <label class="form-label compact-label mb-1">بحث بالكود أو الاسم</label>
+                        <div class="position-relative">
+                            <input id="partySearchInput"
+                                   type="text"
+                                   class="form-control form-control-sm"
+                                   placeholder="اكتب جزء من اسم العميل أو الكود..." />
+                            <div id="partySuggestions"
+                                 class="list-group position-absolute w-100 shadow-sm"
+                                 style="z-index: 1050; max-height: 200px; overflow-y: auto; display: none;">
+                            </div>
                         </div>
                     </div>
-                </div>
 
-                @* من تاريخ *@
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">من تاريخ</label>
-                    <input type="date"
-                           name="fromDate"
-                           class="form-control"
-                           value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                </div>
+                    <div class="col-lg-2 col-md-3">
+                        <label class="form-label compact-label mb-1">من تاريخ</label>
+                        <input type="date"
+                               name="fromDate"
+                               class="form-control form-control-sm"
+                               value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    </div>
 
-                @* إلى تاريخ *@
-                <div class="col-lg-2 col-md-3">
-                    <label class="form-label">إلى تاريخ</label>
-                    <input type="date"
-                           name="toDate"
-                           class="form-control"
-                           value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                </div>
+                    <div class="col-lg-2 col-md-3">
+                        <label class="form-label compact-label mb-1">إلى تاريخ</label>
+                        <input type="date"
+                               name="toDate"
+                               class="form-control form-control-sm"
+                               value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    </div>
 
-                @* زر عرض حجم التعامل *@
-                <div class="col-lg-2 col-md-12 text-md-start">
-                    <label class="form-label d-none d-md-block">&nbsp;</label>
-                    <button type="submit"
-                            class="btn btn-primary w-100">
-                        عرض حجم التعامل
-                    </button>
-                </div>
-            </form>
+                    <div class="col-lg-2 col-md-2">
+                        <label class="form-label compact-label mb-1 d-none d-md-block">&nbsp;</label>
+                        <button type="submit" class="btn btn-primary btn-sm w-100">
+                            عرض
+                        </button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
-
 
     @* =====================================================
        2) لو لم يتم اختيار عميل بعد
        ===================================================== *@
     @if (Model == null)
     {
-        <div class="alert alert-light border text-muted">
-            برجاء اختيار عميل أو مورد من أعلى الصفحة (كود أو اسم) مع تحديد فترة التاريخ إن لزم،
-            ثم اضغط زر <strong>عرض</strong> لعرض حجم التعامل.
+        <div class="alert alert-light border text-muted text-center">
+            برجاء اختيار عميل أو مورد من أعلى الصفحة ثم اضغط زر <strong>عرض</strong>.
         </div>
     }
     else
     {
-        @* متغيرات: نص يوضح حالة الرصيد (مدين / دائن) *@
-        decimal currentBalance = Model.CurrentBalance;      // رصيد العميل الحالى
-        string balanceText;                                // وصف بالعربى
-        string balanceCss;                                 // لون النص
+        // متغيرات: نص يوضح حالة الرصيد (مدين / دائن)
+        decimal currentBalance = Model.CurrentBalance;
+        string balanceText;
+        string balanceCss;
 
         if (currentBalance > 0)
         {
-            balanceText = "رصيد مدين على العميل (مطلوب سداده لنا).";
+            balanceText = "مدين (مطلوب سداده لنا)";
             balanceCss = "text-danger";
         }
         else if (currentBalance < 0)
         {
-            balanceText = "رصيد دائن لصالح العميل (له عندنا).";
+            balanceText = "دائن (له عندنا)";
             balanceCss = "text-success";
         }
         else
         {
-            balanceText = "لا توجد مديونية على العميل (الرصيد = 0).";
+            balanceText = "لا توجد مديونية";
             balanceCss = "text-muted";
         }
 
-    @* =====================================================
-           3) عنوان الصفحة + نوع الطرف
+    <div class="dashboard-content">
+        @* =====================================================
+           3) معلومات العميل الأساسية (مدمجة في صف واحد)
            ===================================================== *@
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h2 class="mb-0">حجم تعامل عميل</h2>
-
-        <span class="badge bg-light text-dark">
-            نوع الطرف:
-            <strong>@(Model.PartyCategory ?? "غير محدد")</strong>
-        </span>
-    </div>
-
-    @* =====================================================
-           4) كارت بيانات العميل الأساسية + الأزرار
-           ===================================================== *@
-    <div class="card mb-3 shadow-sm">
-        <div class="card-body">
-            <div class="row align-items-center g-3">
-                <div class="col-md-8">
-                    <h3 class="mb-1">@Model.CustomerName</h3>
-
-                    <p class="text-muted mb-2">
-                        كود العميل:
-                        <strong>@Model.CustomerId</strong>
-                        &nbsp;|&nbsp;
-                        نوع الطرف:
-                        <strong>@(Model.PartyCategory ?? "غير محدد")</strong>
-                    </p>
-
-                    <p class="mb-1">
-                        <strong>هاتف 1:</strong>
-                        @(string.IsNullOrWhiteSpace(Model.Phone1) ? "-" : Model.Phone1)
-                        &nbsp;|&nbsp;
-                        <strong>هاتف 2:</strong>
-                        @(string.IsNullOrWhiteSpace(Model.Phone2) ? "-" : Model.Phone2)
-                        &nbsp;|&nbsp;
-                        <strong>واتساب:</strong>
-                        @(string.IsNullOrWhiteSpace(Model.Whatsapp) ? "-" : Model.Whatsapp)
-                    </p>
-
-                    <p class="mb-0">
-                        <strong>العنوان:</strong>
-                        @(string.IsNullOrWhiteSpace(Model.Address)
-                                                ? "لم يتم إدخال عنوان"
-                                                : Model.Address)
-                        </p>
+        <div class="card compact-card shadow-sm mb-2">
+            <div class="card-body p-2">
+                <div class="row g-2 align-items-center">
+                    <div class="col-lg-3 col-md-4">
+                        <h5 class="mb-0 customer-info-compact">@Model.CustomerName</h5>
+                        <small class="text-muted">كود: @Model.CustomerId | @(Model.PartyCategory ?? "غير محدد")</small>
                     </div>
-
-                    <div class="col-md-4 text-md-end">
-                        <p class="mb-1">
-                            <strong>الحساب المحاسبي:</strong><br />
-                            @if (Model.Account != null)
-                            {
-                                @($"{Model.Account.AccountCode} — {Model.Account.AccountName}")
-                            }
-                            else
-                            {
-                                @:بدون ربط محاسبي
-                            }
-                    </p>
-
-                    <p class="mb-1">
-                        <strong>تاريخ الإنشاء:</strong>
-                        @Model.CreatedAt.ToString("yyyy/MM/dd HH:mm")
-                    </p>
-                    <p class="mb-0">
-                        <strong>آخر تعديل:</strong>
-                        @Model.UpdatedAt.ToString("yyyy/MM/dd HH:mm")
-                    </p>
-                </div>
-            </div>
-
-            <hr class="my-3" />
-
-            @* ===== أزرار الحركة: تفعيل تابات الجداول تحت + إنشاء حركات جديدة ===== *@
-            <div class="d-flex flex-wrap gap-2">
-
-                @* أزرار تفعيل التابات (زي حركة الصنف) *@
-                <button type="button"
-                        class="btn btn-outline-dark btn-sm js-open-movement-tab"
-                        data-target="#tab-agg">
-                    🔁 الحركة المجمعة
-                </button>
-
-                <button type="button"
-                        class="btn btn-outline-success btn-sm js-open-movement-tab"
-                        data-target="#tab-sales">
-                    📄 مبيعات العميل
-                </button>
-
-                <button type="button"
-                        class="btn btn-outline-warning btn-sm js-open-movement-tab"
-                        data-target="#tab-salesReturns">
-                    ↩️ مرتجعات المبيعات
-                </button>
-
-                <button type="button"
-                        class="btn btn-outline-primary btn-sm js-open-movement-tab"
-                        data-target="#tab-purchases">
-                    🧾 فواتير المشتريات
-                </button>
-
-                <button type="button"
-                        class="btn btn-outline-primary btn-sm js-open-movement-tab"
-                        data-target="#tab-purchaseReturns">
-                    ↩️ مرتجعات المشتريات
-                </button>
-
-                <button type="button"
-                        class="btn btn-outline-secondary btn-sm js-open-movement-tab"
-                        data-target="#tab-orders">
-                    📑 أوامر البيع / الشراء
-                </button>
-
-                <button type="button"
-                        class="btn btn-outline-secondary btn-sm js-open-movement-tab"
-                        data-target="#tab-settlements">
-                    ⚖️ تسويات أخرى
-                </button>
-
-                @* كشف حساب مفصل – ده يفتح شاشة منفصلة زى ما هو *@
-                <a asp-controller="CustomerLedger"
-                   asp-action="Index"
-                   asp-route-customerId="@Model.CustomerId"
-                   class="btn btn-outline-info btn-sm js-open-customer-ledger">
-                    📊 كشف حساب مفصل
-                </a>
-
-                @* إنشاء حركات مالية جديدة من داخل حجم التعامل *@
-                <a asp-controller="CashReceipts"
-                   asp-action="Create"
-                   asp-route-customerId="@Model.CustomerId"
-                   class="btn btn-success btn-sm">
-                    💰 إذن استلام جديد
-                </a>
-
-                <a asp-controller="CashPayments"
-                   asp-action="Create"
-                   asp-route-customerId="@Model.CustomerId"
-                   class="btn btn-danger btn-sm">
-                    💸 إذن دفع جديد
-                </a>
-
-                <a asp-controller="DebitNotes"
-                   asp-action="Create"
-                   asp-route-customerId="@Model.CustomerId"
-                   class="btn btn-outline-danger btn-sm">
-                    📉 إشعار خصم جديد
-                </a>
-
-                <a asp-controller="CreditNotes"
-                   asp-action="Create"
-                   asp-route-customerId="@Model.CustomerId"
-                   class="btn btn-outline-success btn-sm">
-                    📈 إشعار إضافة جديد
-                </a>
-
-                <a asp-action="Edit"
-                   asp-route-id="@Model.CustomerId"
-                   class="btn btn-outline-secondary btn-sm">
-                    ✏️ تعديل بيانات العميل
-                </a>
-            </div>
-        </div>
-    </div>
-
-    @* =====================================================
-           5) كروت ملخص سريع لحجم التعامل
-           ===================================================== *@
-    <div class="row g-3 mb-4">
-
-        @* إجمالي المبيعات *@
-        <div class="col-6 col-md-3">
-            <div class="card text-center shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-1">إجمالي مبيعات العميل</div>
-                    <div class="fs-4 fw-bold">@totalSales.ToString("0.00")</div>
-                    <div class="text-muted small">من فواتير البيع</div>
-                </div>
-            </div>
-        </div>
-
-        @* إجمالي المرتجعات *@
-        <div class="col-6 col-md-3">
-            <div class="card text-center shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-1">إجمالي المرتجعات</div>
-                    <div class="fs-4 fw-bold text-danger">@totalReturns.ToString("0.00")</div>
-                    <div class="text-muted small">فواتير/إشعارات مرتجع</div>
-                </div>
-            </div>
-        </div>
-
-        @* إجمالي المشتريات من هذا الطرف *@
-        <div class="col-6 col-md-3">
-            <div class="card text-center shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-1">إجمالي مشترياتنا من الطرف</div>
-                    <div class="fs-4 fw-bold">@totalPurchases.ToString("0.00")</div>
-                    <div class="text-muted small">من فواتير الشراء</div>
-                </div>
-            </div>
-        </div>
-
-        @* الرصيد الحالى + دائن/مدين *@
-        <div class="col-6 col-md-3">
-            <div class="card text-center shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-1">الرصيد الحالي</div>
-                    <div class="fs-4 fw-bold">@Model.CurrentBalance.ToString("0.00")</div>
-                    <div class="small @balanceCss">@balanceText</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    @* =====================================================
-           6) كروت إضافية: عدد الفواتير + آخر عملية
-           ===================================================== *@
-    <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
-            <div class="card text-center shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-1">عدد الفواتير (بيع + مرتجع)</div>
-                    <div class="fs-4 fw-bold">@invoiceCount</div>
-                    <div class="text-muted small">سيتم ملؤها من الكنترولر لاحقاً</div>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-6 col-md-3">
-            <div class="card text-center shadow-sm h-100">
-                <div class="card-body">
-                    <div class="text-muted small mb-1">تاريخ آخر عملية</div>
-                    <div class="fs-6 fw-bold">
-                        @(lastTransDate.HasValue
-                                                ? lastTransDate.Value.ToString("yyyy/MM/dd")
-                                                : "لا توجد حركة")
+                    <div class="col-lg-3 col-md-4 customer-info-compact">
+                        <div><strong>هاتف:</strong> @(string.IsNullOrWhiteSpace(Model.Phone1) ? "-" : Model.Phone1)</div>
+                        <div><strong>عنوان:</strong> @(string.IsNullOrWhiteSpace(Model.Address) ? "غير محدد" : (Model.Address.Length > 40 ? Model.Address.Substring(0, 40) + "..." : Model.Address))</div>
+                    </div>
+                    <div class="col-lg-3 col-md-4 customer-info-compact">
+                        <div><strong>حساب:</strong> @(Model.Account != null ? $"{Model.Account.AccountCode} - {Model.Account.AccountName}" : "بدون ربط")</div>
+                        <div><strong>آخر تعديل:</strong> @Model.UpdatedAt.ToString("yyyy/MM/dd HH:mm")</div>
+                    </div>
+                    <div class="col-lg-3 col-md-12">
+                        <div class="d-flex flex-wrap gap-1">
+                            <a asp-action="Edit" asp-route-id="@Model.CustomerId" 
+                               class="btn btn-outline-secondary btn-sm action-btn-compact app-menu-link"
+                               data-tab-id="customer-edit-tab"
+                               data-tab-title="تعديل عميل">✏️ تعديل</a>
+                            <a asp-controller="CashReceipts" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                               class="btn btn-success btn-sm action-btn-compact app-menu-link"
+                               data-tab-id="cash-receipt-create-tab"
+                               data-tab-title="إضافة إذن استلام نقدية">💰 استلام</a>
+                            <a asp-controller="CashPayments" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                               class="btn btn-danger btn-sm action-btn-compact app-menu-link"
+                               data-tab-id="cash-payment-create-tab"
+                               data-tab-title="إضافة إذن دفع نقدية">💸 دفع</a>
+                            <a asp-controller="CustomerLedger" asp-action="Index" asp-route-customerId="@Model.CustomerId" class="btn btn-outline-info btn-sm action-btn-compact">📊 كشف حساب</a>
                         </div>
-                        <div class="text-muted small">آخر فاتورة/مرتجع/حركة مالية</div>
                     </div>
                 </div>
             </div>
         </div>
 
         @* =====================================================
-           7) كارت التابات: الحركة المجمعة + تفاصيل حسب نوع المستند
+           4) بطاقات الملخص الإجمالية (مدمجة في صف واحد)
            ===================================================== *@
-        <div class="card mb-4 shadow-sm" id="customerMovementCard">
-            <div class="card-header">
-
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-
-                    <div class="fw-semibold">
-                        تفاصيل حركة الطرف خلال المدة
-                        <span class="text-muted small">
-                            (
-                            @(fromDate.HasValue? fromDate.Value.ToString("yyyy/MM/dd") : "بداية المدة")
-                            &nbsp;–&nbsp;
-                            @(toDate.HasValue? toDate.Value.ToString("yyyy/MM/dd") : "نهاية المدة")
-                            )
-                        </span>
+        <div class="row g-2 mb-2">
+            <div class="col-6 col-lg-2">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
+                     style="cursor: pointer; transition: all 0.2s;"
+                     onclick="window.location.href='@Url.Action("Index", "SalesInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'"
+                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
+                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
+                    <div class="card-body p-2">
+                        <div class="compact-label text-muted">المبيعات</div>
+                        <div class="compact-stat text-success">@totalSales.ToString("N2")</div>
+                        <small class="text-muted" style="font-size: 0.7rem;">اضغط لعرض الفواتير</small>
                     </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
+                     style="cursor: pointer; transition: all 0.2s;"
+                     onclick="window.location.href='@Url.Action("Index", "PurchaseInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'"
+                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
+                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
+                    <div class="card-body p-2">
+                        <div class="compact-label text-muted">المشتريات</div>
+                        <div class="compact-stat text-primary">@totalPurchases.ToString("N2")</div>
+                        <small class="text-muted" style="font-size: 0.7rem;">اضغط لعرض الفواتير</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-2">
+                        <div class="compact-label text-muted">المرتجعات</div>
+                        <div class="compact-stat text-danger">@totalReturns.ToString("N2")</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="card compact-card text-center shadow-sm" style="border: 3px solid #ff9800 !important; box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3) !important;">
+                    <div class="card-body p-2">
+                        <div class="compact-label text-muted">الرصيد الحالي</div>
+                        <div class="compact-stat @balanceCss">@currentBalance.ToString("N2")</div>
+                        <small class="@balanceCss" style="font-size: 0.7rem;">@balanceText</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-2">
+                        <div class="compact-label text-muted">عدد الفواتير</div>
+                        <div class="compact-stat">@invoiceCount</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-2">
+                        <div class="compact-label text-muted">آخر عملية</div>
+                        <div class="compact-stat">@(lastTransDate?.ToString("yyyy/MM/dd") ?? "-")</div>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                    @* شريط التابات (يتحرك أفقياً لو عددهم كبير) *@
-                    <div style="overflow-x:auto; white-space:nowrap;">
+        @* =====================================================
+           5) التبويبات والجداول (مدمجة ومضغوطة)
+           ===================================================== *@
+        <div class="card compact-card shadow-sm mb-2" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+            <div class="card-header p-2" style="flex-shrink: 0;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong class="small">حركة العميل</strong>
+                    <div style="overflow-x: auto; white-space: nowrap;">
                         <ul class="nav nav-pills nav-sm flex-nowrap" id="customerMovementTabs" role="tablist">
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link active"
-                                        id="tab-agg-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-agg"
-                                        type="button"
-                                        role="tab">
-                                    الحركة المجمعة
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-sales"
-                                        type="button"
-                                        role="tab">
-                                    فواتير المبيعات
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-salesReturns"
-                                        type="button"
-                                        role="tab">
-                                    مرتجعات المبيعات
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-purchases"
-                                        type="button"
-                                        role="tab">
-                                    فواتير المشتريات
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-purchaseReturns"
-                                        type="button"
-                                        role="tab">
-                                    مرتجعات المشتريات
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-orders"
-                                        type="button"
-                                        role="tab">
-                                    أوامر البيع / الشراء
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-receipts"
-                                        type="button"
-                                        role="tab">
-                                    إيصالات الاستلام
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-payments"
-                                        type="button"
-                                        role="tab">
-                                    إيصالات الدفع
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-debitNotes"
-                                        type="button"
-                                        role="tab">
-                                    إشعارات الخصم
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-creditNotes"
-                                        type="button"
-                                        role="tab">
-                                    إشعارات الإضافة
-                                </button>
-                            </li>
-
-                            <li class="nav-item" role="presentation">
-                                <button class="nav-link"
-                                        data-bs-toggle="tab"
-                                        data-bs-target="#tab-settlements"
-                                        type="button"
-                                        role="tab">
-                                    تسويات أخرى
-                                </button>
-                            </li>
+                            <li class="nav-item"><button class="nav-link active nav-tabs-compact" id="tab-agg-link" data-bs-toggle="tab" data-bs-target="#tab-agg">الحركة المجمعة</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-sales">المبيعات</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-salesReturns">مرتجعات البيع</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-purchases">المشتريات</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-purchaseReturns">مرتجعات الشراء</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-orders">الأوامر</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-receipts">إيصالات استلام</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-payments">إيصالات دفع</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-debitNotes">إشعارات خصم</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-creditNotes">إشعارات إضافة</button></li>
+                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-settlements">تسويات</button></li>
                         </ul>
                     </div>
                 </div>
             </div>
 
-            <div class="card-body p-0">
-                <div class="tab-content" id="customerMovementTabsContent">
-
+            <div class="card-body p-2" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;">
+                <div class="tab-content h-100" id="customerMovementTabsContent" style="overflow: hidden; display: flex; flex-direction: column;">
                     @* --- تبويب: الحركة المجمعة --- *@
-                    <div class="tab-pane fade show active" id="tab-agg" role="tabpanel">
-                        <div class="p-3 border-bottom bg-light small">
-                            <div class="row g-3">
-                                <div class="col-md-4">
-                                    <div class="text-muted">الرصيد الحالي</div>
-                                    <div class="fw-bold">@Model.CurrentBalance.ToString("0.00")</div>
-                                    <div class="@balanceCss">@balanceText</div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="text-muted">بداية المدة</div>
-                                    <div class="fw-bold">
-                                        @(fromDate.HasValue? fromDate.Value.ToString("yyyy/MM/dd") : "لم يتم تحديدها")
-                                    </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="text-muted">نهاية المدة</div>
-                                    <div class="fw-bold">
-                                        @(toDate.HasValue? toDate.Value.ToString("yyyy/MM/dd") : "لم يتم تحديدها")
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade show active h-100" id="tab-agg" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact table-hover mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>نوع المستند</th>
                                         <th>رقم المستند</th>
                                         <th class="text-end">مدين</th>
                                         <th class="text-end">دائن</th>
-                                        <th class="text-end">رصيد بعد الحركة</th>
+                                        <th class="text-end">الرصيد</th>
                                         <th>ملاحظات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td colspan="7" class="text-center text-muted py-3">
-                                            لم يتم ربط جدول الحركة المجمعة بعد.<br />
-                                            <small>لاحقاً سنجمع بيانات المبيعات والمشتريات والفواتير والحركات المالية من جدول الحركة/الليدجر.</small>
+                                        <td colspan="7" class="text-center text-muted py-2">
+                                            <small>لم يتم ربط جدول الحركة المجمعة بعد.</small>
                                         </td>
                                     </tr>
                                 </tbody>
@@ -573,35 +378,59 @@
                         </div>
                     </div>
 
-                    @* --- تبويب: فواتير المبيعات --- *@
-                    <div class="tab-pane fade" id="tab-sales" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    @* --- باقي التبويبات (بنفس التصميم المضغوط) --- *@
+                    <div class="tab-pane fade h-100" id="tab-sales" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
-                                        <th>التاريخ</th>
                                         <th>رقم الفاتورة</th>
+                                        <th>التاريخ</th>
+                                        <th>الوقت</th>
                                         <th>المخزن</th>
-                                        <th class="text-end">الكمية</th>
-                                        <th class="text-end">المبلغ</th>
+                                        <th class="text-end">الصافي</th>
+                                        <th>الحالة</th>
+                                        <th>مرحل؟</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط فواتير المبيعات بعد.
-                                        </td>
-                                    </tr>
+                                    @if (salesInvoices != null && salesInvoices.Any())
+                                    {
+                                        @foreach (var invoice in salesInvoices)
+                                        {
+                                            <tr>
+                                                <td><a asp-controller="SalesInvoices" asp-action="Show" asp-route-id="@invoice.SIId" target="_blank" class="text-primary">@invoice.SIId</a></td>
+                                                <td>@invoice.SIDate.ToString("yyyy-MM-dd")</td>
+                                                <td>@DateTime.Today.Add(invoice.SITime).ToString("HH:mm:ss")</td>
+                                                <td>@(warehouses.TryGetValue(invoice.WarehouseId, out var warehouseName) ? warehouseName : invoice.WarehouseId.ToString())</td>
+                                                <td class="text-end">@invoice.NetTotal.ToString("N2")</td>
+                                                <td>@invoice.Status</td>
+                                                <td>@(invoice.IsPosted ? "نعم" : "لا")</td>
+                                                <td>
+                                                    <a asp-controller="SalesInvoices" asp-action="Show" asp-route-id="@invoice.SIId" target="_blank" class="btn btn-sm btn-primary">عرض</a>
+                                                </td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="4" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@salesInvoices.Sum(i => i.NetTotal).ToString("N2")</td>
+                                            <td colspan="3"></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="8" class="text-center text-muted py-3"><small>لا توجد فواتير مبيعات مرحّلة للعميل المحدد</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: مرتجعات المبيعات --- *@
-                    <div class="tab-pane fade" id="tab-salesReturns" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-salesReturns" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>رقم المرتجع</th>
@@ -611,45 +440,60 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط مرتجعات المبيعات بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط مرتجعات المبيعات بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: فواتير المشتريات --- *@
-                    <div class="tab-pane fade" id="tab-purchases" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-purchases" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
-                                        <th>التاريخ</th>
                                         <th>رقم الفاتورة</th>
+                                        <th>التاريخ</th>
                                         <th>المخزن</th>
-                                        <th class="text-end">الكمية</th>
-                                        <th class="text-end">المبلغ</th>
+                                        <th class="text-end">الصافي</th>
+                                        <th>مرحل؟</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط فواتير المشتريات بعد.
-                                        </td>
-                                    </tr>
+                                    @if (purchaseInvoices != null && purchaseInvoices.Any())
+                                    {
+                                        @foreach (var invoice in purchaseInvoices)
+                                        {
+                                            <tr>
+                                                <td><a asp-controller="PurchaseInvoices" asp-action="Show" asp-route-id="@invoice.PIId" target="_blank" class="text-primary">@invoice.PIId</a></td>
+                                                <td>@invoice.PIDate.ToString("yyyy-MM-dd")</td>
+                                                <td>@(warehouses.TryGetValue(invoice.WarehouseId, out var warehouseName) ? warehouseName : invoice.WarehouseId.ToString())</td>
+                                                <td class="text-end">@invoice.NetTotal.ToString("N2")</td>
+                                                <td>@(invoice.IsPosted ? "نعم" : "لا")</td>
+                                                <td>
+                                                    <a asp-controller="PurchaseInvoices" asp-action="Show" asp-route-id="@invoice.PIId" target="_blank" class="btn btn-sm btn-primary">عرض</a>
+                                                </td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@purchaseInvoices.Sum(i => i.NetTotal).ToString("N2")</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="6" class="text-center text-muted py-3"><small>لا توجد فواتير مشتريات مرحّلة للعميل المحدد</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: مرتجعات المشتريات --- *@
-                    <div class="tab-pane fade" id="tab-purchaseReturns" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-purchaseReturns" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>رقم المستند</th>
@@ -659,21 +503,16 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط مرتجعات المشتريات بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط مرتجعات المشتريات بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: أوامر البيع / الشراء --- *@
-                    <div class="tab-pane fade" id="tab-orders" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-orders" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>نوع الأمر</th>
@@ -683,21 +522,16 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط أوامر البيع/الشراء بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط الأوامر بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: إيصالات الاستلام --- *@
-                    <div class="tab-pane fade" id="tab-receipts" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-receipts" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>رقم الإيصال</th>
@@ -707,21 +541,16 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط إيصالات الاستلام بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط إيصالات الاستلام بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: إيصالات الدفع --- *@
-                    <div class="tab-pane fade" id="tab-payments" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-payments" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>رقم الإيصال</th>
@@ -731,67 +560,52 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط إيصالات الدفع بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط إيصالات الدفع بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: إشعارات الخصم --- *@
-                    <div class="tab-pane fade" id="tab-debitNotes" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-debitNotes" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>رقم الإشعار</th>
                                         <th class="text-end">المبلغ</th>
-                                        <th>سبب الإشعار</th>
+                                        <th>السبب</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="4" class="text-center text-muted py-3">
-                                            لم يتم ربط إشعارات الخصم بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="4" class="text-center text-muted py-2"><small>لم يتم ربط إشعارات الخصم بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: إشعارات الإضافة --- *@
-                    <div class="tab-pane fade" id="tab-creditNotes" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-creditNotes" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>رقم الإشعار</th>
                                         <th class="text-end">المبلغ</th>
-                                        <th>سبب الإشعار</th>
+                                        <th>السبب</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="4" class="text-center text-muted py-3">
-                                            لم يتم ربط إشعارات الإضافة بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="4" class="text-center text-muted py-2"><small>لم يتم ربط إشعارات الإضافة بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
 
-                    @* --- تبويب: تسويات أخرى --- *@
-                    <div class="tab-pane fade" id="tab-settlements" role="tabpanel">
-                        <div class="table-responsive mb-0">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead class="table-light">
+                    <div class="tab-pane fade h-100" id="tab-settlements" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0">
+                                <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
                                         <th>نوع التسوية</th>
@@ -801,99 +615,43 @@
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr>
-                                        <td colspan="5" class="text-center text-muted py-3">
-                                            لم يتم ربط التسويات الأخرى بعد.
-                                        </td>
-                                    </tr>
+                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط التسويات بعد.</small></td></tr>
                                 </tbody>
                             </table>
                         </div>
                     </div>
-
-                </div> @* tab-content *@
-            </div> @* card-body *@
-        </div> @* card *@
-
-        @* =====================================================
-           8) (اختياري) الرسوم البيانية – نفس الكود القديم
-           ===================================================== *@
-        <div class="row g-3 mb-4">
-            <div class="col-12 col-lg-8">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header">
-                        منحنى مبيعات العميل (آخر 12 شهر) – بيانات تجريبية حالياً
-                    </div>
-                    <div class="card-body">
-                        <canvas id="customerSalesChart" height="120"></canvas>
-                        <small class="text-muted d-block mt-2">
-                            لاحقاً سنربط الرسم البيانى ببيانات حقيقية من جداول الفواتير.
-                        </small>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-lg-4">
-                <div class="card shadow-sm h-100">
-                    <div class="card-header">
-                        نسبة مبيعات / مرتجعات / مشتريات
-                    </div>
-                    <div class="card-body">
-                        <canvas id="customerPieChart" height="180"></canvas>
-                    </div>
                 </div>
             </div>
         </div>
+    </div>
     }
 </div>
 
 @section Scripts {
     <script>
         (function () {
-
-            // ================================
-            // 0) تحميل بيانات العملاء من السيرفر مرة واحدة (بدلاً من SearchCustomers)
-            // ================================
-            // متغير: مصفوفة بها كل العملاء (كود + اسم + تليفون)
             var customersData = @Html.Raw(customersJson);
-
-            // ================================
-            // 1) أوتوكومبليت لاختيار العميل
-            // ================================
-            var input    = document.getElementById('partySearchInput');   // متغير: تكست بوكس البحث
-            var hiddenId = document.getElementById('partySearchId');      // متغير: كود العميل المخفى
-            var list     = document.getElementById('partySuggestions');   // متغير: قائمة النتائج (buttons)
-            var form     = document.getElementById('customerSearchForm'); // متغير: فورم البحث
-
-            var activeIndex = -1;   // متغير: العنصر المحدد حالياً فى القائمة
-            var lastTerm    = "";   // متغير: آخر نص تم البحث عنه (للاستخدام لو حبيت فيما بعد)
+            var input = document.getElementById('partySearchInput');
+            var hiddenId = document.getElementById('partySearchId');
+            var list = document.getElementById('partySuggestions');
+            var form = document.getElementById('customerSearchForm');
+            var activeIndex = -1;
 
             if (input && hiddenId && list && form) {
-
-                // عند الكتابة فى التكست بوكس
                 input.addEventListener('input', function () {
-                    // متغير: النص المكتوب
                     var term = input.value.trim();
-                    // نلغى أى اختيار قديم
                     hiddenId.value = "";
                     activeIndex = -1;
 
-                    // لو الحروف قليلة جداً → نخفي القائمة
                     if (term.length < 1) {
                         list.style.display = 'none';
                         list.innerHTML = '';
                         return;
                     }
 
-                    // متغير: نفس الكلمة بحروف صغيرة للمقارنة
                     var termLower = term.toLowerCase();
-
-                    // فلترة قائمة العملاء فى الميمورى (بدون أى Fetch)
-                    // نبحث بالكود أو الاسم
                     var results = customersData.filter(function (item) {
-                        // مقارنة الكود كـ نص
                         var codeMatch = item.code && item.code.indexOf(term) !== -1;
-                        // مقارنة الاسم كـ حروف صغيرة
                         var nameMatch = item.name && item.name.toLowerCase().indexOf(termLower) !== -1;
                         return codeMatch || nameMatch;
                     });
@@ -905,21 +663,17 @@
                         return;
                     }
 
-                    // نعرض أول 30 نتيجة فقط علشان الأداء
-                    results.slice(0, 30).forEach(function (item, index) {
+                    results.slice(0, 30).forEach(function (item) {
                         var btn = document.createElement('button');
                         btn.type = 'button';
                         btn.className = 'list-group-item list-group-item-action';
-                        btn.dataset.id = item.id;   // متغير: كود العميل
-                        // نص الزر: الكود — الاسم (التليفون اختيارى)
-                        btn.textContent = item.code + ' — ' + item.name +
-                            (item.phone ? ' (' + item.phone + ')' : '');
+                        btn.dataset.id = item.id;
+                        btn.textContent = item.code + ' — ' + item.name + (item.phone ? ' (' + item.phone + ')' : '');
 
-                        // عند الضغط على أى اختيار
                         btn.addEventListener('click', function () {
-                            hiddenId.value = item.id;                         // حفظ الكود فى الهيدن
-                            input.value    = item.code + ' — ' + item.name;  // عرض الكود + الاسم فى البوكس
-                            list.style.display = 'none';                     // إخفاء القائمة
+                            hiddenId.value = item.id;
+                            input.value = item.code + ' — ' + item.name;
+                            list.style.display = 'none';
                         });
 
                         list.appendChild(btn);
@@ -928,7 +682,6 @@
                     list.style.display = 'block';
                 });
 
-                // الأسهم + Enter داخل قائمة الاقتراحات
                 input.addEventListener('keydown', function (e) {
                     var items = list.querySelectorAll('button');
                     if (list.style.display !== 'block' || items.length === 0) return;
@@ -936,50 +689,70 @@
                     if (e.key === 'ArrowDown') {
                         e.preventDefault();
                         activeIndex = (activeIndex + 1) % items.length;
-                        setActive(items, activeIndex);
+                        items.forEach(function (el) { el.classList.remove('active'); });
+                        if (activeIndex >= 0 && activeIndex < items.length) {
+                            items[activeIndex].classList.add('active');
+                            items[activeIndex].scrollIntoView({ block: 'nearest' });
+                        }
                     } else if (e.key === 'ArrowUp') {
                         e.preventDefault();
                         activeIndex = (activeIndex - 1 + items.length) % items.length;
-                        setActive(items, activeIndex);
+                        items.forEach(function (el) { el.classList.remove('active'); });
+                        if (activeIndex >= 0 && activeIndex < items.length) {
+                            items[activeIndex].classList.add('active');
+                            items[activeIndex].scrollIntoView({ block: 'nearest' });
+                        }
                     } else if (e.key === 'Enter') {
                         if (activeIndex >= 0 && activeIndex < items.length) {
                             e.preventDefault();
-                            items[activeIndex].click();   // نختار العنصر المحدد
+                            items[activeIndex].click();
                         }
                     } else if (e.key === 'Escape') {
                         list.style.display = 'none';
                     }
                 });
 
-                // دالة: تمييز العنصر النشط فى القائمة + سحب السكرول إليه
-                function setActive(items, index) {
-                    items.forEach(function (el) { el.classList.remove('active'); });
-                    if (index >= 0 && index < items.length) {
-                        var el = items[index];
-                        el.classList.add('active');
-                        el.scrollIntoView({ block: 'nearest' });
-                    }
-                }
-
-                // إخفاء القائمة عند الضغط خارجها
                 document.addEventListener('click', function (e) {
                     if (!list.contains(e.target) && e.target !== input) {
                         list.style.display = 'none';
                     }
                 });
 
-                // تأمين الفورم: لازم يكون فيه ID قبل الإرسال
                 form.addEventListener('submit', function (e) {
                     if (!hiddenId.value) {
                         var txt = input.value.trim();
-
-                        // لو المستخدم كتب كود رقمى بس → نعتبره كود عميل مباشرة
+                        
+                        // ✅ محاولة 1: إذا كان كود رقمي صرف
                         if (/^\d+$/.test(txt)) {
                             hiddenId.value = txt;
                         }
+                        // ✅ محاولة 2: البحث في customersData للعثور على تطابق تام
+                        else if (txt.length > 0) {
+                            var exactMatch = customersData.find(function(item) {
+                                return item.name.toLowerCase() === txt.toLowerCase() || 
+                                       item.code === txt || 
+                                       (item.code + ' — ' + item.name) === txt;
+                            });
+                            if (exactMatch) {
+                                hiddenId.value = exactMatch.id.toString();
+                                input.value = exactMatch.code + ' — ' + exactMatch.name;
+                            }
+                            // ✅ محاولة 3: إذا كان هناك تطابق واحد فقط في القائمة
+                            else {
+                                var termLower = txt.toLowerCase();
+                                var matches = customersData.filter(function (item) {
+                                    var codeMatch = item.code && item.code.indexOf(txt) !== -1;
+                                    var nameMatch = item.name && item.name.toLowerCase().indexOf(termLower) !== -1;
+                                    return codeMatch || nameMatch;
+                                });
+                                if (matches.length === 1) {
+                                    hiddenId.value = matches[0].id.toString();
+                                    input.value = matches[0].code + ' — ' + matches[0].name;
+                                }
+                            }
+                        }
                     }
 
-                    // لو بعد كل ده مفيش كود → نمنع الإرسال
                     if (!hiddenId.value) {
                         e.preventDefault();
                         alert('من فضلك اختر عميل من القائمة أو أدخل كوده الرقمى ثم اضغط عرض.');
@@ -987,52 +760,19 @@
                 });
             }
 
-            // ================================
-            // 2) أزرار تفعيل تابات الجداول
-            // ================================
             var tabButtons = document.querySelectorAll('.js-open-movement-tab');
             tabButtons.forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     var targetSelector = btn.getAttribute('data-target');
                     if (!targetSelector) return;
 
-                    var trigger = document.querySelector(
-                        '#customerMovementTabs button[data-bs-target="' + targetSelector + '"]'
-                    );
+                    var trigger = document.querySelector('#customerMovementTabs button[data-bs-target="' + targetSelector + '"]');
                     if (trigger && window.bootstrap && bootstrap.Tab) {
                         var tab = new bootstrap.Tab(trigger);
                         tab.show();
-
-                        var card = document.getElementById('customerMovementCard');
-                        if (card) {
-                            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
                     }
                 });
             });
-
-            // ================================
-            // 3) زر الرجوع لقائمة العملاء مع نظام التابات
-            // ================================
-            var backLinks = document.querySelectorAll('.js-back-to-customers');
-            backLinks.forEach(function (lnk) {
-                lnk.addEventListener('click', function (e) {
-                    try {
-                        if (window.parent && window.parent !== window && window.parent.erpTabs) {
-                            e.preventDefault();
-
-                            var customersUrl = '@Url.Action("Index", "Customers")';
-                            // فتح تاب قائمة العملاء
-                            window.parent.erpTabs.openTab('customers', customersUrl, 'قائمة العملاء');
-                            // غلق تاب حجم التعامل الحالى
-                            window.parent.erpTabs.closeTab('customer-engagement');
-                        }
-                    } catch (err) {
-                        // لو حصل خطأ نسيب اللينك يشتغل عادى
-                    }
-                });
-            });
-
         })();
     </script>
 }

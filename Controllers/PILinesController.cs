@@ -1,4 +1,4 @@
-﻿using System;                                   // تواريخ وأوقات
+using System;                                   // تواريخ وأوقات
 using System.Collections.Generic;               // القوائم List
 using System.Linq;                              // LINQ: Where / OrderBy
 using System.Text;                              // لبناء ملف CSV
@@ -93,6 +93,14 @@ namespace ERP.Controllers
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             query = ApplySort(query, sort, sortDesc);
 
+            // =========================================================
+            // حساب إجمالي قيمة السطر من نفس الاستعلام (بعد الفلاتر)
+            // قيمة السطر = (Qty * PriceRetail) * (1 - PurchaseDiscountPct / 100)
+            // ✅ مهم: لازم قبل الـ Paging علشان ما تتحسبش على الصفحة بس
+            // =========================================================
+            decimal totalLineValue = await query.SumAsync(line => 
+                (decimal?)((line.Qty * line.PriceRetail) * (1m - (line.PurchaseDiscountPct / 100m)))) ?? 0m;
+
             // 3) حساب العدد الكلي بعد الفلاتر
             int totalCount = await query.CountAsync();
 
@@ -133,6 +141,9 @@ namespace ERP.Controllers
             ViewBag.ToCode = finalToCode;
             ViewBag.CodeFrom = finalFromCode;
             ViewBag.CodeTo = finalToCode;
+
+            // إجمالي قيمة السطر (بعد الفلاتر)
+            ViewBag.TotalLineValue = totalLineValue;
 
             return View(model);
         }

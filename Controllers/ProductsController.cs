@@ -1,10 +1,11 @@
-﻿// Controllers/ProductsController.cs
+// Controllers/ProductsController.cs
 using ClosedXML.Excel;                  // مكتبة Excel
 using OfficeOpenXml;
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                         // سياق قاعدة البيانات الرئيسي
 using ERP.Infrastructure;               // كلاس PagedResult<T> لتقسيم الصفحات
 using ERP.Models;                       // الموديلات Product, Category,...
+using ERP.Services;                     // StockAnalysisService
 using ERP.ViewModels;                   // ViewModels الخاصة بحركة الصنف
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -28,8 +29,13 @@ namespace ERP.Controllers
     {
         // كائن الـ DbContext للتعامل مع قاعدة البيانات
         private readonly AppDbContext _db;
+        private readonly StockAnalysisService _stockAnalysisService;
 
-        public ProductsController(AppDbContext db) => _db = db;
+        public ProductsController(AppDbContext db, StockAnalysisService stockAnalysisService)
+        {
+            _db = db;
+            _stockAnalysisService = stockAnalysisService;
+        }
 
 
 
@@ -1139,23 +1145,29 @@ namespace ERP.Controllers
             ViewBag.NetAmount = 0m;                // متغير: صافى المبلغ
 
             // تفاصيل الحركة والملخصات
-            ViewBag.Lines = Array.Empty<object>();             // حركة مجمعة
+            ViewBag.Lines = Array.Empty<object>();             // حركة مجمعة (لن يُستخدم)
             ViewBag.SalesLines = Array.Empty<object>();        // فواتير المبيعات
             ViewBag.SalesReturnLines = Array.Empty<object>();  // مرتجعات المبيعات
             ViewBag.PurchaseLines = Array.Empty<object>();     // فواتير المشتريات
             ViewBag.PurchaseReturnLines = Array.Empty<object>(); // مرتجعات المشتريات
+            ViewBag.AdjustmentLines = Array.Empty<object>();   // تسويات جردية
+            ViewBag.PurchaseRequestLines = Array.Empty<object>(); // طلبات الشراء
+            ViewBag.TransferLines = Array.Empty<object>();     // تحويلات بين المخازن
 
             ViewBag.YearlySummary = Array.Empty<object>();     // ملخص حسب السنوات
             ViewBag.WarehouseSummary = Array.Empty<object>();  // ملخص حسب المخازن
 
-            // ===== 5) لو لسه ما اخترناش صنف → رجّع الشاشة من غير بيانات =====
+            // ===== 5) تحميل قائمة الأصناف للأوتوكومبليت (datalist) - دائماً حتى يعمل datalist =====
+            await LoadProductsForAutoCompleteAsync();
+
+            // ===== 6) لو لسه ما اخترناش صنف → رجّع الشاشة من غير بيانات =====
             if (finalProdId == null)
             {
                 ViewBag.SelectedProdName = "";
                 return View(model: null);   // @model Product? فى الفيو
             }
 
-            // ===== 6) تحميل بيانات بطاقة الصنف من جدول Products =====
+            // ===== 7) تحميل بيانات بطاقة الصنف من جدول Products =====
             var product = await _db.Products
                 .Include(p => p.Category)
                 .FirstOrDefaultAsync(p => p.ProdId == finalProdId.Value);
@@ -1166,17 +1178,179 @@ namespace ERP.Controllers
             ViewBag.SelectedProdName = product.ProdName;      // اسم الصنف فى بوكس البحث
             ViewBag.PriceRetail = product.PriceRetail;        // سعر الجمهور من جدول الأصناف
 
-            // ===== 7) لاحقاً: هنا هنضيف الربط الفعلى مع StockLedger / StockBatch =====
-            // - تجميع المشتريات/المبيعات/المرتجعات من القيود المخزنية
-            // - حساب الخصم المرجح
-            // - ملء ViewBag.* بالأرقام الحقيقية + القوائم لكل تاب
+            // ===== 8) جلب بيانات المبيعات من SalesInvoiceLines =====
+            var salesQuery = _db.SalesInvoiceLines
+                .AsNoTracking()
+                .Include(sil => sil.SalesInvoice)
+                    .ThenInclude(si => si.Customer)
+                .Where(sil => sil.ProdId == finalProdId.Value && sil.SalesInvoice.IsPosted);
+
+            // فلترة بالمخزن
+            if (warehouseId.HasValue)
+            {
+                salesQuery = salesQuery.Where(sil => sil.SalesInvoice.WarehouseId == warehouseId.Value);
+            }
+
+            // فلترة بالتاريخ
+            if (from.HasValue)
+            {
+                salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate >= from.Value);
+            }
+            if (to.HasValue)
+            {
+                salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate <= to.Value);
+            }
+
+            // فلترة بالعميل
+            if (finalCustomerId.HasValue)
+            {
+                salesQuery = salesQuery.Where(sil => sil.SalesInvoice.CustomerId == finalCustomerId.Value);
+            }
+
+            // جلب قائمة المبيعات للعرض
+            var salesList = await salesQuery
+                .OrderByDescending(sil => sil.SalesInvoice.SIDate)
+                .ThenByDescending(sil => sil.SalesInvoice.SIId)
+                .Select(sil => new
+                {
+                    Date = sil.SalesInvoice.SIDate,
+                    InvoiceNo = sil.SIId,
+                    Customer = sil.SalesInvoice.Customer != null ? sil.SalesInvoice.Customer.CustomerName : "",
+                    Qty = sil.Qty,
+                    UnitPrice = sil.UnitSalePrice,
+                    // حساب الخصم الإجمالي المتراكم من الخصومات الثلاثة
+                    // الخصم المتراكم = 1 - ((1 - D1/100) * (1 - D2/100) * (1 - D3/100))
+                    DiscountPercent = sil.PriceRetail > 0 
+                        ? ((sil.PriceRetail - sil.UnitSalePrice) / sil.PriceRetail) * 100m
+                        : 0m,
+                    NetAmount = sil.LineNetTotal
+                })
+                .ToListAsync();
+
+            ViewBag.SalesLines = salesList;
+
+            // حساب إجماليات المبيعات
+            ViewBag.TotalQtySold = salesList.Sum(s => s.Qty);
+            ViewBag.TotalAmountSold = salesList.Sum(s => (decimal)s.NetAmount);
+
+            // ===== 9) حساب صافي الكمية من StockLedger =====
+            var stockLedgerQuery = _db.StockLedger
+                .AsNoTracking()
+                .Where(sl => sl.ProdId == finalProdId.Value);
+
+            // فلترة بالمخزن إذا تم تحديده
+            if (warehouseId.HasValue)
+            {
+                stockLedgerQuery = stockLedgerQuery.Where(sl => sl.WarehouseId == warehouseId.Value);
+            }
+
+            // فلترة بالتاريخ إذا تم تحديده
+            if (from.HasValue)
+            {
+                stockLedgerQuery = stockLedgerQuery.Where(sl => sl.TranDate >= from.Value);
+            }
+            if (to.HasValue)
+            {
+                stockLedgerQuery = stockLedgerQuery.Where(sl => sl.TranDate <= to.Value);
+            }
+
+            // حساب صافي الكمية = Sum(QtyIn) - Sum(QtyOut)
+            int totalQtyIn = await stockLedgerQuery.SumAsync(sl => sl.QtyIn);
+            int totalQtyOut = await stockLedgerQuery.SumAsync(sl => sl.QtyOut);
+            int calculatedNetQty = totalQtyIn - totalQtyOut;
+            ViewBag.NetQty = calculatedNetQty;
+
+            // حساب صافي المبلغ من StockLedger (إجمالي التكلفة)
+            decimal calculatedNetAmount = await stockLedgerQuery
+                .Where(sl => sl.QtyIn > 0)
+                .SumAsync(sl => (sl.TotalCost ?? (sl.QtyIn * sl.UnitCost))) 
+                - await stockLedgerQuery
+                    .Where(sl => sl.QtyOut > 0)
+                    .SumAsync(sl => (sl.TotalCost ?? (sl.QtyOut * sl.UnitCost)));
+            ViewBag.NetAmount = calculatedNetAmount;
+
+            // ===== 10) حساب الخصم المرجح من StockAnalysisService =====
+            // الخصم المرجح = متوسط الخصم الموزون للمشتريات المتبقية من StockLedger
+            // يعتمد على: SourceType == "Purchase" و RemainingQty > 0
+            // الصيغة: Sum(RemainingQty × PurchaseDiscount) / Sum(RemainingQty)
+            decimal calculatedWeightedDiscount = await _stockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(finalProdId.Value);
+            ViewBag.WeightedDiscount = calculatedWeightedDiscount;
+
+            // ===== 11) جلب بيانات المشتريات من PILines =====
+            var purchasesQuery = _db.PILines
+                .AsNoTracking()
+                .Include(pil => pil.PurchaseInvoice)
+                    .ThenInclude(pi => pi.Customer)
+                .Where(pil => pil.ProdId == finalProdId.Value && pil.PurchaseInvoice.IsPosted);
+
+            // فلترة بالمخزن
+            if (warehouseId.HasValue)
+            {
+                purchasesQuery = purchasesQuery.Where(pil => pil.PurchaseInvoice.WarehouseId == warehouseId.Value);
+            }
+
+            // فلترة بالتاريخ
+            if (from.HasValue)
+            {
+                purchasesQuery = purchasesQuery.Where(pil => pil.PurchaseInvoice.PIDate >= from.Value);
+            }
+            if (to.HasValue)
+            {
+                purchasesQuery = purchasesQuery.Where(pil => pil.PurchaseInvoice.PIDate <= to.Value);
+            }
+
+            // جلب قائمة المشتريات للعرض
+            var purchasesList = await purchasesQuery
+                .OrderByDescending(pil => pil.PurchaseInvoice.PIDate)
+                .ThenByDescending(pil => pil.PurchaseInvoice.PIId)
+                .Select(pil => new
+                {
+                    Date = pil.PurchaseInvoice.PIDate,
+                    InvoiceNo = pil.PurchaseInvoice.PIId,
+                    Supplier = pil.PurchaseInvoice.Customer != null ? pil.PurchaseInvoice.Customer.CustomerName : "",
+                    Qty = pil.Qty,
+                    UnitCost = pil.UnitCost,
+                    Amount = pil.Qty * pil.UnitCost  // القيمة = الكمية × سعر الوحدة
+                })
+                .ToListAsync();
+
+            ViewBag.PurchaseLines = purchasesList;
+
+            // حساب إجماليات المشتريات
+            ViewBag.TotalQtyPurchased = purchasesList.Sum(p => p.Qty);
+            ViewBag.TotalAmountPurchased = purchasesList.Sum(p => (decimal)p.Amount);
+
+            // ===== 12) لاحقاً: هنا هنضيف باقي الربط =====
+            // - مرتجعات المبيعات من SalesReturnLines
+            // - مرتجعات المشتريات من PurchaseReturnLines
+            // - تسويات الجرد من StockAdjustmentLines
+            // - طلبات الشراء من PRLines
+            // - التحويلات بين المخازن من StockTransferLines
 
             return View(product);   // الملف: Views/Products/Show.cshtml
         }
 
+        // =========================================================
+        // دالة مساعدة: تحميل قائمة الأصناف للأوتوكومبليت (datalist)
+        // =========================================================
+        private async Task LoadProductsForAutoCompleteAsync()
+        {
+            var products = await _db.Products
+                .AsNoTracking()
+                .OrderBy(p => p.ProdName)
+                .Select(p => new
+                {
+                    Id = p.ProdId,
+                    Name = p.ProdName ?? string.Empty,
+                    GenericName = p.GenericName ?? string.Empty,
+                    Company = p.Company ?? string.Empty,
+                    HasQuota = p.HasQuota,
+                    PriceRetail = p.PriceRetail
+                })
+                .ToListAsync();
 
-
-
+            ViewBag.ProductsAuto = products;
+        }
 
 
 

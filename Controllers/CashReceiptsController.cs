@@ -1,4 +1,4 @@
-﻿using System;                                     // للتعامل مع التواريخ DateTime
+using System;                                     // للتعامل مع التواريخ DateTime
 using System.Collections.Generic;                 // القوائم Dictionary / List
 using System.Globalization;                       // تنسيق التواريخ فى التصدير
 using System.Linq;                                // أوامر LINQ مثل Where / OrderBy
@@ -265,9 +265,9 @@ namespace ERP.Controllers
         // =========================================================
 
         // GET: CashReceipts/Create
-        public IActionResult Create()
+        public IActionResult Create(int? customerId = null)
         {
-            PopulateDropdowns();  // تجهيز القوائم المنسدلة
+            PopulateDropdowns(customerId);  // تجهيز القوائم المنسدلة مع اختيار العميل إذا تم تمريره
             return View();
         }
 

@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;                            // مكتبة Excel لإنشاء ملف xlsx
+using ClosedXML.Excel;                            // مكتبة Excel لإنشاء ملف xlsx
 using ERP.Data;                                   // AppDbContext
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // Customer
@@ -601,7 +601,26 @@ namespace ERP.Controllers
             DateTime? toExclusive = toDate?.Date.AddDays(1); // متغير: نهاية المدة (حصري)
 
             // =========================================================
-            // 6) إجمالي المبيعات (من فواتير البيع المُرحّلة فقط)
+            // 6) إجمالي المبيعات (من قيود دفتر الأستاذ - مصدر الحقيقة)
+            // ✅ مهم: نحسب من LedgerEntries وليس من SalesInvoices مباشرة
+            // لأن القيود هي المصدر الحقيقي بعد الترحيل
+            // =========================================================
+            var salesLedgerQ = _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.CustomerId == customer.CustomerId &&
+                    e.SourceType == LedgerSourceType.SalesInvoice &&
+                    e.LineNo == 1 && // سطر مدين العميل فقط (ليس سطر الإيرادات)
+                    e.PostVersion > 0); // فقط القيود المرحلة (ليست القيود العكسية)
+
+            if (from.HasValue) salesLedgerQ = salesLedgerQ.Where(e => e.EntryDate >= from.Value);
+            if (toExclusive.HasValue) salesLedgerQ = salesLedgerQ.Where(e => e.EntryDate < toExclusive.Value);
+
+            // ✅ نحسب من Debit (مدين العميل) لأن هذا هو صافي الفاتورة
+            decimal totalSales = await salesLedgerQ.SumAsync(e => (decimal?)e.Debit) ?? 0m;
+
+            // =========================================================
+            // 6.1) استعلام منفصل لـ SalesInvoices (لحساب عدد الفواتير وآخر تاريخ)
             // =========================================================
             var salesQ = _context.SalesInvoices
                 .AsNoTracking()
@@ -610,10 +629,69 @@ namespace ERP.Controllers
             if (from.HasValue) salesQ = salesQ.Where(x => x.SIDate >= from.Value);
             if (toExclusive.HasValue) salesQ = salesQ.Where(x => x.SIDate < toExclusive.Value);
 
-            decimal totalSales = await salesQ.SumAsync(x => (decimal?)x.NetTotal) ?? 0m;
+            // =========================================================
+            // 7) إجمالي المشتريات (من قيود دفتر الأستاذ - مصدر الحقيقة)
+            // ✅ مهم: نحسب من LedgerEntries وليس من PurchaseInvoices مباشرة
+            // لأن القيود هي المصدر الحقيقي بعد الترحيل
+            // ✅ مهم: نحسب من آخر PostVersion لكل فاتورة (SourceId) لضمان عدم حساب القيود القديمة
+            // =========================================================
+            
+            // أولاً: نجد آخر PostVersion لكل فاتورة (SourceId)
+            var maxPostVersions = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.CustomerId == customer.CustomerId &&
+                    e.SourceType == LedgerSourceType.PurchaseInvoice &&
+                    e.LineNo == 2 &&
+                    e.LineNo < 9000 &&
+                    e.PostVersion > 0 &&
+                    e.Description != null &&
+                    !e.Description.Contains("عكس"))
+                .GroupBy(e => e.SourceId)
+                .Select(g => new { SourceId = g.Key, MaxPostVersion = g.Max(e => e.PostVersion) })
+                .ToDictionaryAsync(x => x.SourceId, x => x.MaxPostVersion);
+
+            // ثانياً: نحسب الإجمالي من القيود التي تطابق آخر PostVersion لكل فاتورة
+            // ✅ مهم: يجب تحميل البيانات أولاً ثم التصفية في الذاكرة لأن Dictionary.get_Item لا يمكن ترجمته إلى SQL
+            decimal totalPurchases = 0m; // متغير: إجمالي المشتريات
+            var sourceIds = maxPostVersions.Keys.ToList();
+            if (sourceIds.Count == 0)
+            {
+                totalPurchases = 0m; // ✅ إذا لم توجد فواتير مشتريات، الإجمالي = 0
+            }
+            else
+            {
+                // ✅ تحميل جميع القيود المرشحة أولاً إلى الذاكرة
+                var allPurchasesEntries = await _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.CustomerId == customer.CustomerId &&
+                        e.SourceType == LedgerSourceType.PurchaseInvoice &&
+                        e.LineNo == 2 &&
+                        e.LineNo < 9000 &&
+                        e.PostVersion > 0 &&
+                        e.Description != null &&
+                        !e.Description.Contains("عكس") &&
+                        sourceIds.Contains(e.SourceId))
+                    .ToListAsync();
+
+                // ✅ تصفية في الذاكرة: فقط القيود التي تطابق آخر PostVersion لكل فاتورة
+                var filteredEntries = allPurchasesEntries
+                    .Where(e =>
+                        maxPostVersions.ContainsKey(e.SourceId) &&
+                        maxPostVersions[e.SourceId] == e.PostVersion)
+                    .ToList();
+
+                // ✅ تطبيق فلتر التاريخ (إن وجد)
+                if (from.HasValue) filteredEntries = filteredEntries.Where(e => e.EntryDate >= from.Value).ToList();
+                if (toExclusive.HasValue) filteredEntries = filteredEntries.Where(e => e.EntryDate < toExclusive.Value).ToList();
+
+                // ✅ نحسب من Credit (دائن المورد) لأن هذا هو صافي الفاتورة
+                totalPurchases = filteredEntries.Sum(e => e.Credit);
+            }
 
             // =========================================================
-            // 7) إجمالي المشتريات (من فواتير الشراء المُرحّلة فقط)
+            // 7.1) استعلام منفصل لـ PurchaseInvoices (لحساب عدد الفواتير وآخر تاريخ)
             // =========================================================
             var purchasesQ = _context.PurchaseInvoices
                 .AsNoTracking()
@@ -621,8 +699,6 @@ namespace ERP.Controllers
 
             if (from.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate >= from.Value);
             if (toExclusive.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate < toExclusive.Value);
-
-            decimal totalPurchases = await purchasesQ.SumAsync(x => (decimal?)x.NetTotal) ?? 0m;
 
             // =========================================================
             // 8) إجمالي المرتجعات
@@ -668,13 +744,47 @@ namespace ERP.Controllers
             customer.CurrentBalance = currentBalance;
 
             // =========================================================
-            // 11) تمرير النتائج للفيو
+            // 11) تحميل قوائم الفواتير للعرض في الجداول
+            // =========================================================
+            var salesInvoicesList = await salesQ
+                .Include(s => s.Customer)
+                .Include(s => s.Lines)
+                .OrderByDescending(s => s.SIDate)
+                .ThenByDescending(s => s.SITime)
+                .ToListAsync();
+
+            var purchaseInvoicesList = await purchasesQ
+                .Include(p => p.Customer)
+                .Include(p => p.Lines)
+                .OrderByDescending(p => p.PIDate)
+                .ToListAsync();
+
+            // =========================================================
+            // 11.1) تحميل أسماء المخازن للعرض (اختياري - يمكن عرض WarehouseId فقط)
+            // =========================================================
+            var warehouseIds = salesInvoicesList.Select(s => s.WarehouseId)
+                .Union(purchaseInvoicesList.Select(p => p.WarehouseId))
+                .Distinct()
+                .ToList();
+
+            var warehouses = warehouseIds.Count > 0
+                ? await _context.Warehouses
+                    .AsNoTracking()
+                    .Where(w => warehouseIds.Contains(w.WarehouseId))
+                    .ToDictionaryAsync(w => w.WarehouseId, w => w.WarehouseName)
+                : new Dictionary<int, string>();
+
+            // =========================================================
+            // 12) تمرير النتائج للفيو
             // =========================================================
             ViewBag.TotalSales = totalSales;
             ViewBag.TotalPurchases = totalPurchases;
             ViewBag.TotalReturns = totalReturns;
             ViewBag.InvoiceCount = invoiceCount;
             ViewBag.LastTransactionDate = lastTransactionDate;
+            ViewBag.SalesInvoicesList = salesInvoicesList;
+            ViewBag.PurchaseInvoicesList = purchaseInvoicesList;
+            ViewBag.Warehouses = warehouses;
 
             return View(customer);
         }

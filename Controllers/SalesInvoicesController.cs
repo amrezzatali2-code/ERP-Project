@@ -1113,6 +1113,444 @@ namespace ERP.Controllers
 
 
 
+        // ================================================================
+        // DTO: بيانات مسح سطر بيع (جاية من AJAX)
+        // ================================================================
+        public class RemoveLineJsonDto
+        {
+            public int SIId { get; set; }    // متغير: رقم فاتورة البيع
+            public int LineNo { get; set; }  // متغير: رقم السطر داخل الفاتورة
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
+        {
+            try
+            {
+                // =========================
+                // 0) فحص المدخلات
+                // =========================
+                if (dto == null || dto.SIId <= 0 || dto.LineNo <= 0)
+                    return BadRequest(new { ok = false, message = "بيانات المسح غير صحيحة." });
+
+                // =========================
+                // 1) تحميل الفاتورة
+                // =========================
+                var invoice = await _context.SalesInvoices
+                    .FirstOrDefaultAsync(x => x.SIId == dto.SIId);
+
+                if (invoice == null)
+                    return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+                // =========================
+                // 1.1) منع التعديل على فاتورة مُرحّلة
+                // =========================
+                if (invoice.IsPosted)
+                    return BadRequest(new { ok = false, message = "الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً." });
+
+                // =========================
+                // 2) تحميل السطر المطلوب
+                // =========================
+                var line = await _context.SalesInvoiceLines
+                    .FirstOrDefaultAsync(l => l.SIId == dto.SIId && l.LineNo == dto.LineNo);
+
+                if (line == null)
+                    return NotFound(new { ok = false, message = "السطر غير موجود." });
+
+                // =========================
+                // 3) تحميل حركات StockLedger المرتبطة بالسطر
+                // =========================
+                var ledgers = await _context.StockLedger
+                    .Where(x =>
+                        x.SourceType == "Sales" &&    // ثابت: مصدر الحركة بيع
+                        x.SourceId == dto.SIId &&     // ثابت: رقم الفاتورة
+                        x.SourceLine == dto.LineNo)   // ثابت: رقم السطر
+                    .ToListAsync();
+
+                // =========================
+                // 4) نبدأ Transaction (الحذف مسموح للفواتير غير المرحلة)
+                // =========================
+                await using var tx = await _context.Database.BeginTransactionAsync();
+
+                // =========================
+                // 6) تحديث StockBatches (إرجاع الكمية للمخزن)
+                // =========================
+                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim(); // متغير: رقم التشغيلة
+                var expDate = line.Expiry?.Date;                                                   // متغير: تاريخ الصلاحية
+
+                // شرطنا الثابت: لازم BatchNo + Expiry
+                if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                {
+                    var exp = expDate.Value.Date;
+
+                    var sbRow = await _context.StockBatches
+                        .FirstOrDefaultAsync(x =>
+                            x.WarehouseId == invoice.WarehouseId &&         // متغير: المخزن
+                            x.ProdId == line.ProdId &&                      // متغير: الصنف
+                            x.BatchNo == batchNo &&                          // متغير: التشغيلة
+                            x.Expiry.HasValue &&
+                            x.Expiry.Value.Date == exp);
+
+                    if (sbRow != null)
+                    {
+                        sbRow.QtyOnHand += line.Qty; // ✅ إرجاع الكمية للمخزن (زيادة رصيد البيع)
+
+                        sbRow.UpdatedAt = DateTime.UtcNow;
+                        sbRow.Note = $"SI:{dto.SIId} Line:{dto.LineNo} (+{line.Qty})";
+                    }
+                }
+
+                // =========================
+                // 7) حذف StockFifoMap المرتبط بحركات الخروج أولاً
+                // =========================
+                foreach (var lg in ledgers)
+                {
+                    if (lg.QtyOut > 0)
+                    {
+                        // حذف كل الـ FIFO Maps المرتبطة بهذه الحركة
+                        var fifoMaps = await _context.Set<StockFifoMap>()
+                            .Where(f => f.OutEntryId == lg.EntryId)
+                            .ToListAsync();
+
+                        if (fifoMaps.Any())
+                        {
+                            // إرجاع RemainingQty للدخلات المرتبطة
+                            foreach (var map in fifoMaps)
+                            {
+                                var inLedger = await _context.StockLedger
+                                    .FirstOrDefaultAsync(x => x.EntryId == map.InEntryId);
+
+                                if (inLedger != null)
+                                {
+                                    inLedger.RemainingQty = (inLedger.RemainingQty ?? 0) + map.Qty;
+                                }
+                            }
+
+                            _context.Set<StockFifoMap>().RemoveRange(fifoMaps);
+                        }
+                    }
+                }
+
+                // =========================
+                // 8) حذف StockLedger ثم حذف سطر الفاتورة
+                // =========================
+                if (ledgers.Count > 0)
+                    _context.StockLedger.RemoveRange(ledgers);   // ✅ حذف وليس عكس
+
+                _context.SalesInvoiceLines.Remove(line);
+
+                await _context.SaveChangesAsync();
+
+                // =========================
+                // 9) تحديث هيدر الفاتورة (داخل نفس الـ Transaction)
+                // =========================
+                await _docTotals.RecalcSalesInvoiceTotalsAsync(dto.SIId);
+
+                await _context.SaveChangesAsync();
+
+                // ✅ Commit بعد كل شيء يخص الداتا
+                await tx.CommitAsync();
+
+                // =========================
+                // 10) LogActivity (بعد الـ Commit حتى لا يعطل المسح)
+                // =========================
+                try
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "SalesInvoiceLine",
+                        dto.SIId,
+                        $"SIId={dto.SIId} | LineNo={dto.LineNo} | ProdId={line.ProdId} | Qty={line.Qty}"
+                    );
+                }
+                catch
+                {
+                    // تعليق: لا نوقف العملية لو اللوج حصل فيه مشكلة
+                }
+
+                // =========================
+                // 11) رجّع السطور + الإجماليات بعد المسح
+                // =========================
+                var linesNow = await _context.SalesInvoiceLines
+                    .Where(l => l.SIId == dto.SIId)
+                    .OrderBy(l => l.LineNo)
+                    .ToListAsync();
+
+                var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+                var prodMap = await _context.Products
+                    .AsNoTracking()
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .Select(p => new { p.ProdId, p.ProdName })
+                    .ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+                int totalLines = linesNow.Count;
+                int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
+                int totalQty = linesNow.Sum(x => x.Qty);
+
+                decimal totalRetail = linesNow.Sum(x => x.Qty * x.UnitSalePrice);
+                decimal totalDiscount = linesNow.Sum(x => x.DiscountValue);
+                decimal totalAfterDiscount = linesNow.Sum(x => x.LineTotalAfterDiscount);
+                decimal taxAmount = linesNow.Sum(x => x.TaxValue);
+                decimal netTotal = totalAfterDiscount + taxAmount;
+
+                var linesDto = linesNow.Select(l =>
+                {
+                    var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+
+                    return new
+                    {
+                        lineNo = l.LineNo,
+                        prodId = l.ProdId,
+                        prodName = name,
+                        qty = l.Qty,
+                        priceRetail = l.UnitSalePrice,
+                        discPct = l.Disc1Percent,
+                        batchNo = l.BatchNo,
+                        expiry = l.Expiry?.ToString("yyyy-MM-dd"),
+                        lineValue = l.LineTotalAfterDiscount
+                    };
+                }).ToList();
+
+                return Json(new
+                {
+                    ok = true,
+                    message = "تم حذف السطر بنجاح.",
+                    lines = linesDto,
+                    totals = new
+                    {
+                        totalLines,
+                        totalItems,
+                        totalQty,
+                        totalRetail,
+                        totalDiscount,
+                        totalAfterDiscount,
+                        taxAmount,
+                        netTotal
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { ok = false, message = ex.Message });
+            }
+        }
+
+        // ================================================================
+        // DTO: بيانات مسح كل السطور (جاية من AJAX)
+        // ================================================================
+        public class ClearAllLinesJsonDto
+        {
+            public int SIId { get; set; } // متغير: رقم فاتورة البيع
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ClearAllLinesJson([FromBody] ClearAllLinesJsonDto dto)
+        {
+            try
+            {
+                // =========================
+                // 0) فحص المدخلات
+                // =========================
+                if (dto == null || dto.SIId <= 0)
+                    return BadRequest(new { ok = false, message = "بيانات المسح غير صحيحة." });
+
+                // =========================
+                // 1) تحميل الفاتورة
+                // =========================
+                var invoice = await _context.SalesInvoices
+                    .FirstOrDefaultAsync(x => x.SIId == dto.SIId);
+
+                if (invoice == null)
+                    return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+                // =========================
+                // 1.1) إذا كانت الفاتورة مُرحّلة، نفتحها تلقائياً قبل المسح
+                // (لأن الترحيل بعد المسح سيعمل قيود عكسية + قيد جديد)
+                // =========================
+                bool wasPosted = invoice.IsPosted;
+                if (wasPosted)
+                {
+                    // فتح الفاتورة تلقائياً (إرجاع IsPosted = false) قبل المسح
+                    invoice.IsPosted = false;
+                    invoice.Status = "فاتورة مفتوحة";
+                    await _context.SaveChangesAsync();
+                }
+
+                // =========================
+                // 2) تحميل كل سطور الفاتورة
+                // =========================
+                var lines = await _context.SalesInvoiceLines
+                    .Where(l => l.SIId == dto.SIId)
+                    .OrderBy(l => l.LineNo)
+                    .ToListAsync();
+
+                if (lines.Count == 0)
+                {
+                    // رجّع نفس شكل RemoveLineJson (lines + totals)
+                    return Json(new
+                    {
+                        ok = true,
+                        message = "لا توجد أصناف لمسحها.",
+                        lines = new object[0],
+                        totals = new { totalLines = 0, totalItems = 0, totalQty = 0, totalRetail = 0m, totalDiscount = 0m, totalAfterDiscount = 0m, taxAmount = 0m, netTotal = 0m }
+                    });
+                }
+
+                // =========================
+                // 3) تحميل كل حركات StockLedger المرتبطة بالفاتورة مرة واحدة
+                // =========================
+                var allLedgers = await _context.StockLedger
+                    .Where(x =>
+                        x.SourceType == "Sales" &&  // ثابت: مصدر الحركة بيع
+                        x.SourceId == dto.SIId)     // ثابت: رقم الفاتورة
+                    .ToListAsync();
+
+                // =========================
+                // 4) نبدأ Transaction بعد ما اتأكدنا إن المسح مسموح
+                // =========================
+                await using var tx = await _context.Database.BeginTransactionAsync();
+
+                // =========================
+                // 5) تحديث StockBatches (إرجاع الكمية للمخزن — زياده QtyOnHand)
+                //    (بنفس منطق RemoveLineJson لكن على كل السطور)
+                // =========================
+                foreach (var line in lines)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim(); // متغير: رقم التشغيلة
+                    var expDate = line.Expiry?.Date;                                                    // متغير: تاريخ الصلاحية
+
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+
+                        var sbRow = await _context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == invoice.WarehouseId &&   // متغير: المخزن
+                                x.ProdId == line.ProdId &&                // متغير: الصنف
+                                x.BatchNo == batchNo &&                    // متغير: التشغيلة
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand += line.Qty; // ✅ إرجاع الكمية للمخزن (زيادة رصيد البيع)
+
+                            sbRow.UpdatedAt = DateTime.UtcNow;
+                            sbRow.Note = $"SI:{dto.SIId} ClearAll (Line:{line.LineNo}) (+{line.Qty})";
+
+                            // ❌ ممنوع حذف صف StockBatches حتى لو الرصيد = 0 (حسب الاتفاق)
+                        }
+                    }
+                }
+
+                // =========================
+                // 6) حذف StockFifoMap المرتبط بحركات الخروج أولاً
+                // =========================
+                foreach (var lg in allLedgers)
+                {
+                    if (lg.QtyOut > 0)
+                    {
+                        // حذف كل الـ FIFO Maps المرتبطة بهذه الحركة
+                        var fifoMaps = await _context.Set<StockFifoMap>()
+                            .Where(f => f.OutEntryId == lg.EntryId)
+                            .ToListAsync();
+
+                        if (fifoMaps.Any())
+                        {
+                            // إرجاع RemainingQty للدخلات المرتبطة
+                            foreach (var map in fifoMaps)
+                            {
+                                var inLedger = await _context.StockLedger
+                                    .FirstOrDefaultAsync(x => x.EntryId == map.InEntryId);
+
+                                if (inLedger != null)
+                                {
+                                    inLedger.RemainingQty = (inLedger.RemainingQty ?? 0) + map.Qty;
+                                }
+                            }
+
+                            _context.Set<StockFifoMap>().RemoveRange(fifoMaps);
+                        }
+                    }
+                }
+
+                // =========================
+                // 7) حذف StockLedger (كل قيود الفاتورة) ثم حذف كل سطور الفاتورة
+                // =========================
+                if (allLedgers.Count > 0)
+                    _context.StockLedger.RemoveRange(allLedgers);
+
+                _context.SalesInvoiceLines.RemoveRange(lines);
+
+                await _context.SaveChangesAsync();
+
+                // =========================
+                // 8) تحديث هيدر الفاتورة (داخل نفس الـ Transaction)
+                // =========================
+                await _docTotals.RecalcSalesInvoiceTotalsAsync(dto.SIId);
+
+                await _context.SaveChangesAsync();
+
+                await tx.CommitAsync();
+
+                // =========================
+                // 9) LogActivity (بعد الـ Commit)
+                // =========================
+                try
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "SalesInvoiceLines",
+                        dto.SIId,
+                        $"SIId={dto.SIId} | ClearAllLines | LinesCount={lines.Count}"
+                    );
+                }
+                catch
+                {
+                    // تعليق: لا نوقف العملية لو اللوج حصل فيه مشكلة
+                }
+
+                // =========================
+                // 10) ترحيل الفاتورة تلقائياً بعد مسح الأصناف (بنفس منطق فاتورة المشتريات)
+                // - PostSalesInvoiceAsync سيعمل قيود عكسية تلقائياً إذا كانت هناك مرحلة سابقة
+                // - ثم سينشئ قيد جديد للفاتورة (حتى لو كانت فارغة)
+                // =========================
+                try
+                {
+                    // ترحيل الفاتورة (سيعمل قيود عكسية إذا كانت هناك مرحلة سابقة، ثم قيد جديد)
+                    await _ledgerPostingService.PostSalesInvoiceAsync(dto.SIId, User.Identity?.Name);
+                }
+                catch (Exception postEx)
+                {
+                    // تعليق: لو الترحيل فشل، نرجع رسالة خطأ واضحة
+                    throw new Exception($"تم مسح الأصناف بنجاح، لكن الترحيل فشل: {postEx.Message}");
+                }
+
+                // =========================
+                // 11) رجّع السطور + الإجماليات بعد المسح (هتكون فاضية)
+                // =========================
+                return Json(new
+                {
+                    ok = true,
+                    message = wasPosted 
+                        ? "تم مسح جميع الأصناف وترحيل الفاتورة تلقائياً (تم عمل قيود عكسية وقيد جديد)." 
+                        : "تم مسح جميع الأصناف وترحيل الفاتورة تلقائياً.",
+                    lines = new object[0],
+                    totals = new { totalLines = 0, totalItems = 0, totalQty = 0, totalRetail = 0m, totalDiscount = 0m, totalAfterDiscount = 0m, taxAmount = 0m, netTotal = 0m },
+                    isPosted = true // تعليق: الفاتورة أصبحت مُرحّلة
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { ok = false, message = ex.Message });
+            }
+        }
+
+
+
+
         [HttpPost]
         [IgnoreAntiforgeryToken] // تعليق: لأن الاستدعاء من fetch بدون توكن
         public async Task<IActionResult> PostInvoice(int id)
@@ -1277,6 +1715,106 @@ namespace ERP.Controllers
 
 
 
+
+
+
+
+        // ================================
+        //      فتح الفاتورة المرحلة   
+        // ================================
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> OpenInvoice(int id)
+        {
+            // ================================
+            // 0) تحديد هل الطلب Ajax أم لا
+            // ================================
+            bool isAjax =
+                string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+                || Request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                // ================================
+                // 1) تحميل الفاتورة
+                // ================================
+                var invoice = await _context.SalesInvoices
+                    .FirstOrDefaultAsync(x => x.SIId == id);
+
+                if (invoice == null)
+                {
+                    if (isAjax) return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+                    TempData["Error"] = "الفاتورة غير موجودة.";
+                    return RedirectToAction("Index");
+                }
+
+                // ================================
+                // 2) لازم تكون مترحلة عشان ينفع "فتح"
+                // ================================
+                if (!invoice.IsPosted)
+                {
+                    if (isAjax) return BadRequest(new { ok = false, message = "هذه الفاتورة ليست مُرحّلة، لا يوجد ما يمكن فتحه." });
+                    TempData["Error"] = "هذه الفاتورة ليست مُرحّلة.";
+                    return RedirectToAction("Show", new { id = invoice.SIId });
+                }
+
+                // ================================
+                // 3) (لاحقًا) صلاحية فتح التعديل
+                // ================================
+                // تعليق: هنا هتحط شرط الصلاحية لما نعمل نظام Permissions
+                // مثال:
+                // if (!User.IsInRole("Admin")) return Forbid();
+
+                // ================================
+                // 4) فتح الفاتورة للتعديل (إلغاء الترحيل)
+                // ================================
+                invoice.IsPosted = false;                 // متغير: إلغاء حالة الترحيل
+                invoice.Status = "مفتوحة للتعديل";                  // متغير: حالة عرضية
+                invoice.PostedAt = null;                  // متغير: مسح وقت الترحيل
+                invoice.PostedBy = null;                  // متغير: مسح من قام بالترحيل
+                invoice.UpdatedAt = DateTime.Now;         // متغير: آخر تعديل
+
+                await _context.SaveChangesAsync();
+
+                // ================================
+                // 5) تسجيل نشاط
+                // ================================
+                await _activityLogger.LogAsync(
+                    actionType: UserActionType.Unpost,     // متغير: نوع العملية (فتح/إلغاء ترحيل)
+                    entityName: "SalesInvoice",
+                    entityId: invoice.SIId,
+                    description: $"فتح فاتورة مبيعات رقم {invoice.SIId} للتعديل"
+                );
+
+                // ================================
+                // 6) رد Ajax
+                // ================================
+                if (isAjax)
+                {
+                    return Ok(new
+                    {
+                        ok = true,
+                        message = "تم فتح الفاتورة للتعديل.",
+                        isPosted = false,
+                        status = invoice.Status
+                    });
+                }
+
+                TempData["Success"] = "تم فتح الفاتورة للتعديل.";
+                return RedirectToAction("Show", new { id = invoice.SIId });
+            }
+            catch (Exception ex)
+            {
+                var msg = string.IsNullOrWhiteSpace(ex.Message) ? "حدث خطأ أثناء فتح الفاتورة." : ex.Message;
+
+                if (isAjax)
+                    return BadRequest(new { ok = false, message = "فشل فتح الفاتورة: " + msg });
+
+                TempData["Error"] = "فشل فتح الفاتورة: " + msg;
+                return RedirectToAction("Show", new { id });
+            }
+        }
 
 
 
@@ -1488,6 +2026,12 @@ namespace ERP.Controllers
             // بناء الاستعلام الموحّد
             var q = BuildSalesInvoicesQuery(search, searchBy, sort, dir, fromCode, toCode);
 
+            // =========================================================
+            // حساب إجمالي الصافي من نفس الاستعلام (بعد الفلاتر)
+            // ✅ مهم: لازم قبل الـ PagedResult علشان ما تتحسبش على الصفحة بس
+            // =========================================================
+            decimal totalNet = await q.SumAsync(si => (decimal?)si.NetTotal) ?? 0m;
+
             // التقسيم إلى صفحات
             var model = await PagedResult<SalesInvoice>.CreateAsync(q, page, pageSize);
 
@@ -1509,6 +2053,9 @@ namespace ERP.Controllers
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
             ViewBag.TotalCount = model.TotalCount;
+
+            // إجمالي الصافي
+            ViewBag.TotalNet = totalNet;
 
             return View(model);
         }
@@ -1812,28 +2359,31 @@ namespace ERP.Controllers
 
 
         // =========================
-        // Delete — POST: تنفيذ الحذف لفاتورة واحدة
-        // (معتمد على Cascade لحذف السطور)
+        // Delete — POST: تنفيذ الحذف لفاتورة واحدة (حذف عميق)
+        // ✅ نفس منطق فاتورة المشتريات:
+        // 1) تحديث StockBatches (إرجاع الكمية للمخزن)
+        // 2) حذف StockFifoMap + إرجاع RemainingQty
+        // 3) حذف StockLedger الخاص بالفاتورة
+        // 4) عكس الأثر المحاسبي (Reverse) بدل حذف LedgerEntries
+        // 5) حذف الهيدر (Cascade يحذف السطور)
         // =========================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var invoice = await _context.SalesInvoices
-                                        .FirstOrDefaultAsync(e => e.SIId == id);
-            if (invoice == null)
-                return NotFound();
+            var result = await TryDeleteSalesInvoiceDeepAsync(id);
 
-            try
+            if (result.Status == DeleteInvoiceStatus.Deleted)
             {
-                _context.SalesInvoices.Remove(invoice);
-                await _context.SaveChangesAsync();
-                TempData["Msg"] = "تم حذف الفاتورة (مع السطور التابعة لها إن وُجدت).";
+                TempData["SuccessMessage"] = "تم حذف الفاتورة بنجاح (مع تحديث المخزون وعكس الأثر المحاسبي).";
             }
-            catch (DbUpdateConcurrencyException)
+            else if (result.Status == DeleteInvoiceStatus.BlockedByFifo)
             {
-                ModelState.AddModelError(string.Empty, "تعذر الحذف بسبب تعارض متزامن.");
-                return View(invoice);
+                TempData["ErrorMessage"] = result.Message ?? "لا يمكن حذف الفاتورة لأن جزءًا من كميته تم البيع/الصرف منه بالفعل.";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = $"تعذر حذف الفاتورة رقم {id}: {result.Message ?? "خطأ غير معروف"}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -1844,7 +2394,8 @@ namespace ERP.Controllers
 
 
         // =========================
-        // BulkDelete — حذف مجموعة فواتير مختارة
+        // BulkDelete — حذف مجموعة فواتير مختارة (حذف عميق)
+        // ✅ نفس منطق فاتورة المشتريات: يحذف "المسموح فقط" ويترك الممنوع/الفاشل
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -1852,7 +2403,7 @@ namespace ERP.Controllers
         {
             if (string.IsNullOrWhiteSpace(selectedIds))
             {
-                TempData["Msg"] = "لم يتم اختيار أي فواتير للحذف.";
+                TempData["ErrorMessage"] = "لم يتم اختيار أي فواتير للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -1860,29 +2411,70 @@ namespace ERP.Controllers
                                  .Select(s => int.TryParse(s, out var n) ? (int?)n : null)
                                  .Where(n => n.HasValue)
                                  .Select(n => n!.Value)
+                                 .Distinct()
                                  .ToList();
 
             if (!ids.Any())
             {
-                TempData["Msg"] = "لم يتم اختيار أي فواتير صحيحة للحذف.";
+                TempData["ErrorMessage"] = "لم يتم اختيار أي فواتير صحيحة للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
-            var invoices = await _context.SalesInvoices
-                                         .Where(x => ids.Contains(x.SIId))
-                                         .ToListAsync();
+            var existingIds = await _context.SalesInvoices
+                .Where(x => ids.Contains(x.SIId))
+                .Select(x => x.SIId)
+                .ToListAsync();
 
-            if (!invoices.Any())
+            if (!existingIds.Any())
             {
-                TempData["Msg"] = "لم يتم العثور على الفواتير المحددة.";
+                TempData["ErrorMessage"] = "لم يتم العثور على الفواتير المحددة في قاعدة البيانات.";
                 return RedirectToAction(nameof(Index));
             }
 
-            // نفترض أن العلاقة مع السطور عليها Cascade Delete
-            _context.SalesInvoices.RemoveRange(invoices);
-            await _context.SaveChangesAsync();
+            int deletedCount = 0;
+            int blockedCount = 0;
+            int failedCount = 0;
 
-            TempData["Msg"] = $"تم حذف {invoices.Count} فاتورة (مع السطور التابعة لها).";
+            var blockedIds = new List<int>();
+            var failedIds = new List<int>();
+
+            foreach (var id in existingIds)
+            {
+                var result = await TryDeleteSalesInvoiceDeepAsync(id);
+
+                if (result.Status == DeleteInvoiceStatus.Deleted)
+                    deletedCount++;
+                else if (result.Status == DeleteInvoiceStatus.BlockedByFifo)
+                {
+                    blockedCount++;
+                    blockedIds.Add(id);
+                }
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(id);
+                }
+            }
+
+            var summary = $"تم حذف: {deletedCount} | تم منع: {blockedCount} | فشل: {failedCount}";
+
+            if (deletedCount > 0)
+            {
+                TempData["SuccessMessage"] = summary;
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"فواتير فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = $"لم يتم حذف أي فاتورة. {summary}";
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | فواتير فشل حذفها: {string.Join(", ", failedIds)}";
+            }
+
             return RedirectToAction(nameof(Index));
         }
 
