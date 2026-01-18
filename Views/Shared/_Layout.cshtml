@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     @* ===== الأساسيات ===== *@
@@ -362,6 +362,15 @@
                                         حجم تعامل عميل
                                     </a>
                                 </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Reports"
+                                       asp-action="CustomerBalances"
+                                       data-tab-id="customer-balances-report"
+                                       data-tab-title="تقرير: أرصدة العملاء">
+                                        📊 تقرير: أرصدة العملاء
+                                    </a>
+                                </li>
 
                             </ul>
                         </li>
@@ -437,6 +446,14 @@
                                        data-tab-id="stock-ledger"
                                        data-tab-title="دفتر الحركة المخزنية">
                                         دفتر الحركة المخزنية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Reports" asp-action="ProductBalances"
+                                       data-tab-id="product-balances-report"
+                                       data-tab-title="تقرير: أرصدة الأصناف">
+                                        📊 تقرير: أرصدة الأصناف
                                     </a>
                                 </li>
                                 <li>

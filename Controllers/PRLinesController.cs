@@ -1,4 +1,4 @@
-﻿using System;                                     // لاستخدام DateTime
+using System;                                     // لاستخدام DateTime
 using System.Collections.Generic;                 // List<T>
 using System.IO;                                  // MemoryStream لتجهيز ملف الإكسل
 using System.Linq;                                // أوامر LINQ
@@ -231,6 +231,175 @@ namespace ERP.Controllers
 
             // ممكن نرجع لقائمة السطور مفلترة على نفس الطلب
             return RedirectToAction(nameof(Index), new { search = model.PRId.ToString(), searchBy = "pr" });
+        }
+
+        // ============================================================
+        // AddLineJson — POST: إضافة/تعديل سطر طلب شراء عبر AJAX
+        // مشابه لـ PILines.AddLineJson لكن بدون تأثير على المخزون
+        // ============================================================
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
+        {
+            // =========================
+            // 0) فحص سريع للمدخلات
+            // =========================
+            if (dto == null)
+                return BadRequest(new { ok = false, message = "لم يتم إرسال بيانات." });
+
+            if (dto.PRId <= 0 || dto.prodId <= 0)
+                return BadRequest(new { ok = false, message = "بيانات الطلب/الصنف غير صحيحة." });
+
+            if (dto.qty <= 0)
+                return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
+
+            // =========================
+            // 1) تحميل طلب الشراء
+            // =========================
+            var request = await _context.PurchaseRequests
+                .FirstOrDefaultAsync(pr => pr.PRId == dto.PRId);
+
+            if (request == null)
+                return NotFound(new { ok = false, message = "طلب الشراء غير موجود." });
+
+            if (request.IsConverted)
+                return BadRequest(new { ok = false, message = "لا يمكن تعديل طلب تم تحويله إلى فاتورة." });
+
+            // =========================
+            // 2) البحث عن سطر موجود (نفس ProdId)
+            // =========================
+            var existingLine = await _context.PRLines
+                .FirstOrDefaultAsync(l => l.PRId == dto.PRId && l.ProdId == dto.prodId);
+
+            if (existingLine != null)
+            {
+                // تعديل السطر الموجود
+                int qtyDelta = dto.qty - existingLine.QtyRequested;
+                existingLine.QtyRequested = dto.qty;
+                existingLine.PriceRetail = dto.priceRetail;
+                existingLine.PurchaseDiscountPct = dto.purchaseDiscountPct;
+                
+                // حساب التكلفة المتوقعة (بعد الخصم)
+                decimal expectedCost = dto.qty * dto.priceRetail * (1 - (dto.purchaseDiscountPct / 100m));
+                existingLine.ExpectedCost = expectedCost;
+
+                await _context.SaveChangesAsync();
+                await _docTotals.RecalcPurchaseRequestTotalsAsync(dto.PRId);
+
+                // جلب السطور المحدثة
+                var linesNow = await GetLinesForRequestAsync(dto.PRId);
+
+                return Json(new
+                {
+                    ok = true,
+                    message = "تم تعديل السطر بنجاح.",
+                    lines = linesNow.lines,
+                    totals = linesNow.totals
+                });
+            }
+
+            // =========================
+            // 3) إضافة سطر جديد
+            // =========================
+            int nextLineNo = await _context.PRLines
+                .Where(l => l.PRId == dto.PRId)
+                .Select(l => (int?)l.LineNo)
+                .MaxAsync() ?? 0;
+            nextLineNo++;
+
+            // حساب التكلفة المتوقعة
+            decimal expectedCostNew = dto.qty * dto.priceRetail * (1 - (dto.purchaseDiscountPct / 100m));
+
+            var newLine = new PRLine
+            {
+                PRId = dto.PRId,
+                LineNo = nextLineNo,
+                ProdId = dto.prodId,
+                QtyRequested = dto.qty,
+                PriceRetail = dto.priceRetail,
+                PurchaseDiscountPct = dto.purchaseDiscountPct,
+                ExpectedCost = expectedCostNew,
+                QtyConverted = 0
+            };
+
+            _context.PRLines.Add(newLine);
+            await _context.SaveChangesAsync();
+
+            // =========================
+            // 4) إعادة حساب الإجماليات
+            // =========================
+            await _docTotals.RecalcPurchaseRequestTotalsAsync(dto.PRId);
+
+            // =========================
+            // 5) جلب السطور المحدثة والإجماليات
+            // =========================
+            var result = await GetLinesForRequestAsync(dto.PRId);
+
+            return Json(new
+            {
+                ok = true,
+                message = "تم إضافة السطر بنجاح.",
+                lines = result.lines,
+                totals = result.totals
+            });
+        }
+
+        /// <summary>
+        /// DTO لإضافة/تعديل سطر طلب شراء
+        /// </summary>
+        public class AddLineJsonDto
+        {
+            public int PRId { get; set; }
+            public int prodId { get; set; }
+            public int qty { get; set; }
+            public decimal priceRetail { get; set; }
+            public decimal purchaseDiscountPct { get; set; }
+        }
+
+        /// <summary>
+        /// دالة مساعدة: جلب السطور والإجماليات لطلب شراء
+        /// </summary>
+        private async Task<(List<object> lines, object totals)> GetLinesForRequestAsync(int prId)
+        {
+            var lines = await _context.PRLines
+                .Where(l => l.PRId == prId)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            var prodIds = lines.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products
+                .Where(p => prodIds.Contains(p.ProdId))
+                .Select(p => new { p.ProdId, p.ProdName })
+                .ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+            var linesDto = lines.Select(l =>
+            {
+                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                return new
+                {
+                    lineNo = l.LineNo,
+                    prodId = l.ProdId,
+                    prodName = name,
+                    qty = l.QtyRequested,
+                    priceRetail = l.PriceRetail,
+                    purchaseDiscountPct = l.PurchaseDiscountPct,
+                    expectedCost = l.ExpectedCost,
+                    qtyConverted = l.QtyConverted
+                };
+            }).ToList<object>();
+
+            var request = await _context.PurchaseRequests
+                .FirstOrDefaultAsync(pr => pr.PRId == prId);
+
+            var totals = new
+            {
+                totalLines = lines.Count,
+                totalItems = prodIds.Count,
+                totalQty = lines.Sum(l => l.QtyRequested),
+                totalExpectedCost = request?.ExpectedItemsTotal ?? 0m
+            };
+
+            return (linesDto, totals);
         }
 
         // ============================================================

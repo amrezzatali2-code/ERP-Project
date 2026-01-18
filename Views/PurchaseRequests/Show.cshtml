@@ -1,8 +1,8 @@
-﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.PurchaseRequest
 
 @{
-    // عنوان الصفحة في التاب
+    // عنوان التاب
     ViewData["Title"] = Model.PRId == 0
         ? "طلب شراء جديد"
         : $"طلب شراء — رقم {Model.PRId}";

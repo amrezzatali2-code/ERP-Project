@@ -602,21 +602,28 @@ namespace ERP.Controllers
 
             // =========================================================
             // 6) إجمالي المبيعات (من قيود دفتر الأستاذ - مصدر الحقيقة)
-            // ✅ مهم: نحسب من LedgerEntries وليس من SalesInvoices مباشرة
-            // لأن القيود هي المصدر الحقيقي بعد الترحيل
+            // ✅ نحسب من LedgerEntries وليس من SalesInvoices مباشرة
+            // ✅ نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001)
+            // ✅ تحسين: استخدام NOT EXISTS في SQL مباشرة بدل Contains (أسرع مع ملايين السطور)
             // =========================================================
             var salesLedgerQ = _context.LedgerEntries
                 .AsNoTracking()
                 .Where(e =>
                     e.CustomerId == customer.CustomerId &&
                     e.SourceType == LedgerSourceType.SalesInvoice &&
-                    e.LineNo == 1 && // سطر مدين العميل فقط (ليس سطر الإيرادات)
-                    e.PostVersion > 0); // فقط القيود المرحلة (ليست القيود العكسية)
+                    e.LineNo == 1 &&
+                    e.PostVersion > 0 &&
+                    // ✅ استثناء الفواتير المحذوفة: استخدام NOT EXISTS (أسرع من Contains)
+                    !_context.LedgerEntries.Any(rev =>
+                        rev.CustomerId == customer.CustomerId &&
+                        rev.SourceType == LedgerSourceType.SalesInvoice &&
+                        rev.SourceId == e.SourceId &&
+                        rev.LineNo == 9001)) // قيود عكسية = فاتورة محذوفة
+                .AsQueryable();
 
             if (from.HasValue) salesLedgerQ = salesLedgerQ.Where(e => e.EntryDate >= from.Value);
             if (toExclusive.HasValue) salesLedgerQ = salesLedgerQ.Where(e => e.EntryDate < toExclusive.Value);
 
-            // ✅ نحسب من Debit (مدين العميل) لأن هذا هو صافي الفاتورة
             decimal totalSales = await salesLedgerQ.SumAsync(e => (decimal?)e.Debit) ?? 0m;
 
             // =========================================================

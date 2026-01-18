@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;                 // القوائم (List)
 using System.Linq;                                // أوامر LINQ: Where / OrderBy / Skip / Take
 using System.Threading.Tasks;                     // async / Task
@@ -30,6 +30,70 @@ namespace ERP.Controllers
             _docTotals = docTotals;   // تخزين سيرفيس الإجماليات لإعادة حساب إجماليات الطلب
         }
 
+
+        // =========================================================
+        // دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر)
+        // الهدف: تشتغل الأسهم حتى في الطلب الجديد (PRId = 0)
+        // =========================================================
+        private async Task FillPurchaseRequestNavAsync(int currentId)
+        {
+            // ==============================
+            // 1) أول وآخر طلب (Query واحد)
+            // ==============================
+            var minMax = await _context.PurchaseRequests
+                .AsNoTracking()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    FirstId = g.Min(x => x.PRId),
+                    LastId = g.Max(x => x.PRId)
+                })
+                .FirstOrDefaultAsync();
+
+            // ==============================
+            // 2) السابقة/التالية
+            // ملاحظة مهمة:
+            // - لو currentId = 0 (طلب جديد) => السابقة = آخر طلب / التالية = أول طلب
+            // ==============================
+            int? prevId = null; // متغير: رقم الطلب السابق
+            int? nextId = null; // متغير: رقم الطلب التالي
+
+            if (currentId > 0)
+            {
+                // السابقة = أكبر رقم أقل من الحالي
+                prevId = await _context.PurchaseRequests
+                    .AsNoTracking()
+                    .Where(x => x.PRId < currentId)
+                    .OrderByDescending(x => x.PRId)
+                    .Select(x => (int?)x.PRId)
+                    .FirstOrDefaultAsync();
+
+                // التالية = أصغر رقم أكبر من الحالي
+                nextId = await _context.PurchaseRequests
+                    .AsNoTracking()
+                    .Where(x => x.PRId > currentId)
+                    .OrderBy(x => x.PRId)
+                    .Select(x => (int?)x.PRId)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                // ✅ طلب جديد: نخلي الأسهم شغالة كبحث سريع
+                prevId = minMax?.LastId;   // السابق يأخذك لآخر طلب
+                nextId = minMax?.FirstId;  // التالي يأخذك لأول طلب
+            }
+
+            // ==============================
+            // 3) تعبئة ViewBag للـ View (بدون Null)
+            // ==============================
+            int firstId = minMax?.FirstId ?? 0;  // متغير: أول طلب
+            int lastId = minMax?.LastId ?? 0;  // متغير: آخر طلب
+
+            ViewBag.NavFirstId = firstId;
+            ViewBag.NavLastId = lastId;
+            ViewBag.NavPrevId = prevId ?? 0;
+            ViewBag.NavNextId = nextId ?? 0;
+        }
 
         /// <summary>
         /// تجهيز القوائم المنسدلة (الموردين + المخازن) لشاشة فاتورة المشتريات.
@@ -257,32 +321,120 @@ namespace ERP.Controllers
 
 
         // ========================================================
+        // GET: PurchaseRequests/Show/{id}
+        // فتح شاشة عرض/تعديل طلب شراء (للطلبات القديمة)
+        // ========================================================
+        [HttpGet]
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        {
+            // =========================================
+            // متغير: هل هذا الطلب يطلب "Body فقط"؟
+            // - frag=body معناها: نريد جزء الصفحة المتغير فقط (بدون Layout وبدون شريط الأزرار)
+            // =========================================
+            bool isBodyOnly = string.Equals(frag, "body", StringComparison.OrdinalIgnoreCase);
+
+            // =========================================
+            // ✅ Frame Guard (لنمط التابات)
+            // =========================================
+            if (!isBodyOnly && frame != 1)
+                return RedirectToAction(nameof(Show), new { id = id, frag = frag, frame = 1 });
+
+            // =========================================
+            // 1) تحميل طلب الشراء من قاعدة البيانات
+            // =========================================
+            var purchaseRequest = await _context.PurchaseRequests
+                .Include(pr => pr.Warehouse)
+                .Include(pr => pr.Customer)
+                .Include(pr => pr.Lines)
+                .FirstOrDefaultAsync(pr => pr.PRId == id);
+
+            // =========================================
+            // 2) لو الطلب مش موجود
+            // =========================================
+            if (purchaseRequest == null)
+            {
+                if (isBodyOnly)
+                {
+                    return NotFound("طلب الشراء غير موجود.");
+                }
+
+                // محاولة إيجاد أقرب طلب سابق
+                var nearestPrev = await _context.PurchaseRequests
+                    .AsNoTracking()
+                    .Where(x => x.PRId < id)
+                    .OrderByDescending(x => x.PRId)
+                    .Select(x => (int?)x.PRId)
+                    .FirstOrDefaultAsync();
+
+                if (nearestPrev.HasValue && nearestPrev.Value > 0)
+                {
+                    TempData["Error"] = $"رقم الطلب ({id}) غير موجود (قد يكون محذوفاً). تم فتح الطلب السابق رقم ({nearestPrev.Value}).";
+                    return RedirectToAction(nameof(Show), new { id = nearestPrev.Value, frag = (string?)null, frame = 1 });
+                }
+
+                TempData["Error"] = "لا توجد طلبات شراء مسجلة حالياً.";
+                return RedirectToAction(nameof(Create), new { frame = 1 });
+            }
+
+            // =========================================
+            // 3) تجهيز القوائم المنسدلة
+            // =========================================
+            await PopulateDropDownsAsync(purchaseRequest.CustomerId, purchaseRequest.WarehouseId);
+
+            // =========================================
+            // 4) تجهيز ViewBag
+            // =========================================
+            ViewBag.IsLocked = purchaseRequest.IsConverted || purchaseRequest.Status == "Converted";
+            ViewBag.Frame = (!isBodyOnly) ? 1 : 0;
+
+            // =========================================
+            // 4.1) ✅ تجهيز التنقل بشكل موحّد (استخدم دالتك المساعدة)
+            // =========================================
+            await FillPurchaseRequestNavAsync(purchaseRequest.PRId);
+
+            // =========================================
+            // 5) عرض الـ View
+            // =========================================
+            return View("Show", purchaseRequest);
+        }
+
+        // ========================================================
         // GET: PurchaseRequests/Create
         // فتح شاشة طلب جديد باستخدام View: Show
         // ========================================================
-        public async Task<IActionResult> Create()
+        public async Task<IActionResult> Create(int? frame = null)
         {
             // متغير: موديل طلب شراء جديد بالقيم الافتراضية
             var model = new PurchaseRequest
             {
-                PRDate = DateTime.Today,     // تاريخ اليوم كقيمة افتراضية
-                NeedByDate = null,               // المستخدم يحددها من الشاشة
-                WarehouseId = 0,                  // يختار المخزن من الشاشة
-                CustomerId = 0,                  // يختار المورد من الشاشة
+                PRId = 0,                       // طلب جديد (لم يتم الحفظ بعد)
+                PRDate = DateTime.Today,        // تاريخ اليوم كقيمة افتراضية
+                NeedByDate = null,              // المستخدم يحددها من الشاشة
+                WarehouseId = 0,                // يختار المخزن من الشاشة
+                CustomerId = 0,                 // يختار المورد من الشاشة
 
                 // إجماليات الطلب (هتتحسب من السطور عن طريق السيرفيس)
-                TotalQtyRequested = 0,                 // إجمالي الكمية المطلوبة = 0 مبدئياً
-                ExpectedItemsTotal = 0m,                // إجمالي التكلفة المتوقعة = 0 مبدئياً
+                TotalQtyRequested = 0,          // إجمالي الكمية المطلوبة = 0 مبدئياً
+                ExpectedItemsTotal = 0m,        // إجمالي التكلفة المتوقعة = 0 مبدئياً
 
-                Status = "Draft",                  // الحالة الافتراضية: مسودة
-                IsConverted = false,                    // الطلب لسه متحوّلش لفاتورة شراء
+                Status = "Draft",               // الحالة الافتراضية: مسودة
+                IsConverted = false,            // الطلب لسه متحوّلش لفاتورة شراء
 
-                CreatedAt = DateTime.UtcNow,            // وقت إنشاء السجل
-                Lines = new List<PRLine>()          // قائمة سطور فاضية
+                RequestedBy = "",               // سيتم ملؤه من الواجهة
+                CreatedBy = "",                 // سيتم ملؤه عند الحفظ
+
+                CreatedAt = DateTime.UtcNow,    // وقت إنشاء السجل
+                Lines = new List<PRLine>()      // قائمة سطور فاضية
             };
 
             // تحميل قائمة العملاء للمساعدة في الاختيار من الـ datalist
             await PopulateDropDownsAsync();
+
+            ViewBag.IsLocked = false;
+            ViewBag.Frame = frame ?? 1;
+
+            // ✅ تجهيز الأسهم حتى في الطلب الجديد (PRId = 0)
+            await FillPurchaseRequestNavAsync(model.PRId);
 
             // نستخدم نفس فيو Show لعرض الطلب الجديد
             return View("Show", model);
@@ -394,6 +546,372 @@ namespace ERP.Controllers
 
 
 
+
+        // =========================================================
+        // SaveHeader — POST: حفظ/إنشاء رأس طلب الشراء عبر AJAX
+        // مشابه لـ PurchaseInvoice.SaveHeader لكن بدون تأثير على المخزون/الحسابات
+        // =========================================================
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> SaveHeader([FromBody] PurchaseRequestHeaderDto dto)
+        {
+            // 1) فحص الداتا المرسلة من الواجهة
+            if (dto == null)
+            {
+                return BadRequest("حدث خطأ في البيانات المرسلة.");
+            }
+
+            if (dto.CustomerId <= 0)
+            {
+                return BadRequest("يجب اختيار المورد قبل حفظ الطلب.");
+            }
+
+            if (dto.WarehouseId <= 0)
+            {
+                return BadRequest("يجب اختيار المخزن قبل حفظ الطلب.");
+            }
+
+            var now = DateTime.UtcNow;
+
+            // 2) طلب جديد (PRId = 0)
+            if (dto.PRId == 0)
+            {
+                var request = new PurchaseRequest
+                {
+                    PRDate = dto.PRDate.HasValue ? dto.PRDate.Value : DateTime.Today,
+                    NeedByDate = dto.NeedByDate,
+                    CustomerId = dto.CustomerId,
+                    WarehouseId = dto.WarehouseId,
+                    RequestedBy = dto.RequestedBy ?? "",
+                    CreatedBy = GetCurrentUserDisplayName(),
+                    Status = "Draft",
+                    IsConverted = false,
+                    TotalQtyRequested = 0,
+                    ExpectedItemsTotal = 0m,
+                    Notes = dto.Notes,
+                    CreatedAt = now
+                };
+
+                _context.PurchaseRequests.Add(request);
+                await _context.SaveChangesAsync();
+
+                // الرد إلى الجافاسكربت
+                return Json(new
+                {
+                    success = true,
+                    prId = request.PRId,
+                    requestNumber = request.PRId.ToString(),
+                    requestDate = request.PRDate.ToString("yyyy/MM/dd"),
+                    requestTime = request.CreatedAt.ToString("HH:mm"),
+                    status = request.Status,
+                    isConverted = request.IsConverted,
+                    createdBy = request.CreatedBy
+                });
+            }
+
+            // 3) تعديل طلب موجود (PRId > 0)
+            var existing = await _context.PurchaseRequests
+                .FirstOrDefaultAsync(pr => pr.PRId == dto.PRId);
+
+            if (existing == null)
+            {
+                return NotFound("لم يتم العثور على الطلب المطلوب.");
+            }
+
+            if (existing.IsConverted)
+            {
+                return BadRequest("لا يمكن تعديل طلب تم تحويله إلى فاتورة شراء.");
+            }
+
+            existing.PRDate = dto.PRDate ?? existing.PRDate;
+            existing.NeedByDate = dto.NeedByDate;
+            existing.CustomerId = dto.CustomerId;
+            existing.WarehouseId = dto.WarehouseId;
+            existing.RequestedBy = dto.RequestedBy ?? existing.RequestedBy;
+            existing.Notes = dto.Notes;
+            existing.UpdatedAt = now;
+
+            await _context.SaveChangesAsync();
+
+            return Json(new
+            {
+                success = true,
+                prId = existing.PRId,
+                requestNumber = existing.PRId.ToString(),
+                requestDate = existing.PRDate.ToString("yyyy/MM/dd"),
+                requestTime = existing.CreatedAt.ToString("HH:mm"),
+                status = existing.Status,
+                isConverted = existing.IsConverted,
+                createdBy = existing.CreatedBy
+            });
+        }
+
+        /// <summary>
+        /// DTO لحفظ رأس طلب الشراء
+        /// </summary>
+        public class PurchaseRequestHeaderDto
+        {
+            public int PRId { get; set; }
+            public DateTime? PRDate { get; set; }
+            public DateTime? NeedByDate { get; set; }
+            public int CustomerId { get; set; }
+            public int WarehouseId { get; set; }
+            public string? RequestedBy { get; set; }
+            public string? Notes { get; set; }
+        }
+
+        // =========================================================
+        // ConvertToInvoice — POST: تحويل طلب شراء إلى فاتورة شراء
+        // ينشئ فاتورة شراء جديدة من بيانات الطلب (Header + Lines)
+        // =========================================================
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> ConvertToInvoice(int prId)
+        {
+            // =========================
+            // 1) تحميل طلب الشراء مع السطور
+            // =========================
+            var request = await _context.PurchaseRequests
+                .Include(pr => pr.Lines)
+                .FirstOrDefaultAsync(pr => pr.PRId == prId);
+
+            if (request == null)
+                return NotFound(new { ok = false, message = "طلب الشراء غير موجود." });
+
+            if (request.Lines == null || !request.Lines.Any())
+                return BadRequest(new { ok = false, message = "لا يمكن تحويل طلب بدون سطور." });
+
+            // =========================
+            // 2) استخدام Transaction للحفظ الآمن
+            // =========================
+            await using var tx = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // =========================
+                // 3) إنشاء فاتورة شراء جديدة
+                // =========================
+                var now = DateTime.UtcNow;
+                var invoice = new PurchaseInvoice
+                {
+                    PIDate = now.Date,
+                    CustomerId = request.CustomerId,
+                    WarehouseId = request.WarehouseId,
+                    RefPRId = prId,                  // ربط الفاتورة بالطلب
+
+                    Status = "غير مرحلة",
+                    IsPosted = false,
+
+                    CreatedAt = now,
+                    CreatedBy = GetCurrentUserDisplayName(),
+
+                    // الإجماليات سيتم حسابها لاحقاً من السطور
+                    ItemsTotal = 0m,
+                    DiscountTotal = 0m,
+                    TaxTotal = 0m,
+                    NetTotal = 0m
+                };
+
+                _context.PurchaseInvoices.Add(invoice);
+                await _context.SaveChangesAsync(); // لحصول على PIId
+
+                // =========================
+                // 4) نسخ السطور من PRLines إلى PILines + تحديث المخزون مباشرة
+                // =========================
+                int lineNo = 1;
+
+                foreach (var prLine in request.Lines.OrderBy(l => l.LineNo))
+                {
+                    // حساب UnitCost من ExpectedCost (إن وُجد)
+                    decimal unitCost = 0m;
+                    if (prLine.QtyRequested > 0 && prLine.ExpectedCost > 0)
+                    {
+                        unitCost = prLine.ExpectedCost / prLine.QtyRequested;
+                    }
+                    else if (prLine.PriceRetail > 0)
+                    {
+                        // أو من PriceRetail بعد خصم الشراء
+                        unitCost = prLine.PriceRetail * (1 - (prLine.PurchaseDiscountPct / 100m));
+                    }
+
+                    unitCost = Math.Round(unitCost, 2);
+
+                    // تنظيف BatchNo و Expiry
+                    var batchNo = string.IsNullOrWhiteSpace(prLine.PreferredBatchNo) ? null : prLine.PreferredBatchNo.Trim();
+                    var expDate = prLine.PreferredExpiry?.Date;
+
+                    // إنشاء PILine
+                    var piLine = new PILine
+                    {
+                        PIId = invoice.PIId,
+                        LineNo = lineNo++,
+                        ProdId = prLine.ProdId,
+                        Qty = prLine.QtyRequested,
+                        PriceRetail = prLine.PriceRetail,
+                        PurchaseDiscountPct = prLine.PurchaseDiscountPct,
+                        UnitCost = unitCost,
+                        BatchNo = batchNo,
+                        Expiry = expDate
+                    };
+
+                    _context.PILines.Add(piLine);
+
+                    // =========================
+                    // 4.1) تحديث Batch (Master) - إذا كان BatchNo و Expiry موجودين
+                    // =========================
+                    Batch? batch = null;
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+                        batch = await _context.Batches
+                            .FirstOrDefaultAsync(b =>
+                                b.ProdId == prLine.ProdId &&
+                                b.BatchNo == batchNo &&
+                                b.Expiry.Date == exp);
+
+                        if (batch == null)
+                        {
+                            batch = new Batch
+                            {
+                                ProdId = prLine.ProdId,
+                                BatchNo = batchNo,
+                                Expiry = exp,
+                                PriceRetailBatch = prLine.PriceRetail,
+                                UnitCostDefault = unitCost,
+                                CustomerId = invoice.CustomerId,
+                                EntryDate = now,
+                                IsActive = true
+                            };
+                            _context.Batches.Add(batch);
+                        }
+                        else
+                        {
+                            batch.PriceRetailBatch = prLine.PriceRetail;
+                            batch.UnitCostDefault = unitCost;
+                            batch.UpdatedAt = now;
+                            batch.IsActive = true;
+                        }
+                    }
+
+                    // =========================
+                    // 4.2) إنشاء StockLedger (حركة دخول) - تحديث المخزون مباشرة
+                    // =========================
+                    var ledger = new StockLedger
+                    {
+                        TranDate = now,
+                        WarehouseId = invoice.WarehouseId,
+                        ProdId = prLine.ProdId,
+                        BatchNo = batchNo,
+                        Expiry = expDate,
+                        BatchId = batch?.BatchId,
+                        QtyIn = prLine.QtyRequested,
+                        QtyOut = 0,
+                        UnitCost = unitCost,
+                        RemainingQty = prLine.QtyRequested,
+                        SourceType = "Purchase",
+                        SourceId = invoice.PIId,
+                        SourceLine = piLine.LineNo,
+                        PurchaseDiscount = prLine.PurchaseDiscountPct,
+                        Note = $"Purchase Line from PR#{prId}: {prLine.ProdId}"
+                    };
+
+                    _context.StockLedger.Add(ledger);
+
+                    // =========================
+                    // 4.3) تحديث StockBatches (الكمية في المخزن) - إذا كان BatchNo و Expiry موجودين
+                    // =========================
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+                        var sbRow = await _context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == invoice.WarehouseId &&
+                                x.ProdId == prLine.ProdId &&
+                                x.BatchNo == batchNo &&
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand += prLine.QtyRequested;
+                            sbRow.UpdatedAt = now;
+                            sbRow.Note = $"PI:{invoice.PIId} Line:{piLine.LineNo} (from PR#{prId})";
+                        }
+                        else
+                        {
+                            var newRow = new StockBatch
+                            {
+                                WarehouseId = invoice.WarehouseId,
+                                ProdId = prLine.ProdId,
+                                BatchNo = batchNo,
+                                Expiry = exp,
+                                QtyOnHand = prLine.QtyRequested,
+                                QtyReserved = 0,
+                                UpdatedAt = now,
+                                Note = $"PI:{invoice.PIId} Line:{piLine.LineNo} (from PR#{prId})"
+                            };
+                            _context.StockBatches.Add(newRow);
+                        }
+                    }
+                }
+
+                await _context.SaveChangesAsync();
+
+                // =========================
+                // 5) تحديث حالة الطلب إلى "محوّل"
+                // =========================
+                request.IsConverted = true;
+                request.Status = "Converted";
+                request.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                // =========================
+                // 6) إعادة حساب إجماليات الفاتورة
+                // =========================
+                await _docTotals.RecalcPurchaseInvoiceTotalsAsync(invoice.PIId);
+
+                await tx.CommitAsync();
+
+                // =========================
+                // 7) الرد للواجهة
+                // =========================
+                return Json(new
+                {
+                    ok = true,
+                    message = "تم تحويل الطلب إلى فاتورة شراء بنجاح.",
+                    piId = invoice.PIId,
+                    invoiceNumber = invoice.PIId.ToString()
+                });
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return BadRequest(new { ok = false, message = $"خطأ أثناء التحويل: {ex.Message}" });
+            }
+        }
+
+        /// <summary>
+        /// دالة مساعدة: الحصول على اسم المستخدم الحالي
+        /// </summary>
+        private string GetCurrentUserDisplayName()
+        {
+            // لو فيه يوزر عامل تسجيل دخول
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                // نحاول الأول نجيب DisplayName (اسم الموظف الظاهر فى التقارير)
+                var displayName = User.FindFirst("DisplayName")?.Value;
+                if (!string.IsNullOrWhiteSpace(displayName))
+                    return displayName;
+
+                // لو مفيش DisplayName نرجع لاسم الدخول العادى (UserName)
+                if (!string.IsNullOrWhiteSpace(User.Identity!.Name))
+                    return User.Identity.Name!;
+            }
+
+            // لو مفيش يوزر → نرجع System
+            return "System";
+        }
 
         // ========================================================
         // POST: PurchaseRequests/BulkDelete
