@@ -1,4 +1,4 @@
-﻿using DocumentFormat.OpenXml.Vml.Office;
+using DocumentFormat.OpenXml.Vml.Office;
 using ERP.Data.Seed;
 using ERP.Models;
 using ERP.Seed;
@@ -974,6 +974,12 @@ namespace ERP.Data
                 e.Property(x => x.ProdId).IsRequired();
                 e.Property(x => x.PriceBasis).HasMaxLength(30);
                 e.Property(x => x.PreferredBatchNo).HasMaxLength(50);
+                
+                // ✅ علاقة PRLine مع Product
+                e.HasOne(x => x.Product)
+                    .WithMany()
+                    .HasForeignKey(x => x.ProdId)
+                    .OnDelete(DeleteBehavior.Restrict);
 
                 // فهارس تساعد في التقارير والبحث
                 e.HasIndex(x => x.ProdId);

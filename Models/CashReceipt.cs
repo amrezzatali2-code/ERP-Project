@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;            // خصائص التحقق من صحة البيانات + Display
 using System.ComponentModel.DataAnnotations.Schema;     // خصائص الربط مع قاعدة البيانات
 
@@ -60,6 +60,10 @@ namespace ERP.Models
         public string? Description { get; set; }  // متغير: بيان/شرح الإذن (عن أي شيء هذا الاستلام؟)
 
         // ===== الترحيل والحالة =====
+
+        [Display(Name = "الحالة")]
+        [StringLength(20)]
+        public string Status { get; set; } = "غير مرحلة";   // متغير: حالة الإذن (غير مرحلة / مرحّل / مفتوحة للتعديل)
 
         [Display(Name = "مرحّل؟")]
         public bool IsPosted { get; set; } = false;      // متغير: هل تم ترحيل الإذن لقيود اليومية؟

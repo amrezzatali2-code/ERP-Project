@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.ComponentModel.DataAnnotations;   // لاستخدام Display
 
@@ -55,7 +55,8 @@ namespace ERP.Models
         // كل سطر يتبع طلب شراء واحد
         // المقابل في PurchaseRequest: ICollection<PRLine> Lines
 
-        // (اختياري لاحقاً) ممكن نضيف Navigation للصنف:
-        // public virtual Product Product { get; set; } = null!;
+        // Navigation Property للصنف
+        [Display(Name = "الصنف")]
+        public virtual Product Product { get; set; } = null!;
     }
 }

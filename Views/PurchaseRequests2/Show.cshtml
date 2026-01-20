@@ -146,7 +146,7 @@
         }
 
         /* =========================================================
-           ERP — Print Template (Purchase Request)
+           ERP — Print Template (Purchase Invoice)
            محلي داخل Show فقط
         ========================================================= */
 
@@ -193,20 +193,20 @@
         /* =========================================================
    اختيار سطر من جدول السطور (Click Row)
    - عند الضغط على أي سطر في جدول السطور: يتم تمييزه
-   - وتعبئة بياناته في جزء (إضافة صنف للطلب) أعلى الصفحة
+   - وتعبئة بياناته في جزء (إضافة صنف للفاتورة) أعلى الصفحة
    ========================================================= */
 #PRLinesTbody tr[data-prodid] {
     cursor: pointer; /* تعليق: السطر قابل للضغط */
 }
 
-#PRLinesTbody tr.pr-row-selected td {
+#PRLinesTbody tr.pi-row-selected td {
     outline: 2px solid rgba(13, 110, 253, 0.35);
     outline-offset: -2px;
     background: rgba(13, 110, 253, 0.06);
 }
 
 @@media print {
-    #PRLinesTbody tr.pr-row-selected td {
+    #PRLinesTbody tr.pi-row-selected td {
         outline: none !important;
         background: transparent !important;
     }
@@ -239,13 +239,13 @@
 
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
                     <div class="card-header py-2 text-center">
-                        <h6 class="mb-0">إجراءات طلب الشراء</h6>
+                        <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
                     </div>
 
 
                     <!-- =========================================================
-                    ثابت: رقم الطلب + علم التحويل (Flag)
-                    - RequestId: رقم الطلب الحالي (0 لو جديد)
+                    ثابت: رقم الطلب + علم الترحيل (Flag)
+                    - RequestId: رقم الطلب الحالي (0 لو جديدة)
                     - RequestIsConvertedFlag: 1 لو محوّل / 0 لو مفتوح
                     ========================================================= -->
                     <input type="hidden" id="RequestId" value="@Model.PRId" />
@@ -263,64 +263,64 @@
 
                             int currentId = Model?.PRId ?? 0;
 
-                            bool hasAnyRequests =
+                            bool hasAnyInvoices =
                             navFirst.HasValue && navLast.HasValue &&
                             navFirst.Value > 0 && navLast.Value > 0;
 
                             int? prevEffective = (currentId == 0) ? navLast : navPrev;
                             int? nextEffective = (currentId == 0) ? navFirst : navNext;
 
-                            bool canFirst = hasAnyRequests && navFirst.HasValue && navFirst.Value > 0 && navFirst.Value != currentId;
-                            bool canLast = hasAnyRequests && navLast.HasValue && navLast.Value > 0 && navLast.Value != currentId;
-                            bool canPrev = hasAnyRequests && prevEffective.HasValue && prevEffective.Value > 0 && prevEffective.Value != currentId;
-                            bool canNext = hasAnyRequests && nextEffective.HasValue && nextEffective.Value > 0 && nextEffective.Value != currentId;
+                            bool canFirst = hasAnyInvoices && navFirst.HasValue && navFirst.Value > 0 && navFirst.Value != currentId;
+                            bool canLast = hasAnyInvoices && navLast.HasValue && navLast.Value > 0 && navLast.Value != currentId;
+                            bool canPrev = hasAnyInvoices && prevEffective.HasValue && prevEffective.Value > 0 && prevEffective.Value != currentId;
+                            bool canNext = hasAnyInvoices && nextEffective.HasValue && nextEffective.Value > 0 && nextEffective.Value != currentId;
                         }
 
                         <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
                             <button type="button"
-                                    id="btnFirstRequest"
+                                    id="btnFirstInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="فاتورة المشتريات"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (navFirst ?? 0), frame = 1 })"
                                     data-id="@(navFirst ?? 0)"
-                                    title="أول طلب"
+                                    title="أول فاتورة"
                                     @(canFirst ? "" : "disabled")>
                                 ⏮
                             </button>
 
                             <button type="button"
-                                    id="btnPrevRequest"
+                                    id="btnPrevInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="فاتورة المشتريات"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (prevEffective ?? 0), frame = 1 })"
                                     data-id="@(prevEffective ?? 0)"
-                                    title="الطلب السابق"
+                                    title="الفاتورة السابقة"
                                     @(canPrev ? "" : "disabled")>
                                 ◀
                             </button>
 
                             <button type="button"
-                                    id="btnNextRequest"
+                                    id="btnNextInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="فاتورة المشتريات"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (nextEffective ?? 0), frame = 1 })"
                                     data-id="@(nextEffective ?? 0)"
-                                    title="الطلب التالي"
+                                    title="الفاتورة التالية"
                                     @(canNext ? "" : "disabled")>
                                 ▶
                             </button>
 
                             <button type="button"
-                                    id="btnLastRequest"
+                                    id="btnLastInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="فاتورة المشتريات"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (navLast ?? 0), frame = 1 })"
                                     data-id="@(navLast ?? 0)"
-                                    title="آخر طلب"
+                                    title="آخر فاتورة"
                                     @(canLast ? "" : "disabled")>
                                 ⏭
                             </button>
@@ -328,16 +328,16 @@
 
                         <div class="d-flex align-items-center gap-1">
                             <input type="number"
-                                   id="NavRequestSearchInput"
+                                   id="NavInvoiceSearchInput"
                                    class="form-control form-control-sm"
                                    placeholder="بحث برقم الطلب" />
 
 
                             <button type="button"
-                                    id="btnNavRequestSearch"
+                                    id="btnNavInvoiceSearch"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="فاتورة المشتريات"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })">
                                 بحث
                             </button>
@@ -347,9 +347,9 @@
 
                         <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
                            data-tab-id="pr-show-tab"
-                           data-tab-title="طلب الشراء"
+                           data-tab-title="فاتورة المشتريات"
                            data-url="@Url.Action("Create", "PurchaseRequests", new { frame = 1 })">
-                            ➕ طلب جديد
+                            ➕ فاتورة جديدة
                         </a>
 
                         <button type="button" 
@@ -359,8 +359,12 @@
                             💾 حفظ الطلب
                         </button>
 
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnConvertToInvoice" data-lock-converted="1">
-                            📤 تحويل إلى فاتورة شراء
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnConvertToInvoice"
+                                data-request-id="@(Model?.PRId ?? 0)" 
+                                data-lock-converted="1">
+                            🔄 تحويل إلى فاتورة شراء
                         </button>
 
                         <div id="convertRequestMsg" class="small mt-2"></div>
@@ -399,7 +403,7 @@
             <div class="col-12 col-lg-10 order-2 order-lg-1">
 
                 @* ✅ ده الجزء الوحيد اللي هيتبدّل عند التنقل *@
-                <div id="PR_BodyHost">
+                <div id="PI_BodyHost">
 
                     @* =========================
                        قيم التنقل (لازم تكون داخل الـ BodyHost عشان تتحدّث مع frag=body)
@@ -411,19 +415,19 @@
                     <input type="hidden" id="NavCurrentId" value="@(Model?.PRId ?? 0)" />
 
                     @* ====================================================
-                       1) كارت بيانات طلب الشراء + المورد + المخزن
+                       1) كارت بيانات فاتورة المشتريات + المورد + المخزن
                        ==================================================== *@
                     <div class="card shadow-sm mb-2 invoice-header-card">
 
                         @{
                             bool isNewRequest = Model == null || Model.PRId == 0;
-                            bool hasRequest = !isNewRequest;
+                            bool hasInvoice = !isNewRequest;
 
-                            string requestDateText = hasRequest
+                            string invoiceDateText = hasInvoice
                             ? Model.PRDate.ToString("yyyy/MM/dd")
                             : "";
 
-                            string requestTimeText = hasRequest
+                            string invoiceTimeText = hasInvoice
                             ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
                             : "";
                         }
@@ -446,16 +450,16 @@
                                 <button type="button"
                                         class="btn btn-sm btn-light"
                                         data-bs-toggle="collapse"
-                                        data-bs-target="#RequestHeaderCardCollapse"
+                                        data-bs-target="#InvoiceHeaderCardCollapse"
                                         aria-expanded="true"
-                                        aria-controls="RequestHeaderCardCollapse">
-                                    <span id="RequestHeaderCardArrow">▾</span>
+                                        aria-controls="InvoiceHeaderCardCollapse">
+                                    <span id="InvoiceHeaderCardArrow">▾</span>
                                 </button>
 
                             </div>
                         </div>
 
-                        <div id="RequestHeaderCardCollapse" class="collapse show">
+                        <div id="InvoiceHeaderCardCollapse" class="collapse show">
                             <div class="card-body">
 
                                 <div class="row g-3 align-items-end">
@@ -465,7 +469,7 @@
 
                                         <input id="CustomerCodeDisplay"
                                                class="form-control form-control-sm text-center invoice-small-input"
-                                               type="number" data-lock-posted="1"  />
+                                               type="number" data-lock-converted="1"  />
 
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
@@ -479,7 +483,6 @@
                                                placeholder="اكتب اسم المورد ثم اختره من القائمة"
                                                list="customersList"
                                                autocomplete="off"
-                                               autofocus
                                                value="@ViewBag.SelectedCustomerName" 
                                                data-lock-converted="1" 
                                                 />
@@ -523,14 +526,14 @@
                                                 <label class="form-label form-label-sm">تاريخ الطلب</label>
                                                 <input id="RequestDateDisplay"
                                                        class="form-control form-control-sm text-center"
-                                                       value="@requestDateText"
+                                                       value="@invoiceDateText"
                                                        readonly />
                                             </div>
                                             <div class="col-6">
                                                 <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                                <input id="RequestTimeDisplay"
+                                                <input id="InvoiceTimeDisplay"
                                                        class="form-control form-control-sm text-center"
-                                                       value="@requestTimeText"
+                                                       value="@invoiceTimeText"
                                                        readonly />
                                             </div>
                                         </div>
@@ -540,7 +543,7 @@
 
                                 <br />
 
-                                <input type="hidden" asp-for="Status" id="RequestStatusHidden" />
+                                <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
 
                                 <div class="row g-3">
 
@@ -552,12 +555,7 @@
                                                readonly />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">تم الطلب بواسطة</label>
-                                        <input asp-for="RequestedBy"
-                                               class="form-control form-control-sm text-center"
-                                               />
-                                    </div>
+                                    @* ملاحظة: طلب الشراء لا يحتوي على RefPRId - هذا موجود فقط في فاتورة الشراء *@
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
@@ -570,8 +568,8 @@
                                     </div>
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">أنشأه</label>
-                                        <input id="RequestCreatedByDisplay"
+                                        <label class="form-label form-label-sm">كاتب الفاتورة</label>
+                                        <input id="InvoiceCreatedByDisplay"
                                                class="form-control form-control-sm text-center"
                                                value="@Model.CreatedBy"
                                                readonly 
@@ -711,7 +709,7 @@
                        ===================================================== *@
                     <div class="card shadow-sm mb-3 invoice-Add-card">
                         <div class="card-header">
-                            <h6 class="mb-0">إضافة صنف للطلب</h6>
+                            <h6 class="mb-0">إضافة صنف للفاتورة</h6>
                         </div>
 
                         <div class="card-body">
@@ -790,14 +788,14 @@
                                     <label class="form-label form-label-sm">الكمية</label>
                                     <input type="number" id="ProdQtyInput"
                                            class="form-control form-control-sm text-center pi-input"
-                                           placeholder="0"                                              data-lock-posted="1" />
+                                           placeholder="0"                                              data-lock-converted="1" />
                                 </div>
 
                                 <div class="col-lg-2 col-md-4">
                                     <label id="ProdDisc1Label" class="form-label form-label-sm">الخصم</label>
                                     <input type="number" id="ProdDisc1Input"
                                            class="form-control form-control-sm text-center pi-input"
-                                           value="0" data-lock-posted="1"/>
+                                           value="0" data-lock-converted="1"/>
                                 </div>
 
                                 <div class="col-lg-2 col-md-4">
@@ -816,8 +814,8 @@
 
                                 <div class="col-lg-2 col-md-4 d-grid">
                                     <label class="form-label form-label-sm">&nbsp;</label>
-                                    <button type="button" id="btnAddInvoiceLine"
-                                                class="btn btn-primary btn-sm w-100" data-lock-posted="1">
+                                    <button type="button" id="btnAddRequestLine"
+                                                class="btn btn-primary btn-sm w-100" data-lock-converted="1">
                                         إضافة
                                     </button>
                                 </div>
@@ -832,7 +830,7 @@
                     @* <div class="card shadow-sm mb-3 invoice-lines-card"> *@
                         @* <div class="card-header py-2 invoice-lines-header">
                             <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-semibold">سطور طلب الشراء</span>
+                                <span class="fw-semibold">سطور فاتورة المشتريات</span>
                             </div>
                         </div> *@
 
@@ -858,14 +856,11 @@
                                             var linesList = Model.Lines?.OrderBy(l => l.LineNo).ToList()
                                             ?? new List<ERP.Models.PRLine>();
 
-                                            var productsDict = ViewBag.Products as Dictionary<int, string> ?? new Dictionary<int, string>();
                                             var groups = linesList
                                             .GroupBy(l => new
                                             {
                                                 l.ProdId,
-                                                ProdName = productsDict.ContainsKey(l.ProdId) 
-                                                    ? productsDict[l.ProdId] 
-                                                    : ("صنف #" + l.ProdId)
+                                                ProdName = l.Product?.ProdName ?? ("صنف #" + l.ProdId)
                                             })
                                             .OrderBy(g => g.Key.ProdName);
                                         }
@@ -874,7 +869,7 @@
                                         {
                                             <tr>
                                                 <td colspan="9" class="text-center text-muted py-3">
-                                                    لا يوجد سطور داخل الطلب حتى الآن.
+                                                    لا يوجد سطور داخل الفاتورة حتى الآن.
                                                 </td>
                                             </tr>
                                         }
@@ -898,10 +893,10 @@
                                                             <span class="text-muted small"> | كود: @g.Key.ProdId</span>
                                                         </td>
 
-                                                        <td class="text-center">@(line.PreferredBatchNo ?? "")</td>
+                                                        <td class="text-center">@line.PreferredBatchNo</td>
 
                                                         <td class="text-center">
-                                                            @(line.PreferredExpiry.HasValue ? line.PreferredExpiry.Value.ToString("yyyy-MM-dd") : "")
+                                                            @(line.PreferredExpiry.HasValue? line.PreferredExpiry.Value.ToString("yyyy-MM-dd") : "")
                                                         </td>
 
                                                         <td class="text-center">@line.QtyRequested</td>
@@ -914,7 +909,7 @@
 
                                                     <td class="text-center no-print">
                                                             <button type="button"
-                                                                    class="btn btn-danger btn-sm btnRemoveLineFromRequest"
+                                                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
                                                                         data-line-no="@line.LineNo" data-lock-converted="1">
                                                                 مسح
                                                             </button>
@@ -948,9 +943,9 @@
                                                         <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                             <td class="text-center">@line.LineNo</td>
                                                             <td class="text-muted small">↳</td>
-                                                            <td class="text-center">@(line.PreferredBatchNo ?? "")</td>
+                                                            <td class="text-center">@line.PreferredBatchNo</td>
                                                             <td class="text-center">
-                                                                @(line.PreferredExpiry.HasValue ? line.PreferredExpiry.Value.ToString("yyyy-MM-dd") : "")
+                                                                @(line.PreferredExpiry.HasValue? line.PreferredExpiry.Value.ToString("yyyy-MM-dd") : "")
                                                             </td>
                                                             <td class="text-center">@line.QtyRequested</td>
                                                             <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
@@ -989,7 +984,7 @@
                         l.QtyRequested * l.PriceRetail * (1m - (l.PurchaseDiscountPct / 100m))
                         );
 
-                        // طلبات الشراء لا تحتوي على ضريبة
+                        // ملاحظة: طلب الشراء لا يحتوي على TaxTotal - هذا موجود فقط في فاتورة الشراء
                         decimal taxAmount = 0m;
                         decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
                         decimal netTotal = totalAfterDiscountAndTax;
@@ -1053,7 +1048,7 @@
                                     <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
                                     <h5 id="TotalAfterDiscountAndTaxValue" class="mb-1">@totalAfterDiscountAndTax.ToString("0.00")</h5>
 
-                                    <span class="small text-muted d-block mt-2">الصافي النهائي للطلب</span>
+                                    <span class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
                                     <h3 id="NetTotalValue" class="mb-0 text-success">@netTotal.ToString("0.00")</h3>
                                 </div>
 
@@ -1091,7 +1086,7 @@
 
 
     <!-- =========================================================
-         ERP — منطقة طباعة طلب الشراء (ثابت معتمد)
+         ERP — منطقة طباعة فاتورة المشتريات (ثابت معتمد)
          ملاحظة: الـ site.css عندك بيطبع فقط .erp-print-area
     ========================================================= -->
     <div id="prPrintArea" class="erp-print-area print-only">
@@ -1099,10 +1094,10 @@
         <!-- ===== هيدر الطباعة (قابل للتخصيص لاحقاً: لوجو/بيانات شركة) ===== -->
         <div class="mb-3">
             <div class="d-flex justify-content-between align-items-start">
-                <div class="small text-muted" id="piPrintNow"></div>
+                <div class="small text-muted" id="prPrintNow"></div>
 
                 <div class="text-center">
-                    @* <div class="fw-bold">فاتورة مشتريات</div> *@
+                    @* <div class="fw-bold">طلب شراء</div> *@
                     <div class="small text-muted" id="prPrintTitle"></div>
                 </div>
 
@@ -1293,7 +1288,7 @@
             const prodBatchInput  = document.getElementById('ProdBatchInput');    // متغير: الباتش
             const prodExpiryInput = document.getElementById('ProdExpiryInput');   // متغير: تاريخ الصلاحية
             const prodHiddenId    = document.getElementById('ProdId');            // متغير: المعرّف الداخلي للصنف
-            const btnAddLine      = document.getElementById('btnAddInvoiceLine'); // متغير: زر إضافة السطر
+            const btnAddLine      = document.getElementById('btnAddRequestLine'); // متغير: زر إضافة السطر
 
             console.log('📋 العناصر:', {
                 prodCodeInput: !!prodCodeInput,
@@ -2132,8 +2127,8 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             const requestId = requestIdInput ? parseInt(requestIdInput.value || '0', 10) : 0;
 
             if (!requestId || requestId <= 0) {
-                alert('لا يمكن إضافة أصناف قبل حفظ الفاتورة. اضغط "حفظ الفاتورة" أولاً.');
-                document.getElementById('btnSaveInvoiceHeader')?.focus(); // متغير: زر حفظ الهيدر
+                alert('لا يمكن إضافة أصناف قبل حفظ الطلب. اضغط "حفظ الطلب" أولاً.');
+                document.getElementById('btnSaveRequestHeader')?.focus(); // متغير: زر حفظ الهيدر
                 return;
             }
 
@@ -2165,7 +2160,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             // 4) تجهيز DTO
             const dto = {
                 id: requestId,
-                prId: requestId,
+                piId: requestId,
                 requestId: requestId,
 
                 prodId: prodId,
@@ -2411,56 +2406,17 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
         // (C) فوكس + حفظ الهيدر (AJAX) — بدون تكرار
         // =========================================================
         document.addEventListener('DOMContentLoaded', () => {
-            // =========================================================
-            // ✅ Focus على حقل اسم العميل عند فتح الصفحة
-            // =========================================================
-            const isNewRequest = @(Model == null || Model.PRId == 0 ? "true" : "false"); // متغير: هل طلب جديد؟
-            
-            // ✅ عمل focus على حقل اسم العميل دائماً عند فتح الصفحة
-            function focusCustomerName() {
+
+            // ==========================
+            // 1) فوكس على المورد لو فاتورة جديدة
+            // ==========================
+            const isNewRequest = @(Model == null || Model.PRId == 0 ? "true" : "false"); // متغير: هل فاتورة جديدة؟
+            if (isNewRequest) {
                 const custNameInput = document.getElementById('CustomerNameInput'); // متغير: اسم المورد
-                
-                if (custNameInput) {
-                    try {
-                        // محاولة focus مباشرة
-                        custNameInput.focus();
-                        
-                        // لو طلب جديد وبه نص، نختار النص
-                        if (isNewRequest && custNameInput.value) {
-                            setTimeout(() => {
-                                custNameInput.select();
-                            }, 100);
-                        }
-                        
-                        console.log('✅ تم عمل focus على حقل اسم المورد');
-                    } catch (err) {
-                        console.error('❌ خطأ في عمل focus:', err);
-                    }
-                } else {
-                    console.warn('⚠️ حقل CustomerNameInput غير موجود');
-                }
-            }
-            
-            // محاولة Focus متعددة للتأكد من العمل
-            focusCustomerName(); // أول محاولة
-            
-            setTimeout(() => {
-                focusCustomerName(); // محاولة ثانية بعد 100ms
-            }, 100);
-            
-            setTimeout(() => {
-                focusCustomerName(); // محاولة ثالثة بعد 500ms
-            }, 500);
-            
-            // أيضاً عند تحميل الصفحة بالكامل
-            if (document.readyState === 'complete') {
-                focusCustomerName();
-            } else {
-                window.addEventListener('load', () => {
-                    setTimeout(() => {
-                        focusCustomerName();
-                    }, 200);
-                });
+                setTimeout(() => {
+                    custNameInput?.focus();
+                    custNameInput?.select?.();
+                }, 250);
             }
 
             // ==========================
@@ -2483,7 +2439,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 busy = true;
                 saveBtn.disabled = true;
 
-                // متغير: رقم الفاتورة الحالي (0 لو جديدة)
+                // متغير: رقم الطلب الحالي (0 لو جديدة)
                 const requestId = parseInt((document.getElementById('RequestId')?.value || '0'), 10) || 0;
 
                 // متغير: كود المورد
@@ -2492,17 +2448,11 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 // متغير: كود المخزن
                 const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
 
-                // متغير: طلب شراء مرجعي (اختياري)
-                let refPrId = null;
-                const refPrInput = document.getElementById('RefPRId'); // متغير: حقل طلب الشراء
-                if (refPrInput && refPrInput.value.trim() !== '') {
-                    const parsed = parseInt(refPrInput.value.trim(), 10);
-                    if (!isNaN(parsed)) refPrId = parsed;
-                }
+                // ملاحظة: طلب الشراء لا يحتوي على RefPRId - هذا موجود فقط في فاتورة الشراء
 
                 // تحقق: لازم المورد والمخزن
                 if (!customerId || !warehouseId) {
-                    alert('من فضلك اختر المورد والمخزن أولاً قبل حفظ الفاتورة.');
+                    alert('من فضلك اختر المورد والمخزن أولاً قبل حفظ الطلب.');
                     busy = false;
                     saveBtn.disabled = false;
                     return;
@@ -2511,8 +2461,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                 const dto = {
                     prId: requestId,          // متغير: رقم الطلب
                     customerId: customerId,   // متغير: رقم المورد
-                    warehouseId: warehouseId, // متغير: رقم المخزن
-                    refPrId: refPrId          // متغير: طلب شراء مرجعي
+                    warehouseId: warehouseId  // متغير: رقم المخزن
                 };
 
                 try {
@@ -2526,14 +2475,14 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                     if (!response.ok) {
                         const txt = await response.text().catch(() => '');
                         console.error('SaveHeader HTTP Error:', response.status, txt);
-                        alert('حدث خطأ غير متوقع أثناء حفظ الفاتورة.');
+                        alert('حدث خطأ غير متوقع أثناء حفظ الطلب.');
                         return;
                     }
 
                     const data = await response.json().catch(() => null);
 
                     if (!data || !data.success) {
-                        alert((data && data.message) ? data.message : 'تعذر حفظ الفاتورة.');
+                        alert((data && data.message) ? data.message : 'تعذر حفظ الطلب.');
                         return;
                     }
 
@@ -2542,14 +2491,14 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                     const requestIdInput = document.getElementById('RequestId');
                     if (newId > 0 && requestIdInput) requestIdInput.value = newId.toString();
 
-                    const invoiceNumberDisplay = document.getElementById('InvoiceNumberDisplay');
+                    const invoiceNumberDisplay = document.getElementById('RequestNumberDisplay');
                     if (invoiceNumberDisplay) {
                         invoiceNumberDisplay.value = data.invoiceNumber || (newId > 0 ? newId.toString() : invoiceNumberDisplay.value);
                     }
 
                     // تحديث التاريخ/الوقت
-                    const requestDateDisplay = document.getElementById('RequestDateDisplay');
-                    if (requestDateDisplay && data.requestDate) requestDateDisplay.value = data.requestDate;
+                    const invoiceDateDisplay = document.getElementById('RequestDateDisplay');
+                    if (invoiceDateDisplay && data.invoiceDate) invoiceDateDisplay.value = data.invoiceDate;
 
                     const invoiceTimeDisplay = document.getElementById('InvoiceTimeDisplay');
                     if (invoiceTimeDisplay && data.invoiceTime) invoiceTimeDisplay.value = data.invoiceTime;
@@ -2558,7 +2507,7 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
                     const statusHidden = document.getElementById('InvoiceStatusHidden');
                     if (statusHidden && data.status) statusHidden.value = data.status;
 
-                 const isConvertedDisplay = document.getElementById('RequestStatusDisplay');
+                 const statusDisplay = document.getElementById('RequestStatusDisplay');
 if (isPostedDisplay) {
     // تعليق: نعرض الحالة النصية (مرحلة 1/2/...) بدل نعم/لا
     isPostedDisplay.value = (data && data.status) ? data.status : 'غير مرحلة';
@@ -2574,7 +2523,7 @@ if (isPostedDisplay) {
 
                 } catch (err) {
                     console.error(err);
-                    alert('تعذر الاتصال بالخادم لحفظ الفاتورة.');
+                    alert('تعذر الاتصال بالخادم لحفظ الطلب.');
                 } finally {
                     busy = false;
                     saveBtn.disabled = false;
@@ -2714,7 +2663,7 @@ if (isPostedDisplay) {
             // =========================================================
             document.addEventListener("DOMContentLoaded", function () {
 
-                            const btnClearAll = document.getElementById("btnClearInvoiceLines"); // متغير: زر مسح كل الأصناف (غيّر الـ id لو مختلف عندك)
+                            const btnClearAll = document.getElementById("btnClearRequestLines"); // متغير: زر مسح كل الأصناف
                 const msg = document.getElementById("convertRequestMsg");           // متغير: صندوق الرسائل
 
                 if (!btnClearAll) return;
@@ -2747,19 +2696,19 @@ if (isPostedDisplay) {
                     if (busy) return;
                     if (btnClearAll.disabled) return;
 
-                    // ✅ اقرأ رقم الفاتورة وقت الضغط
+                    // ✅ اقرأ رقم الطلب وقت الضغط
                     const requestId = parseInt((document.getElementById("RequestId")?.value || "0"), 10) || 0;
 
                     if (requestId <= 0) {
                         if (msg) {
-                            msg.textContent = "⚠️ لا يمكن مسح الأصناف قبل حفظ الفاتورة.";
+                            msg.textContent = "⚠️ لا يمكن مسح الأصناف قبل حفظ الطلب.";
                             msg.className = "small mt-2 text-warning";
                         }
                         return;
                     }
 
                     // ✅ منع المسح لو الفاتورة مُرحّلة (نفس سياسة البرنامج)
-                    if (typeof isInvoicePosted === "function" && isInvoicePosted()) {
+                    if (typeof isRequestConverted === "function" && isRequestConverted()) {
                         if (msg) {
                             msg.textContent = "الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.";
                             msg.className = "small mt-2 text-danger";
@@ -2851,10 +2800,22 @@ if (isPostedDisplay) {
 
 //حفظ الضريبة (Enter أو Blur)
 
-// Note: Purchase Requests don't have tax functionality
-// async function saveTaxAjax() {
-//     // This function is not applicable for Purchase Requests
-// }
+async function saveTaxAjax() {
+
+    const token = getAntiForgeryToken();
+    const requestId = parseInt('@(Model.PRId)', 10);
+
+    const taxInput = document.getElementById('TaxAmountInput');
+    const taxVal = parseFloat(taxInput?.value || '0') || 0;
+
+    const res = await fetch('@Url.Action("SaveTaxJson", "PurchaseRequests")', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'RequestVerificationToken': token
+        },
+        body: JSON.stringify({ PRId: requestId, taxTotal: taxVal })
+    });
 
     const data = await res.json();
 
@@ -2931,7 +2892,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bindNavButton('btnLastInvoice');
 
     // ==============================
-    // (3) البحث برقم الفاتورة
+    // (3) البحث برقم الطلب
     // ==============================
     const searchInput = document.getElementById('NavInvoiceSearchInput');
     const searchBtn   = document.getElementById('btnNavInvoiceSearch');
@@ -2961,175 +2922,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // =========================================================
             // زر: ترحيل الفاتورة
             // =========================================================
-            function initPostInvoice() {
-                console.log('🔄 تهيئة زر التحويل...');
-
-                const btnPost = document.getElementById("btnConvertToInvoice");              // متغير: زر التحويل
-                const msg = document.getElementById("convertRequestMsg");                  // متغير: مكان الرسائل
-                const isConvertedBox = document.getElementById("RequestStatusDisplay");  // متغير: خانة "محوّل؟" (عرض فقط)
-
-                if (!btnPost) {
-                    console.warn('⚠️ زر التحويل غير موجود');
-                    return;
-                }
-
-                // ✅ منع إعادة ربط الـ event listener إذا كان مربوطاً بالفعل
-                if (btnPost.dataset.boundPostInvoice) {
-                    console.log('✅ زر الترحيل مربوط بالفعل');
-                    return;
-                }
-                btnPost.dataset.boundPostInvoice = '1';
-
-                // متغير: حالة التحويل من السيرفر وقت فتح الصفحة (Boolean حقيقي)
-                const serverIsConverted = @Model.IsConverted.ToString().ToLower(); // true/false
-
-                // ✅ لو محوّل من البداية: اقفل زر التحويل وطبق القفل
-                if (serverIsConverted) {
-                    btnPost.disabled = true;
-                    btnPost.innerHTML = "✅ تم تحويل الطلب إلى فاتورة شراء";
-
-                    // ✅ تحديث علم الترحيل + تطبيق القفل
-                    if (typeof setInvoicePosted === "function") setInvoicePosted(true);
-                    if (typeof applyPostedUiLock === "function") applyPostedUiLock();
-
-                    if (msg) {
-                        msg.textContent = "هذه الفاتورة مترحّلة بالفعل.";
-                        msg.className = "small mt-2 text-muted";
-                    }
-                    return;
-                }
-
-                btnPost.addEventListener("click", async function (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-
-                    // =========================
-                    // 0) اقرأ رقم الفاتورة الآن
-                    // =========================
-                    const requestId = parseInt((document.getElementById("RequestId")?.value || "0"), 10) || 0;
-
-                    console.log('📤 تم الضغط على زر التحويل - RequestId:', requestId);
-
-                    if (requestId <= 0) {
-                        if (msg) {
-                            msg.textContent = "⚠️ لازم تحفظ الفاتورة أولاً قبل الترحيل.";
-                            msg.className = "small mt-2 text-warning";
-                        }
-                        const saveBtn = document.getElementById("btnSaveInvoiceHeader");
-                        if (saveBtn) saveBtn.focus();
-                        return;
-                    }
-
-                    if (btnPost.disabled) return;
-
-                    const ok = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
-                    if (!ok) return;
-
-                    // تجهيز الزر
-                    btnPost.disabled = true;
-                    const oldHtml = btnPost.innerHTML;
-                    btnPost.innerHTML = "⏳ جاري الترحيل...";
-
-                    if (msg) {
-                        msg.textContent = "يتم الآن ترحيل الفاتورة...";
-                        msg.className = "small mt-2 text-muted";
-                    }
-
-                    try {
-
-                        // =========================
-                        // 1) طلب الترحيل
-                        // =========================
-                        const res = await fetch(`/PurchaseRequests/ConvertToInvoice?id=${requestId}`, {
-                            method: "POST",
-                            credentials: "same-origin",
-                            headers: {
-                                "X-Requested-With": "XMLHttpRequest",
-                                "Accept": "application/json"
-                            }
-                        });
-
-                        // =========================
-                        // 2) لو فشل: اقرأ رسالة مفهومة
-                        // =========================
-                        if (!res.ok) {
-                            // اقرأ مرة واحدة فقط (عشان ما تقعش في body stream already read)
-                            const raw = await res.text();
-                            let errText = raw || "حدث خطأ أثناء الترحيل.";
-                            try {
-                                const obj = JSON.parse(raw);
-                                if (obj && obj.message) errText = obj.message;
-                            } catch { }
-                            throw new Error(errText);
-                        }
-
-                        // =========================
-                        // 3) نجاح: اقرأ JSON مرة واحدة
-                        // =========================
-                        const data = await res.json(); // ✅ تعريف data هنا (مرة واحدة)
-
-                        const okMsg = (data && data.message) ? data.message : "تم ترحيل الفاتورة بنجاح.";
-                        const postedFlag = (data && typeof data.isPosted !== "undefined") ? !!data.isPosted : true;
-
-                        // =========================
-                        // 4) تحديث البوكس (عرض فقط)
-                        // =========================
-                        if (isPostedBox) {
-                            isPostedBox.value = (data && data.postedLabel) ? data.postedLabel : "نعم";
-                        }
-
-                        // =========================
-                        // 5) تحديث الفلاج الحقيقي + تطبيق القفل
-                        // =========================
-                        if (typeof setInvoicePosted === "function") setInvoicePosted(postedFlag);
-                        if (typeof applyPostedUiLock === "function") applyPostedUiLock();
-
-                        // =========================
-                        // 6) بعد نجاح الترحيل: فعّل زر الفتح
-                        // =========================
-                        const btnOpen = document.getElementById("btnOpenInvoice");
-                        if (btnOpen) btnOpen.disabled = false;
-
-                        const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
-                        if (btnPrint) btnPrint.disabled = false;                     // ✅ بعد الترحيل: الطباعة تتفتح
-
-
-                        // =========================
-                        // 7) واجهة زر الترحيل
-                        // =========================
-                        btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
-                        btnPost.disabled = true;
-
-                        if (msg) {
-                            msg.textContent = okMsg;
-                            msg.className = "small mt-2 text-success";
-                        }
-
-                    } catch (err) {
-
-                        btnPost.disabled = false;
-                        btnPost.innerHTML = oldHtml;
-
-                        if (msg) {
-                            msg.textContent = "فشل الترحيل: " + (err.message || "خطأ غير معروف");
-                            msg.className = "small mt-2 text-danger";
-                        }
-                        console.error('❌ خطأ في الترحيل:', err);
-                    }
-                });
-
-                console.log('✅ تم ربط event listener لزر الترحيل');
-            } // نهاية دالة initPostInvoice
-
-            // ✅ تنفيذ الدالة عند تحميل الصفحة
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', initPostInvoice);
-            } else {
-                initPostInvoice();
-            }
-
-            // ✅ جعل الدالة متاحة عالمياً لإعادة التهيئة بعد حذف السطر
-            window.__initPostInvoice = initPostInvoice;
+            // ملاحظة: طلب الشراء لا يُرحّل - يتم تحويله إلى فاتورة شراء فقط
 
 
 
@@ -3159,63 +2952,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     return raw || "حدث خطأ غير معروف.";
                 }
 
-                // Note: Purchase Requests don't have "Open" button like invoices
-                // const btnOpen = document.getElementById("btnOpenInvoice");              // متغير: زر الفتح
-                const btnPost = document.getElementById("btnConvertToInvoice");              // متغير: زر التحويل (لو موجود)
-                const msg = document.getElementById("convertRequestMsg");                  // متغير: نفس بوكس الرسائل
-                const isConvertedBox = document.getElementById("RequestStatusDisplay");  // متغير: خانة مُرحَّلة؟ (لو موجودة)
-
-                if (!btnOpen) return;
-
-            
-
-                // لو مش مترحلة حالياً => زر الفتح يتقفل (لأنه ملوش معنى)
-                if (!isInvoicePosted()) {
-                    btnOpen.disabled = true;
-                }
-
-                let busy = false; // متغير: منع الضغط المتكرر
-
-                btnOpen.addEventListener("click", async function () {
-
-                    if (busy) return;
-                    if (btnOpen.disabled) return;
-
-                    // تأكيد
-                    const ok = confirm("هل تريد فتح هذه الفاتورة للتعديل؟ سيتم السماح بالتعديل حتى تقوم بترحيلها مرة أخرى.");
-                    if (!ok) return;
-
-                    busy = true;
-                    btnOpen.disabled = true;
-
-                    const oldHtml = btnOpen.innerHTML;
-                    btnOpen.innerHTML = "⏳ جاري الفتح...";
-
-                    if (msg) {
-                        msg.textContent = "جاري فتح الفاتورة للتعديل...";
-                        msg.className = "small mt-2 text-muted";
-                    }
-
-                    try {
+                // ملاحظة: طلب الشراء لا يحتاج زر الترحيل أو الفتح
+                // ملاحظة: طلب الشراء لا يحتاج زر فتح - الطلب إما محوّل أو غير محوّل
 
 
-               // ✅ (1) اقرأ رقم الفاتورة "وقت الضغط" (ده أهم سطر)
-                 const requestId = parseInt((document.getElementById('RequestId')?.value || '0'), 10) || 0;
-
-            if (requestId <= 0) {
-                if (msg) {
-                    msg.textContent = "⚠️ لا يمكن تحويل طلب قبل حفظه.";
-                    msg.className = "small mt-2 text-warning";
-                }
-                btnOpen.disabled = true;
-                btnOpen.innerHTML = oldHtml;
-                busy = false;
-                return;
-            }
-
-            // Note: Purchase Requests don't have "Open" functionality like invoices
-            // This section can be removed or adapted for ConvertToInvoice
-                        // const res = await fetch(`/PurchaseRequests/ConvertToInvoice?id=${requestId}`, {
+                        const res = await fetch(`/PurchaseRequests/OpenInvoice?id=${requestId}`, {
                             method: "POST",
                             credentials: "same-origin",
                             headers: { "X-Requested-With": "XMLHttpRequest" }
@@ -3239,8 +2980,8 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch { }
 
             // ✅ تحديث الفلاج + فتح الواجهة
-            setInvoicePosted(false);
-            applyPostedUiLock();
+            setRequestConverted(false);
+            applyConvertedUiLock();
 
             // ✅ زر الفتح: بعد نجاح الفتح نخليه Disabled (مالوش معنى نضغطه تاني)
             // ونعيد شكله الطبيعي "فتح الفاتورة" (مش "تم فتح" علشان يبقى واضح)
@@ -3252,7 +2993,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 btnPost.disabled = false;
                 btnPost.innerHTML = "📌 ترحيل الفاتورة";
 
-                const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
+                const btnPrint = document.getElementById("btnPrintRequest"); // متغير: زر الطباعة
                 if (btnPrint) btnPrint.disabled = true;                      // ✅ بعد فتح الفاتورة: الطباعة تتقفل
 
 
@@ -3308,12 +3049,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // =========================================================
-            // ثابت: تطبيق القفل على أي عنصر عليه data-lock-posted="1"
+            // ثابت: تطبيق القفل على أي عنصر عليه data-lock-converted="1"
             // =========================================================
-            function applyPostedUiLock() {
+            function applyConvertedUiLock() {
 
-                const posted = isInvoicePosted(); // متغير: هل الفاتورة مُرحّلة؟
-                const lockables = document.querySelectorAll('[data-lock-posted="1"]'); // متغير: العناصر المطلوب قفلها
+                const converted = isRequestConverted(); // متغير: هل الطلب محوّل؟
+                const lockables = document.querySelectorAll('[data-lock-converted="1"]'); // متغير: العناصر المطلوب قفلها
 
                 lockables.forEach(el => {
 
@@ -3328,9 +3069,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const tag = (el.tagName || "").toUpperCase(); // متغير: نوع العنصر
 
                     // -------------------------
-                    // حالة: مُرحّلة (قفل)
+                    // حالة: محوّل (قفل)
                     // -------------------------
-                    if (posted) {
+                    if (converted) {
 
                         if (tag === "BUTTON") {
                             el.disabled = true;
@@ -3562,7 +3303,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // base URL للعرض
                 const base = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
-                    || '@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })';
+                    || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
 
                 // نجهز URLs
                 const urlFirst = setOrReplaceParam(base, 'id', navFirst);
@@ -3585,7 +3326,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // =========================
             // تحميل Body فقط وتبديل المحتوى
             // =========================
-            async function loadRequestBody(url) {
+            async function loadInvoiceBody(url) {
 
                 const host = document.getElementById('PI_BodyHost');
                 if (!host) return;
@@ -3639,9 +3380,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // ✅ مهم جداً: إعادة تهيئة event listeners لزر الترحيل بعد إعادة تحميل الـ body
                     console.log('🔄 إعادة تهيئة event listeners لزر الترحيل...');
                     setTimeout(() => {
-                        if (typeof window.__initPostInvoice === 'function') {
-                            window.__initPostInvoice();
-                        }
+                        // ملاحظة: طلب الشراء لا يحتاج تهيئة الترحيل
                     }, 150);
 
 
@@ -3696,10 +3435,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
 
                               // ✅ رقم الطلب (لازم يتقري وقت الضغط من الـ DOM لأنه بيتغير مع الـ Reload الجزئي)
-            const prId = parseInt((document.getElementById('RequestId')?.value || '0'), 10) || 0;
+            const requestId = parseInt((document.getElementById('RequestId')?.value || '0'), 10) || 0;
 
 
-                if (!prId || prId <= 0) { alert('لا يمكن مسح سطر: رقم الطلب غير معروف.'); return; }
+                if (!requestId || requestId <= 0) { alert('لا يمكن مسح سطر: رقم الطلب غير معروف.'); return; }
                 if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
 
                 // تأكيد بسيط
@@ -3727,7 +3466,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             ...(antiToken ? { 'RequestVerificationToken': antiToken } : {})
                         },
                         // ✅ لازم نفس أسماء الـ DTO
-                        body: JSON.stringify({ PRId: prId, LineNo: lineNo })
+                        body: JSON.stringify({ PRId: requestId, LineNo: lineNo })
                     });
 
                     // متغير: نحاول نفهم الرد سواء JSON أو نص
@@ -3751,7 +3490,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // =========================================================
 // ✅ إظهار رسالة "تم الحذف" بدل ما تضيع
 // =========================================================
-const msgBox = document.getElementById('convertRequestMsg'); // متغير: مكان الرسائل (لو عندك عنصر آخر غيّره)
+const msgBox = document.getElementById('convertRequestMsg'); // متغير: مكان الرسائل
 if (msgBox) {
     msgBox.textContent = data.message || 'تم حذف السطر.';
     msgBox.className = 'small mt-2 text-success';
@@ -3761,28 +3500,28 @@ if (msgBox) {
                     // ✅ بعد المسح: Reload جزئي للفاتورة (frag=body)
                     const baseUrl =
                         document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
-                        || '@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })';
+                        || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
 
-                    const url = setOrReplaceParam(baseUrl, 'id', piId);
+                    const url = setOrReplaceParam(baseUrl, 'id', requestId);
 
 
                     // =========================================================
                     // ✅ حفظ حالة الفاتورة الحالية قبل Reload
                     // =========================================================
                         const statusBox = document.getElementById('RequestStatusDisplay');      // متغير: بوكس حالة الطلب الظاهر
-                        const statusHidden = document.getElementById('RequestStatusHidden');      // متغير: الحالة المخفية (لـ JS)
+                        const statusHidden = document.getElementById('InvoiceStatusHidden');      // متغير: الحالة المخفية (لـ JS)
                         const prevStatus = statusBox ? statusBox.value : '';                      // متغير: الحالة قبل المسح
 
 
                     // ✅ مهم: ننتظر التحميل قبل إعادة تفعيل الزر
-                    await loadRequestBody(url);
+                    await loadInvoiceBody(url);
 
 
              // =========================================================
             // ✅ بعد Reload: رجّع نفس الحالة كما كانت (المسح لا يغير الحالة)
             // =========================================================
             const statusBox2 = document.getElementById('RequestStatusDisplay');     // متغير: بوكس الحالة بعد Reload
-            const statusHidden2 = document.getElementById('RequestStatusHidden');     // متغير: hidden بعد Reload
+            const statusHidden2 = document.getElementById('InvoiceStatusHidden');     // متغير: hidden بعد Reload
 
             if (statusBox2) statusBox2.value = prevStatus || statusBox2.value;        // تعليق: لا نسمح لـ OPEN أن يحل محل الحالة القديمة
             if (statusHidden2) statusHidden2.value = prevStatus || statusHidden2.value;
@@ -3837,7 +3576,7 @@ if (msgBox) {
                     if (!baseUrl) return;
 
                     const url = setOrReplaceParam(baseUrl, 'id', val);
-                    loadRequestBody(url);
+                    loadInvoiceBody(url);
                     return;
                 }
 
@@ -3855,16 +3594,108 @@ if (msgBox) {
 
 
             // =========================================================
+            // ERP — زر تحويل طلب الشراء إلى فاتورة شراء
+            // =========================================================
+            document.addEventListener("DOMContentLoaded", function () {
+                const btnConvert = document.getElementById("btnConvertToInvoice");
+                const msg = document.getElementById("convertRequestMsg");
+
+                if (!btnConvert) return;
+
+                // ✅ ربط مرة واحدة
+                if (btnConvert.dataset.boundConvert) return;
+                btnConvert.dataset.boundConvert = "1";
+
+                btnConvert.addEventListener("click", async function (e) {
+                    e.preventDefault();
+
+                    const requestId = parseInt((document.getElementById("RequestId")?.value || "0"), 10) || 0;
+
+                    if (requestId <= 0) {
+                        if (msg) {
+                            msg.textContent = "⚠️ لازم تحفظ الطلب أولاً قبل التحويل.";
+                            msg.className = "small mt-2 text-warning";
+                        }
+                        const saveBtn = document.getElementById("btnSaveRequestHeader");
+                        if (saveBtn) saveBtn.focus();
+                        return;
+                    }
+
+                    const ok = confirm("هل تريد تحويل هذا الطلب إلى فاتورة شراء؟ بعد التحويل سيتم قفل الطلب.");
+                    if (!ok) return;
+
+                    btnConvert.disabled = true;
+                    const oldHtml = btnConvert.innerHTML;
+                    btnConvert.innerHTML = "⏳ جاري التحويل...";
+
+                    if (msg) {
+                        msg.textContent = "يتم الآن تحويل الطلب إلى فاتورة شراء...";
+                        msg.className = "small mt-2 text-muted";
+                    }
+
+                    try {
+                        const res = await fetch(`/PurchaseRequests/ConvertToInvoice?prId=${requestId}`, {
+                            method: "POST",
+                            credentials: "same-origin",
+                            headers: {
+                                "X-Requested-With": "XMLHttpRequest",
+                                "Accept": "application/json"
+                            }
+                        });
+
+                        if (!res.ok) {
+                            const raw = await res.text();
+                            let errText = raw || "حدث خطأ أثناء التحويل.";
+                            try {
+                                const obj = JSON.parse(raw);
+                                if (obj && obj.message) errText = obj.message;
+                            } catch { }
+                            throw new Error(errText);
+                        }
+
+                        const data = await res.json();
+                        const okMsg = (data && data.message) ? data.message : "تم تحويل الطلب إلى فاتورة شراء بنجاح.";
+
+                        // تحديث حالة التحويل
+                        if (typeof setRequestConverted === "function") setRequestConverted(true);
+                        if (typeof applyConvertedUiLock === "function") applyConvertedUiLock();
+
+                        btnConvert.innerHTML = "✅ تم التحويل";
+                        btnConvert.disabled = true;
+
+                        if (msg) {
+                            msg.textContent = okMsg;
+                            msg.className = "small mt-2 text-success";
+                        }
+
+                        // إعادة تحميل الصفحة بعد التحويل
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 1500);
+
+                    } catch (err) {
+                        btnConvert.disabled = false;
+                        btnConvert.innerHTML = oldHtml;
+
+                        if (msg) {
+                            msg.textContent = "فشل التحويل: " + (err.message || "خطأ غير معروف");
+                            msg.className = "small mt-2 text-danger";
+                        }
+                        console.error('❌ خطأ في التحويل:', err);
+                    }
+                });
+            });
+
+            // =========================================================
 // ERP — زر طباعة الطلب (Purchase Request) [ثابت معتمد]
-// - يمكن الطباعة في أي وقت
 // - نقرأ RequestId وقت الضغط
 // - نطبع فقط .erp-print-area (حسب site.css)
 // - نجهز (الهيدر + السطور + الإجماليات) قبل الطباعة
 // =========================================================
 document.addEventListener("DOMContentLoaded", function () {
 
-    const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الفاتورة
-    const msg = document.getElementById("postInvoiceMsg");       // متغير: صندوق الرسائل
+    const btnPrint = document.getElementById("btnPrintRequest"); // متغير: زر طباعة الطلب
+    const msg = document.getElementById("convertRequestMsg");       // متغير: صندوق الرسائل
 
     if (!btnPrint) return;
 
@@ -3872,10 +3703,7 @@ document.addEventListener("DOMContentLoaded", function () {
     if (btnPrint.dataset.boundPrint) return;
     btnPrint.dataset.boundPrint = "1";
 
-    // ✅ عند فتح الصفحة: لو الفاتورة مش مُرحّلة نقفل زر الطباعة
-    if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
-        btnPrint.disabled = true;
-    }
+    // ملاحظة: طلب الشراء يمكن طباعته في أي وقت (لا يحتاج ترحيل)
 
     // متغير: منع فتح نافذة الطباعة مرتين
     let printing = false;
@@ -3886,7 +3714,7 @@ document.addEventListener("DOMContentLoaded", function () {
     function preparePurchaseRequestPrint() {
 
         // متغير: منطقة الطباعة
-        const printArea = document.getElementById("piPrintArea");
+        const printArea = document.getElementById("prPrintArea");
         if (!printArea) return false;
 
         // =========================
@@ -3897,7 +3725,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const requestId = (document.getElementById("RequestId")?.value || "").trim();
 
         // متغير: تاريخ الطلب (لو عندك input اسمه PRDate)
-        const requestDate =
+        const invoiceDate =
             (document.getElementById("PRDate")?.value || "").trim() ||
             "";
 
@@ -3919,7 +3747,7 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("prPrintNow").textContent = new Date().toLocaleString();
         document.getElementById("prPrintTitle").textContent = `ERP — طلب شراء رقم ${requestId || ""}`;
         document.getElementById("prPrintRequestNo").textContent = requestId || "";
-        document.getElementById("prPrintRequestDate").textContent = requestDate || "";
+        document.getElementById("prPrintRequestDate").textContent = invoiceDate || "";
         document.getElementById("prPrintSupplier").textContent = supplierName || "";
         document.getElementById("prPrintWarehouse").textContent = warehouseName || "";
 
@@ -3931,7 +3759,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
         linesWrap.innerHTML = "";
 
-        const tbody = document.getElementById("PRLinesTbody"); // متغير: tbody الخاص بسطور الطلب
+        const tbody = document.getElementById("PRLinesTbody"); // متغير: tbody الخاص بسطور الفاتورة
         if (!tbody) {
             linesWrap.innerHTML = `<div class="text-muted small">لا توجد سطور للطباعة.</div>`;
         } else {
@@ -3993,10 +3821,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
     btnPrint.addEventListener("click", function () {
 
-        // ✅ اقرأ رقم الفاتورة وقت الضغط
-        const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+        // ✅ اقرأ رقم الطلب وقت الضغط
+        const requestId = parseInt((document.getElementById("RequestId")?.value || "0"), 10) || 0;
 
-        if (invoiceId <= 0) {
+        if (requestId <= 0) {
             if (msg) {
                 msg.textContent = "⚠️ لا يمكن طباعة فاتورة قبل حفظها.";
                 msg.className = "small mt-2 text-warning";
@@ -4004,15 +3832,7 @@ document.addEventListener("DOMContentLoaded", function () {
             return;
         }
 
-        // ✅ شرط البرنامج: لا طباعة إلا بعد الترحيل
-        if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
-            if (msg) {
-                msg.textContent = "❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة).";
-                msg.className = "small mt-2 text-danger";
-            }
-            document.getElementById("btnConvertToInvoice")?.focus();
-            return;
-        }
+        // ملاحظة: طلب الشراء يمكن طباعته في أي وقت (لا يحتاج ترحيل)
 
         // منع تكرار الطباعة
         if (printing) return;
@@ -4036,8 +3856,8 @@ document.addEventListener("DOMContentLoaded", function () {
             // متغير: اسم المورد من نفس Input في الهيدر
             const supplierName = (document.getElementById("CustomerNameInput")?.value || "").trim();
 
-            // متغير: تاريخ الفاتورة من نفس Input في الهيدر
-            const invoiceDate = (document.getElementById("InvoiceDateDisplay")?.value || "").trim();
+            // متغير: تاريخ الطلب من نفس Input في الهيدر
+            const invoiceDate = (document.getElementById("RequestDateDisplay")?.value || "").trim();
 
             // دالة صغيرة: تكتب نص في عنصر طباعة لو موجود
             function setPrintText(id, text) {
@@ -4047,7 +3867,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
             // ✅ املأ القيم داخل الطباعة
             setPrintText("prPrintSupplier", supplierName);
-            setPrintText("prPrintRequestDate", requestDate);
+            setPrintText("prPrintRequestDate", invoiceDate);
 
 
         // ✅ اطبع مرة واحدة
@@ -4087,7 +3907,7 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (input) {
                     input.removeAttribute('title');
                     // تعليق: placeholder هو اللي هيوضح وظيفة البحث
-                    if (!input.getAttribute('placeholder')) input.setAttribute('placeholder', 'بحث برقم الفاتورة');
+                    if (!input.getAttribute('placeholder')) input.setAttribute('placeholder', 'بحث برقم الطلب');
                 }
 
                 const btn = document.getElementById('btnNavInvoiceSearch');

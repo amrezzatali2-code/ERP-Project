@@ -1258,5 +1258,1369 @@ namespace ERP.Controllers
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 fileName);
         }
+
+        // =========================================================
+        // تقرير: أرباح الأصناف
+        // يحسب الربح بطريقتين:
+        // 1) من البيع (SalesInvoiceLines): Revenue - Cost
+        // 2) من الميزانية (LedgerEntries): Revenue Account - COGS Account
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> ProductProfits(
+            string? search,
+            int? categoryId,
+            int? warehouseId,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? profitMethod = "both", // "sales" | "ledger" | "both"
+            string? sortBy = "name",
+            string? sortDir = "asc",
+            bool loadReport = false,
+            int page = 1,
+            int pageSize = 200)
+        {
+            // =========================================================
+            // 1) تجهيز القوائم المنسدلة
+            // =========================================================
+            var categories = await _context.Categories
+                .AsNoTracking()
+                .OrderBy(c => c.CategoryName)
+                .Select(c => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
+                {
+                    Value = c.CategoryId.ToString(),
+                    Text = c.CategoryName
+                })
+                .ToListAsync();
+
+            var warehouses = await _context.Warehouses
+                .AsNoTracking()
+                .OrderBy(w => w.WarehouseName)
+                .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
+                {
+                    Value = w.WarehouseId.ToString(),
+                    Text = w.WarehouseName
+                })
+                .ToListAsync();
+
+            ViewBag.Categories = categories;
+            ViewBag.Warehouses = warehouses;
+
+            // =========================================================
+            // 2) تجهيز الفلاتر
+            // =========================================================
+            ViewBag.Search = search ?? "";
+            ViewBag.CategoryId = categoryId;
+            ViewBag.WarehouseId = warehouseId;
+            ViewBag.FromDate = fromDate;
+            ViewBag.ToDate = toDate;
+            ViewBag.ProfitMethod = profitMethod;
+            ViewBag.SortBy = sortBy;
+            ViewBag.SortDir = sortDir;
+
+            // =========================================================
+            // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
+            // =========================================================
+            if (!loadReport)
+            {
+                ViewBag.ReportData = new List<ProductProfitReportDto>();
+                ViewBag.TotalSalesRevenue = 0m;
+                ViewBag.TotalSalesCost = 0m;
+                ViewBag.TotalSalesProfit = 0m;
+                ViewBag.TotalLedgerRevenue = 0m;
+                ViewBag.TotalLedgerCost = 0m;
+                ViewBag.TotalLedgerProfit = 0m;
+                return View();
+            }
+
+            // =========================================================
+            // 4) بناء الاستعلام الأساسي للأصناف
+            // =========================================================
+            var productsQuery = _context.Products
+                .AsNoTracking()
+                .Include(p => p.Category)
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                productsQuery = productsQuery.Where(p =>
+                    p.ProdName.Contains(s) ||
+                    (p.Barcode != null && p.Barcode.Contains(s)) ||
+                    (p.ProdId.ToString() == s));
+            }
+
+            if (categoryId.HasValue && categoryId.Value > 0)
+            {
+                productsQuery = productsQuery.Where(p => p.CategoryId == categoryId.Value);
+            }
+
+            productsQuery = productsQuery.Where(p => p.IsActive == true);
+
+            var productIds = await productsQuery.Select(p => p.ProdId).ToListAsync();
+
+            if (productIds.Count == 0)
+            {
+                ViewBag.ReportData = new List<ProductProfitReportDto>();
+                return View();
+            }
+
+            // =========================================================
+            // 5) حساب الربح من البيع (SalesInvoiceLines)
+            // =========================================================
+            var salesProfitQuery = _context.SalesInvoiceLines
+                .AsNoTracking()
+                .Include(sil => sil.SalesInvoice)
+                .Where(sil =>
+                    productIds.Contains(sil.ProdId) &&
+                    sil.SalesInvoice.IsPosted);
+
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.WarehouseId == warehouseId.Value);
+            }
+
+            if (fromDate.HasValue)
+            {
+                var from = fromDate.Value.Date;
+                salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
+            }
+
+            if (toDate.HasValue)
+            {
+                var to = toDate.Value.Date.AddDays(1);
+                salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate < to);
+            }
+
+            var salesProfitData = await salesProfitQuery
+                .GroupBy(sil => sil.ProdId)
+                .Select(g => new
+                {
+                    ProdId = g.Key,
+                    SalesRevenue = g.Sum(sil => sil.LineNetTotal),
+                    SalesCost = g.Sum(sil => 
+                        sil.CostTotal > 0 
+                            ? sil.CostTotal 
+                            : (sil.ProfitValue > 0 
+                                ? (sil.LineNetTotal - sil.ProfitValue) 
+                                : 0m)),
+                    SalesQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.ProdId);
+
+            // =========================================================
+            // 6) حساب الربح من الميزانية (LedgerEntries)
+            // =========================================================
+            // نحتاج إلى حساب الإيرادات والتكلفة من LedgerEntries
+            // الإيرادات: Credit من حساب 4100 (SourceType = SalesInvoice, LineNo = 2)
+            // COGS: Debit من حساب 5100 (SourceType = SalesInvoice, LineNo = 3)
+
+            // أولاً: حل AccountId من الأكواد
+            var salesRevenueAccount = await _context.Accounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.AccountCode == "4100");
+
+            var cogsAccount = await _context.Accounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.AccountCode == "5100");
+
+            Dictionary<int, decimal> ledgerRevenueData = new Dictionary<int, decimal>();
+            Dictionary<int, decimal> ledgerCostData = new Dictionary<int, decimal>();
+
+            if (salesRevenueAccount != null && cogsAccount != null)
+            {
+                // الحصول على فواتير المبيعات المرتبطة بالأصناف المحددة
+                var salesInvoiceIds = await salesProfitQuery
+                    .Select(sil => sil.SalesInvoice.SIId)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (salesInvoiceIds.Any())
+                {
+                    // الإيرادات من الميزانية
+                    var revenueEntries = await _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == salesRevenueAccount.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.LineNo == 2 &&
+                            e.PostVersion > 0 &&
+                            salesInvoiceIds.Contains(e.SourceId!.Value) &&
+                            !_context.LedgerEntries.Any(rev =>
+                                rev.SourceType == LedgerSourceType.SalesInvoice &&
+                                rev.SourceId == e.SourceId &&
+                                rev.LineNo == 9001))
+                        .ToListAsync();
+
+                    // ربط الإيرادات بالأصناف عبر SalesInvoiceLines
+                    foreach (var entry in revenueEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+
+                        var invoiceLines = await _context.SalesInvoiceLines
+                            .AsNoTracking()
+                            .Where(sil =>
+                                sil.SIId == entry.SourceId.Value &&
+                                productIds.Contains(sil.ProdId))
+                            .ToListAsync();
+
+                        if (invoiceLines.Any())
+                        {
+                            decimal totalInvoiceNet = invoiceLines.Sum(sil => sil.LineNetTotal);
+                            if (totalInvoiceNet > 0)
+                            {
+                                foreach (var line in invoiceLines)
+                                {
+                                    decimal proportion = line.LineNetTotal / totalInvoiceNet;
+                                    decimal revenueShare = entry.Credit * proportion;
+
+                                    if (ledgerRevenueData.ContainsKey(line.ProdId))
+                                        ledgerRevenueData[line.ProdId] += revenueShare;
+                                    else
+                                        ledgerRevenueData[line.ProdId] = revenueShare;
+                                }
+                            }
+                        }
+                    }
+
+                    // COGS من الميزانية
+                    var cogsEntries = await _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == cogsAccount.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.LineNo == 3 &&
+                            e.PostVersion > 0 &&
+                            salesInvoiceIds.Contains(e.SourceId!.Value) &&
+                            !_context.LedgerEntries.Any(rev =>
+                                rev.SourceType == LedgerSourceType.SalesInvoice &&
+                                rev.SourceId == e.SourceId &&
+                                rev.LineNo == 9001))
+                        .ToListAsync();
+
+                    // ربط COGS بالأصناف عبر SalesInvoiceLines
+                    foreach (var entry in cogsEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+
+                        var invoiceLines = await _context.SalesInvoiceLines
+                            .AsNoTracking()
+                            .Where(sil =>
+                                sil.SIId == entry.SourceId.Value &&
+                                productIds.Contains(sil.ProdId))
+                            .ToListAsync();
+
+                        if (invoiceLines.Any())
+                        {
+                            decimal totalInvoiceCost = invoiceLines.Sum(sil => sil.CostTotal);
+                            if (totalInvoiceCost > 0)
+                            {
+                                foreach (var line in invoiceLines)
+                                {
+                                    decimal proportion = line.CostTotal / totalInvoiceCost;
+                                    decimal costShare = entry.Debit * proportion;
+
+                                    if (ledgerCostData.ContainsKey(line.ProdId))
+                                        ledgerCostData[line.ProdId] += costShare;
+                                    else
+                                        ledgerCostData[line.ProdId] = costShare;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // =========================================================
+            // 7) بناء reportData
+            // =========================================================
+            var productsDict = await productsQuery
+                .Select(p => new
+                {
+                    p.ProdId,
+                    p.ProdName,
+                    CategoryName = p.Category != null ? p.Category.CategoryName : ""
+                })
+                .ToDictionaryAsync(p => p.ProdId);
+
+            var reportData = new List<ProductProfitReportDto>();
+
+            foreach (var prodId in productIds)
+            {
+                if (!productsDict.TryGetValue(prodId, out var product)) continue;
+
+                // الربح من البيع
+                decimal salesRevenue = salesProfitData.TryGetValue(prodId, out var salesData) ? salesData.SalesRevenue : 0m;
+                decimal salesCost = salesProfitData.TryGetValue(prodId, out var salesData2) ? salesData2.SalesCost : 0m;
+                decimal salesProfit = salesRevenue - salesCost;
+                decimal salesProfitPercent = salesRevenue > 0 ? (salesProfit / salesRevenue) * 100m : 0m;
+                decimal salesQty = salesProfitData.TryGetValue(prodId, out var salesData3) ? salesData3.SalesQty : 0m;
+
+                // الربح من الميزانية
+                decimal ledgerRevenue = ledgerRevenueData.TryGetValue(prodId, out var rev) ? rev : 0m;
+                decimal ledgerCost = ledgerCostData.TryGetValue(prodId, out var cost) ? cost : 0m;
+                decimal ledgerProfit = ledgerRevenue - ledgerCost;
+                decimal ledgerProfitPercent = ledgerRevenue > 0 ? (ledgerProfit / ledgerRevenue) * 100m : 0m;
+
+                // الربح من أرصدة الحسابات (Account Balance) - سيتم حسابه لاحقاً لكل الصنف
+                decimal accountBalanceRevenue = 0m;
+                decimal accountBalanceCost = 0m;
+                decimal accountBalanceProfit = 0m;
+                decimal accountBalanceProfitPercent = 0m;
+
+                // متوسطات
+                decimal avgUnitPrice = salesQty > 0 ? salesRevenue / salesQty : 0m;
+                decimal avgUnitCost = salesQty > 0 ? salesCost / salesQty : 0m;
+
+                reportData.Add(new ProductProfitReportDto
+                {
+                    ProdId = prodId,
+                    ProdCode = prodId.ToString(),
+                    ProdName = product.ProdName ?? "",
+                    CategoryName = product.CategoryName ?? "",
+                    SalesRevenue = salesRevenue,
+                    SalesCost = salesCost,
+                    SalesProfit = salesProfit,
+                    SalesProfitPercent = salesProfitPercent,
+                    LedgerRevenue = ledgerRevenue,
+                    LedgerCost = ledgerCost,
+                    LedgerProfit = ledgerProfit,
+                    LedgerProfitPercent = ledgerProfitPercent,
+                    AccountBalanceRevenue = accountBalanceRevenue,
+                    AccountBalanceCost = accountBalanceCost,
+                    AccountBalanceProfit = accountBalanceProfit,
+                    AccountBalanceProfitPercent = accountBalanceProfitPercent,
+                    SalesQty = salesQty,
+                    AvgUnitPrice = avgUnitPrice,
+                    AvgUnitCost = avgUnitCost
+                });
+            }
+
+            // =========================================================
+            // 7.1) حساب الربح من أرصدة الحسابات (Account Balance) للأصناف
+            // =========================================================
+            if (salesRevenueAccount != null && cogsAccount != null)
+            {
+                // حساب رصيد حساب الإيرادات (4100) = Credit - Debit
+                var revenueBalanceQuery = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.AccountId == salesRevenueAccount.AccountId &&
+                        e.PostVersion > 0 &&
+                        !_context.LedgerEntries.Any(rev =>
+                            rev.SourceType == LedgerSourceType.SalesInvoice &&
+                            rev.SourceId == e.SourceId &&
+                            rev.LineNo == 9001));
+
+                if (fromDate.HasValue)
+                {
+                    var from = fromDate.Value.Date;
+                    revenueBalanceQuery = revenueBalanceQuery.Where(e => e.EntryDate >= from);
+                }
+
+                if (toDate.HasValue)
+                {
+                    var to = toDate.Value.Date.AddDays(1);
+                    revenueBalanceQuery = revenueBalanceQuery.Where(e => e.EntryDate < to);
+                }
+
+                var totalRevenueCredit = await revenueBalanceQuery.SumAsync(e => (decimal?)e.Credit) ?? 0m;
+                var totalRevenueDebit = await revenueBalanceQuery.SumAsync(e => (decimal?)e.Debit) ?? 0m;
+                var revenueAccountBalance = totalRevenueCredit - totalRevenueDebit; // رصيد الإيرادات (دائن - مدين)
+
+                // حساب رصيد حساب COGS (5100) = Debit - Credit
+                var cogsBalanceQuery = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.AccountId == cogsAccount.AccountId &&
+                        e.PostVersion > 0 &&
+                        !_context.LedgerEntries.Any(rev =>
+                            rev.SourceType == LedgerSourceType.SalesInvoice &&
+                            rev.SourceId == e.SourceId &&
+                            rev.LineNo == 9001));
+
+                if (fromDate.HasValue)
+                {
+                    var from = fromDate.Value.Date;
+                    cogsBalanceQuery = cogsBalanceQuery.Where(e => e.EntryDate >= from);
+                }
+
+                if (toDate.HasValue)
+                {
+                    var to = toDate.Value.Date.AddDays(1);
+                    cogsBalanceQuery = cogsBalanceQuery.Where(e => e.EntryDate < to);
+                }
+
+                var totalCogsDebit = await cogsBalanceQuery.SumAsync(e => (decimal?)e.Debit) ?? 0m;
+                var totalCogsCredit = await cogsBalanceQuery.SumAsync(e => (decimal?)e.Credit) ?? 0m;
+                var cogsAccountBalance = totalCogsDebit - totalCogsCredit; // رصيد COGS (مدين - دائن)
+
+                // توزيع الأرصدة على الأصناف حسب نسبة المبيعات
+                decimal totalSalesRevenueForBalance = reportData.Sum(r => r.SalesRevenue);
+                if (totalSalesRevenueForBalance > 0)
+                {
+                    foreach (var item in reportData)
+                    {
+                        decimal proportion = item.SalesRevenue / totalSalesRevenueForBalance;
+                        item.AccountBalanceRevenue = revenueAccountBalance * proportion;
+                        item.AccountBalanceCost = cogsAccountBalance * proportion;
+                        item.AccountBalanceProfit = item.AccountBalanceRevenue - item.AccountBalanceCost;
+                        item.AccountBalanceProfitPercent = item.AccountBalanceRevenue > 0 
+                            ? (item.AccountBalanceProfit / item.AccountBalanceRevenue) * 100m 
+                            : 0m;
+                    }
+                }
+            }
+
+            // =========================================================
+            // 8) الترتيب
+            // =========================================================
+            bool isDesc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+            switch (sortBy?.ToLowerInvariant())
+            {
+                case "code":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.ProdCode).ToList()
+                        : reportData.OrderBy(r => r.ProdCode).ToList();
+                    break;
+                case "salesprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.SalesProfit).ToList()
+                        : reportData.OrderBy(r => r.SalesProfit).ToList();
+                    break;
+                case "ledgerprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.LedgerProfit).ToList()
+                        : reportData.OrderBy(r => r.LedgerProfit).ToList();
+                    break;
+                case "salesrevenue":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.SalesRevenue).ToList()
+                        : reportData.OrderBy(r => r.SalesRevenue).ToList();
+                    break;
+                default: // "name"
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.ProdName).ToList()
+                        : reportData.OrderBy(r => r.ProdName).ToList();
+                    break;
+            }
+
+            // =========================================================
+            // 9) حساب المجاميع
+            // =========================================================
+            decimal totalSalesRevenue = reportData.Sum(r => r.SalesRevenue);
+            decimal totalSalesCost = reportData.Sum(r => r.SalesCost);
+            decimal totalSalesProfit = totalSalesRevenue - totalSalesCost;
+            decimal totalLedgerRevenue = reportData.Sum(r => r.LedgerRevenue);
+            decimal totalLedgerCost = reportData.Sum(r => r.LedgerCost);
+            decimal totalLedgerProfit = totalLedgerRevenue - totalLedgerCost;
+            
+            // حساب المجاميع للطريقة الثالثة (من الأرصدة)
+            decimal totalAccountBalanceRevenue = reportData.Sum(r => r.AccountBalanceRevenue);
+            decimal totalAccountBalanceCost = reportData.Sum(r => r.AccountBalanceCost);
+            decimal totalAccountBalanceProfit = totalAccountBalanceRevenue - totalAccountBalanceCost;
+
+            int totalCount = reportData.Count;
+
+            // =========================================================
+            // 10) Pagination
+            // =========================================================
+            if (pageSize > 0 && pageSize < totalCount)
+            {
+                if (page < 1) page = 1;
+                int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                if (page > totalPages) page = totalPages;
+
+                int skip = (page - 1) * pageSize;
+                reportData = reportData.Skip(skip).Take(pageSize).ToList();
+
+                ViewBag.Page = page;
+                ViewBag.PageSize = pageSize;
+                ViewBag.TotalPages = totalPages;
+                ViewBag.TotalCount = totalCount;
+            }
+            else
+            {
+                ViewBag.Page = 1;
+                ViewBag.PageSize = totalCount;
+                ViewBag.TotalPages = 1;
+                ViewBag.TotalCount = totalCount;
+            }
+
+            ViewBag.ReportData = reportData;
+            ViewBag.TotalSalesRevenue = totalSalesRevenue;
+            ViewBag.TotalSalesCost = totalSalesCost;
+            ViewBag.TotalSalesProfit = totalSalesProfit;
+            ViewBag.TotalLedgerRevenue = totalLedgerRevenue;
+            ViewBag.TotalLedgerCost = totalLedgerCost;
+            ViewBag.TotalLedgerProfit = totalLedgerProfit;
+            ViewBag.TotalAccountBalanceRevenue = totalAccountBalanceRevenue;
+            ViewBag.TotalAccountBalanceCost = totalAccountBalanceCost;
+            ViewBag.TotalAccountBalanceProfit = totalAccountBalanceProfit;
+
+            // =========================================================
+            // 11) بيانات الميزانية (للعرض تحت الجدول) - ProductProfits
+            // =========================================================
+            if (salesRevenueAccount != null && cogsAccount != null)
+            {
+                // حساب إجمالي الإيرادات من LedgerEntries (حساب 4100) مع فلاتر التاريخ
+                var revenueQuery = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.AccountId == salesRevenueAccount.AccountId &&
+                        e.SourceType == LedgerSourceType.SalesInvoice &&
+                        e.LineNo == 2 &&
+                        e.PostVersion > 0 &&
+                        !_context.LedgerEntries.Any(rev =>
+                            rev.SourceType == LedgerSourceType.SalesInvoice &&
+                            rev.SourceId == e.SourceId &&
+                            rev.LineNo == 9001));
+
+                if (fromDate.HasValue)
+                {
+                    var from = fromDate.Value.Date;
+                    revenueQuery = revenueQuery.Where(e => e.EntryDate >= from);
+                }
+
+                if (toDate.HasValue)
+                {
+                    var to = toDate.Value.Date.AddDays(1);
+                    revenueQuery = revenueQuery.Where(e => e.EntryDate < to);
+                }
+
+                var totalRevenueFromLedger = await revenueQuery.SumAsync(e => (decimal?)e.Credit) ?? 0m;
+
+                // حساب إجمالي COGS من LedgerEntries (حساب 5100) مع فلاتر التاريخ
+                var cogsQuery = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.AccountId == cogsAccount.AccountId &&
+                        e.SourceType == LedgerSourceType.SalesInvoice &&
+                        e.LineNo == 3 &&
+                        e.PostVersion > 0 &&
+                        !_context.LedgerEntries.Any(rev =>
+                            rev.SourceType == LedgerSourceType.SalesInvoice &&
+                            rev.SourceId == e.SourceId &&
+                            rev.LineNo == 9001));
+
+                if (fromDate.HasValue)
+                {
+                    var from = fromDate.Value.Date;
+                    cogsQuery = cogsQuery.Where(e => e.EntryDate >= from);
+                }
+
+                if (toDate.HasValue)
+                {
+                    var to = toDate.Value.Date.AddDays(1);
+                    cogsQuery = cogsQuery.Where(e => e.EntryDate < to);
+                }
+
+                var totalCogsFromLedger = await cogsQuery.SumAsync(e => (decimal?)e.Debit) ?? 0m;
+
+                ViewBag.BalanceSheetData = new
+                {
+                    RevenueAccount = new
+                    {
+                        AccountId = salesRevenueAccount.AccountId,
+                        AccountCode = salesRevenueAccount.AccountCode,
+                        AccountName = salesRevenueAccount.AccountName,
+                        TotalCredit = totalRevenueFromLedger
+                    },
+                    CogsAccount = new
+                    {
+                        AccountId = cogsAccount.AccountId,
+                        AccountCode = cogsAccount.AccountCode,
+                        AccountName = cogsAccount.AccountName,
+                        TotalDebit = totalCogsFromLedger
+                    },
+                    TotalProfit = totalRevenueFromLedger - totalCogsFromLedger
+                };
+            }
+            else
+            {
+                ViewBag.BalanceSheetData = null;
+            }
+
+            return View();
+        }
+
+        // =========================================================
+        // تقرير: أرباح العملاء
+        // يحسب الربح بطريقتين:
+        // 1) من البيع (SalesInvoiceLines): Revenue - Cost
+        // 2) من الميزانية (LedgerEntries): Revenue Account - COGS Account
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> CustomerProfits(
+            string? search,
+            string? partyCategory,
+            int? governorateId,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? profitMethod = "both", // "sales" | "ledger" | "both"
+            string? sortBy = "name",
+            string? sortDir = "asc",
+            bool loadReport = false,
+            int page = 1,
+            int pageSize = 200)
+        {
+            // =========================================================
+            // 1) تجهيز القوائم المنسدلة
+            // =========================================================
+            var governorates = await _context.Governorates
+                .AsNoTracking()
+                .OrderBy(g => g.GovernorateName)
+                .Select(g => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
+                {
+                    Value = g.GovernorateId.ToString(),
+                    Text = g.GovernorateName
+                })
+                .ToListAsync();
+
+            ViewBag.Governorates = governorates;
+
+            // =========================================================
+            // 2) تجهيز الفلاتر
+            // =========================================================
+            ViewBag.Search = search ?? "";
+            ViewBag.PartyCategory = partyCategory;
+            ViewBag.GovernorateId = governorateId;
+            ViewBag.FromDate = fromDate;
+            ViewBag.ToDate = toDate;
+            ViewBag.ProfitMethod = profitMethod;
+            ViewBag.SortBy = sortBy;
+            ViewBag.SortDir = sortDir;
+
+            // =========================================================
+            // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
+            // =========================================================
+            if (!loadReport)
+            {
+                ViewBag.ReportData = new List<CustomerProfitReportDto>();
+                ViewBag.TotalSalesRevenue = 0m;
+                ViewBag.TotalSalesCost = 0m;
+                ViewBag.TotalSalesProfit = 0m;
+                ViewBag.TotalLedgerRevenue = 0m;
+                ViewBag.TotalLedgerCost = 0m;
+                ViewBag.TotalLedgerProfit = 0m;
+                return View();
+            }
+
+            // =========================================================
+            // 4) بناء الاستعلام الأساسي للعملاء
+            // =========================================================
+            var customersQuery = _context.Customers
+                .AsNoTracking()
+                .AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                customersQuery = customersQuery.Where(c =>
+                    (c.CustomerName != null && c.CustomerName.Contains(s)) ||
+                    (c.Phone1 != null && c.Phone1.Contains(s)) ||
+                    (c.CustomerId.ToString() == s));
+            }
+
+            if (!string.IsNullOrWhiteSpace(partyCategory))
+            {
+                customersQuery = customersQuery.Where(c => c.PartyCategory == partyCategory);
+            }
+
+            if (governorateId.HasValue && governorateId.Value > 0)
+            {
+                customersQuery = customersQuery.Where(c => c.GovernorateId == governorateId.Value);
+            }
+
+            customersQuery = customersQuery.Where(c => c.IsActive == true);
+
+            var customerIds = await customersQuery.Select(c => c.CustomerId).ToListAsync();
+
+            if (customerIds.Count == 0)
+            {
+                ViewBag.ReportData = new List<CustomerProfitReportDto>();
+                return View();
+            }
+
+            // =========================================================
+            // 5) حساب الربح من البيع (SalesInvoiceLines)
+            // نفس منطق ProductProfits بالضبط
+            // =========================================================
+            var salesProfitQuery = _context.SalesInvoiceLines
+                .AsNoTracking()
+                .Include(sil => sil.SalesInvoice)
+                .Where(sil =>
+                    customerIds.Contains(sil.SalesInvoice.CustomerId) &&
+                    sil.SalesInvoice.IsPosted);
+
+            if (fromDate.HasValue)
+            {
+                var from = fromDate.Value.Date;
+                salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
+            }
+
+            if (toDate.HasValue)
+            {
+                var to = toDate.Value.Date.AddDays(1);
+                salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate < to);
+            }
+
+            var salesProfitData = await salesProfitQuery
+                .GroupBy(sil => sil.SalesInvoice.CustomerId)
+                .Select(g => new
+                {
+                    CustomerId = g.Key,
+                    SalesRevenue = g.Sum(sil => sil.LineNetTotal),
+                    SalesCost = g.Sum(sil => 
+                        sil.CostTotal > 0 
+                            ? sil.CostTotal 
+                            : (sil.ProfitValue > 0 
+                                ? (sil.LineNetTotal - sil.ProfitValue) 
+                                : 0m)),
+                    InvoiceCount = g.Select(sil => sil.SIId).Distinct().Count()
+                })
+                .ToDictionaryAsync(x => x.CustomerId);
+
+            // =========================================================
+            // 6) حساب الربح من الميزانية (LedgerEntries)
+            // =========================================================
+            var salesRevenueAccount = await _context.Accounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.AccountCode == "4100");
+
+            var cogsAccount = await _context.Accounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.AccountCode == "5100");
+
+            Dictionary<int, decimal> ledgerRevenueData = new Dictionary<int, decimal>();
+            Dictionary<int, decimal> ledgerCostData = new Dictionary<int, decimal>();
+
+            if (salesRevenueAccount != null && cogsAccount != null)
+            {
+                // الحصول على فواتير المبيعات المرتبطة بالعملاء المحددين
+                var salesInvoiceIds = await salesProfitQuery
+                    .Select(sil => sil.SalesInvoice.SIId)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (salesInvoiceIds.Any())
+                {
+                    // تحميل الفواتير دفعة واحدة
+                    var invoicesDict = await _context.SalesInvoices
+                        .AsNoTracking()
+                        .Where(si => salesInvoiceIds.Contains(si.SIId))
+                        .Select(si => new { si.SIId, si.CustomerId })
+                        .ToDictionaryAsync(x => x.SIId, x => x.CustomerId);
+
+                    // الإيرادات من الميزانية - نستخدم SourceId (رقم الفاتورة) ثم نربطه بالعميل
+                    var revenueQuery = _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == salesRevenueAccount.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.LineNo == 2 &&
+                            e.PostVersion > 0 &&
+                            e.SourceId.HasValue &&
+                            salesInvoiceIds.Contains(e.SourceId.Value) &&
+                            !_context.LedgerEntries.Any(rev =>
+                                rev.SourceType == LedgerSourceType.SalesInvoice &&
+                                rev.SourceId == e.SourceId &&
+                                rev.LineNo == 9001));
+
+                    if (fromDate.HasValue)
+                    {
+                        var from = fromDate.Value.Date;
+                        revenueQuery = revenueQuery.Where(e => e.EntryDate >= from);
+                    }
+
+                    if (toDate.HasValue)
+                    {
+                        var to = toDate.Value.Date.AddDays(1);
+                        revenueQuery = revenueQuery.Where(e => e.EntryDate < to);
+                    }
+
+                    var revenueEntries = await revenueQuery.ToListAsync();
+
+                    // ربط الإيرادات بالعملاء عبر SalesInvoices
+                    foreach (var entry in revenueEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+                        if (!invoicesDict.TryGetValue(entry.SourceId.Value, out int customerId)) continue;
+                        if (!customerIds.Contains(customerId)) continue;
+
+                        if (ledgerRevenueData.ContainsKey(customerId))
+                            ledgerRevenueData[customerId] += entry.Credit;
+                        else
+                            ledgerRevenueData[customerId] = entry.Credit;
+                    }
+
+                    // COGS من الميزانية - نستخدم SourceId (رقم الفاتورة) ثم نربطه بالعميل
+                    var cogsQuery = _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == cogsAccount.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.LineNo == 3 &&
+                            e.PostVersion > 0 &&
+                            e.SourceId.HasValue &&
+                            salesInvoiceIds.Contains(e.SourceId.Value) &&
+                            !_context.LedgerEntries.Any(rev =>
+                                rev.SourceType == LedgerSourceType.SalesInvoice &&
+                                rev.SourceId == e.SourceId &&
+                                rev.LineNo == 9001));
+
+                    if (fromDate.HasValue)
+                    {
+                        var from = fromDate.Value.Date;
+                        cogsQuery = cogsQuery.Where(e => e.EntryDate >= from);
+                    }
+
+                    if (toDate.HasValue)
+                    {
+                        var to = toDate.Value.Date.AddDays(1);
+                        cogsQuery = cogsQuery.Where(e => e.EntryDate < to);
+                    }
+
+                    var cogsEntries = await cogsQuery.ToListAsync();
+
+                    // ربط COGS بالعملاء عبر SalesInvoices
+                    foreach (var entry in cogsEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+                        if (!invoicesDict.TryGetValue(entry.SourceId.Value, out int customerId)) continue;
+                        if (!customerIds.Contains(customerId)) continue;
+
+                        if (ledgerCostData.ContainsKey(customerId))
+                            ledgerCostData[customerId] += entry.Debit;
+                        else
+                            ledgerCostData[customerId] = entry.Debit;
+                    }
+                }
+            }
+
+            // =========================================================
+            // 6.5) حساب إشعارات الخصم والإضافة من LedgerEntries
+            // ✅ إشعارات الخصم (DebitNote): تكلفة/مصروف (يقلل الربح)
+            // ✅ إشعارات الإضافة (CreditNote): إيراد (يزيد الربح)
+            // 
+            // المنطق: عند ترحيل إشعار الخصم/الإضافة، يُنشأ قيدان:
+            // - DebitNote: مدين حساب العميل، دائن حساب OffsetAccount
+            // - CreditNote: مدين حساب OffsetAccount، دائن حساب العميل
+            // 
+            // لذلك: نحسب التأثير من القيد الذي يحتوي على OffsetAccount:
+            // - إذا كان AccountType = Expense → مصروف (يقلل الربح)
+            // - إذا كان AccountType = Revenue → إيراد (يزيد الربح)
+            // =========================================================
+            var notesQuery = _context.LedgerEntries
+                .AsNoTracking()
+                .Include(e => e.Account)
+                .Where(e =>
+                    e.CustomerId.HasValue &&
+                    customerIds.Contains(e.CustomerId.Value) &&
+                    (e.SourceType == LedgerSourceType.DebitNote || 
+                     e.SourceType == LedgerSourceType.CreditNote) &&
+                    e.PostVersion > 0);
+
+            if (fromDate.HasValue)
+            {
+                var from = fromDate.Value.Date;
+                notesQuery = notesQuery.Where(e => e.EntryDate >= from);
+            }
+
+            if (toDate.HasValue)
+            {
+                var to = toDate.Value.Date.AddDays(1);
+                notesQuery = notesQuery.Where(e => e.EntryDate < to);
+            }
+
+            var notesEntries = await notesQuery.ToListAsync();
+
+            Dictionary<int, decimal> debitNotesAmount = new Dictionary<int, decimal>();
+            Dictionary<int, decimal> creditNotesAmount = new Dictionary<int, decimal>();
+
+            // جلب إشعارات الخصم والإضافة للحصول على OffsetAccountId
+            var debitNoteIds = notesEntries
+                .Where(e => e.SourceType == LedgerSourceType.DebitNote && e.SourceId.HasValue)
+                .Select(e => e.SourceId!.Value)
+                .Distinct()
+                .ToList();
+
+            var creditNoteIds = notesEntries
+                .Where(e => e.SourceType == LedgerSourceType.CreditNote && e.SourceId.HasValue)
+                .Select(e => e.SourceId!.Value)
+                .Distinct()
+                .ToList();
+
+            var debitNotesDict = await _context.DebitNotes
+                .AsNoTracking()
+                .Where(dn => debitNoteIds.Contains(dn.DebitNoteId))
+                .Select(dn => new { dn.DebitNoteId, dn.OffsetAccountId })
+                .ToDictionaryAsync(x => x.DebitNoteId);
+
+            var creditNotesDict = await _context.CreditNotes
+                .AsNoTracking()
+                .Where(cn => creditNoteIds.Contains(cn.CreditNoteId))
+                .Select(cn => new { cn.CreditNoteId, cn.OffsetAccountId })
+                .ToDictionaryAsync(x => x.CreditNoteId);
+
+            foreach (var entry in notesEntries)
+            {
+                if (!entry.CustomerId.HasValue || !entry.SourceId.HasValue) continue;
+
+                int custId = entry.CustomerId.Value;
+                int? offsetAccountId = null;
+
+                // تحديد OffsetAccountId
+                if (entry.SourceType == LedgerSourceType.DebitNote)
+                {
+                    if (debitNotesDict.TryGetValue(entry.SourceId.Value, out var dn))
+                        offsetAccountId = dn.OffsetAccountId;
+                }
+                else if (entry.SourceType == LedgerSourceType.CreditNote)
+                {
+                    if (creditNotesDict.TryGetValue(entry.SourceId.Value, out var cn))
+                        offsetAccountId = cn.OffsetAccountId;
+                }
+
+                // إذا كان AccountId في القيد = OffsetAccountId → هذا هو القيد الذي يؤثر على الربح
+                if (!offsetAccountId.HasValue || entry.AccountId != offsetAccountId.Value)
+                    continue;
+
+                decimal amount = 0m;
+
+                // تحديد المبلغ حسب نوع الإشعار ونوع القيد
+                if (entry.SourceType == LedgerSourceType.DebitNote)
+                {
+                    // DebitNote: دائن OffsetAccount (Credit)
+                    amount = entry.Credit;
+                }
+                else if (entry.SourceType == LedgerSourceType.CreditNote)
+                {
+                    // CreditNote: مدين OffsetAccount (Debit)
+                    amount = entry.Debit;
+                }
+
+                if (amount <= 0m) continue;
+
+                // تحديد التأثير حسب نوع الحساب
+                if (entry.Account.AccountType == AccountType.Expense)
+                {
+                    // مصروف → يقلل الربح
+                    if (debitNotesAmount.ContainsKey(custId))
+                        debitNotesAmount[custId] += amount;
+                    else
+                        debitNotesAmount[custId] = amount;
+                }
+                else if (entry.Account.AccountType == AccountType.Revenue)
+                {
+                    // إيراد → يزيد الربح
+                    if (creditNotesAmount.ContainsKey(custId))
+                        creditNotesAmount[custId] += amount;
+                    else
+                        creditNotesAmount[custId] = amount;
+                }
+            }
+
+            // =========================================================
+            // 7) بناء reportData
+            // =========================================================
+            var customersDict = await customersQuery
+                .Select(c => new
+                {
+                    c.CustomerId,
+                    c.CustomerName,
+                    c.PartyCategory,
+                    c.Phone1
+                })
+                .ToDictionaryAsync(c => c.CustomerId);
+
+            var reportData = new List<CustomerProfitReportDto>();
+
+            foreach (var customerId in customerIds)
+            {
+                if (!customersDict.TryGetValue(customerId, out var customer)) continue;
+
+                // الربح من البيع (نفس منطق ProductProfits)
+                decimal salesRevenue = salesProfitData.TryGetValue(customerId, out var salesData) ? salesData.SalesRevenue : 0m;
+                decimal salesCost = salesProfitData.TryGetValue(customerId, out var salesData2) ? salesData2.SalesCost : 0m;
+                decimal salesProfit = salesRevenue - salesCost;
+                decimal salesProfitPercent = salesRevenue > 0 ? (salesProfit / salesRevenue) * 100m : 0m;
+                int invoiceCount = salesProfitData.TryGetValue(customerId, out var salesData3) ? salesData3.InvoiceCount : 0;
+                decimal avgInvoiceValue = invoiceCount > 0 ? salesRevenue / invoiceCount : 0m;
+
+                // الربح من الميزانية
+                decimal ledgerRevenue = ledgerRevenueData.TryGetValue(customerId, out var rev) ? rev : 0m;
+                decimal ledgerCost = ledgerCostData.TryGetValue(customerId, out var cost) ? cost : 0m;
+                decimal ledgerProfit = ledgerRevenue - ledgerCost;
+                decimal ledgerProfitPercent = ledgerRevenue > 0 ? (ledgerProfit / ledgerRevenue) * 100m : 0m;
+
+                // إشعارات الخصم والإضافة
+                decimal debitNotes = debitNotesAmount.TryGetValue(customerId, out var dn) ? dn : 0m;
+                decimal creditNotes = creditNotesAmount.TryGetValue(customerId, out var cn) ? cn : 0m;
+                decimal netNotesAdjustment = creditNotes - debitNotes; // صافي الإشعارات (الإضافة - الخصم)
+                decimal adjustedProfit = salesProfit + netNotesAdjustment; // الربح المعدل
+                decimal adjustedProfitPercent = salesRevenue > 0 ? (adjustedProfit / salesRevenue) * 100m : 0m;
+
+                // الربح من أرصدة الحسابات (Account Balance) - سيتم حسابه لاحقاً لكل عميل
+                decimal accountBalanceRevenue = 0m;
+                decimal accountBalanceCost = 0m;
+                decimal accountBalanceProfit = 0m;
+                decimal accountBalanceProfitPercent = 0m;
+
+                reportData.Add(new CustomerProfitReportDto
+                {
+                    CustomerId = customerId,
+                    CustomerCode = customerId.ToString(),
+                    CustomerName = customer.CustomerName ?? "",
+                    PartyCategory = customer.PartyCategory ?? "",
+                    Phone1 = customer.Phone1 ?? "",
+                    SalesRevenue = salesRevenue,
+                    SalesCost = salesCost,
+                    SalesProfit = salesProfit,
+                    SalesProfitPercent = salesProfitPercent,
+                    LedgerRevenue = ledgerRevenue,
+                    LedgerCost = ledgerCost,
+                    LedgerProfit = ledgerProfit,
+                    LedgerProfitPercent = ledgerProfitPercent,
+                    DebitNotesAmount = debitNotes,
+                    CreditNotesAmount = creditNotes,
+                    NetNotesAdjustment = netNotesAdjustment,
+                    AdjustedProfit = adjustedProfit,
+                    AdjustedProfitPercent = adjustedProfitPercent,
+                    AccountBalanceRevenue = accountBalanceRevenue,
+                    AccountBalanceCost = accountBalanceCost,
+                    AccountBalanceProfit = accountBalanceProfit,
+                    AccountBalanceProfitPercent = accountBalanceProfitPercent,
+                    InvoiceCount = invoiceCount,
+                    AvgInvoiceValue = avgInvoiceValue
+                });
+            }
+
+            // =========================================================
+            // 7.1) حساب الربح من أرصدة الحسابات (Account Balance) للعملاء
+            // =========================================================
+            if (salesRevenueAccount != null && cogsAccount != null)
+            {
+                // الحصول على فواتير المبيعات المرتبطة بالعملاء المحددين
+                var salesInvoiceIdsQuery = _context.SalesInvoiceLines
+                    .AsNoTracking()
+                    .Where(sil =>
+                        customerIds.Contains(sil.SalesInvoice.CustomerId) &&
+                        sil.SalesInvoice.IsPosted);
+
+                if (fromDate.HasValue)
+                {
+                    var from = fromDate.Value.Date;
+                    salesInvoiceIdsQuery = salesInvoiceIdsQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
+                }
+
+                if (toDate.HasValue)
+                {
+                    var to = toDate.Value.Date.AddDays(1);
+                    salesInvoiceIdsQuery = salesInvoiceIdsQuery.Where(sil => sil.SalesInvoice.SIDate < to);
+                }
+
+                var salesInvoiceIds = await salesInvoiceIdsQuery
+                    .Select(sil => sil.SalesInvoice.SIId)
+                    .Distinct()
+                    .ToListAsync();
+
+                if (salesInvoiceIds.Any())
+                {
+                    // تحميل الفواتير دفعة واحدة
+                    var invoicesDict = await _context.SalesInvoices
+                        .AsNoTracking()
+                        .Where(si => salesInvoiceIds.Contains(si.SIId))
+                        .Select(si => new { si.SIId, si.CustomerId })
+                        .ToDictionaryAsync(x => x.SIId, x => x.CustomerId);
+
+                    // حساب رصيد حساب الإيرادات (4100) = Credit - Debit
+                    var revenueBalanceEntries = await _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == salesRevenueAccount.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.LineNo == 2 &&
+                            e.PostVersion > 0 &&
+                            e.SourceId.HasValue &&
+                            salesInvoiceIds.Contains(e.SourceId.Value) &&
+                            !_context.LedgerEntries.Any(rev =>
+                                rev.SourceType == LedgerSourceType.SalesInvoice &&
+                                rev.SourceId == e.SourceId &&
+                                rev.LineNo == 9001))
+                        .ToListAsync();
+
+                    // تطبيق فلتر التاريخ
+                    if (fromDate.HasValue || toDate.HasValue)
+                    {
+                        var from = fromDate?.Date ?? DateTime.MinValue;
+                        var to = toDate?.Date.AddDays(1) ?? DateTime.MaxValue;
+                        revenueBalanceEntries = revenueBalanceEntries
+                            .Where(e => e.EntryDate >= from && e.EntryDate < to)
+                            .ToList();
+                    }
+
+                    // ربط الإيرادات بالعملاء عبر SalesInvoices
+                    Dictionary<int, decimal> revenueBalanceByCustomer = new Dictionary<int, decimal>();
+                    foreach (var entry in revenueBalanceEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+                        if (!invoicesDict.TryGetValue(entry.SourceId.Value, out int customerId)) continue;
+                        if (!customerIds.Contains(customerId)) continue;
+
+                        if (revenueBalanceByCustomer.ContainsKey(customerId))
+                        {
+                            revenueBalanceByCustomer[customerId] += (entry.Credit - entry.Debit);
+                        }
+                        else
+                        {
+                            revenueBalanceByCustomer[customerId] = entry.Credit - entry.Debit;
+                        }
+                    }
+
+                    // حساب رصيد حساب COGS (5100) = Debit - Credit
+                    var cogsBalanceEntries = await _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == cogsAccount.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesInvoice &&
+                            e.LineNo == 3 &&
+                            e.PostVersion > 0 &&
+                            e.SourceId.HasValue &&
+                            salesInvoiceIds.Contains(e.SourceId.Value) &&
+                            !_context.LedgerEntries.Any(rev =>
+                                rev.SourceType == LedgerSourceType.SalesInvoice &&
+                                rev.SourceId == e.SourceId &&
+                                rev.LineNo == 9001))
+                        .ToListAsync();
+
+                    // تطبيق فلتر التاريخ
+                    if (fromDate.HasValue || toDate.HasValue)
+                    {
+                        var from = fromDate?.Date ?? DateTime.MinValue;
+                        var to = toDate?.Date.AddDays(1) ?? DateTime.MaxValue;
+                        cogsBalanceEntries = cogsBalanceEntries
+                            .Where(e => e.EntryDate >= from && e.EntryDate < to)
+                            .ToList();
+                    }
+
+                    // ربط COGS بالعملاء عبر SalesInvoices
+                    Dictionary<int, decimal> cogsBalanceByCustomer = new Dictionary<int, decimal>();
+                    foreach (var entry in cogsBalanceEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+                        if (!invoicesDict.TryGetValue(entry.SourceId.Value, out int customerId)) continue;
+                        if (!customerIds.Contains(customerId)) continue;
+
+                        if (cogsBalanceByCustomer.ContainsKey(customerId))
+                        {
+                            cogsBalanceByCustomer[customerId] += (entry.Debit - entry.Credit);
+                        }
+                        else
+                        {
+                            cogsBalanceByCustomer[customerId] = entry.Debit - entry.Credit;
+                        }
+                    }
+
+                    // تحديث بيانات كل عميل
+                    foreach (var item in reportData)
+                    {
+                        decimal revenueBalance = revenueBalanceByCustomer.TryGetValue(item.CustomerId, out var revBal) ? revBal : 0m;
+                        decimal cogsBalance = cogsBalanceByCustomer.TryGetValue(item.CustomerId, out var cogsBal) ? cogsBal : 0m;
+                        
+                        item.AccountBalanceRevenue = revenueBalance;
+                        item.AccountBalanceCost = cogsBalance;
+                        item.AccountBalanceProfit = revenueBalance - cogsBalance;
+                        item.AccountBalanceProfitPercent = revenueBalance > 0 
+                            ? (item.AccountBalanceProfit / revenueBalance) * 100m 
+                            : 0m;
+                    }
+                }
+            }
+
+            // =========================================================
+            // 8) الترتيب
+            // =========================================================
+            bool isDesc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
+            switch (sortBy?.ToLowerInvariant())
+            {
+                case "code":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.CustomerCode).ToList()
+                        : reportData.OrderBy(r => r.CustomerCode).ToList();
+                    break;
+                case "salesprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.SalesProfit).ToList()
+                        : reportData.OrderBy(r => r.SalesProfit).ToList();
+                    break;
+                case "ledgerprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.LedgerProfit).ToList()
+                        : reportData.OrderBy(r => r.LedgerProfit).ToList();
+                    break;
+                case "salesrevenue":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.SalesRevenue).ToList()
+                        : reportData.OrderBy(r => r.SalesRevenue).ToList();
+                    break;
+                default: // "name"
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.CustomerName).ToList()
+                        : reportData.OrderBy(r => r.CustomerName).ToList();
+                    break;
+            }
+
+            // =========================================================
+            // 9) حساب المجاميع
+            // =========================================================
+            decimal totalSalesRevenue = reportData.Sum(r => r.SalesRevenue);
+            decimal totalSalesCost = reportData.Sum(r => r.SalesCost);
+            decimal totalSalesProfit = totalSalesRevenue - totalSalesCost;
+            decimal totalLedgerRevenue = reportData.Sum(r => r.LedgerRevenue);
+            decimal totalLedgerCost = reportData.Sum(r => r.LedgerCost);
+            decimal totalLedgerProfit = totalLedgerRevenue - totalLedgerCost;
+            
+            // حساب المجاميع للطريقة الثالثة (من الأرصدة)
+            decimal totalAccountBalanceRevenue = reportData.Sum(r => r.AccountBalanceRevenue);
+            decimal totalAccountBalanceCost = reportData.Sum(r => r.AccountBalanceCost);
+            decimal totalAccountBalanceProfit = totalAccountBalanceRevenue - totalAccountBalanceCost;
+
+            // إجمالي إشعارات الخصم والإضافة (CustomerProfits)
+            decimal totalDebitNotes = reportData.Sum(r => r.DebitNotesAmount);
+            decimal totalCreditNotes = reportData.Sum(r => r.CreditNotesAmount);
+            decimal totalNetNotesAdjustment = totalCreditNotes - totalDebitNotes;
+            decimal totalAdjustedProfit = totalSalesProfit + totalNetNotesAdjustment;
+
+            int totalCount = reportData.Count;
+
+            // =========================================================
+            // 10) Pagination
+            // =========================================================
+            if (pageSize > 0 && pageSize < totalCount)
+            {
+                if (page < 1) page = 1;
+                int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+                if (page > totalPages) page = totalPages;
+
+                int skip = (page - 1) * pageSize;
+                reportData = reportData.Skip(skip).Take(pageSize).ToList();
+
+                ViewBag.Page = page;
+                ViewBag.PageSize = pageSize;
+                ViewBag.TotalPages = totalPages;
+                ViewBag.TotalCount = totalCount;
+            }
+            else
+            {
+                ViewBag.Page = 1;
+                ViewBag.PageSize = totalCount;
+                ViewBag.TotalPages = 1;
+                ViewBag.TotalCount = totalCount;
+            }
+
+            ViewBag.ReportData = reportData;
+            ViewBag.TotalSalesRevenue = totalSalesRevenue;
+            ViewBag.TotalSalesCost = totalSalesCost;
+            ViewBag.TotalSalesProfit = totalSalesProfit;
+            ViewBag.TotalLedgerRevenue = totalLedgerRevenue;
+            ViewBag.TotalLedgerCost = totalLedgerCost;
+            ViewBag.TotalLedgerProfit = totalLedgerProfit;
+            ViewBag.TotalAccountBalanceRevenue = totalAccountBalanceRevenue;
+            ViewBag.TotalAccountBalanceCost = totalAccountBalanceCost;
+            ViewBag.TotalAccountBalanceProfit = totalAccountBalanceProfit;
+            ViewBag.TotalDebitNotes = totalDebitNotes;
+            ViewBag.TotalCreditNotes = totalCreditNotes;
+            ViewBag.TotalNetNotesAdjustment = totalNetNotesAdjustment;
+            ViewBag.TotalAdjustedProfit = totalAdjustedProfit;
+
+            // =========================================================
+            // 11) بيانات الميزانية (للعرض تحت الجدول) - CustomerProfits
+            // =========================================================
+            if (salesRevenueAccount != null && cogsAccount != null)
+            {
+                // حساب إجمالي الإيرادات من LedgerEntries (حساب 4100)
+                var revenueQuery = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.AccountId == salesRevenueAccount.AccountId &&
+                        e.SourceType == LedgerSourceType.SalesInvoice &&
+                        e.LineNo == 2 &&
+                        e.PostVersion > 0 &&
+                        e.CustomerId.HasValue &&
+                        customerIds.Contains(e.CustomerId.Value) &&
+                        !_context.LedgerEntries.Any(rev =>
+                            rev.SourceType == LedgerSourceType.SalesInvoice &&
+                            rev.SourceId == e.SourceId &&
+                            rev.LineNo == 9001));
+
+                if (fromDate.HasValue)
+                {
+                    var from = fromDate.Value.Date;
+                    revenueQuery = revenueQuery.Where(e => e.EntryDate >= from);
+                }
+
+                if (toDate.HasValue)
+                {
+                    var to = toDate.Value.Date.AddDays(1);
+                    revenueQuery = revenueQuery.Where(e => e.EntryDate < to);
+                }
+
+                var totalRevenueFromLedger = await revenueQuery.SumAsync(e => (decimal?)e.Credit) ?? 0m;
+
+                // حساب إجمالي COGS من LedgerEntries (حساب 5100)
+                var cogsQuery = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.AccountId == cogsAccount.AccountId &&
+                        e.SourceType == LedgerSourceType.SalesInvoice &&
+                        e.LineNo == 3 &&
+                        e.PostVersion > 0 &&
+                        e.CustomerId.HasValue &&
+                        customerIds.Contains(e.CustomerId.Value) &&
+                        !_context.LedgerEntries.Any(rev =>
+                            rev.SourceType == LedgerSourceType.SalesInvoice &&
+                            rev.SourceId == e.SourceId &&
+                            rev.LineNo == 9001));
+
+                if (fromDate.HasValue)
+                {
+                    var from = fromDate.Value.Date;
+                    cogsQuery = cogsQuery.Where(e => e.EntryDate >= from);
+                }
+
+                if (toDate.HasValue)
+                {
+                    var to = toDate.Value.Date.AddDays(1);
+                    cogsQuery = cogsQuery.Where(e => e.EntryDate < to);
+                }
+
+                var totalCogsFromLedger = await cogsQuery.SumAsync(e => (decimal?)e.Debit) ?? 0m;
+
+                ViewBag.BalanceSheetData = new
+                {
+                    RevenueAccount = new
+                    {
+                        AccountId = salesRevenueAccount.AccountId,
+                        AccountCode = salesRevenueAccount.AccountCode,
+                        AccountName = salesRevenueAccount.AccountName,
+                        TotalCredit = totalRevenueFromLedger
+                    },
+                    CogsAccount = new
+                    {
+                        AccountId = cogsAccount.AccountId,
+                        AccountCode = cogsAccount.AccountCode,
+                        AccountName = cogsAccount.AccountName,
+                        TotalDebit = totalCogsFromLedger
+                    },
+                    TotalProfit = totalRevenueFromLedger - totalCogsFromLedger
+                };
+            }
+            else
+            {
+                ViewBag.BalanceSheetData = null;
+            }
+
+            return View();
+        }
     }
 }

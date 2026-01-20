@@ -1,21 +1,54 @@
-﻿@model ERP.Models.CashReceipt
+@model ERP.Models.CashReceipt
 
 @{
     ViewData["Title"] = "إضافة إذن استلام نقدية";
+    bool lockCustomer = ViewBag.LockCustomer is bool b && b;
 }
 
 <div class="container" dir="rtl">
     <h2 class="mb-3">إضافة إذن استلام نقدية</h2>
 
-    <form asp-action="Create" method="post">
+    @* عرض رسائل النجاح/الخطأ *@
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    
+    @* عرض أخطاء التحقق من النموذج *@
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger">
+            <strong>يرجى تصحيح الأخطاء التالية:</strong>
+            <ul class="mb-0">
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <li>@error.ErrorMessage</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <form asp-action="Create" method="post" id="receiptForm">
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <!-- رقم المستند -->
+                    <!-- رقم المستند (تلقائي - ReadOnly) -->
                     <div class="col-md-4">
                         <label asp-for="ReceiptNumber" class="form-label"></label>
-                        <input asp-for="ReceiptNumber" class="form-control" />
-                        <span asp-validation-for="ReceiptNumber" class="text-danger"></span>
+                        <input asp-for="ReceiptNumber" class="form-control" readonly placeholder="سيتم توليده تلقائياً" />
+                        <small class="text-muted">سيتم توليد الرقم تلقائياً عند الحفظ</small>
+                        @* لا نعرض رسالة التحقق لأنه سيتم توليده تلقائياً *@
                     </div>
 
                     <!-- التاريخ -->
@@ -25,40 +58,113 @@
                         <span asp-validation-for="ReceiptDate" class="text-danger"></span>
                     </div>
 
+                    <!-- حالة الترحيل -->
+                    <div class="col-md-4">
+                        <label class="form-label">الحالة</label>
+                        <input type="text" class="form-control" value="@(Model.Status ?? "غير مرحلة")" readonly />
+                    </div>
+
                     <!-- الطرف (عميل) -->
                     <div class="col-md-4">
                         <label asp-for="CustomerId" class="form-label"></label>
-                        <select asp-for="CustomerId" class="form-select"
-                                asp-items="ViewBag.CustomerId">
-                            <option value="">-- بدون طرف --</option>
-                        </select>
+                        @if (lockCustomer)
+                        {
+                            <select asp-for="CustomerId" 
+                                    class="form-select" 
+                                    id="customerSelect"
+                                    disabled
+                                    required>
+                                <option value="">-- اختر العميل --</option>
+                                @if (ViewBag.CustomerId is SelectList customerList)
+                                {
+                                    @foreach (var item in customerList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                            <input type="hidden" asp-for="CustomerId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CustomerId" 
+                                    class="form-select" 
+                                    id="customerSelect"
+                                    required>
+                                <option value="">-- اختر العميل --</option>
+                                @if (ViewBag.CustomerId is SelectList customerList)
+                                {
+                                    @foreach (var item in customerList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                        }
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الصندوق/البنك -->
-                    <div class="col-md-6">
+                    <!-- حساب الصندوق/البنك (يتم تعبئته تلقائياً) -->
+                    <div class="col-md-4">
                         <label asp-for="CashAccountId" class="form-label"></label>
-                        <select asp-for="CashAccountId" class="form-select"
-                                asp-items="ViewBag.CashAccountId">
+                        <select asp-for="CashAccountId" class="form-select" required>
                             <option value="">-- اختر حساب الصندوق/البنك --</option>
+                            @if (ViewBag.CashAccountId is SelectList cashAccountList)
+                            {
+                                @foreach (var item in cashAccountList)
+                                {
+                                    <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                }
+                            }
                         </select>
+                        <small class="text-muted">سيتم اختيار حساب الخزينة تلقائياً</small>
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الطرف -->
-                    <div class="col-md-6">
+                    <!-- حساب الطرف (يتم تعبئته تلقائياً عند اختيار العميل) -->
+                    <div class="col-md-4">
                         <label asp-for="CounterAccountId" class="form-label"></label>
-                        <select asp-for="CounterAccountId" class="form-select"
-                                asp-items="ViewBag.CounterAccountId">
-                            <option value="">-- اختر حساب الطرف --</option>
-                        </select>
+                        @if (lockCustomer)
+                        {
+                            <select asp-for="CounterAccountId" 
+                                    class="form-select" 
+                                    id="counterAccountSelect"
+                                    disabled
+                                    required>
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                                @if (ViewBag.CounterAccountId is SelectList counterAccountList)
+                                {
+                                    @foreach (var item in counterAccountList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                            <input type="hidden" asp-for="CounterAccountId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CounterAccountId" 
+                                    class="form-select" 
+                                    id="counterAccountSelect"
+                                    required>
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                                @if (ViewBag.CounterAccountId is SelectList counterAccountList)
+                                {
+                                    @foreach (var item in counterAccountList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                        }
                         <span asp-validation-for="CounterAccountId" class="text-danger"></span>
                     </div>
 
                     <!-- المبلغ -->
                     <div class="col-md-4">
                         <label asp-for="Amount" class="form-label"></label>
-                        <input asp-for="Amount" class="form-control" />
+                        <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" required />
                         <span asp-validation-for="Amount" class="text-danger"></span>
                     </div>
 
@@ -73,7 +179,7 @@
 
             <div class="card-footer d-flex justify-content-between">
                 <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
-                <button type="submit" class="btn btn-primary btn-sm">حفظ</button>
+                <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
             </div>
         </div>
     </form>
@@ -83,4 +189,41 @@
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+    <script>
+        $(document).ready(function() {
+            // ✅ عند اختيار العميل، نجلب حسابه ونملأ حساب الطرف تلقائياً
+            $('#customerSelect').on('change', function() {
+                var customerId = $(this).val();
+                var counterAccountSelect = $('#counterAccountSelect');
+                
+                if (!customerId || customerId === '') {
+                    counterAccountSelect.val('');
+                    return;
+                }
+
+                // جلب حساب العميل عبر AJAX
+                $.ajax({
+                    url: '@Url.Action("GetCustomerAccount", "CashReceipts")',
+                    type: 'GET',
+                    data: { customerId: customerId },
+                    success: function(response) {
+                        if (response && response.success && response.accountId) {
+                            counterAccountSelect.val(response.accountId);
+                        } else {
+                            counterAccountSelect.val('');
+                            if (response && response.message) {
+                                alert(response.message);
+                            } else {
+                                alert('هذا العميل غير مربوط بحساب محاسبي. يرجى ربطه بحساب أولاً.');
+                            }
+                        }
+                    },
+                    error: function() {
+                        counterAccountSelect.val('');
+                        alert('حدث خطأ أثناء جلب حساب العميل.');
+                    }
+                });
+            });
+        });
+    </script>
 }

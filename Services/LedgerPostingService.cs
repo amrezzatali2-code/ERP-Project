@@ -24,6 +24,7 @@ namespace ERP.Services
         Task ReverseForHeaderDeleteAsync(LedgerSourceType sourceType, int sourceId, string? postedBy, string? reason = null);
         Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy);
         Task PostSalesInvoiceAsync(int salesInvoiceId, string? postedBy);
+        Task PostCashReceiptAsync(int cashReceiptId, string? postedBy);
         Task RecalcAllCustomerBalancesAsync();
 
 
@@ -965,6 +966,244 @@ namespace ERP.Services
 
 
 
+
+        // =========================================================
+        // ترحيل إذن استلام نقدية إلى LedgerEntries + تحديث رصيد العميل
+        // ✅ نفس منطق الفواتير:
+        // - لو فيه مرحلة قديمة => يعمل عكس (Reverse) للمرحلة الأخيرة
+        // - ثم ينشئ مرحلة جديدة
+        // - ويحدّث Customer.CurrentBalance
+        //
+        // ✅ قيد إذن الاستلام الصحيح:
+        // (1) الصندوق/البنك    مدين   = المبلغ
+        // (2) حساب العميل      دائن   = المبلغ
+        // =========================================================
+        public async Task PostCashReceiptAsync(int cashReceiptId, string? postedBy)
+        {
+            // ================================
+            // 0) Transaction لضمان سلامة العملية
+            // ================================
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                // ================================
+                // 1) تحميل الإذن + العميل
+                // ================================
+                var receipt = await _db.CashReceipts
+                    .Include(r => r.Customer)
+                    .FirstOrDefaultAsync(r => r.CashReceiptId == cashReceiptId);
+
+                if (receipt == null)
+                    throw new Exception("إذن الاستلام غير موجود.");
+
+                // ================================
+                // 2) منع الترحيل لو مترحّل بالفعل
+                // ================================
+                if (receipt.IsPosted)
+                    throw new Exception("هذا الإذن مترحّل بالفعل. افتح الإذن أولاً قبل إعادة الترحيل.");
+
+                // ================================
+                // 3) التحقق من الحسابات المطلوبة
+                // ================================
+                if (receipt.CashAccountId <= 0)
+                    throw new Exception("حساب الصندوق/البنك غير محدد.");
+
+                if (receipt.CounterAccountId <= 0)
+                    throw new Exception("حساب الطرف غير محدد.");
+
+                // ✅ إذا كان هناك عميل، نتحقق من أن حسابه موجود ومتطابق مع CounterAccountId
+                if (receipt.CustomerId.HasValue && receipt.CustomerId.Value > 0)
+                {
+                    if (receipt.Customer == null)
+                        throw new Exception("بيانات العميل غير محمّلة.");
+
+                    // ملاحظة: CounterAccountId هو الحساب الفعلي المستخدم في الترحيل
+                    // يمكن التحقق من تطابقه مع حساب العميل، لكن لا نجعله إلزامياً
+                    // لأنه قد يكون حساب مختلف للعميل
+                }
+
+                // ================================
+                // 4) قيم مشتركة
+                // ================================
+                var now = DateTime.UtcNow;
+                decimal amount = receipt.Amount;
+                
+                // ✅ التأكد من أن ReceiptNumber موجود (يجب أن يكون قد تم توليده)
+                if (string.IsNullOrWhiteSpace(receipt.ReceiptNumber))
+                {
+                    // إذا لم يكن موجوداً، نستخدم CashReceiptId كرقم مستند
+                    receipt.ReceiptNumber = receipt.CashReceiptId.ToString();
+                    await _db.SaveChangesAsync();
+                }
+                
+                string voucherNo = receipt.ReceiptNumber;
+
+                // =========================================================
+                // 5) تحديد آخر مرحلة مُرحّلة سابقاً
+                // =========================================================
+                int lastStage = await _db.LedgerEntries
+                    .Where(e =>
+                        e.SourceType == LedgerSourceType.Receipt &&
+                        e.SourceId == receipt.CashReceiptId &&
+                        (e.LineNo == 1 || e.LineNo == 2) &&
+                        e.PostVersion > 0)
+                    .OrderByDescending(e => e.PostVersion)
+                    .Select(e => e.PostVersion)
+                    .FirstOrDefaultAsync();
+
+                int newStage = lastStage + 1;
+
+                // =========================================================
+                // 6) لو فيه مرحلة سابقة => اعكسها قبل إنشاء المرحلة الجديدة
+                // =========================================================
+                if (lastStage > 0)
+                {
+                    var lastDebitCash = await _db.LedgerEntries
+                        .Where(e =>
+                            e.SourceType == LedgerSourceType.Receipt &&
+                            e.SourceId == receipt.CashReceiptId &&
+                            e.LineNo == 1 &&
+                            e.PostVersion == lastStage)
+                        .OrderByDescending(e => e.Id)
+                        .FirstOrDefaultAsync();
+
+                    var lastCreditCustomer = await _db.LedgerEntries
+                        .Where(e =>
+                            e.SourceType == LedgerSourceType.Receipt &&
+                            e.SourceId == receipt.CashReceiptId &&
+                            e.LineNo == 2 &&
+                            e.PostVersion == lastStage)
+                        .OrderByDescending(e => e.Id)
+                        .FirstOrDefaultAsync();
+
+                    if (lastDebitCash == null || lastCreditCustomer == null)
+                        throw new Exception("تعذر تحديد آخر ترحيل سابق للإذن (بيانات القيود غير مكتملة).");
+
+                    decimal oldAmount = lastDebitCash.Debit > 0 ? lastDebitCash.Debit : lastCreditCustomer.Credit;
+
+                    // (1) عكس سطر الصندوق (كان مدين -> يصبح دائن)
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = receipt.ReceiptDate,
+                        SourceType = LedgerSourceType.Receipt,
+                        VoucherNo = voucherNo,
+                        SourceId = receipt.CashReceiptId,
+                        LineNo = 9001,
+                        PostVersion = lastStage,
+                        AccountId = lastDebitCash.AccountId,
+                        CustomerId = null,
+                        Debit = 0m,
+                        Credit = oldAmount,
+                        Description = $"عكس ترحيل إذن استلام رقم {receipt.CashReceiptId} (عكس مرحلة {lastStage})",
+                        CreatedAt = now
+                    });
+
+                    // (2) عكس سطر العميل (كان دائن -> يصبح مدين)
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = receipt.ReceiptDate,
+                        SourceType = LedgerSourceType.Receipt,
+                        VoucherNo = voucherNo,
+                        SourceId = receipt.CashReceiptId,
+                        LineNo = 9002,
+                        PostVersion = lastStage,
+                        AccountId = lastCreditCustomer.AccountId,
+                        CustomerId = lastCreditCustomer.CustomerId,
+                        Debit = oldAmount,
+                        Credit = 0m,
+                        Description = $"عكس ترحيل إذن استلام رقم {receipt.CashReceiptId} (عكس مرحلة {lastStage})",
+                        CreatedAt = now
+                    });
+
+                    // خصم رصيد العميل القديم
+                    if (lastCreditCustomer.CustomerId.HasValue && lastCreditCustomer.CustomerId.Value > 0)
+                    {
+                        var oldCustomer = await _db.Customers
+                            .FirstOrDefaultAsync(c => c.CustomerId == lastCreditCustomer.CustomerId.Value);
+
+                        if (oldCustomer != null)
+                            oldCustomer.CurrentBalance -= oldAmount;
+                    }
+                    else if (receipt.CustomerId.HasValue)
+                    {
+                        receipt.Customer.CurrentBalance -= oldAmount;
+                    }
+                }
+
+                // =========================================================
+                // 7) إنشاء قيود المرحلة الجديدة
+                // =========================================================
+                int cashAccountId = receipt.CashAccountId;
+                int customerAccountId = receipt.CounterAccountId; // حساب العميل
+
+                // (1) مدين: الصندوق/البنك
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = receipt.ReceiptDate,
+                    SourceType = LedgerSourceType.Receipt,
+                    VoucherNo = voucherNo,
+                    SourceId = receipt.CashReceiptId,
+                    LineNo = 1,
+                    PostVersion = newStage,
+                    AccountId = cashAccountId,
+                    CustomerId = null,
+                    Debit = amount,
+                    Credit = 0m,
+                    Description = $"ترحيل إذن استلام رقم {receipt.CashReceiptId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // (2) دائن: حساب العميل
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = receipt.ReceiptDate,
+                    SourceType = LedgerSourceType.Receipt,
+                    VoucherNo = voucherNo,
+                    SourceId = receipt.CashReceiptId,
+                    LineNo = 2,
+                    PostVersion = newStage,
+                    AccountId = customerAccountId,
+                    CustomerId = receipt.CustomerId,
+                    Debit = 0m,
+                    Credit = amount,
+                    Description = $"ترحيل إذن استلام رقم {receipt.CashReceiptId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // =========================================================
+                // 8) تحديث حالة الإذن
+                // =========================================================
+                receipt.IsPosted = true;
+                receipt.Status = $"مرحلة {newStage}";
+                receipt.PostedAt = now;
+                receipt.PostedBy = string.IsNullOrWhiteSpace(postedBy) ? "SYSTEM" : postedBy;
+
+                // =========================================================
+                // 9) حفظ القيود + حالة الإذن أولاً
+                // =========================================================
+                await _db.SaveChangesAsync();
+
+                // =========================================================
+                // 10) تحديث رصيد العميل (مصدر الحقيقة = LedgerEntries)
+                // =========================================================
+                if (receipt.CustomerId.HasValue && receipt.CustomerId.Value > 0)
+                {
+                    await RecalcCustomerCurrentBalanceAsync(receipt.CustomerId.Value);
+                    await _db.SaveChangesAsync();
+                }
+
+                // =========================================================
+                // 11) Commit
+                // =========================================================
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
 
         // =========================================================
         // دالة: إعادة حساب جميع أرصدة العملاء/الموردين من القيود LedgerEntries

@@ -1,73 +1,204 @@
-﻿@model ERP.Models.CashReceipt
+@model ERP.Models.CashReceipt
 
 @{
     ViewData["Title"] = "تعديل إذن استلام نقدية";
+    bool lockCustomer = ViewBag.LockCustomer is bool b && b;
+    bool isPosted = Model.IsPosted;
 }
 
 <div class="container" dir="rtl">
     <h2 class="mb-3">تعديل إذن استلام نقدية</h2>
 
-    <form asp-action="Edit" method="post">
+    @if (isPosted)
+    {
+        <div class="alert alert-warning">
+            <strong>تنبيه:</strong> هذا الإذن مُرحّل. يجب فتحه أولاً قبل التعديل.
+            <form asp-action="Open" method="post" style="display: inline;" onsubmit="return confirm('هل تريد فتح هذا الإذن للتعديل؟');">
+                <input type="hidden" name="id" value="@Model.CashReceiptId" />
+                <button type="submit" class="btn btn-warning btn-sm">فتح للتعديل</button>
+            </form>
+        </div>
+    }
+
+    <form asp-action="Edit" method="post" id="receiptForm">
         <input type="hidden" asp-for="CashReceiptId" />
 
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <!-- رقم المستند -->
+                    <!-- رقم المستند (ثابت - ReadOnly) -->
                     <div class="col-md-4">
                         <label asp-for="ReceiptNumber" class="form-label"></label>
-                        <input asp-for="ReceiptNumber" class="form-control" />
+                        <input asp-for="ReceiptNumber" class="form-control" readonly />
                         <span asp-validation-for="ReceiptNumber" class="text-danger"></span>
                     </div>
 
                     <!-- التاريخ -->
                     <div class="col-md-4">
                         <label asp-for="ReceiptDate" class="form-label"></label>
-                        <input asp-for="ReceiptDate" type="date" class="form-control" />
+                        @if (isPosted)
+                        {
+                            <input asp-for="ReceiptDate" type="date" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="ReceiptDate" type="date" class="form-control" />
+                        }
                         <span asp-validation-for="ReceiptDate" class="text-danger"></span>
                     </div>
 
-                    <!-- الطرف -->
+                    <!-- حالة الترحيل -->
+                    <div class="col-md-4">
+                        <label class="form-label">الحالة</label>
+                        <input type="text" class="form-control" value="@(Model.Status ?? "غير مرحلة")" readonly />
+                        @if (isPosted)
+                        {
+                            <span class="badge bg-success">مرحّل</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-warning">غير مرحّل</span>
+                        }
+                    </div>
+
+                    <!-- الطرف (عميل) -->
                     <div class="col-md-4">
                         <label asp-for="CustomerId" class="form-label"></label>
-                        <select asp-for="CustomerId" class="form-select"
-                                asp-items="ViewBag.CustomerId">
-                            <option value="">-- بدون طرف --</option>
-                        </select>
+                        @if (lockCustomer || isPosted)
+                        {
+                            <select asp-for="CustomerId" 
+                                    class="form-select" 
+                                    id="customerSelect"
+                                    disabled
+                                    required>
+                                <option value="">-- اختر العميل --</option>
+                                @if (ViewBag.CustomerId is SelectList customerList)
+                                {
+                                    @foreach (var item in customerList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                            <input type="hidden" asp-for="CustomerId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CustomerId" 
+                                    class="form-select" 
+                                    id="customerSelect"
+                                    required>
+                                <option value="">-- اختر العميل --</option>
+                                @if (ViewBag.CustomerId is SelectList customerList)
+                                {
+                                    @foreach (var item in customerList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                        }
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
 
                     <!-- حساب الصندوق/البنك -->
-                    <div class="col-md-6">
+                    <div class="col-md-4">
                         <label asp-for="CashAccountId" class="form-label"></label>
-                        <select asp-for="CashAccountId" class="form-select"
-                                asp-items="ViewBag.CashAccountId">
-                            <option value="">-- اختر حساب الصندوق/البنك --</option>
-                        </select>
+                        @if (isPosted)
+                        {
+                            <select asp-for="CashAccountId" class="form-select" disabled required>
+                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                                @if (ViewBag.CashAccountId is SelectList cashAccountList)
+                                {
+                                    @foreach (var item in cashAccountList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                            <input type="hidden" asp-for="CashAccountId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CashAccountId" class="form-select" required>
+                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                                @if (ViewBag.CashAccountId is SelectList cashAccountList)
+                                {
+                                    @foreach (var item in cashAccountList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                        }
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الطرف -->
-                    <div class="col-md-6">
+                    <!-- حساب الطرف (يتم تعبئته تلقائياً عند اختيار العميل) -->
+                    <div class="col-md-4">
                         <label asp-for="CounterAccountId" class="form-label"></label>
-                        <select asp-for="CounterAccountId" class="form-select"
-                                asp-items="ViewBag.CounterAccountId">
-                            <option value="">-- اختر حساب الطرف --</option>
-                        </select>
+                        @if (lockCustomer || isPosted)
+                        {
+                            <select asp-for="CounterAccountId" 
+                                    class="form-select" 
+                                    id="counterAccountSelect"
+                                    disabled
+                                    required>
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                                @if (ViewBag.CounterAccountId is SelectList counterAccountList)
+                                {
+                                    @foreach (var item in counterAccountList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                            <input type="hidden" asp-for="CounterAccountId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CounterAccountId" 
+                                    class="form-select" 
+                                    id="counterAccountSelect"
+                                    required>
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                                @if (ViewBag.CounterAccountId is SelectList counterAccountList)
+                                {
+                                    @foreach (var item in counterAccountList)
+                                    {
+                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
+                                    }
+                                }
+                            </select>
+                        }
                         <span asp-validation-for="CounterAccountId" class="text-danger"></span>
                     </div>
 
                     <!-- المبلغ -->
                     <div class="col-md-4">
                         <label asp-for="Amount" class="form-label"></label>
-                        <input asp-for="Amount" class="form-control" />
+                        @if (isPosted)
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" readonly required />
+                        }
+                        else
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" required />
+                        }
                         <span asp-validation-for="Amount" class="text-danger"></span>
                     </div>
 
                     <!-- البيان -->
                     <div class="col-md-8">
                         <label asp-for="Description" class="form-label"></label>
-                        <input asp-for="Description" class="form-control" />
+                        @if (isPosted)
+                        {
+                            <input asp-for="Description" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="Description" class="form-control" />
+                        }
                         <span asp-validation-for="Description" class="text-danger"></span>
                     </div>
                 </div>
@@ -75,7 +206,14 @@
 
             <div class="card-footer d-flex justify-content-between">
                 <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
-                <button type="submit" class="btn btn-primary btn-sm">حفظ التعديلات</button>
+                @if (isPosted)
+                {
+                    <button type="button" class="btn btn-warning btn-sm" disabled>الإذن مُرحّل - افتحه أولاً</button>
+                }
+                else
+                {
+                    <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
+                }
             </div>
         </div>
     </form>
@@ -85,4 +223,41 @@
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+    <script>
+        $(document).ready(function() {
+            // ✅ عند اختيار العميل، نجلب حسابه ونملأ حساب الطرف تلقائياً
+            $('#customerSelect').on('change', function() {
+                var customerId = $(this).val();
+                var counterAccountSelect = $('#counterAccountSelect');
+                
+                if (!customerId || customerId === '') {
+                    counterAccountSelect.val('');
+                    return;
+                }
+
+                // جلب حساب العميل عبر AJAX
+                $.ajax({
+                    url: '@Url.Action("GetCustomerAccount", "CashReceipts")',
+                    type: 'GET',
+                    data: { customerId: customerId },
+                    success: function(response) {
+                        if (response && response.success && response.accountId) {
+                            counterAccountSelect.val(response.accountId);
+                        } else {
+                            counterAccountSelect.val('');
+                            if (response && response.message) {
+                                alert(response.message);
+                            } else {
+                                alert('هذا العميل غير مربوط بحساب محاسبي. يرجى ربطه بحساب أولاً.');
+                            }
+                        }
+                    },
+                    error: function() {
+                        counterAccountSelect.val('');
+                        alert('حدث خطأ أثناء جلب حساب العميل.');
+                    }
+                });
+            });
+        });
+    </script>
 }

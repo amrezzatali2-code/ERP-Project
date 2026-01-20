@@ -1,0 +1,302 @@
+@using ERP.Models
+@{
+    ViewData["Title"] = "الخزينة الرئيسية";
+
+    decimal totalBalance = ViewBag.TotalTreasuryBalance is decimal b ? b : 0m;
+    var receipts = ViewBag.Receipts as List<CashReceipt> ?? new List<CashReceipt>();
+    var payments = ViewBag.Payments as List<CashPayment> ?? new List<CashPayment>();
+    decimal totalReceiptsAmount = ViewBag.TotalReceiptsAmount is decimal r ? r : 0m;
+    decimal totalPaymentsAmount = ViewBag.TotalPaymentsAmount is decimal p ? p : 0m;
+    
+    DateTime? fromDate = ViewBag.FromDate as DateTime?;
+    DateTime? toDate = ViewBag.ToDate as DateTime?;
+    
+    int pageReceipts = ViewBag.PageReceipts is int pr ? pr : 1;
+    int pagePayments = ViewBag.PagePayments is int pp ? pp : 1;
+    int pageSize = ViewBag.PageSize is int ps ? ps : 20;
+    int totalReceipts = ViewBag.TotalReceipts is int tr ? tr : 0;
+    int totalPayments = ViewBag.TotalPayments is int tp ? tp : 0;
+    int totalPagesReceipts = ViewBag.TotalPagesReceipts is int tpr ? tpr : 0;
+    int totalPagesPayments = ViewBag.TotalPagesPayments is int tpp ? tpp : 0;
+}
+
+<div dir="rtl" class="container-fluid mt-3">
+    
+    @* ===== عنوان الصفحة ===== *@
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">الخزينة الرئيسية</h2>
+    </div>
+
+    @* ===== فلتر التاريخ ===== *@
+    <div class="card mb-3 d-print-none">
+        <div class="card-body">
+            <form method="get" action="@Url.Action("Index", "Treasury")" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">من تاريخ</label>
+                    <input type="date" 
+                           name="fromDate" 
+                           class="form-control" 
+                           value="@(fromDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-semibold">إلى تاريخ</label>
+                    <input type="date" 
+                           name="toDate" 
+                           class="form-control" 
+                           value="@(toDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search"></i> بحث
+                    </button>
+                    <a href="@Url.Action("Index", "Treasury")" class="btn btn-secondary">
+                        <i class="bi bi-arrow-counterclockwise"></i> إعادة تعيين
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ===== بطاقة الرصيد الإجمالي ===== *@
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card border-secondary">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0 text-secondary">الرصيد الإجمالي للخزينة</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-secondary mb-0">@totalBalance.ToString("N2")</h2>
+                    <small class="text-muted">جنيه مصري</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-secondary">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0 text-secondary">إجمالي أذون الاستلام</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-secondary mb-0">@totalReceiptsAmount.ToString("N2")</h2>
+                    <small class="text-muted">جنيه مصري</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card border-secondary">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0 text-secondary">إجمالي أذون الدفع</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-secondary mb-0">@totalPaymentsAmount.ToString("N2")</h2>
+                    <small class="text-muted">جنيه مصري</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ===== أذون الاستلام والدفع بجانب بعض ===== *@
+    <div class="row g-3 mb-4">
+        @* ===== أذون الاستلام ===== *@
+        <div class="col-12 col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0 text-secondary">
+                        <i class="bi bi-arrow-down-circle"></i> أذون الاستلام
+                        <span class="badge bg-secondary text-white">@totalReceipts</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+            @if (receipts.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>رقم الإذن</th>
+                                <th>تاريخ الإذن</th>
+                                <th>حساب الصندوق</th>
+                                <th>حساب الطرف</th>
+                                <th>الطرف</th>
+                                <th>المبلغ</th>
+                                <th>البيان</th>
+                                <th>مرحّل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var receipt in receipts)
+                            {
+                                <tr>
+                                    <td>@receipt.ReceiptNumber</td>
+                                    <td>@receipt.ReceiptDate.ToString("yyyy-MM-dd")</td>
+                                    <td>@(receipt.CashAccount?.AccountName ?? "-")</td>
+                                    <td>@(receipt.CounterAccount?.AccountName ?? "-")</td>
+                                    <td>@(receipt.Customer?.CustomerName ?? "-")</td>
+                                    <td class="text-secondary fw-bold">@receipt.Amount.ToString("N2")</td>
+                                    <td>@(receipt.Description ?? "-")</td>
+                                    <td>
+                                        @if (receipt.IsPosted)
+                                        {
+                                            <span class="badge bg-secondary">مرحّل</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">غير مرحّل</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="5" class="text-end">الإجمالي:</th>
+                                <th class="text-secondary">@receipts.Sum(r => r.Amount).ToString("N2")</th>
+                                <th colspan="2"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                @* الترقيم لأذون الاستلام *@
+                @if (totalPagesReceipts > 1)
+                {
+                    <nav aria-label="ترقيم أذون الاستلام">
+                        <ul class="pagination justify-content-center">
+                            @if (pageReceipts > 1)
+                            {
+                                <li class="page-item">
+                                    <a class="page-link" href="@Url.Action("Index", "Treasury", new { fromDate, toDate, pageReceipts = pageReceipts - 1, pagePayments, pageSize })">
+                                        السابق
+                                    </a>
+                                </li>
+                            }
+                            @for (int i = 1; i <= totalPagesReceipts; i++)
+                            {
+                                <li class="page-item @(i == pageReceipts ? "active" : "")">
+                                    <a class="page-link" href="@Url.Action("Index", "Treasury", new { fromDate, toDate, pageReceipts = i, pagePayments, pageSize })">
+                                        @i
+                                    </a>
+                                </li>
+                            }
+                            @if (pageReceipts < totalPagesReceipts)
+                            {
+                                <li class="page-item">
+                                    <a class="page-link" href="@Url.Action("Index", "Treasury", new { fromDate, toDate, pageReceipts = pageReceipts + 1, pagePayments, pageSize })">
+                                        التالي
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                }
+            }
+            else
+            {
+                <div class="alert alert-info">لا توجد أذون استلام في الفترة المحددة</div>
+            }
+                </div>
+            </div>
+        </div>
+
+        @* ===== أذون الدفع ===== *@
+        <div class="col-12 col-md-6">
+            <div class="card h-100">
+                <div class="card-header bg-light border-bottom">
+                    <h5 class="mb-0 text-secondary">
+                        <i class="bi bi-arrow-up-circle"></i> أذون الدفع
+                        <span class="badge bg-secondary text-white">@totalPayments</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+            @if (payments.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>رقم الإذن</th>
+                                <th>تاريخ الإذن</th>
+                                <th>حساب الصندوق</th>
+                                <th>حساب الطرف</th>
+                                <th>الطرف</th>
+                                <th>المبلغ</th>
+                                <th>البيان</th>
+                                <th>مرحّل</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var payment in payments)
+                            {
+                                <tr>
+                                    <td>@payment.PaymentNumber</td>
+                                    <td>@payment.PaymentDate.ToString("yyyy-MM-dd")</td>
+                                    <td>@(payment.CashAccount?.AccountName ?? "-")</td>
+                                    <td>@(payment.CounterAccount?.AccountName ?? "-")</td>
+                                    <td>@(payment.Customer?.CustomerName ?? "-")</td>
+                                    <td class="text-secondary fw-bold">@payment.Amount.ToString("N2")</td>
+                                    <td>@(payment.Description ?? "-")</td>
+                                    <td>
+                                        @if (payment.IsPosted)
+                                        {
+                                            <span class="badge bg-secondary">مرحّل</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-warning text-dark">غير مرحّل</span>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="5" class="text-end">الإجمالي:</th>
+                                <th class="text-secondary">@payments.Sum(p => p.Amount).ToString("N2")</th>
+                                <th colspan="2"></th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                @* الترقيم لأذون الدفع *@
+                @if (totalPagesPayments > 1)
+                {
+                    <nav aria-label="ترقيم أذون الدفع">
+                        <ul class="pagination justify-content-center">
+                            @if (pagePayments > 1)
+                            {
+                                <li class="page-item">
+                                    <a class="page-link" href="@Url.Action("Index", "Treasury", new { fromDate, toDate, pageReceipts, pagePayments = pagePayments - 1, pageSize })">
+                                        السابق
+                                    </a>
+                                </li>
+                            }
+                            @for (int i = 1; i <= totalPagesPayments; i++)
+                            {
+                                <li class="page-item @(i == pagePayments ? "active" : "")">
+                                    <a class="page-link" href="@Url.Action("Index", "Treasury", new { fromDate, toDate, pageReceipts, pagePayments = i, pageSize })">
+                                        @i
+                                    </a>
+                                </li>
+                            }
+                            @if (pagePayments < totalPagesPayments)
+                            {
+                                <li class="page-item">
+                                    <a class="page-link" href="@Url.Action("Index", "Treasury", new { fromDate, toDate, pageReceipts, pagePayments = pagePayments + 1, pageSize })">
+                                        التالي
+                                    </a>
+                                </li>
+                            }
+                        </ul>
+                    </nav>
+                }
+            }
+            else
+            {
+                <div class="alert alert-info">لا توجد أذون دفع في الفترة المحددة</div>
+            }
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>

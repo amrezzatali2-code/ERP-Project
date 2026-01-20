@@ -9,8 +9,9 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // CashReceipt + Account + Customer
+using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
 {
@@ -18,21 +19,84 @@ namespace ERP.Controllers
     /// كنترولر إذون استلام النقدية (CashReceipts)
     /// - نظام القوائم الموحد في Index (بحث + ترتيب + فلترة + حذف جماعي + تصدير).
     /// - CRUD كامل: Create / Edit / Details / Delete.
+    /// - زر حفظ = حفظ + ترحيل محاسبي (LedgerEntries + تحديث حساب العميل)
+    /// - زر فتح = فتح للتعديل (لا يعكس، الحفظ هو الذي يعكس)
     /// </summary>
     public class CashReceiptsController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _context;   // متغير: السياق الأساسي للتعامل مع الـ DB
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
+        private readonly ILedgerPostingService _ledgerPostingService;
 
-        public CashReceiptsController(AppDbContext context)
+        public CashReceiptsController(
+            AppDbContext context,
+            IUserActivityLogger activityLogger,
+            ILedgerPostingService ledgerPostingService)
         {
             _context = context;
+            _activityLogger = activityLogger;
+            _ledgerPostingService = ledgerPostingService;
         }
 
         // =========================================================
         // دالة مساعدة: تجهيز القوائم المنسدلة (الطرف + الحسابات)
         // تُستخدم فى Create و Edit (GET + POST لو حصل خطأ).
         // =========================================================
+        private async Task PopulateDropdownsAsync(int? customerId = null,
+                                                  int? cashAccountId = null,
+                                                  int? counterAccountId = null)
+        {
+            // قائمة العملاء / الأطراف مع AccountId في data attribute
+            var customers = await _context.Customers
+                .AsNoTracking()
+                .Include(c => c.Account)
+                .OrderBy(c => c.CustomerName)
+                .Select(c => new
+                {
+                    c.CustomerId,
+                    c.CustomerName,
+                    AccountId = c.AccountId ?? 0
+                })
+                .ToListAsync();
+
+            var customerItems = customers.Select(c => new SelectListItem
+            {
+                Value = c.CustomerId.ToString(),
+                Text = c.CustomerName ?? "",
+                Selected = customerId.HasValue && c.CustomerId == customerId.Value
+            }).ToList();
+
+            ViewData["CustomerId"] = new SelectList(customerItems, "Value", "Text", customerId);
+            ViewData["CustomersWithAccounts"] = customers.ToDictionary(c => c.CustomerId, c => c.AccountId);
+
+            // حسابات نشطة للصندوق / البنك
+            ViewData["CashAccountId"] = new SelectList(
+                await _context.Accounts
+                        .AsNoTracking()
+                        .Where(a => a.IsActive)
+                        .OrderBy(a => a.AccountName)
+                        .Select(a => new { a.AccountId, a.AccountName })
+                        .ToListAsync(),
+                "AccountId",
+                "AccountName",
+                cashAccountId
+            );
+
+            // حسابات نشطة للطرف المقابل
+            ViewData["CounterAccountId"] = new SelectList(
+                await _context.Accounts
+                        .AsNoTracking()
+                        .Where(a => a.IsActive)
+                        .OrderBy(a => a.AccountName)
+                        .Select(a => new { a.AccountId, a.AccountName })
+                        .ToListAsync(),
+                "AccountId",
+                "AccountName",
+                counterAccountId
+            );
+        }
+
+        // دالة بديلة بدون async (للاستخدام في Post بدون await)
         private void PopulateDropdowns(int? customerId = null,
                                        int? cashAccountId = null,
                                        int? counterAccountId = null)
@@ -68,6 +132,26 @@ namespace ERP.Controllers
                 "AccountName",
                 counterAccountId
             );
+        }
+
+        // =========================================================
+        // دالة مساعدة: جلب AccountId للعميل (للاستخدام في AJAX)
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetCustomerAccount(int customerId)
+        {
+            var customer = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == customerId)
+                .Select(c => new { c.AccountId })
+                .FirstOrDefaultAsync();
+
+            if (customer == null || !customer.AccountId.HasValue)
+            {
+                return Json(new { success = false, message = "العميل غير موجود أو غير مربوط بحساب محاسبي." });
+            }
+
+            return Json(new { success = true, accountId = customer.AccountId.Value });
         }
 
         // =========================================================
@@ -261,35 +345,166 @@ namespace ERP.Controllers
 
         // =========================================================
         // Create — إضافة إذن استلام جديد
-        // GET: يعرض الفورم، POST: يحفظ فى قاعدة البيانات.
+        // GET: يعرض الفورم مع تعبئة تلقائية إذا جاء من customerId
+        // POST: يحفظ + يرحّل محاسبيًا
         // =========================================================
 
         // GET: CashReceipts/Create
-        public IActionResult Create(int? customerId = null)
+        public async Task<IActionResult> Create(int? customerId = null)
         {
-            PopulateDropdowns(customerId);  // تجهيز القوائم المنسدلة مع اختيار العميل إذا تم تمريره
-            return View();
+            // ✅ جلب حساب الخزينة الافتراضي (كود 1101) أو أول حساب خزينة/صندوق
+            var defaultCashAccount = await _context.Accounts
+                .AsNoTracking()
+                .Where(a => a.IsActive && 
+                           (a.AccountCode == "1101" || 
+                            a.AccountName.Contains("خزينة") || 
+                            a.AccountName.Contains("صندوق")))
+                .OrderBy(a => a.AccountCode == "1101" ? 0 : 1) // أولوية لكود 1101
+                .ThenBy(a => a.AccountName)
+                .Select(a => new { a.AccountId })
+                .FirstOrDefaultAsync();
+
+            var model = new CashReceipt
+            {
+                ReceiptDate = DateTime.Now.Date,
+                Status = "غير مرحلة",
+                IsPosted = false,
+                CashAccountId = defaultCashAccount?.AccountId ?? 0 // ✅ تعيين حساب الصندوق الافتراضي
+            };
+
+            // ✅ إذا جاء من صفحة "حجم تعامل عميل" (customerId موجود)
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                var customer = await _context.Customers
+                    .AsNoTracking()
+                    .Include(c => c.Account)
+                    .FirstOrDefaultAsync(c => c.CustomerId == customerId.Value);
+
+                if (customer != null)
+                {
+                    model.CustomerId = customer.CustomerId;
+                    // ✅ حساب الطرف = حساب العميل تلقائيًا
+                    if (customer.AccountId.HasValue)
+                    {
+                        model.CounterAccountId = customer.AccountId.Value;
+                    }
+                    // ✅ البيان الافتراضي
+                    model.Description = $"تحصيل من العميل {customer.CustomerName}";
+                    // ✅ قفل العميل وحساب الطرف في الواجهة
+                    ViewBag.LockCustomer = true;
+                }
+            }
+
+            await PopulateDropdownsAsync(model.CustomerId, model.CashAccountId > 0 ? model.CashAccountId : null, model.CounterAccountId);
+            return View(model);
         }
 
         // POST: CashReceipts/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("CashReceiptId,ReceiptNumber,ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
+        public async Task<IActionResult> Create([Bind("ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
                                                 CashReceipt cashReceipt)
         {
+            // ✅ تجاهل خطأ التحقق لـ ReceiptNumber لأنه سيتم توليده تلقائياً
+            ModelState.Remove(nameof(CashReceipt.ReceiptNumber));
+            
+            // ✅ التحقق من الحقول المطلوبة يدوياً
+            if (cashReceipt.CashAccountId <= 0)
+            {
+                ModelState.AddModelError(nameof(CashReceipt.CashAccountId), "يجب اختيار حساب الصندوق/البنك.");
+            }
+            
+            if (cashReceipt.CounterAccountId <= 0)
+            {
+                ModelState.AddModelError(nameof(CashReceipt.CounterAccountId), "يجب اختيار حساب الطرف.");
+            }
+            
+            if (cashReceipt.Amount <= 0)
+            {
+                ModelState.AddModelError(nameof(CashReceipt.Amount), "يجب إدخال مبلغ أكبر من الصفر.");
+            }
+            
             if (ModelState.IsValid)
             {
-                // تعبئة بيانات التتبع
-                cashReceipt.CreatedAt = DateTime.Now;         // تاريخ الإنشاء
-                // cashReceipt.CreatedBy = User?.Identity?.Name; // يمكن تفعيلها بعد إضافة نظام المستخدمين
+                try
+                {
+                    // =========================================================
+                    // 1) تعبئة بيانات التتبع الأساسية
+                    // =========================================================
+                    cashReceipt.CreatedAt = DateTime.Now;
+                    cashReceipt.CreatedBy = User?.Identity?.Name ?? "SYSTEM";
+                    cashReceipt.Status = "غير مرحلة";
+                    cashReceipt.IsPosted = false;
+                    cashReceipt.ReceiptNumber = ""; // سيتم تعبئته بعد الحفظ
 
-                _context.Add(cashReceipt);
-                await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+                    // =========================================================
+                    // 2) حفظ الهيدر أولاً (للحصول على CashReceiptId)
+                    // =========================================================
+                    _context.Add(cashReceipt);
+                    await _context.SaveChangesAsync();
+
+                    // =========================================================
+                    // 3) توليد رقم المستند تلقائيًا (بعد الحفظ)
+                    // =========================================================
+                    cashReceipt.ReceiptNumber = cashReceipt.CashReceiptId.ToString();
+                    await _context.SaveChangesAsync();
+
+                    // =========================================================
+                    // 4) ترحيل محاسبي (LedgerEntries + تحديث حساب العميل)
+                    // =========================================================
+                    string? postedBy = User?.Identity?.Name ?? "SYSTEM";
+                    await _ledgerPostingService.PostCashReceiptAsync(cashReceipt.CashReceiptId, postedBy);
+
+                    // =========================================================
+                    // 5) تسجيل في اللوج
+                    // =========================================================
+                    await _activityLogger.LogAsync(
+                        UserActionType.Create,
+                        "CashReceipt",
+                        cashReceipt.CashReceiptId,
+                        $"إضافة إذن استلام رقم {cashReceipt.ReceiptNumber} بمبلغ {cashReceipt.Amount} من عميل {cashReceipt.CustomerId}"
+                    );
+
+                    TempData["Success"] = "تم حفظ وترحيل إذن الاستلام بنجاح.";
+                    return RedirectToAction(nameof(Index));
+                }
+                catch (Exception ex)
+                {
+                    // ✅ تسجيل الخطأ الكامل للمطورين
+                    var errorMessage = ex.Message;
+                    if (ex.InnerException != null)
+                    {
+                        errorMessage += $" | التفاصيل: {ex.InnerException.Message}";
+                    }
+                    
+                    TempData["Error"] = $"حدث خطأ أثناء حفظ إذن الاستلام: {errorMessage}";
+                    
+                    // ✅ محاولة حذف الإذن من قاعدة البيانات إذا تم حفظه جزئياً
+                    if (cashReceipt.CashReceiptId > 0)
+                    {
+                        try
+                        {
+                            var existingReceipt = await _context.CashReceipts.FindAsync(cashReceipt.CashReceiptId);
+                            if (existingReceipt != null && !existingReceipt.IsPosted)
+                            {
+                                _context.CashReceipts.Remove(existingReceipt);
+                                await _context.SaveChangesAsync();
+                            }
+                        }
+                        catch { /* تجاهل أخطاء الحذف */ }
+                    }
+                    
+                    await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+                    if (cashReceipt.CustomerId.HasValue)
+                        ViewBag.LockCustomer = true;
+                    return View(cashReceipt);
+                }
             }
 
-            // لو هناك خطأ نرجّع القوائم المنسدلة
-            PopulateDropdowns(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+            // لو هناك خطأ تحقق نرجّع القوائم المنسدلة
+            await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+            if (cashReceipt.CustomerId.HasValue)
+                ViewBag.LockCustomer = true;
             return View(cashReceipt);
         }
 
@@ -303,11 +518,19 @@ namespace ERP.Controllers
             if (id == null)
                 return NotFound();
 
-            var cashReceipt = await _context.CashReceipts.FindAsync(id);
+            var cashReceipt = await _context.CashReceipts
+                .Include(r => r.Customer)
+                .ThenInclude(c => c.Account)
+                .FirstOrDefaultAsync(r => r.CashReceiptId == id);
+
             if (cashReceipt == null)
                 return NotFound();
 
-            PopulateDropdowns(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+            // ✅ إذا كان العميل محددًا، نحفظ هذه المعلومة للواجهة
+            if (cashReceipt.CustomerId.HasValue)
+                ViewBag.LockCustomer = true;
+
+            await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
             return View(cashReceipt);
         }
 
@@ -315,7 +538,7 @@ namespace ERP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id,
-            [Bind("CashReceiptId,ReceiptNumber,ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
+            [Bind("CashReceiptId,ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
             CashReceipt cashReceipt)
         {
             if (id != cashReceipt.CashReceiptId)
@@ -324,36 +547,154 @@ namespace ERP.Controllers
             if (!ModelState.IsValid)
             {
                 PopulateDropdowns(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+                if (cashReceipt.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
                 return View(cashReceipt);
             }
 
-            // نجيب السجل الأصلي من قاعدة البيانات ونحدّث الحقول المسموح بها
-            var existing = await _context.CashReceipts.FindAsync(id);
-            if (existing == null)
-                return NotFound();
-
-            existing.ReceiptNumber = cashReceipt.ReceiptNumber;
-            existing.ReceiptDate = cashReceipt.ReceiptDate;
-            existing.CustomerId = cashReceipt.CustomerId;
-            existing.CashAccountId = cashReceipt.CashAccountId;
-            existing.CounterAccountId = cashReceipt.CounterAccountId;
-            existing.Amount = cashReceipt.Amount;
-            existing.Description = cashReceipt.Description;
-            existing.UpdatedAt = DateTime.Now;    // تحديث تاريخ آخر تعديل
-
             try
             {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!CashReceiptExists(cashReceipt.CashReceiptId))
-                    return NotFound();
-                else
-                    throw;
-            }
+                // =========================================================
+                // 1) جلب السجل الأصلي من قاعدة البيانات
+                // =========================================================
+                var existing = await _context.CashReceipts
+                    .Include(r => r.Customer)
+                    .FirstOrDefaultAsync(r => r.CashReceiptId == id);
 
-            return RedirectToAction(nameof(Index));
+                if (existing == null)
+                    return NotFound();
+
+                // =========================================================
+                // 2) حفظ Snapshot للقيم القديمة (للتسجيل في اللوج)
+                // =========================================================
+                var oldValues = new
+                {
+                    Amount = existing.Amount,
+                    CashAccountId = existing.CashAccountId,
+                    CounterAccountId = existing.CounterAccountId,
+                    ReceiptDate = existing.ReceiptDate,
+                    Description = existing.Description,
+                    IsPosted = existing.IsPosted,
+                    Status = existing.Status
+                };
+
+                // =========================================================
+                // 3) تحديث الحقول المسموح بها (رقم المستند لا يتغير)
+                // =========================================================
+                existing.ReceiptDate = cashReceipt.ReceiptDate;
+                existing.CustomerId = cashReceipt.CustomerId;
+                existing.CashAccountId = cashReceipt.CashAccountId;
+                existing.CounterAccountId = cashReceipt.CounterAccountId;
+                existing.Amount = cashReceipt.Amount;
+                existing.Description = cashReceipt.Description;
+                existing.UpdatedAt = DateTime.Now;
+
+                // =========================================================
+                // 4) حفظ التعديلات أولاً
+                // =========================================================
+                await _context.SaveChangesAsync();
+
+                // =========================================================
+                // 5) ترحيل محاسبي (يعكس القديم ويعمل جديد إذا كان مفتوح)
+                // =========================================================
+                // ✅ إذا كان الإذن مفتوح (غير مرحّل)، الترحيل سيعمل مرحلة جديدة
+                // ✅ إذا كان مرحّل، يجب فتحه أولاً (زر Open)
+                if (!existing.IsPosted)
+                {
+                    string? postedBy = User?.Identity?.Name ?? "SYSTEM";
+                    await _ledgerPostingService.PostCashReceiptAsync(existing.CashReceiptId, postedBy);
+                }
+
+                // =========================================================
+                // 6) تسجيل في اللوج
+                // =========================================================
+                await _activityLogger.LogAsync(
+                    UserActionType.Edit,
+                    "CashReceipt",
+                    existing.CashReceiptId,
+                    $"تعديل إذن استلام رقم {existing.ReceiptNumber}",
+                    oldValues: System.Text.Json.JsonSerializer.Serialize(oldValues),
+                    newValues: System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        Amount = existing.Amount,
+                        CashAccountId = existing.CashAccountId,
+                        CounterAccountId = existing.CounterAccountId,
+                        ReceiptDate = existing.ReceiptDate,
+                        Description = existing.Description,
+                        IsPosted = existing.IsPosted,
+                        Status = existing.Status
+                    })
+                );
+
+                TempData["Success"] = "تم تعديل وترحيل إذن الاستلام بنجاح.";
+                return RedirectToAction(nameof(Index));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                PopulateDropdowns(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
+                if (cashReceipt.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+                return View(cashReceipt);
+            }
+        }
+
+        // =========================================================
+        // Open — فتح إذن مرحّل للتعديل (مثل فواتير البيع)
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Open(int id)
+        {
+            try
+            {
+                var receipt = await _context.CashReceipts
+                    .FirstOrDefaultAsync(r => r.CashReceiptId == id);
+
+                if (receipt == null)
+                {
+                    TempData["Error"] = "الإذن غير موجود.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                // ================================
+                // 1) لازم يكون مرحّل عشان ينفع "فتح"
+                // ================================
+                if (!receipt.IsPosted)
+                {
+                    TempData["Error"] = "هذا الإذن غير مُرحّل، لا يوجد ما يمكن فتحه.";
+                    return RedirectToAction(nameof(Details), new { id });
+                }
+
+                // ================================
+                // 2) فتح الإذن للتعديل (لا يعكس القيود - الحفظ هو الذي يعكس)
+                // ================================
+                receipt.IsPosted = false;
+                receipt.Status = "مفتوحة للتعديل";
+                receipt.PostedAt = null;
+                receipt.PostedBy = null;
+                receipt.UpdatedAt = DateTime.Now;
+
+                await _context.SaveChangesAsync();
+
+                // ================================
+                // 3) تسجيل نشاط
+                // ================================
+                await _activityLogger.LogAsync(
+                    actionType: UserActionType.Unpost,
+                    entityName: "CashReceipt",
+                    entityId: receipt.CashReceiptId,
+                    description: $"فتح إذن استلام رقم {receipt.ReceiptNumber} للتعديل"
+                );
+
+                TempData["Success"] = "تم فتح الإذن للتعديل بنجاح.";
+                return RedirectToAction(nameof(Edit), new { id });
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                return RedirectToAction(nameof(Index));
+            }
         }
 
         // =========================================================
@@ -383,11 +724,66 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var cashReceipt = await _context.CashReceipts.FindAsync(id);
-            if (cashReceipt != null)
+            try
             {
+                var cashReceipt = await _context.CashReceipts
+                    .Include(r => r.Customer)
+                    .FirstOrDefaultAsync(r => r.CashReceiptId == id);
+
+                if (cashReceipt == null)
+                {
+                    TempData["Error"] = "الإذن غير موجود.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                // =========================================================
+                // 1) إذا كان مرحّل، نعكس قيوده أولاً
+                // =========================================================
+                if (cashReceipt.IsPosted)
+                {
+                    string? postedBy = User?.Identity?.Name ?? "SYSTEM";
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                        LedgerSourceType.Receipt,
+                        cashReceipt.CashReceiptId,
+                        postedBy,
+                        "حذف إذن استلام نقدية"
+                    );
+                }
+
+                // =========================================================
+                // 2) حفظ Snapshot قبل الحذف (للتسجيل في اللوج)
+                // =========================================================
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    ReceiptNumber = cashReceipt.ReceiptNumber,
+                    Amount = cashReceipt.Amount,
+                    CustomerId = cashReceipt.CustomerId,
+                    ReceiptDate = cashReceipt.ReceiptDate,
+                    IsPosted = cashReceipt.IsPosted
+                });
+
+                // =========================================================
+                // 3) حذف الإذن
+                // =========================================================
                 _context.CashReceipts.Remove(cashReceipt);
                 await _context.SaveChangesAsync();
+
+                // =========================================================
+                // 4) تسجيل في اللوج
+                // =========================================================
+                await _activityLogger.LogAsync(
+                    UserActionType.Delete,
+                    "CashReceipt",
+                    id,
+                    $"حذف إذن استلام رقم {cashReceipt.ReceiptNumber}",
+                    oldValues: oldValues
+                );
+
+                TempData["Success"] = "تم حذف إذن الاستلام بنجاح.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -473,6 +869,7 @@ namespace ERP.Controllers
             }
 
             var receipts = await _context.CashReceipts
+                                         .Include(r => r.Customer)
                                          .Where(r => ids.Contains(r.CashReceiptId))
                                          .ToListAsync();
 
@@ -484,14 +881,38 @@ namespace ERP.Controllers
 
             try
             {
+                string? postedBy = User?.Identity?.Name ?? "SYSTEM";
+
+                // عكس القيود لكل إذن مرحّل
+                foreach (var receipt in receipts)
+                {
+                    if (receipt.IsPosted)
+                    {
+                        await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                            LedgerSourceType.Receipt,
+                            receipt.CashReceiptId,
+                            postedBy,
+                            "حذف إذن استلام نقدية"
+                        );
+                    }
+
+                    // تسجيل في اللوج
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "CashReceipt",
+                        receipt.CashReceiptId,
+                        $"حذف إذن استلام رقم {receipt.ReceiptNumber} (حذف جماعي)"
+                    );
+                }
+
                 _context.CashReceipts.RemoveRange(receipts);
                 await _context.SaveChangesAsync();
 
                 TempData["Success"] = $"تم حذف {receipts.Count} من إذون الاستلام المحددة.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["Error"] = "لا يمكن حذف بعض الإذون بسبب ارتباطها بقيود محاسبية أو جداول أخرى.";
+                TempData["Error"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -504,7 +925,9 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            var all = await _context.CashReceipts.ToListAsync();
+            var all = await _context.CashReceipts
+                .Include(r => r.Customer)
+                .ToListAsync();
 
             if (all.Count == 0)
             {
@@ -514,14 +937,30 @@ namespace ERP.Controllers
 
             try
             {
+                string? postedBy = User?.Identity?.Name ?? "SYSTEM";
+
+                // عكس القيود لكل إذن مرحّل
+                foreach (var receipt in all)
+                {
+                    if (receipt.IsPosted)
+                    {
+                        await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                            LedgerSourceType.Receipt,
+                            receipt.CashReceiptId,
+                            postedBy,
+                            "حذف إذن استلام نقدية (حذف جميع)"
+                        );
+                    }
+                }
+
                 _context.CashReceipts.RemoveRange(all);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = "تم حذف جميع إذون الاستلام.";
+                TempData["Success"] = $"تم حذف جميع إذون الاستلام ({all.Count}).";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["Error"] = "لا يمكن حذف جميع الإذون بسبب وجود ارتباطات محاسبية أخرى.";
+                TempData["Error"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));

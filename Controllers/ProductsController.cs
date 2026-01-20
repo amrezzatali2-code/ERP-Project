@@ -67,6 +67,11 @@ namespace ERP.Controllers
       decimal? fromNum = null,           // متغير: رقم من
       decimal? toNum = null,             // متغير: رقم إلى
 
+      // ✅ فلاتر متراكبة جديدة
+      int? filterProductGroupId = null,  // متغير: فلتر حسب مجموعة الصنف (ProductGroup)
+      string? filterCompany = null,      // متغير: فلتر حسب الشركة (Company)
+      string? filterImported = null,     // متغير: فلتر حسب المنشأ (محلي/مستورد)
+
       int page = 1,                      // متغير: رقم الصفحة الحالية
       int pageSize = 50                  // متغير: عدد السطور في الصفحة
   )
@@ -171,7 +176,7 @@ namespace ERP.Controllers
                         if (isDec)
                             q = q.Where(p => p.PriceRetail == decVal);
                         else
-                            q = q.Where(p => p.PriceRetail != null && p.PriceRetail.ToString().Contains(s));
+                            q = q.Where(p => p.PriceRetail.ToString().Contains(s));
                         break;
 
                     case "active":
@@ -240,7 +245,7 @@ namespace ERP.Controllers
                                 (p.Company != null && EF.Functions.Like(p.Company, likeStarts)) ||
                                 (p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeStarts)) ||
                                 (p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeStarts)) ||
-                                (p.PriceRetail != null && p.PriceRetail.ToString().StartsWith(s))
+                                p.PriceRetail.ToString().StartsWith(s)
                             );
                         }
                         else
@@ -253,7 +258,7 @@ namespace ERP.Controllers
                                 (p.Company != null && EF.Functions.Like(p.Company, likeContains)) ||
                                 (p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeContains)) ||
                                 (p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeContains)) ||
-                                (p.PriceRetail != null && p.PriceRetail.ToString().Contains(s))
+                                p.PriceRetail.ToString().Contains(s)
                             );
                         }
                         break;
@@ -280,12 +285,43 @@ namespace ERP.Controllers
             }
             else if (nf == "price")
             {
-                if (fromNum.HasValue) q = q.Where(p => p.PriceRetail != null && p.PriceRetail >= fromNum.Value);
-                if (toNum.HasValue) q = q.Where(p => p.PriceRetail != null && p.PriceRetail <= toNum.Value);
+                if (fromNum.HasValue) q = q.Where(p => p.PriceRetail >= fromNum.Value);
+                if (toNum.HasValue) q = q.Where(p => p.PriceRetail <= toNum.Value);
             }
 
             // =========================================================
-            // (5) فلتر التاريخ/الوقت (CreatedAt)
+            // (5) ✅ فلاتر متراكبة (Layered Filters)
+            // =========================================================
+            
+            // فلتر حسب مجموعة الصنف (ProductGroup)
+            if (filterProductGroupId.HasValue && filterProductGroupId.Value > 0)
+            {
+                q = q.Where(p => p.ProductGroupId == filterProductGroupId.Value);
+            }
+
+            // فلتر حسب الشركة (Company)
+            if (!string.IsNullOrWhiteSpace(filterCompany))
+            {
+                var companyFilter = filterCompany.Trim();
+                q = q.Where(p => p.Company != null && p.Company.Contains(companyFilter));
+            }
+
+            // فلتر حسب المنشأ (Imported: محلي/مستورد)
+            if (!string.IsNullOrWhiteSpace(filterImported))
+            {
+                var importedFilter = filterImported.Trim().ToLower();
+                if (importedFilter == "مستورد" || importedFilter == "imported")
+                {
+                    q = q.Where(p => (p.Imported ?? "").Contains("مستورد"));
+                }
+                else if (importedFilter == "محلي" || importedFilter == "local")
+                {
+                    q = q.Where(p => (p.Imported ?? "").Contains("محلي"));
+                }
+            }
+
+            // =========================================================
+            // (6) فلتر التاريخ/الوقت (CreatedAt)
             // =========================================================
             if (useDateRange)
             {
@@ -294,7 +330,7 @@ namespace ERP.Controllers
             }
 
             // =========================================================
-            // (6) الترتيب
+            // (7) الترتيب
             // =========================================================
             q = so switch
             {
@@ -342,6 +378,29 @@ namespace ERP.Controllers
             ViewBag.NumField = nf;
             ViewBag.FromNum = fromNum;
             ViewBag.ToNum = toNum;
+
+            // ✅ فلاتر متراكبة: تحميل قوائم للـ dropdowns
+            var productGroups = await _db.ProductGroups
+                .AsNoTracking()
+                .Where(pg => pg.IsActive)
+                .OrderBy(pg => pg.Name)
+                .Select(pg => new { pg.ProductGroupId, pg.Name })
+                .ToListAsync();
+
+            ViewBag.ProductGroups = new SelectList(productGroups, "ProductGroupId", "Name", filterProductGroupId);
+
+            var companies = await _db.Products
+                .AsNoTracking()
+                .Where(p => !string.IsNullOrWhiteSpace(p.Company))
+                .Select(p => p.Company!)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToListAsync();
+
+            ViewBag.Companies = companies;
+            ViewBag.FilterProductGroupId = filterProductGroupId;
+            ViewBag.FilterCompany = filterCompany;
+            ViewBag.FilterImported = filterImported;
 
             ViewBag.SearchByOptions = new List<SelectListItem>
             {
@@ -677,10 +736,16 @@ namespace ERP.Controllers
             bool useDateRange = false,      // فلترة بتاريخ الإنشاء
             DateTime? fromDate = null,       // من تاريخ
             DateTime? toDate = null,       // إلى تاريخ
+            // ✅ فلاتر متراكبة
+            int? filterProductGroupId = null,
+            string? filterCompany = null,
+            string? filterImported = null,
             string? format = "excel")    // excel | csv
         {
             // متغير: الاستعلام الأساسي بدون تتبّع لزيادة السرعة
-            IQueryable<Product> q = _db.Products.AsNoTracking();
+            IQueryable<Product> q = _db.Products
+                .Include(p => p.ProductGroup)
+                .AsNoTracking();
 
             // ========= البحث =========
             var term = (search ?? string.Empty).Trim();                 // متغير: نص البحث بعد التنظيف
@@ -745,6 +810,35 @@ namespace ERP.Controllers
                             || (p.GenericName != null && p.GenericName.Contains(term))
                             || (p.Company != null && p.Company.Contains(term)));
                         break;
+                }
+            }
+
+            // ========= ✅ فلاتر متراكبة =========
+            
+            // فلتر حسب مجموعة الصنف (ProductGroup)
+            if (filterProductGroupId.HasValue && filterProductGroupId.Value > 0)
+            {
+                q = q.Where(p => p.ProductGroupId == filterProductGroupId.Value);
+            }
+
+            // فلتر حسب الشركة (Company)
+            if (!string.IsNullOrWhiteSpace(filterCompany))
+            {
+                var companyFilter = filterCompany.Trim();
+                q = q.Where(p => p.Company != null && p.Company.Contains(companyFilter));
+            }
+
+            // فلتر حسب المنشأ (Imported)
+            if (!string.IsNullOrWhiteSpace(filterImported))
+            {
+                var importedFilter = filterImported.Trim().ToLower();
+                if (importedFilter == "مستورد" || importedFilter == "imported")
+                {
+                    q = q.Where(p => (p.Imported ?? "").Contains("مستورد"));
+                }
+                else if (importedFilter == "محلي" || importedFilter == "local")
+                {
+                    q = q.Where(p => (p.Imported ?? "").Contains("محلي"));
                 }
             }
 

@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Account>
@@ -237,6 +237,35 @@
                            asp-action="Create">
                             + إضافة حساب
                         </a>
+
+                        @* الخزينة الرئيسية *@
+                        <a class="btn btn-erp btn-erp-primary"
+                           asp-controller="Treasury"
+                           asp-action="Index">
+                            💰 الخزينة الرئيسية
+                        </a>
+
+                        @* تقرير الأرباح *@
+                        <div class="btn-group">
+                            <button type="button" 
+                                    class="btn btn-erp btn-erp-primary btn-erp-sm dropdown-toggle" 
+                                    data-bs-toggle="dropdown" 
+                                    aria-expanded="false">
+                                📊 تقارير الأرباح
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
+                                <li>
+                                    <a class="dropdown-item" asp-controller="Reports" asp-action="ProductProfits">
+                                        📦 أرباح الأصناف
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item" asp-controller="Reports" asp-action="CustomerProfits">
+                                        👥 أرباح العملاء
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
 
                         @* حذف الحسابات المحددة (BulkDelete) *@
                         <form id="formBulkDelete"

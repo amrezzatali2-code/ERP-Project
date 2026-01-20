@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Product>
@@ -33,6 +33,11 @@
     var fromDate = Model.FromDate;
     var toDate = Model.ToDate;
 
+    // فلاتر متراكبة
+    int? filterProductGroupId = ViewBag.FilterProductGroupId as int?;
+    string? filterCompany = ViewBag.FilterCompany as string;
+    string? filterImported = ViewBag.FilterImported as string;
+
     // دالة توليد لينك مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
     {
@@ -44,7 +49,10 @@
         pageSize = ps,
         useDateRange,
         fromDate,
-        toDate
+        toDate,
+        filterProductGroupId,
+        filterCompany,
+        filterImported
     })!;
 
     // دالة إنشاء لينك الترتيب مع السهم
@@ -63,7 +71,10 @@
             pageSize = ps,
             useDateRange,
             fromDate,
-            toDate
+            toDate,
+            filterProductGroupId,
+            filterCompany,
+            filterImported
         }) ?? "#";
 
         string icon = "⇅";
@@ -86,55 +97,35 @@
         </small>
     </div>
 
-    @* ===== صف الكروت كله (4 بحث + كود + أزرار) ===== *@
-    <div class="row g-2 mb-3 d-print-none">
-
-        @* ==========================================================
-           أولاً: كروت البحث + كارت الأكواد داخل فورم GET واحد
-           الكولمن ده واخد 10 من 12 (الباقي لإجراءات الأصناف)
-           ========================================================== *@
+    @* ===== تصميم البحث الجديد (هادئ ومريح) ===== *@
+    <div class="row g-3 mb-3 d-print-none">
+        
         <div class="col-xxl-10 col-12">
             <form id="productsFiltersForm"
                   method="get"
                   action="@Url.Action(action, controller)">
-
-                @* صف واحد فيه 5 كروت متساوية *@
-                <div class="row g-2
-                            row-cols-xxl-5
-                            row-cols-lg-3
-                            row-cols-md-2
-                            row-cols-1">
-
-                    @*======================================================
-                      الكارت 1: بحث نصي 1  (هو اللي بيعرض آخر قيمة البحث)
-                      ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث 1</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                @* مربع نص البحث (UI فقط بدون name) *@
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               id="search1"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..."
-                                               value="@search" />
-                                    </div>
-                                </div>
-
-                                @* اختيار عمود البحث *@
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
+                
+                @* كارت رئيسي هادئ *@
+                <div class="card border-0 shadow-sm" style="background: #fafbfc; border-radius: 12px;">
+                    <div class="card-body p-4">
+                        
+                        @* ===== صناديق البحث النصي المتتالية ===== *@
+                        <div class="mb-4">
+                            <label class="form-label text-muted small mb-3">البحث النصي</label>
+                            
+                            @* صندوق البحث 1 (الرئيسي) *@
+                            <div class="mb-2">
+                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important;">
+                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.85rem; padding: 0.4rem 0.5rem;">🔍</span>
+                                    <input type="text"
+                                           id="search1"
+                                           class="form-control border-0 bg-transparent"
+                                           style="font-size: 0.85rem; padding: 0.4rem 0.5rem;"
+                                           placeholder="بحث رئيسي: اسم، كود، باركود، شركة..."
+                                           value="@search" />
                                     <select id="searchBy1"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
+                                            class="form-select border-0 bg-transparent"
+                                            style="font-size: 0.85rem; max-width: 130px; border-left: 1px solid #e1e5e9 !important; padding: 0.4rem 0.5rem;">
                                         <option value="all" selected="@(searchBy == "all" ? "selected" : null)">الكل</option>
                                         <option value="name" selected="@(searchBy == "name" ? "selected" : null)">اسم الصنف</option>
                                         <option value="id" selected="@(searchBy == "id" ? "selected" : null)">كود الصنف</option>
@@ -142,52 +133,33 @@
                                         <option value="generic" selected="@(searchBy == "generic" ? "selected" : null)">الاسم العلمي</option>
                                         <option value="company" selected="@(searchBy == "company" ? "selected" : null)">الشركة</option>
                                         <option value="category" selected="@(searchBy == "category" ? "selected" : null)">الفئة</option>
+                                        <option value="productGroup" selected="@(searchBy == "productGroup" ? "selected" : null)">مجموعة الصنف</option>
+                                        <option value="bonusGroup" selected="@(searchBy == "bonusGroup" ? "selected" : null)">مجموعة البونص</option>
+                                        <option value="price" selected="@(searchBy == "price" ? "selected" : null)">سعر الجمهور</option>
+                                        <option value="imported" selected="@(searchBy == "imported" ? "selected" : null)">محلي/مستورد</option>
                                         <option value="active" selected="@(searchBy == "active" ? "selected" : null)">الحالة</option>
+                                        <option value="created" selected="@(searchBy == "created" ? "selected" : null)">تاريخ الإنشاء</option>
+                                        <option value="modified" selected="@(searchBy == "modified" ? "selected" : null)">آخر تعديل</option>
+                                        <option value="lastprice" selected="@(searchBy == "lastprice" ? "selected" : null)">آخر تغيير سعر</option>
+                                        <option value="hasQuota" selected="@(searchBy == "hasQuota" ? "selected" : null)">له كوتة؟</option>
+                                        <option value="quotaQuantity" selected="@(searchBy == "quotaQuantity" ? "selected" : null)">كمية الكوتة</option>
+                                        <option value="descShort" selected="@(searchBy == "descShort" ? "selected" : null)">الوصف المختصر</option>
                                     </select>
                                 </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg btn-search-card"
-                                            data-card="1">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
                             </div>
-                        </div>
-                    </div>
-
-                    @*======================================================
-                      الكارت 2: بحث نصي 2 (واجهة إضافية لنفس البحث)
-                      ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث 2</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               id="search2"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..." />
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
+                            
+                            @* صندوق البحث 2 *@
+                            <div class="mb-2">
+                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important; font-size: 0.75rem; height: 28px;">
+                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.7rem; padding: 0.2rem 0.35rem;">🔍</span>
+                                    <input type="text"
+                                           id="search2"
+                                           class="form-control border-0 bg-transparent"
+                                           style="font-size: 0.75rem; padding: 0.2rem 0.35rem; height: 28px;"
+                                           placeholder="بحث إضافي 1..." />
                                     <select id="searchBy2"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
+                                            class="form-select border-0 bg-transparent"
+                                            style="font-size: 0.7rem; max-width: 110px; border-left: 1px solid #e1e5e9 !important; padding: 0.2rem 0.35rem; height: 28px;">
                                         <option value="all">الكل</option>
                                         <option value="name">اسم الصنف</option>
                                         <option value="id">كود الصنف</option>
@@ -195,52 +167,33 @@
                                         <option value="generic">الاسم العلمي</option>
                                         <option value="company">الشركة</option>
                                         <option value="category">الفئة</option>
+                                        <option value="productGroup">مجموعة الصنف</option>
+                                        <option value="bonusGroup">مجموعة البونص</option>
+                                        <option value="price">سعر الجمهور</option>
+                                        <option value="imported">محلي/مستورد</option>
                                         <option value="active">الحالة</option>
+                                        <option value="created">تاريخ الإنشاء</option>
+                                        <option value="modified">آخر تعديل</option>
+                                        <option value="lastprice">آخر تغيير سعر</option>
+                                        <option value="hasQuota">له كوتة؟</option>
+                                        <option value="quotaQuantity">كمية الكوتة</option>
+                                        <option value="descShort">الوصف المختصر</option>
                                     </select>
                                 </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg btn-search-card"
-                                            data-card="2">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
                             </div>
-                        </div>
-                    </div>
-
-                    @*======================================================
-                      الكارت 3: بحث نصي 3
-                      ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث 3</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               id="search3"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..." />
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
+                            
+                            @* صندوق البحث 3 *@
+                            <div class="mb-2">
+                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important;">
+                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.85rem; padding: 0.4rem 0.5rem;">🔍</span>
+                                    <input type="text"
+                                           id="search3"
+                                           class="form-control border-0 bg-transparent"
+                                           style="font-size: 0.85rem; padding: 0.4rem 0.5rem;"
+                                           placeholder="بحث إضافي 2..." />
                                     <select id="searchBy3"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
+                                            class="form-select border-0 bg-transparent"
+                                            style="font-size: 0.85rem; max-width: 130px; border-left: 1px solid #e1e5e9 !important; padding: 0.4rem 0.5rem;">
                                         <option value="all">الكل</option>
                                         <option value="name">اسم الصنف</option>
                                         <option value="id">كود الصنف</option>
@@ -248,52 +201,33 @@
                                         <option value="generic">الاسم العلمي</option>
                                         <option value="company">الشركة</option>
                                         <option value="category">الفئة</option>
+                                        <option value="productGroup">مجموعة الصنف</option>
+                                        <option value="bonusGroup">مجموعة البونص</option>
+                                        <option value="price">سعر الجمهور</option>
+                                        <option value="imported">محلي/مستورد</option>
                                         <option value="active">الحالة</option>
+                                        <option value="created">تاريخ الإنشاء</option>
+                                        <option value="modified">آخر تعديل</option>
+                                        <option value="lastprice">آخر تغيير سعر</option>
+                                        <option value="hasQuota">له كوتة؟</option>
+                                        <option value="quotaQuantity">كمية الكوتة</option>
+                                        <option value="descShort">الوصف المختصر</option>
                                     </select>
                                 </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg btn-search-card"
-                                            data-card="3">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
                             </div>
-                        </div>
-                    </div>
-
-                    @*======================================================
-                      الكارت 4: بحث نصي 4
-                      ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث 4</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               id="search4"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..." />
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
+                            
+                            @* صندوق البحث 4 *@
+                            <div class="mb-3">
+                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important;">
+                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.85rem; padding: 0.4rem 0.5rem;">🔍</span>
+                                    <input type="text"
+                                           id="search4"
+                                           class="form-control border-0 bg-transparent"
+                                           style="font-size: 0.85rem; padding: 0.4rem 0.5rem;"
+                                           placeholder="بحث إضافي 3..." />
                                     <select id="searchBy4"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
+                                            class="form-select border-0 bg-transparent"
+                                            style="font-size: 0.85rem; max-width: 130px; border-left: 1px solid #e1e5e9 !important; padding: 0.4rem 0.5rem;">
                                         <option value="all">الكل</option>
                                         <option value="name">اسم الصنف</option>
                                         <option value="id">كود الصنف</option>
@@ -301,85 +235,119 @@
                                         <option value="generic">الاسم العلمي</option>
                                         <option value="company">الشركة</option>
                                         <option value="category">الفئة</option>
+                                        <option value="productGroup">مجموعة الصنف</option>
+                                        <option value="bonusGroup">مجموعة البونص</option>
+                                        <option value="price">سعر الجمهور</option>
+                                        <option value="imported">محلي/مستورد</option>
                                         <option value="active">الحالة</option>
+                                        <option value="created">تاريخ الإنشاء</option>
+                                        <option value="modified">آخر تعديل</option>
+                                        <option value="lastprice">آخر تغيير سعر</option>
+                                        <option value="hasQuota">له كوتة؟</option>
+                                        <option value="quotaQuantity">كمية الكوتة</option>
+                                        <option value="descShort">الوصف المختصر</option>
                                     </select>
-                                </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg btn-search-card"
-                                            data-card="4">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    @*======================================================
-                      الكارت 5: فلترة كود الصنف (من / إلى)
-                      ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">فلترة بالأكواد</span>
+                        
+                        @* ===== الفلاتر الإضافية في صف واحد (متناسقة مع الأزرار) ===== *@
+                        <div class="row g-2 mb-3">
+                            <div class="col-md-3">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">الفئة</label>
+                                <select name="filterProductGroupId"
+                                        id="filterProductGroupId"
+                                        class="form-select border rounded"
+                                        style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;">
+                                    <option value="">-- جميع الفئات --</option>
+                                    @if (ViewBag.ProductGroups != null)
+                                    {
+                                        @foreach (var pg in (SelectList)ViewBag.ProductGroups)
+                                        {
+                                            <option value="@pg.Value" selected="@(pg.Selected ? "selected" : null)">@pg.Text</option>
+                                        }
+                                    }
+                                </select>
                             </div>
-
-                            <div class="card-body py-2">
-                                @* حقل من كود *@
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">من كود</span>
+                            
+                            <div class="col-md-3">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">الشركة</label>
+                                <input type="text"
+                                       name="filterCompany"
+                                       id="filterCompany"
+                                       class="form-control border rounded"
+                                       style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;"
+                                       list="companiesList"
+                                       placeholder="ابحث عن الشركة..."
+                                       value="@filterCompany" />
+                                <datalist id="companiesList">
+                                    @if (ViewBag.Companies != null)
+                                    {
+                                        @foreach (var comp in (List<string>)ViewBag.Companies)
+                                        {
+                                            <option value="@comp">@comp</option>
+                                        }
+                                    }
+                                </datalist>
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">المنشأ</label>
+                                <select name="filterImported"
+                                        id="filterImported"
+                                        class="form-select border rounded"
+                                        style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;">
+                                    <option value="">-- الكل --</option>
+                                    <option value="محلي" selected="@(filterImported == "محلي" ? "selected" : null)">محلي</option>
+                                    <option value="مستورد" selected="@(filterImported == "مستورد" ? "selected" : null)">مستورد</option>
+                                </select>
+                            </div>
+                            
+                            <div class="col-md-3">
+                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">فلترة بالأكواد</label>
+                                <div class="row g-2">
+                                    <div class="col-6">
                                         <input type="number"
                                                id="codeFromCard"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
+                                               class="form-control border rounded"
+                                               style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;"
+                                               placeholder="من كود"
                                                value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
                                     </div>
-                                </div>
-
-                                @* حقل إلى كود *@
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">إلى كود</span>
+                                    <div class="col-6">
                                         <input type="number"
                                                id="codeToCard"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
+                                               class="form-control border rounded"
+                                               style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;"
+                                               placeholder="إلى كود"
                                                value="@(ViewBag.CodeTo?.ToString() ?? "")" />
                                     </div>
                                 </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            id="btnCodeFilter"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                                        بحث
-                                    </button>
-                                    <button type="button"
-                                            id="btnCodeClear"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                                        إلغاء
-                                    </button>
-                                </div>
                             </div>
                         </div>
+                        
+                        @* ===== أزرار بيضاء مع أيقونات ===== *@
+                        <div class="d-flex justify-content-end gap-2 pt-3 border-top" style="border-color: #e1e5e9 !important;">
+                            <button type="submit"
+                                    id="btnSearchAllFilters"
+                                    class="btn btn-sm rounded"
+                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 1rem;">
+                                🔍 بحث
+                            </button>
+                            <a href="@Url.Action(action, controller)"
+                               class="btn btn-sm rounded"
+                               style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 1rem;">
+                                ✖️ إلغاء
+                            </a>
+                        </div>
                     </div>
-
-                </div> @* نهاية صف الكروت الخمسة *@
-
-                @* ===== الهيدن المشتركة للفورم كله (نفس منطقك القديم) ===== *@
+                </div>
+                
+                @* ===== الهيدن المشتركة للفورم ===== *@
                 <input type="hidden" name="search" id="mainSearch" value="@search" />
                 <input type="hidden" name="searchBy" id="mainSearchBy" value="@searchBy" />
-
                 <input type="hidden" name="codeFrom" id="mainCodeFrom" value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
                 <input type="hidden" name="codeTo" id="mainCodeTo" value="@(ViewBag.CodeTo?.ToString() ?? "")" />
-
                 <input type="hidden" name="sort" value="@sort" />
                 <input type="hidden" name="dir" value="@dir" />
                 <input type="hidden" name="page" value="1" />
@@ -393,58 +361,46 @@
                 {
                     <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
                 }
-
-                <div class="col-12 mt-2 d-flex justify-content-center gap-2 d-print-none">
-                    <button type="submit"
-                            id="btnSearchAllFilters"
-                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                        بحث بكل الفلاتر
-                    </button>
-
-                    <a href="@Url.Action(action, controller)"
-                       class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                        إلغاء كل الفلاتر
-                    </a>
-                </div>
-
             </form>
         </div>
 
         @* ==========================================================
-           ثانياً: كارت إجراءات الأصناف (الأزرار)
+           ثانياً: كارت إجراءات الأصناف (الأزرار - شفافة وصغيرة)
            ========================================================== *@
         <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
-            <div class="card shadow-sm h-100">
-                <div class="card-header text-white py-1"
-                     style="background: linear-gradient(90deg, #4b5563, #64748b);">
+            <div class="card border-0 shadow-sm h-100" style="background: #fafbfc; border-radius: 12px;">
+                <div class="card-header bg-transparent border-bottom py-2" style="border-color: #e1e5e9 !important;">
                     <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold">إجراءات الأصناف</span>
+                        <span class="fw-semibold text-muted" style="font-size: 0.95rem;">إجراءات الأصناف</span>
                     </div>
                 </div>
 
-                <div class="card-body py-2">
-                    <div class="d-grid gap-1">
+                <div class="card-body py-3">
+                    <div class="d-grid gap-2">
 
                         @* إضافة صنف جديد *@
-                        <a class="btn btn-erp btn-erp-success"
+                        <a class="btn btn-sm rounded text-start"
+                           style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;"
                            asp-action="Create">
-                            + إضافة صنف جديد
+                            <span style="color: #667eea; margin-left: 0.5rem;">➕</span>إضافة صنف جديد
                         </a>
 
                         @* فلترة بالتاريخ/الوقت *@
                         <button type="button"
-                                class="btn btn-erp btn-erp-secondary btn-erp-lg"
+                                class="btn btn-sm rounded text-start"
+                                style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;"
                                 data-bs-toggle="modal"
                                 data-bs-target="#dateFilterModal">
-                            فلترة بالتاريخ/الوقت
+                            <span style="color: #667eea; margin-left: 0.5rem;">📅</span>فلترة بالتاريخ/الوقت
                         </button>
 
                         @* اختيار الأعمدة *@
                         <button type="button"
-                                class="btn btn-erp btn-erp-secondary btn-erp-lg"
+                                class="btn btn-sm rounded text-start"
+                                style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;"
                                 data-bs-toggle="modal"
                                 data-bs-target="#columnsModalProducts">
-                            اختيار الأعمدة
+                            <span style="color: #667eea; margin-left: 0.5rem;">⚙️</span>اختيار الأعمدة
                         </button>
 
                         @* فورم حذف المحدد *@
@@ -456,8 +412,9 @@
                             <input type="hidden" name="selectedIds" id="selectedIdsInput" />
                             <button type="button"
                                     id="btnDeleteSelected"
-                                    class="btn btn-erp btn-erp-danger btn-erp-lg">
-                                حذف المحدد
+                                    class="btn btn-sm rounded text-start"
+                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
+                                <span style="color: #dc3545; margin-left: 0.5rem;">🗑️</span>حذف المحدد
                             </button>
                         </form>
 
@@ -469,16 +426,18 @@
                             @Html.AntiForgeryToken()
                             <button type="button"
                                     id="btnDeleteAll"
-                                    class="btn btn-erp btn-erp-danger btn-erp-lg">
-                                حذف جميع الأصناف
+                                    class="btn btn-sm rounded text-start"
+                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
+                                <span style="color: #dc3545; margin-left: 0.5rem;">🗑️</span>حذف جميع الأصناف
                             </button>
                         </form>
 
                         @* زر طباعة *@
                         <button type="button"
                                 id="btnPrint"
-                                class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                            🖨️ طباعة
+                                class="btn btn-sm rounded text-start"
+                                style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
+                            <span style="color: #667eea; margin-left: 0.5rem;">🖨️</span>طباعة
                         </button>
 
                         @* فورم التصدير *@
@@ -501,6 +460,20 @@
                                 <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
                             }
 
+                            @* ✅ الفلاتر المتراكبة *@
+                            @if (filterProductGroupId.HasValue)
+                            {
+                                <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(filterCompany))
+                            {
+                                <input type="hidden" name="filterCompany" value="@filterCompany" />
+                            }
+                            @if (!string.IsNullOrWhiteSpace(filterImported))
+                            {
+                                <input type="hidden" name="filterImported" value="@filterImported" />
+                            }
+
                             @if (ViewBag.CodeFrom != null)
                             {
                                 <input type="hidden" name="codeFrom" value="@ViewBag.CodeFrom" />
@@ -518,8 +491,9 @@
                             </select>
 
                             <button type="submit"
-                                    class="btn btn-erp btn-erp-primary btn-erp-sm flex-grow-1">
-                                تصدير
+                                    class="btn btn-sm rounded flex-grow-1 text-start"
+                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
+                                <span style="color: #28a745; margin-left: 0.5rem;">📊</span>تصدير
                             </button>
                         </form>
 
@@ -532,10 +506,10 @@
 
 </div> @* نهاية الـ container-fluid *@
 
-    @* ===== جدول الأصناف (هو الذى يتطبع) ===== *@
-    <div class="erp-table-wrapper mt-3 erp-print-area">
+    @* ===== جدول الأصناف (هو الذى يتطبع) - مع هيدر ثابت ===== *@
+    <div class="erp-table-wrapper mt-3 erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto;">
         <table id="productsTable" class="table table-striped table-hover erp-table erp-table-sortable erp-products-table">
-            <thead class="table-light">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #f8f9fa !important;">
                 <tr>
                     @* اختيار الصف *@
                     <th class="text-center no-print"
@@ -1024,77 +998,55 @@
             const mainCodeFrom = form.querySelector("#mainCodeFrom");    // متغير: هيدن من كود
             const mainCodeTo   = form.querySelector("#mainCodeTo");      // متغير: هيدن إلى كود
 
-            // --- أزرار "بحث" في الكروت 1..4 (كل كارت بحث نصي) ---
-            const searchButtons = form.querySelectorAll(".btn-search-card"); // متغير: كل أزرار البحث في الكروت
-            searchButtons.forEach(btn => {
-                btn.addEventListener("click", function () {
-                    const card = this.getAttribute("data-card");         // متغير: رقم الكارت
-                    const txt  = form.querySelector("#search" + card);   // متغير: تكست البحث الخاص بالكارت
-                    const sel  = form.querySelector("#searchBy" + card); // متغير: دروب داون عمود البحث للكارت
-
-                    if (txt && sel) {
-                        if (mainSearch)   mainSearch.value   = txt.value || "";
-                        if (mainSearchBy) mainSearchBy.value = sel.value || "all";
-                    }
-
-                    // اختيارياً: لو حابب تمسح الأكواد لو تركتها فاضية
-                    const codeFromCard = form.querySelector("#codeFromCard");
-                    const codeToCard   = form.querySelector("#codeToCard");
-                    if (codeFromCard && !codeFromCard.value && mainCodeFrom) mainCodeFrom.value = "";
-                    if (codeToCard   && !codeToCard.value   && mainCodeTo)   mainCodeTo.value   = "";
-                });
-            });
-
-            // --- كارت الأكواد: زر "بحث" ---
-            const btnCodeFilter = form.querySelector("#btnCodeFilter");  // زر بحث الأكواد
-            if (btnCodeFilter) {
-                btnCodeFilter.addEventListener("click", function () {
-                    const codeFromCard = form.querySelector("#codeFromCard"); // متغير: حقل من كود في الكارت
-                    const codeToCard   = form.querySelector("#codeToCard");   // متغير: حقل إلى كود في الكارت
-
-                    if (codeFromCard && mainCodeFrom) mainCodeFrom.value = codeFromCard.value || "";
-                    if (codeToCard   && mainCodeTo)   mainCodeTo.value   = codeToCard.value   || "";
-
-                    // لو حابب وقت فلترة الأكواد تمسح البحث النصي:
-                    // if (mainSearch) mainSearch.value = "";
-                });
-            }
-
-            // --- كارت الأكواد: زر "إلغاء" يمسح الأكواد ويعيد تحميل الصفحة ---
-            const btnCodeClear = form.querySelector("#btnCodeClear");    // زر إلغاء فلتر الأكواد
-            if (btnCodeClear) {
-                btnCodeClear.addEventListener("click", function () {
-                    const codeFromCard = form.querySelector("#codeFromCard");
-                    const codeToCard   = form.querySelector("#codeToCard");
-
-                    if (codeFromCard) codeFromCard.value = "";
-                    if (codeToCard)   codeToCard.value   = "";
-                    if (mainCodeFrom) mainCodeFrom.value = "";
-                    if (mainCodeTo)   mainCodeTo.value   = "";
-
-                    form.submit(); // يعيد تحميل الصفحة بدون فلتر الأكواد
-                });
-            }
-
-            // --- زر "بحث بكل الفلاتر" ---
-            const btnAllFilters = form.querySelector("#btnSearchAllFilters"); // زر البحث بكل الفلاتر
-            if (btnAllFilters) {
-                btnAllFilters.addEventListener("click", function () {
-                    // حالياً: نعتبره نفس بحث الكارت 1 + الأكواد (لو موجودة)
+            // --- زر البحث الرئيسي + البحث من الصناديق المتعددة ---
+            const btnSearchMain = form.querySelector("#btnSearchAllFilters");
+            if (btnSearchMain) {
+                btnSearchMain.addEventListener("click", function () {
+                    // البحث الرئيسي (صندوق 1) له الأولوية
                     const txt = form.querySelector("#search1");
                     const sel = form.querySelector("#searchBy1");
-
+                    
                     if (txt && sel && mainSearch && mainSearchBy) {
                         mainSearch.value   = txt.value || "";
                         mainSearchBy.value = sel.value || "all";
                     }
-
+                    
+                    // تحديث فلترة الأكواد
                     const codeFromCard = form.querySelector("#codeFromCard");
                     const codeToCard   = form.querySelector("#codeToCard");
                     if (codeFromCard && mainCodeFrom) mainCodeFrom.value = codeFromCard.value || "";
                     if (codeToCard   && mainCodeTo)   mainCodeTo.value   = codeToCard.value   || "";
                 });
             }
+            
+            // --- أزرار البحث الإضافية (2، 3، 4) - كل واحد يبني على السابق ---
+            const searchBoxes = [
+                { search: "#search2", searchBy: "#searchBy2", card: "2" },
+                { search: "#search3", searchBy: "#searchBy3", card: "3" },
+                { search: "#search4", searchBy: "#searchBy4", card: "4" }
+            ];
+            
+            searchBoxes.forEach((box, index) => {
+                const searchInput = form.querySelector(box.search);
+                const searchSelect = form.querySelector(box.searchBy);
+                
+                if (searchInput && searchSelect) {
+                    // عند Enter في أي صندوق بحث
+                    searchInput.addEventListener("keypress", function (e) {
+                        if (e.key === "Enter") {
+                            e.preventDefault();
+                            // نأخذ قيمة هذا الصندوق ونضعها في البحث الرئيسي
+                            if (mainSearch && mainSearchBy && this.value.trim()) {
+                                mainSearch.value = this.value.trim();
+                                mainSearchBy.value = searchSelect.value || "all";
+                                form.submit();
+                            }
+                        }
+                    });
+                }
+            });
+
+            // ✅ التصميم الجديد: كل شيء يعمل من زر "بحث" الواحد (#btnSearchAllFilters)
         })();
     </script>
 }

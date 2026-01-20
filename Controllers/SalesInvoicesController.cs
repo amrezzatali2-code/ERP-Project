@@ -1823,62 +1823,213 @@ namespace ERP.Controllers
         // دالة مشتركة لبناء استعلام فواتير المبيعات
         // (بحث + فلتر رقم من/إلى + ترتيب)
         // =========================
-        private IQueryable<SalesInvoice> BuildSalesInvoicesQuery(
+        /// <summary>
+        /// دالة الفلترة الموحدة بحسب نص البحث ونوع البحث وفلتر الكود وفلتر التاريخ.
+        /// </summary>
+        private static IQueryable<SalesInvoice> ApplyFilters(
+            IQueryable<SalesInvoice> query,
             string? search,
             string? searchBy,
-            string? sort,
-            string? dir,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            bool useDateRange,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string dateField
+        )
         {
-            // 1) الاستعلام الأساسي (قراءة فقط لتحسين الأداء)
-            IQueryable<SalesInvoice> q = _context.SalesInvoices.AsNoTracking();
+            searchBy ??= "id";
+            dateField ??= "SIDate";
 
-            // 2) فلتر رقم الفاتورة من/إلى (SIId)
+            // 1) فلتر نص البحث
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                search = search.Trim();
+                switch (searchBy.ToLower())
+                {
+                    case "id":
+                        if (int.TryParse(search, out var idVal))
+                        {
+                            query = query.Where(s => s.SIId == idVal);
+                        }
+                        else
+                        {
+                            query = query.Where(s => s.SIId.ToString().StartsWith(search));
+                        }
+                        break;
+
+                    // customer → CustomerId (هو العميل في المبيعات)
+                    case "customer":
+                        if (int.TryParse(search, out var custId))
+                        {
+                            query = query.Where(s => s.CustomerId == custId);
+                        }
+                        else
+                        {
+                            query = query.Where(s =>
+                                s.CustomerId.ToString().Contains(search)
+                            );
+                        }
+                        break;
+
+                    case "warehouse":
+                        if (int.TryParse(search, out var whId))
+                        {
+                            query = query.Where(s => s.WarehouseId == whId);
+                        }
+                        else
+                        {
+                            query = query.Where(s =>
+                                s.WarehouseId.ToString().Contains(search)
+                            );
+                        }
+                        break;
+
+                    case "date":
+                        if (DateTime.TryParse(search, out var dateVal))
+                        {
+                            var d = dateVal.Date;
+                            query = query.Where(s => s.SIDate.Date == d);
+                        }
+                        break;
+
+                    case "status":
+                        query = query.Where(s => s.Status.Contains(search));
+                        break;
+
+                    // بحث عام على أكثر من حقل
+                    default:
+                        query = query.Where(s =>
+                            s.SIId.ToString().Contains(search) ||
+                            s.CustomerId.ToString().Contains(search) ||
+                            s.WarehouseId.ToString().Contains(search) ||
+                            s.Status.Contains(search)
+                        );
+                        break;
+                }
+            }
+
+            // 2) فلتر من رقم / إلى رقم (SIId)
             if (fromCode.HasValue)
-                q = q.Where(x => x.SIId >= fromCode.Value);
+                query = query.Where(s => s.SIId >= fromCode.Value);
 
             if (toCode.HasValue)
-                q = q.Where(x => x.SIId <= toCode.Value);
+                query = query.Where(s => s.SIId <= toCode.Value);
 
-            // 3) الحقول النصية للبحث
-            var stringFields = new Dictionary<string, Expression<Func<SalesInvoice, string?>>>
+            // 3) فلتر التاريخ/الوقت
+            if (useDateRange && (fromDate.HasValue || toDate.HasValue))
             {
-                ["status"] = x => x.Status,                     // حالة الفاتورة
-                ["payment"] = x => x.PaymentMethod,              // طريقة الدفع
-                ["date"] = x => x.SIDate.ToString("yyyy-MM-dd") // بحث بالتاريخ كنص (اختياري)
-            };
+                bool useCreated = string.Equals(dateField, "CreatedAt", StringComparison.OrdinalIgnoreCase);
 
-            // 4) الحقول الرقمية للبحث
-            var intFields = new Dictionary<string, Expression<Func<SalesInvoice, int>>>
+                if (fromDate.HasValue)
+                {
+                    if (useCreated)
+                        query = query.Where(s => s.CreatedAt >= fromDate.Value);
+                    else
+                        query = query.Where(s => s.SIDate >= fromDate.Value);
+                }
+
+                if (toDate.HasValue)
+                {
+                    if (useCreated)
+                        query = query.Where(s => s.CreatedAt <= toDate.Value);
+                    else
+                        query = query.Where(s => s.SIDate <= toDate.Value);
+                }
+            }
+
+            return query;
+        }
+
+        /// <summary>
+        /// دالة الترتيب الموحدة بحسب اسم العمود المنطقي القادم من الواجهة.
+        /// </summary>
+        private static IQueryable<SalesInvoice> ApplySort(
+            IQueryable<SalesInvoice> query,
+            string? sort,
+            bool desc
+        )
+        {
+            sort = (sort ?? "SIDate").ToLower();
+
+            switch (sort)
             {
-                ["id"] = x => x.SIId,         // رقم الفاتورة
-                ["customer"] = x => x.CustomerId,   // كود العميل
-                ["warehouse"] = x => x.WarehouseId   // كود المخزن
-            };
+                case "id":
+                    query = desc
+                        ? query.OrderByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.SIId);
+                    break;
 
-            // 5) حقول الترتيب — نفس أسماء الأعمدة في الواجهة
-            var orderFields = new Dictionary<string, Expression<Func<SalesInvoice, object>>>
-            {
-                ["date"] = x => x.SIDate,       // تاريخ الفاتورة
-                ["id"] = x => x.SIId,         // رقم الفاتورة
-                ["time"] = x => x.SITime!,      // وقت الفاتورة
-                ["customer"] = x => x.CustomerId,
-                ["warehouse"] = x => x.WarehouseId,
-                ["net"] = x => x.NetTotal,
-                ["status"] = x => x.Status!,
-                ["posted"] = x => x.IsPosted      // مرحّل أم لا
-            };
+                case "date":
+                case "sidate":
+                    query = desc
+                        ? query.OrderByDescending(s => s.SIDate).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.SIDate).ThenBy(s => s.SIId);
+                    break;
 
-            // 6) تطبيق البحث + الترتيب عن طريق الإكستنشن الموحّد
-            q = q.ApplySearchSort(
-                search, searchBy,
-                sort, dir,
-                stringFields, intFields, orderFields,
-                defaultSearchBy: "all",
-                defaultSortBy: "date");
+                case "time":
+                    query = desc
+                        ? query.OrderByDescending(s => s.SITime).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.SITime).ThenBy(s => s.SIId);
+                    break;
 
-            return q;
+                case "customer":
+                    query = desc
+                        ? query.OrderByDescending(s => s.CustomerId).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.CustomerId).ThenBy(s => s.SIId);
+                    break;
+
+                case "warehouse":
+                    query = desc
+                        ? query.OrderByDescending(s => s.WarehouseId).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.WarehouseId).ThenBy(s => s.SIId);
+                    break;
+
+                case "net":
+                    query = desc
+                        ? query.OrderByDescending(s => s.NetTotal).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.NetTotal).ThenBy(s => s.SIId);
+                    break;
+
+                case "status":
+                    query = desc
+                        ? query.OrderByDescending(s => s.Status).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.Status).ThenBy(s => s.SIId);
+                    break;
+
+                case "posted":
+                    query = desc
+                        ? query.OrderByDescending(s => s.IsPosted).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.IsPosted).ThenBy(s => s.SIId);
+                    break;
+
+                case "createdat":
+                    query = desc
+                        ? query.OrderByDescending(s => s.CreatedAt).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.CreatedAt).ThenBy(s => s.SIId);
+                    break;
+
+                default:
+                    // الترتيب الافتراضي: بتاريخ الفاتورة ثم رقم الفاتورة
+                    query = desc
+                        ? query.OrderByDescending(s => s.SIDate).ThenByDescending(s => s.SIId)
+                        : query.OrderBy(s => s.SIDate).ThenBy(s => s.SIId);
+                    break;
+            }
+
+            return query;
+        }
+
+        /// <summary>
+        /// دالة مساعدة لتحويل نص إلى int? بأمان.
+        /// ترجع null لو التحويل فشل.
+        /// </summary>
+        private static int? TryParseNullableInt(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                return null;
+
+            return int.TryParse(value, out var result) ? result : null;
         }
 
 
@@ -1996,14 +2147,76 @@ namespace ERP.Controllers
             // =========================================
             // 5) تجهيز نظام الأسهم (نفس نظام المشتريات)
             // - أنت قلت: نفس نظام الأسهم => نفس أسماء الـ ViewBag
-            // ⚠️ نفترض عندك دالة FillSalesInvoiceNavAsync جاهزة أو ستضيفها بنفس نمط المشتريات
             // =========================================
-          //  await FillSalesInvoiceNavAsync(invoice.SIId); // متغير: تجهيز First/Prev/Next/Last
+            await FillSalesInvoiceNavAsync(invoice.SIId); // متغير: تجهيز First/Prev/Next/Last
 
             // =========================================
             // 6) عرض View "Show"
             // =========================================
             return View("Show", invoice);
+        }
+
+        /// <summary>
+        /// دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر) لفاتورة المبيعات.
+        /// </summary>
+        private async Task FillSalesInvoiceNavAsync(int currentId)
+        {
+            // ==============================
+            // 1) أول وآخر فاتورة (Query واحد)
+            // ==============================
+            var minMax = await _context.SalesInvoices
+                .AsNoTracking()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    FirstId = g.Min(x => x.SIId),
+                    LastId = g.Max(x => x.SIId)
+                })
+                .FirstOrDefaultAsync();
+
+            // ==============================
+            // 2) السابقة/التالية
+            // ملاحظة مهمة:
+            // - لو currentId = 0 (فاتورة جديدة) => السابقة = آخر فاتورة / التالية = أول فاتورة
+            // ==============================
+            int? prevId = null; // متغير: رقم الفاتورة السابقة
+            int? nextId = null; // متغير: رقم الفاتورة التالية
+
+            if (currentId > 0)
+            {
+                // السابقة = أكبر رقم أقل من الحالي
+                prevId = await _context.SalesInvoices
+                    .AsNoTracking()
+                    .Where(x => x.SIId < currentId)
+                    .OrderByDescending(x => x.SIId)
+                    .Select(x => (int?)x.SIId)
+                    .FirstOrDefaultAsync();
+
+                // التالية = أصغر رقم أكبر من الحالي
+                nextId = await _context.SalesInvoices
+                    .AsNoTracking()
+                    .Where(x => x.SIId > currentId)
+                    .OrderBy(x => x.SIId)
+                    .Select(x => (int?)x.SIId)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                // ✅ فاتورة جديدة: نخلي الأسهم شغالة كبحث سريع
+                prevId = minMax?.LastId;   // السابق يأخذك لآخر فاتورة
+                nextId = minMax?.FirstId;  // التالي يأخذك لأول فاتورة
+            }
+
+            // ==============================
+            // 3) تعبئة ViewBag للـ View (بدون Null)
+            // ==============================
+            int firstId = minMax?.FirstId ?? 0;  // متغير: أول فاتورة
+            int lastId = minMax?.LastId ?? 0;  // متغير: آخر فاتورة
+
+            ViewBag.NavFirstId = firstId;
+            ViewBag.NavLastId = lastId;
+            ViewBag.NavPrevId = prevId ?? 0;
+            ViewBag.NavNextId = nextId ?? 0;
         }
 
 
@@ -2014,45 +2227,108 @@ namespace ERP.Controllers
         // Index — عرض قائمة فواتير البيع
         // =========================
         public async Task<IActionResult> Index(
-            string? search,              // نص البحث
-            string? searchBy = "all",    // all | id | customer | warehouse | status | date
-            string? sort = "date",       // date | id | time | customer | warehouse | net | status | posted
-            string? dir = "desc",        // asc | desc
-            int page = 1,
-            int pageSize = 50,
-            int? fromCode = null,        // فلتر رقم فاتورة من
-            int? toCode = null)          // فلتر رقم فاتورة إلى
+            string? search,                      // نص البحث
+            string? searchBy,                    // نوع البحث: id / customer / warehouse / date / status
+            string? sort,                        // عمود الترتيب: id / date / customer / warehouse / net / status / posted ...
+            string? dir,                         // اتجاه الترتيب: asc / desc
+            bool useDateRange = false,           // هل فلتر التاريخ مفعّل؟
+            DateTime? fromDate = null,           // من تاريخ/وقت
+            DateTime? toDate = null,             // إلى تاريخ/وقت
+            string? dateField = "SIDate",        // الحقل المستخدم في فلتر التاريخ (SIDate أو CreatedAt)
+            int? fromCode = null,                // من رقم فاتورة
+            int? toCode = null,                  // إلى رقم فاتورة
+            int page = 1,                        // رقم الصفحة
+            int pageSize = 25                    // حجم الصفحة
+        )
         {
-            // بناء الاستعلام الموحّد
-            var q = BuildSalesInvoicesQuery(search, searchBy, sort, dir, fromCode, toCode);
+            // قيم افتراضية لو مش جاية من الكويري
+            searchBy ??= "id";
+            sort ??= "SIDate";
+            dir ??= "desc";
+            dateField ??= "SIDate";
+
+            if (page < 1) page = 1;
+            if (pageSize <= 0) pageSize = 25;
+
+            // نبدأ بالاستعلام الأساسي بدون تنفيذ فعلي (IQueryable)
+            IQueryable<SalesInvoice> query = _context.SalesInvoices.AsNoTracking();
+
+            // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
+            int? codeFrom = Request.Query.ContainsKey("codeFrom")
+                ? TryParseNullableInt(Request.Query["codeFrom"])
+                : null;
+
+            int? codeTo = Request.Query.ContainsKey("codeTo")
+                ? TryParseNullableInt(Request.Query["codeTo"])
+                : null;
+
+            // نحدد القيمة النهائية لفلتر الأرقام
+            int? finalFromCode = fromCode ?? codeFrom;
+            int? finalToCode = toCode ?? codeTo;
+
+            // 1) تطبيق البحث + فلتر الكود + فلتر التاريخ
+            query = ApplyFilters(
+                query,
+                search,
+                searchBy,
+                finalFromCode,
+                finalToCode,
+                useDateRange,
+                fromDate,
+                toDate,
+                dateField
+            );
+
+            // 2) تطبيق الترتيب
+            bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            query = ApplySort(query, sort, sortDesc);
 
             // =========================================================
             // حساب إجمالي الصافي من نفس الاستعلام (بعد الفلاتر)
-            // ✅ مهم: لازم قبل الـ PagedResult علشان ما تتحسبش على الصفحة بس
+            // ✅ مهم: لازم قبل الـ Paging علشان ما تتحسبش على الصفحة بس
             // =========================================================
-            decimal totalNet = await q.SumAsync(si => (decimal?)si.NetTotal) ?? 0m;
+            decimal totalNet = await query.SumAsync(si => (decimal?)si.NetTotal) ?? 0m;
 
-            // التقسيم إلى صفحات
-            var model = await PagedResult<SalesInvoice>.CreateAsync(q, page, pageSize);
+            // 3) حساب العدد الكلي بعد الفلاتر
+            int totalCount = await query.CountAsync();
 
-            // تجهيز قيم الـ ViewBag للفلاتر والواجهة
-            ViewBag.Search = search ?? "";
-            ViewBag.SearchBy = searchBy ?? "all";
-            ViewBag.Sort = sort ?? "date";
-            ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
+            // 4) قراءة صفحة واحدة فقط (Skip/Take)
+            var items = await query
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
 
-            // أرقام من/إلى (نستخدم أكثر من اسم لتوافق الواجهة)
-            ViewBag.FromCode = fromCode;
-            ViewBag.ToCode = toCode;
-            ViewBag.CodeFrom = fromCode;
-            ViewBag.CodeTo = toCode;
+            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
-            // حقل التاريخ المستخدم في الفلترة (ثابت هنا SIDate)
-            ViewBag.DateField = "SIDate";
+            // 5) تجهيز الموديل الخاص بالتقسيم PagedResult
+            var model = new PagedResult<SalesInvoice>
+            {
+                Items = items,
+                PageNumber = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                HasPrevious = page > 1,
+                HasNext = page < totalPages,
+                Search = search,
+                SortColumn = sort,
+                SortDescending = sortDesc,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
 
-            ViewBag.Page = page;
-            ViewBag.PageSize = pageSize;
-            ViewBag.TotalCount = model.TotalCount;
+            // 6) تمرير قيم للـ ViewBag علشان الواجهة تحفظ الحالة الحالية
+            ViewBag.Search = search;
+            ViewBag.SearchBy = searchBy;
+            ViewBag.Sort = sort;
+            ViewBag.Dir = sortDesc ? "desc" : "asc";
+            ViewBag.DateField = dateField;
+
+            ViewBag.FromCode = finalFromCode;
+            ViewBag.ToCode = finalToCode;
+            ViewBag.CodeFrom = finalFromCode;
+            ViewBag.CodeTo = finalToCode;
 
             // إجمالي الصافي
             ViewBag.TotalNet = totalNet;
@@ -2282,16 +2558,37 @@ namespace ERP.Controllers
             string? dir,
             int? codeFrom,
             int? codeTo,
-            bool useDateRange = false,       // موجود للتماشي مع الفورم، حالياً لا نستخدمه
+            bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
+            string? dateField = "SIDate",
             string? format = "excel")        // excel | csv (حاليًا الاثنين CSV)
         {
+            // قيم افتراضية
+            searchBy ??= "id";
+            sort ??= "SIDate";
+            dir ??= "desc";
+            dateField ??= "SIDate";
+
             // نعيد استخدام نفس منطق الفلترة والترتيب
             int? fromCode = codeFrom;
             int? toCode = codeTo;
 
-            var q = BuildSalesInvoicesQuery(search, searchBy, sort, dir, fromCode, toCode);
+            IQueryable<SalesInvoice> q = _context.SalesInvoices.AsNoTracking();
+
+            // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
+            int? finalCodeFrom = Request.Query.ContainsKey("codeFrom")
+                ? TryParseNullableInt(Request.Query["codeFrom"])
+                : fromCode;
+
+            int? finalCodeTo = Request.Query.ContainsKey("codeTo")
+                ? TryParseNullableInt(Request.Query["codeTo"])
+                : toCode;
+
+            // تطبيق الفلاتر والترتيب
+            q = ApplyFilters(q, search, searchBy, finalCodeFrom, finalCodeTo, useDateRange, fromDate, toDate, dateField);
+            bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            q = ApplySort(q, sort, sortDesc);
 
             var list = await q.ToListAsync();
 
