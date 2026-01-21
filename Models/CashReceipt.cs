@@ -17,10 +17,10 @@ namespace ERP.Models
         public int CashReceiptId { get; set; }   // متغير: رقم إذن الاستلام (PK داخلي)
 
         // ===== بيانات المستند الأساسية =====
-        [Required]                                // تعليق: رقم المستند مطلوب
+        // ✅ ReceiptNumber سيتم توليده تلقائياً من CashReceiptId بعد الحفظ
         [StringLength(50)]                        // تعليق: أقصى طول لرقم المستند 50 حرفًا
         [Display(Name = "رقم المستند")]
-        public string ReceiptNumber { get; set; } = string.Empty;   // متغير: رقم المستند الظاهر للمستخدم
+        public string ReceiptNumber { get; set; } = string.Empty;   // متغير: رقم المستند الظاهر للمستخدم (يتم توليده من CashReceiptId)
 
         [Required]                                // تعليق: تاريخ الإذن مطلوب
         [Display(Name = "تاريخ الإذن")]
@@ -34,15 +34,15 @@ namespace ERP.Models
         public virtual Customer? Customer { get; set; }  // متغير: كائن العميل/الطرف المرتبط بالإذن
 
         // ===== الحسابات المحاسبية =====
+        // ✅ ملاحظة: لا نستخدم [Required] على int لأن int لا يمكن أن تكون null
+        // التحقق يتم يدوياً في Controller (التحقق من > 0)
 
-        [Required]
         [Display(Name = "حساب الصندوق / البنك")]
         public int CashAccountId { get; set; }      // متغير: حساب النقدية (صندوق/بنك) الذي يستلم الفلوس
 
         [ForeignKey(nameof(CashAccountId))]
         public virtual Account CashAccount { get; set; } = null!;  // متغير: كائن حساب الصندوق/البنك
 
-        [Required]
         [Display(Name = "حساب الطرف")]
         public int CounterAccountId { get; set; }   // متغير: الحساب المقابل (حساب العميل/المورد/طرف آخر)
 

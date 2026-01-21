@@ -43,12 +43,19 @@
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <!-- رقم المستند (تلقائي - ReadOnly) -->
+                    <!-- رقم المستند (CashReceiptId - تلقائي - ReadOnly) -->
                     <div class="col-md-4">
-                        <label asp-for="ReceiptNumber" class="form-label"></label>
-                        <input asp-for="ReceiptNumber" class="form-control" readonly placeholder="سيتم توليده تلقائياً" />
-                        <small class="text-muted">سيتم توليد الرقم تلقائياً عند الحفظ</small>
-                        @* لا نعرض رسالة التحقق لأنه سيتم توليده تلقائياً *@
+                        <label class="form-label">رقم المستند</label>
+                        @if (Model.CashReceiptId > 0)
+                        {
+                            <input type="text" class="form-control" value="@Model.CashReceiptId" readonly />
+                            <small class="text-muted">رقم المستند: @Model.CashReceiptId</small>
+                        }
+                        else
+                        {
+                            <input type="text" class="form-control" value="" readonly placeholder="سيتم توليده تلقائياً عند الحفظ" />
+                            <small class="text-muted">سيتم توليد رقم المستند تلقائياً عند الحفظ (CashReceiptId)</small>
+                        }
                     </div>
 
                     <!-- التاريخ -->
@@ -70,35 +77,23 @@
                         @if (lockCustomer)
                         {
                             <select asp-for="CustomerId" 
+                                    asp-items="ViewBag.CustomerId"
                                     class="form-select" 
                                     id="customerSelect"
                                     disabled
                                     required>
                                 <option value="">-- اختر العميل --</option>
-                                @if (ViewBag.CustomerId is SelectList customerList)
-                                {
-                                    @foreach (var item in customerList)
-                                    {
-                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
-                                    }
-                                }
                             </select>
                             <input type="hidden" asp-for="CustomerId" />
                         }
                         else
                         {
                             <select asp-for="CustomerId" 
+                                    asp-items="ViewBag.CustomerId"
                                     class="form-select" 
                                     id="customerSelect"
                                     required>
                                 <option value="">-- اختر العميل --</option>
-                                @if (ViewBag.CustomerId is SelectList customerList)
-                                {
-                                    @foreach (var item in customerList)
-                                    {
-                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
-                                    }
-                                }
                             </select>
                         }
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
@@ -107,16 +102,15 @@
                     <!-- حساب الصندوق/البنك (يتم تعبئته تلقائياً) -->
                     <div class="col-md-4">
                         <label asp-for="CashAccountId" class="form-label"></label>
-                        <select asp-for="CashAccountId" class="form-select" required>
+                        @* ✅ دائماً نستخدم select عادي مع asp-for لضمان إرسال القيمة *@
+                        <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId" name="CashAccountId">
                             <option value="">-- اختر حساب الصندوق/البنك --</option>
-                            @if (ViewBag.CashAccountId is SelectList cashAccountList)
-                            {
-                                @foreach (var item in cashAccountList)
-                                {
-                                    <option value="@item.Value" selected="@item.Selected">@item.Text</option>
-                                }
-                            }
                         </select>
+                        @* ✅ Hidden input احتياطي لضمان إرسال القيمة *@
+                        @if (Model.CashAccountId > 0)
+                        {
+                            <input type="hidden" name="CashAccountId" value="@Model.CashAccountId" id="CashAccountIdHidden" />
+                        }
                         <small class="text-muted">سيتم اختيار حساب الخزينة تلقائياً</small>
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
@@ -126,37 +120,31 @@
                         <label asp-for="CounterAccountId" class="form-label"></label>
                         @if (lockCustomer)
                         {
+                            @* ✅ العميل مقفل - نستخدم select disabled مع hidden input *@
                             <select asp-for="CounterAccountId" 
+                                    asp-items="ViewBag.CounterAccountId"
                                     class="form-select" 
                                     id="counterAccountSelect"
-                                    disabled
-                                    required>
+                                    disabled>
                                 <option value="">-- سيتم تعبئته تلقائياً --</option>
-                                @if (ViewBag.CounterAccountId is SelectList counterAccountList)
-                                {
-                                    @foreach (var item in counterAccountList)
-                                    {
-                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
-                                    }
-                                }
                             </select>
-                            <input type="hidden" asp-for="CounterAccountId" />
+                            <input type="hidden" name="CounterAccountId" value="@Model.CounterAccountId" id="CounterAccountIdHidden" />
                         }
                         else
                         {
+                            @* ✅ select عادي - القيمة ستُحدد تلقائياً من Model أو من JavaScript *@
                             <select asp-for="CounterAccountId" 
+                                    asp-items="ViewBag.CounterAccountId"
                                     class="form-select" 
                                     id="counterAccountSelect"
-                                    required>
+                                    name="CounterAccountId">
                                 <option value="">-- سيتم تعبئته تلقائياً --</option>
-                                @if (ViewBag.CounterAccountId is SelectList counterAccountList)
-                                {
-                                    @foreach (var item in counterAccountList)
-                                    {
-                                        <option value="@item.Value" selected="@item.Selected">@item.Text</option>
-                                    }
-                                }
                             </select>
+                            @* ✅ Hidden input احتياطي لضمان إرسال القيمة *@
+                            @if (Model.CounterAccountId > 0)
+                            {
+                                <input type="hidden" name="CounterAccountId" value="@Model.CounterAccountId" id="CounterAccountIdHidden" />
+                            }
                         }
                         <span asp-validation-for="CounterAccountId" class="text-danger"></span>
                     </div>
@@ -191,6 +179,27 @@
     }
     <script>
         $(document).ready(function() {
+            // ✅ التأكد من تحديد القيم المحددة مسبقاً عند تحميل الصفحة
+            @if (Model.CashAccountId > 0)
+            {
+                <text>
+                var cashAccountId = '@Model.CashAccountId';
+                $('#CashAccountId').val(cashAccountId);
+                // تحديث hidden input أيضاً
+                $('#CashAccountIdHidden').val(cashAccountId);
+                </text>
+            }
+            
+            @if (Model.CounterAccountId > 0)
+            {
+                <text>
+                var counterAccountId = '@Model.CounterAccountId';
+                $('#counterAccountSelect').val(counterAccountId);
+                // تحديث hidden input أيضاً
+                $('#CounterAccountIdHidden').val(counterAccountId);
+                </text>
+            }
+            
             // ✅ عند اختيار العميل، نجلب حسابه ونملأ حساب الطرف تلقائياً
             $('#customerSelect').on('change', function() {
                 var customerId = $(this).val();
@@ -198,6 +207,7 @@
                 
                 if (!customerId || customerId === '') {
                     counterAccountSelect.val('');
+                    $('#CounterAccountIdHidden').val('');
                     return;
                 }
 
@@ -209,8 +219,11 @@
                     success: function(response) {
                         if (response && response.success && response.accountId) {
                             counterAccountSelect.val(response.accountId);
+                            // تحديث hidden input أيضاً
+                            $('#CounterAccountIdHidden').val(response.accountId);
                         } else {
                             counterAccountSelect.val('');
+                            $('#CounterAccountIdHidden').val('');
                             if (response && response.message) {
                                 alert(response.message);
                             } else {
@@ -220,9 +233,43 @@
                     },
                     error: function() {
                         counterAccountSelect.val('');
+                        $('#CounterAccountIdHidden').val('');
                         alert('حدث خطأ أثناء جلب حساب العميل.');
                     }
                 });
+            });
+            
+            // ✅ التأكد من إرسال القيم قبل إرسال النموذج
+            $('#receiptForm').on('submit', function(e) {
+                var cashAccountId = $('#CashAccountId').val();
+                var counterAccountId = $('#counterAccountSelect').val();
+                
+                // إذا كانت القيم موجودة في select لكن hidden input غير موجود أو فارغ، نضيفهما
+                if (cashAccountId && cashAccountId !== '') {
+                    if ($('#CashAccountIdHidden').length === 0) {
+                        $('<input>').attr({
+                            type: 'hidden',
+                            name: 'CashAccountId',
+                            value: cashAccountId,
+                            id: 'CashAccountIdHidden'
+                        }).appendTo('#receiptForm');
+                    } else {
+                        $('#CashAccountIdHidden').val(cashAccountId);
+                    }
+                }
+                
+                if (counterAccountId && counterAccountId !== '') {
+                    if ($('#CounterAccountIdHidden').length === 0) {
+                        $('<input>').attr({
+                            type: 'hidden',
+                            name: 'CounterAccountId',
+                            value: counterAccountId,
+                            id: 'CounterAccountIdHidden'
+                        }).appendTo('#receiptForm');
+                    } else {
+                        $('#CounterAccountIdHidden').val(counterAccountId);
+                    }
+                }
             });
         });
     </script>

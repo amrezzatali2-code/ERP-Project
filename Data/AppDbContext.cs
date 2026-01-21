@@ -568,8 +568,8 @@ namespace ERP.Data
                 entity.HasKey(e => e.CashReceiptId);
 
                 entity.Property(e => e.ReceiptNumber)
-                      .IsRequired()
                       .HasMaxLength(50);
+                // ✅ ملاحظة: ReceiptNumber لا يكون Required لأنه سيتم توليده تلقائياً من CashReceiptId
 
                 entity.Property(e => e.Description)
                       .HasMaxLength(250);

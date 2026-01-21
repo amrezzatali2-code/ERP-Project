@@ -66,34 +66,44 @@ namespace ERP.Controllers
                 Selected = customerId.HasValue && c.CustomerId == customerId.Value
             }).ToList();
 
-            ViewData["CustomerId"] = new SelectList(customerItems, "Value", "Text", customerId);
+            ViewData["CustomerId"] = new SelectList(customerItems, "Value", "Text", customerId?.ToString()); // ✅ تحويل إلى string
             ViewData["CustomersWithAccounts"] = customers.ToDictionary(c => c.CustomerId, c => c.AccountId);
 
             // حسابات نشطة للصندوق / البنك
-            ViewData["CashAccountId"] = new SelectList(
-                await _context.Accounts
-                        .AsNoTracking()
-                        .Where(a => a.IsActive)
-                        .OrderBy(a => a.AccountName)
-                        .Select(a => new { a.AccountId, a.AccountName })
-                        .ToListAsync(),
-                "AccountId",
-                "AccountName",
-                cashAccountId
-            );
+            var cashAccounts = await _context.Accounts
+                    .AsNoTracking()
+                    .Where(a => a.IsActive)
+                    .OrderBy(a => a.AccountName)
+                    .Select(a => new { a.AccountId, a.AccountName })
+                    .ToListAsync();
+            
+            // ✅ إنشاء SelectList باستخدام SelectListItem مباشرة
+            var cashAccountItems = cashAccounts.Select(a => new SelectListItem
+            {
+                Value = a.AccountId.ToString(),
+                Text = a.AccountName ?? "",
+                Selected = cashAccountId.HasValue && cashAccountId.Value == a.AccountId
+            }).ToList();
+            
+            ViewData["CashAccountId"] = new SelectList(cashAccountItems, "Value", "Text", cashAccountId);
 
             // حسابات نشطة للطرف المقابل
-            ViewData["CounterAccountId"] = new SelectList(
-                await _context.Accounts
-                        .AsNoTracking()
-                        .Where(a => a.IsActive)
-                        .OrderBy(a => a.AccountName)
-                        .Select(a => new { a.AccountId, a.AccountName })
-                        .ToListAsync(),
-                "AccountId",
-                "AccountName",
-                counterAccountId
-            );
+            var counterAccounts = await _context.Accounts
+                    .AsNoTracking()
+                    .Where(a => a.IsActive)
+                    .OrderBy(a => a.AccountName)
+                    .Select(a => new { a.AccountId, a.AccountName })
+                    .ToListAsync();
+            
+            // ✅ إنشاء SelectList باستخدام SelectListItem مباشرة
+            var counterAccountItems = counterAccounts.Select(a => new SelectListItem
+            {
+                Value = a.AccountId.ToString(),
+                Text = a.AccountName ?? "",
+                Selected = counterAccountId.HasValue && counterAccountId.Value == a.AccountId
+            }).ToList();
+            
+            ViewData["CounterAccountId"] = new SelectList(counterAccountItems, "Value", "Text", counterAccountId);
         }
 
         // دالة بديلة بدون async (للاستخدام في Post بدون await)
@@ -395,7 +405,7 @@ namespace ERP.Controllers
                 }
             }
 
-            await PopulateDropdownsAsync(model.CustomerId, model.CashAccountId > 0 ? model.CashAccountId : null, model.CounterAccountId);
+            await PopulateDropdownsAsync(model.CustomerId, model.CashAccountId > 0 ? (int?)model.CashAccountId : null, model.CounterAccountId > 0 ? (int?)model.CounterAccountId : null);
             return View(model);
         }
 
@@ -408,15 +418,25 @@ namespace ERP.Controllers
             // ✅ تجاهل خطأ التحقق لـ ReceiptNumber لأنه سيتم توليده تلقائياً
             ModelState.Remove(nameof(CashReceipt.ReceiptNumber));
             
-            // ✅ التحقق من الحقول المطلوبة يدوياً
+            // ✅ تسجيل القيم الواردة للتأكد من وصولها (للـ debugging)
+            // يمكن إزالة هذا لاحقاً بعد حل المشكلة
+            // System.Diagnostics.Debug.WriteLine($"CashAccountId: {cashReceipt.CashAccountId}, CounterAccountId: {cashReceipt.CounterAccountId}");
+            
+            // ✅ التحقق من الحقول المطلوبة يدوياً (بعد إزالة [Required] من Model)
+            // ملاحظة: int لا يمكن أن تكون null، لذلك القيمة الافتراضية هي 0
+            // إذا كانت القيمة 0، فهذا يعني أنه لم يتم اختيار حساب
+            
+            // ✅ تسجيل القيم المرسلة للتحقق
+            System.Diagnostics.Debug.WriteLine($"DEBUG: CashAccountId={cashReceipt.CashAccountId}, CounterAccountId={cashReceipt.CounterAccountId}, Amount={cashReceipt.Amount}");
+            
             if (cashReceipt.CashAccountId <= 0)
             {
-                ModelState.AddModelError(nameof(CashReceipt.CashAccountId), "يجب اختيار حساب الصندوق/البنك.");
+                ModelState.AddModelError(nameof(CashReceipt.CashAccountId), $"يجب اختيار حساب الصندوق/البنك. (القيمة المرسلة: {cashReceipt.CashAccountId})");
             }
             
             if (cashReceipt.CounterAccountId <= 0)
             {
-                ModelState.AddModelError(nameof(CashReceipt.CounterAccountId), "يجب اختيار حساب الطرف.");
+                ModelState.AddModelError(nameof(CashReceipt.CounterAccountId), $"يجب اختيار حساب الطرف. (القيمة المرسلة: {cashReceipt.CounterAccountId})");
             }
             
             if (cashReceipt.Amount <= 0)
@@ -435,16 +455,21 @@ namespace ERP.Controllers
                     cashReceipt.CreatedBy = User?.Identity?.Name ?? "SYSTEM";
                     cashReceipt.Status = "غير مرحلة";
                     cashReceipt.IsPosted = false;
-                    cashReceipt.ReceiptNumber = ""; // سيتم تعبئته بعد الحفظ
+                    // ✅ ReceiptNumber سيتم توليده من CashReceiptId بعد الحفظ
 
                     // =========================================================
-                    // 2) حفظ الهيدر أولاً (للحصول على CashReceiptId)
+                    // 2) حفظ الهيدر (سيتم توليد CashReceiptId تلقائياً كـ Identity)
+                    // ✅ هنا يتم توليد CashReceiptId تلقائياً من قاعدة البيانات
                     // =========================================================
                     _context.Add(cashReceipt);
                     await _context.SaveChangesAsync();
+                    
+                    // ✅ الآن CashReceiptId موجود بعد الحفظ
+                    // إذا تم إلغاء الإذن بعد هذه النقطة، سيتم حفظه في قاعدة البيانات
+                    // لكن يمكن حذفه إذا فشل الترحيل (موجود في catch block)
 
                     // =========================================================
-                    // 3) توليد رقم المستند تلقائيًا (بعد الحفظ)
+                    // 3) توليد رقم المستند من CashReceiptId
                     // =========================================================
                     cashReceipt.ReceiptNumber = cashReceipt.CashReceiptId.ToString();
                     await _context.SaveChangesAsync();
