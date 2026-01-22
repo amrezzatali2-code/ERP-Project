@@ -1333,12 +1333,14 @@ private async Task PopulateDropDownsAsync(
             // ==============================
             // 1) تجهيز موديل "طلب شراء" جديد بالقيم الافتراضية
             // ==============================
+            var defaultWarehouseId = await GetDefaultWarehouseIdAsync();
+
             var model = new PurchaseRequest
             {
                 PRId = 0,                        // متغير: طلب جديد (لم يتم الحفظ بعد)
                 PRDate = DateTime.Today,         // متغير: تاريخ الطلب الافتراضي = اليوم
                 NeedByDate = null,               // متغير: تاريخ الاحتياج (المستخدم يحدده)
-                WarehouseId = 0,                 // متغير: المخزن (المستخدم يختاره)
+                WarehouseId = defaultWarehouseId > 0 ? defaultWarehouseId : 0,  // متغير: افتراضي = مخزن الدواء (مثل فاتورة المشتريات)
                 CustomerId = 0,                  // متغير: المورد (المستخدم يختاره)
 
                 // إجماليات الطلب (مصدرها سطور الطلب عبر DocumentTotalsService)
@@ -1512,9 +1514,18 @@ private async Task PopulateDropDownsAsync(
         public async Task<IActionResult> Edit(int id)
         {
             // =========================
-            // 1) تحميل طلب الشراء
+            // 1) تحميل طلب الشراء + السطور + المورد (مثل Show)
             // =========================
             var request = await _context.PurchaseRequests
+                .Include(p => p.Customer)
+                    .ThenInclude(c => c.Governorate)
+                .Include(p => p.Customer)
+                    .ThenInclude(c => c.District)
+                .Include(p => p.Customer)
+                    .ThenInclude(c => c.Area)
+                .Include(p => p.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.PRId == id);
 
             if (request == null)
@@ -1529,6 +1540,16 @@ private async Task PopulateDropDownsAsync(
             // 3) تجهيز الأصناف للأوتوكومبليت (سطور الطلب)
             // =========================
             await LoadProductsForAutoCompleteAsync();
+
+            // =========================
+            // 3.1) التنقل + القفل (مثل Show)
+            // =========================
+            await FillPurchaseRequestNavAsync(request.PRId);
+            ViewBag.IsLocked =
+                request.IsConverted
+                || string.Equals(request.Status, "Converted", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(request.Status, "Closed", StringComparison.OrdinalIgnoreCase);
+            ViewBag.Frame = 1;
 
             // =========================
             // 4) تسجيل لوج فتح شاشة التعديل
@@ -1835,13 +1856,14 @@ private async Task PopulateDropDownsAsync(
                 .GroupBy(_ => 1)
                 .Select(g => new
                 {
-                    FirstId = g.Min(x => x.PRId), // متغير: أول رقم طلب شراء
-                    LastId = g.Max(x => x.PRId)   // متغير: آخر رقم طلب شراء
+                    FirstId = g.Min(x => x.PRId),
+                    LastId = g.Max(x => x.PRId)
                 })
                 .FirstOrDefaultAsync();
 
             // ==============================
             // 2) السابقة/التالية
+            // ملاحظة مهمة:
             // - لو currentId = 0 (طلب جديد) => السابقة = آخر طلب / التالية = أول طلب
             // ==============================
             int? prevId = null; // متغير: رقم طلب الشراء السابق
@@ -1867,7 +1889,7 @@ private async Task PopulateDropDownsAsync(
             }
             else
             {
-                // ✅ طلب جديد: نخلي الأسهم شغالة كتنقل سريع
+                // ✅ طلب جديد: نخلي الأسهم شغالة كبحث سريع
                 prevId = minMax?.LastId;   // السابق يأخذك لآخر طلب شراء
                 nextId = minMax?.FirstId;  // التالي يأخذك لأول طلب شراء
             }
@@ -1883,6 +1905,7 @@ private async Task PopulateDropDownsAsync(
             ViewBag.NavPrevId = prevId ?? 0;
             ViewBag.NavNextId = nextId ?? 0;
         }
+
 
 
 
@@ -2208,6 +2231,13 @@ private async Task PopulateDropDownsAsync(
             // ملاحظة: لا يوجد RefPRId في موديل PurchaseRequest الحالي
         }
 
+      
+        
+        
+        
+        
+        
+        
         // =========================================================
         // SaveHeader — حفظ هيدر طلب الشراء (Create / Update)
         // دورها في طلب الشراء:
@@ -2248,6 +2278,7 @@ private async Task PopulateDropDownsAsync(
                     Status = "غير محول",            // متغير: حالة طلب الشراء (افتراضي)
                     IsConverted = false,            // متغير: لم يتم تحويله بعد لفاتورة شراء
 
+                    RequestedBy = userName,         // متغير: طالب الطلب (نفس المنشئ عند الحفظ من الواجهة)
                     CreatedAt = now,                // متغير: وقت الإنشاء
                     CreatedBy = userName,           // متغير: اسم المنشئ
                     UpdatedAt = now                 // متغير: آخر تعديل (نفس وقت الإنشاء)
@@ -2256,14 +2287,20 @@ private async Task PopulateDropDownsAsync(
                 _context.PurchaseRequests.Add(pr);
                 await _context.SaveChangesAsync();
 
-                // ✅ نفس شكل JSON القديم قدر الإمكان لتفادي كسر JS عندك
+                var reqDate = pr.PRDate.ToString("yyyy/MM/dd");
+                var reqTime = pr.CreatedAt.ToString("HH:mm");
+                var reqNum = pr.PRId.ToString();
+                // ✅ نفس شكل JSON القديم + invoiceNumber/Date/Time لأن الـ JS في الـ View يتوقعهما
                 return Json(new
                 {
                     success = true,
                     PRId = pr.PRId,
-                    requestNumber = pr.PRId.ToString(),                 // متغير: رقم الطلب
-                    requestDate = pr.PRDate.ToString("yyyy/MM/dd"),     // متغير: تاريخ الطلب
-                    requestTime = pr.CreatedAt.ToString("HH:mm"),       // متغير: وقت الإنشاء
+                    requestNumber = reqNum,
+                    requestDate = reqDate,
+                    requestTime = reqTime,
+                    invoiceNumber = reqNum,
+                    invoiceDate = reqDate,
+                    invoiceTime = reqTime,
                     status = pr.Status,
                     isConverted = pr.IsConverted,
                     createdBy = pr.CreatedBy
@@ -2924,61 +2961,177 @@ private async Task PopulateDropDownsAsync(
 
                 // ================================================================
                 // 6) نسخ سطور طلب الشراء إلى سطور فاتورة المشتريات
-                //    - PRLine لا يحتوي على Batch/Expiry/Discount شراء
-                //    - طلب الشراء يحتوي على QtyRequested + ExpectedCost فقط
-                //    - PriceRetail نأخذه من جدول الأصناف Products وقت التحويل
+                //    - ننسخ PriceRetail و PurchaseDiscountPct من PRLine ليتطابق إجمالي الفاتورة مع الطلب
+                //    - PriceRetail: من السطر إن وُجد، وإلا من الصنف
                 // ================================================================
                 var prLines = await _context.PRLines
-                    .AsNoTracking()                          // تعليق: قراءة فقط
-                    .Include(l => l.Product)                 // تعليق: لتحميل سعر الجمهور من الصنف
-                    .Where(l => l.PRId == request.PRId)      // متغير: رقم طلب الشراء
-                    .OrderBy(l => l.LineNo)                  // تعليق: نفس ترتيب السطور
+                    .AsNoTracking()
+                    .Include(l => l.Product)
+                    .Where(l => l.PRId == request.PRId)
+                    .OrderBy(l => l.LineNo)
                     .ToListAsync();
 
                 foreach (var l in prLines)
                 {
+                    var priceRetail = l.PriceRetail > 0 ? l.PriceRetail : (l.Product?.PriceRetail ?? 0m);
+                    
+                    // حساب تكلفة الوحدة المحسوبة
+                    var lineValue = l.QtyRequested * priceRetail * (1m - (l.PurchaseDiscountPct / 100m));
+                    var computedUnitCost = (l.QtyRequested > 0) ? (lineValue / l.QtyRequested) : 0m;
+                    computedUnitCost = Math.Round(computedUnitCost, 2);
+                    
+                    // معالجة التشغيلة والصلاحية من PRLine (إن وجدت)
+                    var batchNo = string.IsNullOrWhiteSpace(l.PreferredBatchNo) ? null : l.PreferredBatchNo.Trim();
+                    DateTime? expDate = l.PreferredExpiry?.Date;
+                    
                     var newLine = new PILine
                     {
-                        PIId = pi.PIId,                      // متغير: رقم فاتورة المشتريات الجديدة
-                        LineNo = l.LineNo,                   // متغير: رقم السطر (نفس سطر الطلب)
-                        ProdId = l.ProdId,                   // متغير: كود الصنف
-
-                        // ✅ الكمية: في طلب الشراء اسمها QtyRequested
-                        Qty = l.QtyRequested,                // متغير: الكمية المطلوبة
-
-                        // ✅ التكلفة/الوحدة: في طلب الشراء اسمها ExpectedCost (تكلفة متوقعة)
-                        // نضعها كقيمة مبدئية في الفاتورة (وقابل للتعديل لاحقًا)
-                        UnitCost = l.ExpectedCost,           // متغير: تكلفة الوحدة (افتراضيًا من المتوقع)
-
-                        // ✅ سعر الجمهور: غير موجود في PRLine، فنقرأه من الصنف نفسه
-                        PriceRetail = l.Product != null ? l.Product.PriceRetail : 0m,  // متغير: سعر الجمهور
-
-                        // ✅ خصم الشراء: غير موجود في طلب الشراء => نبدأه بصفر
-                        PurchaseDiscountPct = 0m,            // متغير: خصم الشراء %
-
-                        // ✅ التشغيلة/الصلاحية: لا تُحدد في طلب الشراء
-                        BatchNo = null,                      // متغير: التشغيلة (يُحدد لاحقًا في الفاتورة)
-                        Expiry = null                        // متغير: الصلاحية (تُحدد لاحقًا في الفاتورة)
+                        PIId = pi.PIId,
+                        LineNo = l.LineNo,
+                        ProdId = l.ProdId,
+                        Qty = l.QtyRequested,
+                        UnitCost = computedUnitCost,
+                        PriceRetail = priceRetail,
+                        PurchaseDiscountPct = l.PurchaseDiscountPct,
+                        BatchNo = batchNo,
+                        Expiry = expDate
                     };
 
-                    _context.PILines.Add(newLine);           // تعليق: إضافة السطر للفاتورة الجديدة
+                    _context.PILines.Add(newLine);
+                    
+                    // ================================
+                    // تحديث المخزون لكل سطر (بدون ترحيل محاسبي)
+                    // ================================
+                    
+                    // 1) تحديث Batch (Master) - جدول التشغيلات الرئيسي
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+                        var batch = await _context.Batches
+                            .FirstOrDefaultAsync(b =>
+                                b.ProdId == l.ProdId &&
+                                b.BatchNo == batchNo &&
+                                b.Expiry.Date == exp);
+
+                        if (batch == null)
+                        {
+                            batch = new Batch
+                            {
+                                ProdId = l.ProdId,
+                                BatchNo = batchNo,
+                                Expiry = exp,
+                                PriceRetailBatch = priceRetail,
+                                UnitCostDefault = computedUnitCost,
+                                CustomerId = request.CustomerId,
+                                EntryDate = DateTime.UtcNow,
+                                IsActive = true
+                            };
+                            _context.Batches.Add(batch);
+                        }
+                        else
+                        {
+                            batch.PriceRetailBatch = priceRetail;
+                            batch.UnitCostDefault = computedUnitCost;
+                            batch.UpdatedAt = DateTime.UtcNow;
+                            batch.IsActive = true;
+                        }
+                    }
+                    
+                    // 2) تحديث StockLedger - حركات المخزون
+                    var purchaseDiscountPct = l.PurchaseDiscountPct;
+                    var existingLedger = await _context.StockLedger.FirstOrDefaultAsync(x =>
+                        x.SourceType == "Purchase" &&
+                        x.SourceId == pi.PIId &&
+                        x.SourceLine == l.LineNo &&
+                        x.WarehouseId == request.WarehouseId &&
+                        x.ProdId == l.ProdId &&
+                        (x.BatchNo ?? "").Trim() == (batchNo ?? "") &&
+                        ((x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null) == expDate) &&
+                        x.UnitCost == computedUnitCost &&
+                        x.QtyOut == 0 &&
+                        (x.PurchaseDiscount ?? 0m) == purchaseDiscountPct
+                    );
+
+                    if (existingLedger != null)
+                    {
+                        existingLedger.QtyIn += l.QtyRequested;
+                        existingLedger.RemainingQty = (existingLedger.RemainingQty ?? 0) + l.QtyRequested;
+                        existingLedger.PurchaseDiscount = purchaseDiscountPct;
+                        existingLedger.TranDate = DateTime.UtcNow;
+                        existingLedger.Note = $"Purchase Line (Merged): {l.Product?.ProdName ?? ""}";
+                    }
+                    else
+                    {
+                        var ledger = new StockLedger
+                        {
+                            TranDate = DateTime.UtcNow,
+                            WarehouseId = request.WarehouseId,
+                            ProdId = l.ProdId,
+                            BatchNo = batchNo,
+                            Expiry = expDate,
+                            BatchId = null,
+                            QtyIn = l.QtyRequested,
+                            QtyOut = 0,
+                            UnitCost = computedUnitCost,
+                            RemainingQty = l.QtyRequested,
+                            SourceType = "Purchase",
+                            SourceId = pi.PIId,
+                            SourceLine = l.LineNo,
+                            PurchaseDiscount = purchaseDiscountPct,
+                            Note = $"Purchase Line: {l.Product?.ProdName ?? ""}"
+                        };
+                        _context.StockLedger.Add(ledger);
+                    }
+                    
+                    // 3) تحديث StockBatches - رصيد التشغيلات في المخزن
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+                        var sbRow = await _context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == request.WarehouseId &&
+                                x.ProdId == l.ProdId &&
+                                x.BatchNo == batchNo &&
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand += l.QtyRequested;
+                            sbRow.UpdatedAt = DateTime.UtcNow;
+                            sbRow.Note = $"PI:{pi.PIId} Line:{l.LineNo} (+{l.QtyRequested})";
+                        }
+                        else
+                        {
+                            var newRow = new StockBatch
+                            {
+                                WarehouseId = request.WarehouseId,
+                                ProdId = l.ProdId,
+                                BatchNo = batchNo,
+                                Expiry = exp,
+                                QtyOnHand = l.QtyRequested,
+                                QtyReserved = 0,
+                                UpdatedAt = DateTime.UtcNow,
+                                Note = $"PI:{pi.PIId} Line:{l.LineNo} (+{l.QtyRequested})"
+                            };
+                            _context.StockBatches.Add(newRow);
+                        }
+                    }
                 }
 
-                // حفظ سطور الفاتورة الجديدة
+                // حفظ سطور الفاتورة + تحديثات المخزون
                 await _context.SaveChangesAsync();
 
-
                 // ================================
-                // 7) (اختياري لكن مهم عندك) إعادة حساب إجماليات فاتورة المشتريات
+                // 7) إعادة حساب إجماليات فاتورة المشتريات
                 // ================================
                 await _docTotals.RecalcPurchaseInvoiceTotalsAsync(pi.PIId);
                 await _context.SaveChangesAsync();
 
                 // ================================
-                // 8) ترحيل فاتورة المشتريات الجديدة (تأثير المخزون)
+                // 8) ملاحظة: لا نقوم بترحيل الحسابات هنا
+                // الترحيل المحاسبي سيتم من خلال زر "ترحيل الفاتورة" في صفحة فاتورة المشتريات
                 // ================================
-                // تعليق: هذا هو الجزء الذي "سيؤثر في المخزون" لأنه ينشئ قيود Ledger/StockLedger
-                await _ledgerPostingService.PostPurchaseInvoiceAsync(pi.PIId, User.Identity?.Name);
 
                 // ================================
                 // 9) تحديث طلب الشراء بأنه تم تحويله
@@ -3031,6 +3184,8 @@ private async Task PopulateDropDownsAsync(
             catch (Exception ex)
             {
                 var msg = string.IsNullOrWhiteSpace(ex.Message) ? "حدث خطأ أثناء التحويل." : ex.Message;
+                if (ex.InnerException != null && !string.IsNullOrWhiteSpace(ex.InnerException.Message))
+                    msg = msg + " " + ex.InnerException.Message;
 
                 if (isAjax)
                     return BadRequest(new { ok = false, message = "فشل التحويل: " + msg });

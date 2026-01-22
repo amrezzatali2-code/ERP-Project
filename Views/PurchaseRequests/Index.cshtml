@@ -366,9 +366,18 @@
 
                             <td class="text-nowrap no-print" data-col="actions">
 
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@pr.PRId">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })"
+                                   data-tab-id="PurchaseRequests"
+                                   data-tab-title="طلب شراء"
+                                   data-url="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })">
+                                    عرض
+                                </a>
+                                <a class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })"
+                                   data-tab-id="PurchaseRequests"
+                                   data-tab-title="طلب شراء"
+                                   data-url="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })">
                                     تعديل
                                 </a>
                                 <a class="btn btn-erp btn-erp-danger btn-erp-sm"

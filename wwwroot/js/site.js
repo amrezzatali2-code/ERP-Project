@@ -1,4 +1,4 @@
-﻿// ===============================
+// ===============================
 // نظام التابات للـ ERP (نسخة IFRAME + زر تحديث)
 // + نظام ثابت لإعادة تهيئة الصفحات بعد التحميل (ERP_INIT Hook)
 // ===============================
@@ -275,7 +275,7 @@ if (window.__ERP_TABS_INITED__) {
 
             var existingTab = tabsBar.querySelector('[data-tab-id="' + tabId + '"]');
 
-            // لو التاب موجود → فعّله وحدث الـ URL لو اتغير
+            // لو التاب موجود → فعّله وحدث الـ URL والعنوان لو اتغير
             if (existingTab) {
                 var existingFrame = tabsContainer.querySelector('.app-tab-frame[data-tab-id="' + tabId + '"]');
 
@@ -293,6 +293,12 @@ if (window.__ERP_TABS_INITED__) {
                         // لو نفس الرابط: نجبر no-cache خفيف
                         existingFrame.src = addNoCache(url);
                     }
+                }
+
+                // ✅ تحديث عنوان التاب (مثلاً فاتورة مشتريات vs طلب شراء) لئلا يبقى العنوان القديم
+                var titleEl = existingTab.querySelector('.app-tab-title');
+                if (titleEl && (title || '').trim()) {
+                    titleEl.textContent = (title || '').trim();
                 }
 
                 enableTabsMode();

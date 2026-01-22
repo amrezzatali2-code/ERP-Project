@@ -1,73 +1,187 @@
-﻿@model ERP.Models.CashPayment
+@model ERP.Models.CashPayment
 
 @{
     ViewData["Title"] = "إضافة إذن دفع نقدية";
+    bool lockCustomer = ViewBag.LockCustomer is bool b && b;
 }
 
 <div class="container" dir="rtl">
     <h2 class="mb-3">إضافة إذن دفع نقدية</h2>
 
-    <form asp-action="Create" method="post">
-        <div asp-validation-summary="ModelOnly" class="text-danger mb-2"></div>
+    @* عرض رسائل النجاح/الخطأ *@
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    
+    @* عرض أخطاء التحقق من النموذج *@
+    @if (!ViewData.ModelState.IsValid)
+    {
+        <div class="alert alert-danger">
+            <strong>يرجى تصحيح الأخطاء التالية:</strong>
+            <ul class="mb-0">
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <li>@error.ErrorMessage</li>
+                }
+            </ul>
+        </div>
+    }
 
+    <form asp-action="Create" method="post" id="paymentForm">
+        @if (Model.CashPaymentId > 0)
+        {
+            <input type="hidden" asp-for="CashPaymentId" />
+        }
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <!-- رقم المستند -->
+                    <!-- رقم المستند (CashPaymentId - تلقائي - ReadOnly) -->
                     <div class="col-md-4">
-                        <label asp-for="PaymentNumber" class="form-label"></label>
-                        <input asp-for="PaymentNumber" class="form-control" />
-                        <span asp-validation-for="PaymentNumber" class="text-danger"></span>
+                        <label class="form-label">رقم المستند</label>
+                        @if (Model.CashPaymentId > 0)
+                        {
+                            <input type="text" class="form-control" value="@Model.CashPaymentId" readonly />
+                            <small class="text-muted">رقم المستند: @Model.CashPaymentId</small>
+                        }
+                        else
+                        {
+                            <input type="text" class="form-control" value="" readonly placeholder="سيتم توليده تلقائياً عند الحفظ" />
+                            <small class="text-muted">سيتم توليد رقم المستند تلقائياً عند الحفظ (CashPaymentId)</small>
+                        }
                     </div>
 
-                    <!-- تاريخ الإذن -->
+                    <!-- التاريخ -->
                     <div class="col-md-4">
                         <label asp-for="PaymentDate" class="form-label"></label>
-                        <input asp-for="PaymentDate" type="date" class="form-control" />
+                        @if (Model.Status == "مغلق")
+                        {
+                            <input asp-for="PaymentDate" type="date" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="PaymentDate" type="date" class="form-control" />
+                        }
                         <span asp-validation-for="PaymentDate" class="text-danger"></span>
+                    </div>
+
+                    <!-- حالة الترحيل -->
+                    <div class="col-md-4">
+                        <label class="form-label">الحالة</label>
+                        <input type="text" class="form-control" value="@(Model.Status ?? "غير مرحلة")" readonly />
                     </div>
 
                     <!-- الطرف (عميل/مورد/طرف آخر) -->
                     <div class="col-md-4">
                         <label asp-for="CustomerId" class="form-label"></label>
-                        <select asp-for="CustomerId" class="form-select"
-                                asp-items="ViewBag.CustomerId">
-                            <option value="">-- بدون طرف --</option>
-                        </select>
+                        @if (lockCustomer || Model.Status == "مغلق")
+                        {
+                            <select asp-for="CustomerId" 
+                                    asp-items="ViewBag.CustomerId"
+                                    class="form-select" 
+                                    id="customerSelect"
+                                    disabled>
+                                <option value="">-- بدون طرف --</option>
+                            </select>
+                            <input type="hidden" asp-for="CustomerId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CustomerId" 
+                                    asp-items="ViewBag.CustomerId"
+                                    class="form-select" 
+                                    id="customerSelect">
+                                <option value="">-- بدون طرف --</option>
+                            </select>
+                        }
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الصندوق / البنك (يُصرف منه) -->
-                    <div class="col-md-6">
+                    <!-- حساب الصندوق/البنك (يتم تعبئته تلقائياً) -->
+                    <div class="col-md-4">
                         <label asp-for="CashAccountId" class="form-label"></label>
-                        <select asp-for="CashAccountId" class="form-select"
-                                asp-items="ViewBag.CashAccountId">
-                            <option value="">-- اختر حساب الصندوق/البنك --</option>
-                        </select>
+                        @if (Model.Status == "مغلق")
+                        {
+                            <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId" disabled>
+                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                            </select>
+                            <input type="hidden" asp-for="CashAccountId" />
+                        }
+                        else
+                        {
+                            @* ✅ دائماً نستخدم select عادي مع asp-for لضمان إرسال القيمة *@
+                            <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId">
+                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                            </select>
+                        }
+                        <small class="text-muted">سيتم اختيار حساب الخزينة تلقائياً</small>
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الطرف (حساب المورد/العميل في الدليل) -->
-                    <div class="col-md-6">
+                    <!-- حساب الطرف (يتم تعبئته تلقائياً عند اختيار العميل) -->
+                    <div class="col-md-4">
                         <label asp-for="CounterAccountId" class="form-label"></label>
-                        <select asp-for="CounterAccountId" class="form-select"
-                                asp-items="ViewBag.CounterAccountId">
-                            <option value="">-- اختر حساب الطرف --</option>
-                        </select>
+                        @if (lockCustomer)
+                        {
+                            @* ✅ العميل مقفل - نستخدم select disabled مع hidden input *@
+                            <select asp-for="CounterAccountId" 
+                                    asp-items="ViewBag.CounterAccountId"
+                                    class="form-select" 
+                                    id="counterAccountSelect"
+                                    disabled>
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                            </select>
+                            <input type="hidden" asp-for="CounterAccountId" />
+                        }
+                        else
+                        {
+                            @* ✅ select عادي - القيمة ستُحدد تلقائياً من Model أو من JavaScript *@
+                            <select asp-for="CounterAccountId" 
+                                    asp-items="ViewBag.CounterAccountId"
+                                    class="form-select" 
+                                    id="counterAccountSelect">
+                                <option value="">-- سيتم تعبئته تلقائياً --</option>
+                            </select>
+                        }
                         <span asp-validation-for="CounterAccountId" class="text-danger"></span>
                     </div>
 
                     <!-- المبلغ -->
                     <div class="col-md-4">
                         <label asp-for="Amount" class="form-label"></label>
-                        <input asp-for="Amount" class="form-control" />
+                        @if (Model.Status == "مغلق")
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" required />
+                        }
                         <span asp-validation-for="Amount" class="text-danger"></span>
                     </div>
 
                     <!-- البيان -->
                     <div class="col-md-8">
                         <label asp-for="Description" class="form-label"></label>
-                        <input asp-for="Description" class="form-control" />
+                        @if (Model.Status == "مغلق")
+                        {
+                            <input asp-for="Description" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="Description" class="form-control" />
+                        }
                         <span asp-validation-for="Description" class="text-danger"></span>
                     </div>
                 </div>
@@ -75,7 +189,19 @@
 
             <div class="card-footer d-flex justify-content-between">
                 <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
-                <button type="submit" class="btn btn-primary btn-sm">حفظ</button>
+                <div>
+                    @if (Model.CashPaymentId > 0 && Model.Status == "مغلق")
+                    {
+                        <form asp-action="Open" method="post" style="display: inline;" asp-route-id="@Model.CashPaymentId">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-warning btn-sm">فتح للتعديل</button>
+                        </form>
+                    }
+                    @if (Model.Status != "مغلق")
+                    {
+                        <button type="submit" class="btn btn-primary btn-sm">حفظ وإغلاق</button>
+                    }
+                </div>
             </div>
         </div>
     </form>
@@ -85,4 +211,56 @@
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+    <script>
+        $(document).ready(function() {
+            // ✅ التأكد من تحديد القيم المحددة مسبقاً عند تحميل الصفحة
+            @if (Model.CashAccountId > 0)
+            {
+                <text>
+                $('#CashAccountId').val('@Model.CashAccountId');
+                </text>
+            }
+            
+            @if (Model.CounterAccountId > 0)
+            {
+                <text>
+                $('#counterAccountSelect').val('@Model.CounterAccountId');
+                </text>
+            }
+            
+            // ✅ عند اختيار العميل، نجلب حسابه ونملأ حساب الطرف تلقائياً
+            $('#customerSelect').on('change', function() {
+                var customerId = $(this).val();
+                var counterAccountSelect = $('#counterAccountSelect');
+                
+                if (!customerId || customerId === '') {
+                    counterAccountSelect.val('');
+                    return;
+                }
+
+                // جلب حساب العميل عبر AJAX
+                $.ajax({
+                    url: '@Url.Action("GetCustomerAccount", "CashPayments")',
+                    type: 'GET',
+                    data: { customerId: customerId },
+                    success: function(response) {
+                        if (response && response.success && response.accountId) {
+                            counterAccountSelect.val(response.accountId);
+                        } else {
+                            counterAccountSelect.val('');
+                            if (response && response.message) {
+                                alert(response.message);
+                            } else {
+                                alert('هذا العميل غير مربوط بحساب محاسبي. يرجى ربطه بحساب أولاً.');
+                            }
+                        }
+                    },
+                    error: function() {
+                        counterAccountSelect.val('');
+                        alert('حدث خطأ أثناء جلب حساب العميل.');
+                    }
+                });
+            });
+        });
+    </script>
 }

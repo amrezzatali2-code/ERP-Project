@@ -628,10 +628,25 @@ namespace ERP.Controllers
 
             // =========================================================
             // 6.1) استعلام منفصل لـ SalesInvoices (لحساب عدد الفواتير وآخر تاريخ)
+            // ✅ مهم: نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001)
             // =========================================================
+            // أولاً: نجد أرقام الفواتير المحذوفة (التي لها قيود عكسية)
+            var deletedSalesInvoiceIds = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.CustomerId == customer.CustomerId &&
+                    e.SourceType == LedgerSourceType.SalesInvoice &&
+                    e.LineNo == 9001) // قيود عكسية = فاتورة محذوفة
+                .Select(e => e.SourceId)
+                .Distinct()
+                .ToListAsync();
+
             var salesQ = _context.SalesInvoices
                 .AsNoTracking()
-                .Where(x => x.CustomerId == customer.CustomerId && x.IsPosted);
+                .Where(x => 
+                    x.CustomerId == customer.CustomerId && 
+                    x.IsPosted &&
+                    !deletedSalesInvoiceIds.Contains(x.SIId)); // ✅ استثناء الفواتير المحذوفة
 
             if (from.HasValue) salesQ = salesQ.Where(x => x.SIDate >= from.Value);
             if (toExclusive.HasValue) salesQ = salesQ.Where(x => x.SIDate < toExclusive.Value);
@@ -641,68 +656,81 @@ namespace ERP.Controllers
             // ✅ مهم: نحسب من LedgerEntries وليس من PurchaseInvoices مباشرة
             // لأن القيود هي المصدر الحقيقي بعد الترحيل
             // ✅ مهم: نحسب من آخر PostVersion لكل فاتورة (SourceId) لضمان عدم حساب القيود القديمة
+            // ✅ مهم: نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001 أو 9002)
+            // ✅ مهم: نستثني أيضاً الفواتير غير الموجودة في جدول PurchaseInvoices (محذوفة قديماً)
             // =========================================================
             
-            // أولاً: نجد آخر PostVersion لكل فاتورة (SourceId)
-            var maxPostVersions = await _context.LedgerEntries
+            // أولاً: نجد أرقام الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001 أو 9002)
+            var deletedPurchaseInvoiceIds = await _context.LedgerEntries
                 .AsNoTracking()
                 .Where(e =>
                     e.CustomerId == customer.CustomerId &&
                     e.SourceType == LedgerSourceType.PurchaseInvoice &&
-                    e.LineNo == 2 &&
-                    e.LineNo < 9000 &&
+                    (e.LineNo == 9001 || e.LineNo == 9002)) // قيود عكسية = فاتورة محذوفة
+                .Select(e => e.SourceId)
+                .Distinct()
+                .ToListAsync();
+            
+            // ثانياً: نجد أرقام الفواتير الموجودة فعلياً في جدول PurchaseInvoices
+            var existingPurchaseInvoiceIds = await _context.PurchaseInvoices
+                .AsNoTracking()
+                .Where(pi => pi.CustomerId == customer.CustomerId && pi.IsPosted)
+                .Select(pi => pi.PIId)
+                .ToListAsync();
+            
+            // ثالثاً: نحسب المشتريات مباشرة من القيود الصحيحة مع استثناء الفواتير المحذوفة
+            // ✅ نهج أبسط: نحسب من جميع القيود الصحيحة (LineNo = 2) ونستثني المحذوفة
+            var purchasesLedgerQ = _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.CustomerId == customer.CustomerId &&
+                    e.SourceType == LedgerSourceType.PurchaseInvoice &&
+                    e.LineNo == 2 && // دائن المورد
+                    e.LineNo < 9000 && // استثناء القيود العكسية
                     e.PostVersion > 0 &&
                     e.Description != null &&
-                    !e.Description.Contains("عكس"))
-                .GroupBy(e => e.SourceId)
-                .Select(g => new { SourceId = g.Key, MaxPostVersion = g.Max(e => e.PostVersion) })
-                .ToDictionaryAsync(x => x.SourceId, x => x.MaxPostVersion);
-
-            // ثانياً: نحسب الإجمالي من القيود التي تطابق آخر PostVersion لكل فاتورة
-            // ✅ مهم: يجب تحميل البيانات أولاً ثم التصفية في الذاكرة لأن Dictionary.get_Item لا يمكن ترجمته إلى SQL
-            decimal totalPurchases = 0m; // متغير: إجمالي المشتريات
-            var sourceIds = maxPostVersions.Keys.ToList();
-            if (sourceIds.Count == 0)
-            {
-                totalPurchases = 0m; // ✅ إذا لم توجد فواتير مشتريات، الإجمالي = 0
-            }
-            else
-            {
-                // ✅ تحميل جميع القيود المرشحة أولاً إلى الذاكرة
-                var allPurchasesEntries = await _context.LedgerEntries
-                    .AsNoTracking()
-                    .Where(e =>
-                        e.CustomerId == customer.CustomerId &&
-                        e.SourceType == LedgerSourceType.PurchaseInvoice &&
-                        e.LineNo == 2 &&
-                        e.LineNo < 9000 &&
-                        e.PostVersion > 0 &&
-                        e.Description != null &&
-                        !e.Description.Contains("عكس") &&
-                        sourceIds.Contains(e.SourceId))
-                    .ToListAsync();
-
-                // ✅ تصفية في الذاكرة: فقط القيود التي تطابق آخر PostVersion لكل فاتورة
-                var filteredEntries = allPurchasesEntries
-                    .Where(e =>
-                        maxPostVersions.ContainsKey(e.SourceId) &&
-                        maxPostVersions[e.SourceId] == e.PostVersion)
-                    .ToList();
-
-                // ✅ تطبيق فلتر التاريخ (إن وجد)
-                if (from.HasValue) filteredEntries = filteredEntries.Where(e => e.EntryDate >= from.Value).ToList();
-                if (toExclusive.HasValue) filteredEntries = filteredEntries.Where(e => e.EntryDate < toExclusive.Value).ToList();
-
-                // ✅ نحسب من Credit (دائن المورد) لأن هذا هو صافي الفاتورة
-                totalPurchases = filteredEntries.Sum(e => e.Credit);
-            }
+                    !e.Description.Contains("عكس") &&
+                    e.SourceId.HasValue && // ✅ التأكد من أن SourceId ليس null
+                    !deletedPurchaseInvoiceIds.Contains(e.SourceId.Value) && // ✅ استثناء الفواتير المحذوفة (قيود عكسية)
+                    existingPurchaseInvoiceIds.Contains(e.SourceId.Value)); // ✅ استثناء الفواتير غير الموجودة في الجدول (محذوفة قديماً)
+            
+            if (from.HasValue) purchasesLedgerQ = purchasesLedgerQ.Where(e => e.EntryDate >= from.Value);
+            if (toExclusive.HasValue) purchasesLedgerQ = purchasesLedgerQ.Where(e => e.EntryDate < toExclusive.Value);
+            
+            // ✅ نحسب الإجمالي من Credit (دائن المورد) لأن هذا هو صافي الفاتورة
+            // ✅ لكن نحتاج فقط آخر PostVersion لكل فاتورة
+            var allPurchasesEntries = await purchasesLedgerQ.ToListAsync();
+            
+            // ✅ تصفية في الذاكرة: فقط القيود التي لها SourceId صحيح
+            var validEntries = allPurchasesEntries
+                .Where(e => e.SourceId.HasValue)
+                .ToList();
+            
+            // ✅ تجميع حسب SourceId وأخذ آخر PostVersion لكل فاتورة
+            var purchasesBySource = validEntries
+                .GroupBy(e => e.SourceId!.Value)
+                .Select(g => new
+                {
+                    SourceId = g.Key,
+                    MaxPostVersion = g.Max(e => e.PostVersion),
+                    Entries = g.Where(e => e.PostVersion == g.Max(x => x.PostVersion)).ToList()
+                })
+                .ToList();
+            
+            // ✅ نحسب الإجمالي من آخر PostVersion لكل فاتورة
+            decimal totalPurchases = purchasesBySource.Sum(g => g.Entries.Sum(e => e.Credit));
 
             // =========================================================
             // 7.1) استعلام منفصل لـ PurchaseInvoices (لحساب عدد الفواتير وآخر تاريخ)
+            // ✅ مهم: نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001)
+            // ✅ نستخدم deletedPurchaseInvoiceIds المحدد مسبقاً في السطر 664
             // =========================================================
             var purchasesQ = _context.PurchaseInvoices
                 .AsNoTracking()
-                .Where(x => x.CustomerId == customer.CustomerId && x.IsPosted);
+                .Where(x => 
+                    x.CustomerId == customer.CustomerId && 
+                    x.IsPosted &&
+                    !deletedPurchaseInvoiceIds.Contains(x.PIId)); // ✅ استثناء الفواتير المحذوفة
 
             if (from.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate >= from.Value);
             if (toExclusive.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate < toExclusive.Value);

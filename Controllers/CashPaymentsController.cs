@@ -9,8 +9,9 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // CashPayment + Customer + Account
+using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
 {
@@ -25,16 +26,83 @@ namespace ERP.Controllers
     {
         // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;   // متغير: السياق الأساسي للتعامل مع الـ DB
+        private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل المحاسبي
+        private readonly IUserActivityLogger _activityLogger; // متغير: تسجيل نشاط المستخدمين
 
-        public CashPaymentsController(AppDbContext context)
+        public CashPaymentsController(AppDbContext context, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _ledgerPostingService = ledgerPostingService;
+            _activityLogger = activityLogger;
         }
 
         // =========================================================
         // دالة مساعدة: تجهيز القوائم المنسدلة (الطرف + الحسابات)
         // تُستخدم فى Create و Edit (GET + POST لو حصل خطأ).
         // =========================================================
+        private async Task PopulateDropdownsAsync(int? customerId = null,
+                                                  int? cashAccountId = null,
+                                                  int? counterAccountId = null)
+        {
+            // قائمة العملاء / الأطراف مع AccountId في data attribute
+            var customers = await _context.Customers
+                .AsNoTracking()
+                .Include(c => c.Account)
+                .OrderBy(c => c.CustomerName)
+                .Select(c => new
+                {
+                    c.CustomerId,
+                    c.CustomerName,
+                    AccountId = c.AccountId ?? 0
+                })
+                .ToListAsync();
+
+            var customerItems = customers.Select(c => new SelectListItem
+            {
+                Value = c.CustomerId.ToString(),
+                Text = c.CustomerName ?? "",
+                Selected = customerId.HasValue && c.CustomerId == customerId.Value
+            }).ToList();
+
+            ViewData["CustomerId"] = new SelectList(customerItems, "Value", "Text", customerId?.ToString());
+            ViewData["CustomersWithAccounts"] = customers.ToDictionary(c => c.CustomerId, c => c.AccountId);
+
+            // حسابات نشطة للصندوق / البنك
+            var cashAccounts = await _context.Accounts
+                    .AsNoTracking()
+                    .Where(a => a.IsActive)
+                    .OrderBy(a => a.AccountName)
+                    .Select(a => new { a.AccountId, a.AccountName })
+                    .ToListAsync();
+            
+            var cashAccountItems = cashAccounts.Select(a => new SelectListItem
+            {
+                Value = a.AccountId.ToString(),
+                Text = a.AccountName ?? "",
+                Selected = cashAccountId.HasValue && cashAccountId.Value == a.AccountId
+            }).ToList();
+            
+            ViewData["CashAccountId"] = new SelectList(cashAccountItems, "Value", "Text", cashAccountId);
+
+            // حسابات نشطة للطرف المقابل
+            var counterAccounts = await _context.Accounts
+                    .AsNoTracking()
+                    .Where(a => a.IsActive)
+                    .OrderBy(a => a.AccountName)
+                    .Select(a => new { a.AccountId, a.AccountName })
+                    .ToListAsync();
+            
+            var counterAccountItems = counterAccounts.Select(a => new SelectListItem
+            {
+                Value = a.AccountId.ToString(),
+                Text = a.AccountName ?? "",
+                Selected = counterAccountId.HasValue && counterAccountId.Value == a.AccountId
+            }).ToList();
+            
+            ViewData["CounterAccountId"] = new SelectList(counterAccountItems, "Value", "Text", counterAccountId);
+        }
+
+        // دالة بديلة بدون async (للاستخدام في Post بدون await)
         private void PopulateDropdowns(int? customerId = null,
                                        int? cashAccountId = null,
                                        int? counterAccountId = null)
@@ -70,6 +138,26 @@ namespace ERP.Controllers
                 "AccountName",
                 counterAccountId
             );
+        }
+
+        // =========================================================
+        // دالة مساعدة: جلب AccountId للعميل (للاستخدام في AJAX)
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetCustomerAccount(int customerId)
+        {
+            var customer = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == customerId)
+                .Select(c => new { c.AccountId })
+                .FirstOrDefaultAsync();
+
+            if (customer == null || !customer.AccountId.HasValue)
+            {
+                return Json(new { success = false, message = "العميل غير موجود أو غير مربوط بحساب محاسبي." });
+            }
+
+            return Json(new { success = true, accountId = customer.AccountId.Value });
         }
 
         // =========================================================
@@ -242,93 +330,372 @@ namespace ERP.Controllers
         // =========================================================
         // Create — GET: عرض فورم إضافة إذن جديد
         // =========================================================
-        public IActionResult Create(int? customerId = null)
+        public async Task<IActionResult> Create(int? id = null, int? customerId = null)
         {
-            PopulateDropdowns(customerId);  // تجهيز القوائم المنسدلة مع اختيار العميل إذا تم تمريره
-            return View();
+            CashPayment model;
+            
+            // ✅ إذا كان id موجود، نحمّل الإذن الموجود (للتعديل)
+            if (id.HasValue && id.Value > 0)
+            {
+                model = await _context.CashPayments
+                    .Include(p => p.Customer)
+                    .ThenInclude(c => c.Account)
+                    .FirstOrDefaultAsync(p => p.CashPaymentId == id.Value);
+                
+                if (model == null)
+                    return NotFound();
+                
+                // ✅ إذا كان العميل محددًا، نحفظ هذه المعلومة للواجهة
+                if (model.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+            }
+            else
+            {
+                // ✅ جلب حساب الخزينة الافتراضي (كود 1101) أو أول حساب خزينة/صندوق
+                var defaultCashAccount = await _context.Accounts
+                    .AsNoTracking()
+                    .Where(a => a.IsActive && 
+                               (a.AccountCode == "1101" || 
+                                a.AccountName.Contains("خزينة") || 
+                                a.AccountName.Contains("صندوق")))
+                    .OrderBy(a => a.AccountCode == "1101" ? 0 : 1) // أولوية لكود 1101
+                    .ThenBy(a => a.AccountName)
+                    .Select(a => new { a.AccountId })
+                    .FirstOrDefaultAsync();
+
+                model = new CashPayment
+                {
+                    PaymentDate = DateTime.Now.Date,
+                    IsPosted = false,
+                    Status = "غير مرحلة",
+                    CashAccountId = defaultCashAccount?.AccountId ?? 0 // ✅ تعيين حساب الصندوق الافتراضي
+                };
+            }
+
+            // ✅ إذا جاء من صفحة "حجم تعامل عميل" (customerId موجود) ولم يكن id موجود
+            if (!id.HasValue && customerId.HasValue && customerId.Value > 0)
+            {
+                var customer = await _context.Customers
+                    .AsNoTracking()
+                    .Include(c => c.Account)
+                    .FirstOrDefaultAsync(c => c.CustomerId == customerId.Value);
+
+                if (customer != null)
+                {
+                    model.CustomerId = customer.CustomerId;
+                    // ✅ حساب الطرف = حساب العميل تلقائيًا
+                    if (customer.AccountId.HasValue)
+                    {
+                        model.CounterAccountId = customer.AccountId.Value;
+                    }
+                    // ✅ البيان الافتراضي
+                    model.Description = $"دفع للعميل {customer.CustomerName}";
+                    // ✅ قفل العميل وحساب الطرف في الواجهة
+                    ViewBag.LockCustomer = true;
+                }
+            }
+
+            await PopulateDropdownsAsync(model.CustomerId, model.CashAccountId > 0 ? (int?)model.CashAccountId : null, model.CounterAccountId > 0 ? (int?)model.CounterAccountId : null);
+            return View(model);
         }
 
         // =========================================================
-        // Create — POST: حفظ إذن جديد
+        // Create — POST: حفظ إذن جديد أو تعديل إذن موجود
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(CashPayment payment)
+        public async Task<IActionResult> Create([Bind("CashPaymentId,PaymentDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
+                                                CashPayment payment)
         {
+            // ✅ تجاهل خطأ التحقق لـ PaymentNumber لأنه سيتم توليده تلقائياً
+            ModelState.Remove(nameof(CashPayment.PaymentNumber));
+            
+            // ✅ تسجيل القيم المرسلة للتحقق
+            System.Diagnostics.Debug.WriteLine($"DEBUG: CashPaymentId={payment.CashPaymentId}, CashAccountId={payment.CashAccountId}, CounterAccountId={payment.CounterAccountId}, Amount={payment.Amount}");
+            
             if (!ModelState.IsValid)
             {
                 // لو فيه أخطاء في البيانات نرجع لنفس الفورم
+                await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                if (payment.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
                 return View(payment);
             }
 
-            // تعيين قيم الإنشاء
-            payment.CreatedAt = DateTime.UtcNow;
-            payment.IsPosted = false;       // مبدئياً غير مرحّل
-            payment.PostedAt = null;
-            payment.PostedBy = null;
-
-            if (string.IsNullOrWhiteSpace(payment.CreatedBy))
+            try
             {
-                // ممكن نستخدم اسم المستخدم الحالي لو النظام فيه Login
-                payment.CreatedBy = User?.Identity?.Name ?? "System";
+                // =========================================================
+                // إذا كان CashPaymentId > 0، فهذا تعديل
+                // =========================================================
+                if (payment.CashPaymentId > 0)
+                {
+                    return await Edit(payment.CashPaymentId, payment);
+                }
+
+                // =========================================================
+                // إنشاء إذن جديد
+                // =========================================================
+                // تعيين قيم الإنشاء
+                payment.CreatedAt = DateTime.UtcNow;
+                payment.IsPosted = false;       // مبدئياً غير مرحّل
+                payment.PostedAt = null;
+                payment.PostedBy = null;
+                payment.Status = "غير مرحلة";   // ✅ الحالة الافتراضية
+
+                if (string.IsNullOrWhiteSpace(payment.CreatedBy))
+                {
+                    payment.CreatedBy = User?.Identity?.Name ?? "System";
+                }
+
+                // ✅ توليد رقم المستند من CashPaymentId بعد الحفظ
+                _context.Add(payment);
+                await _context.SaveChangesAsync();
+                
+                // ✅ الآن CashPaymentId موجود بعد الحفظ
+                payment.PaymentNumber = payment.CashPaymentId.ToString();
+                await _context.SaveChangesAsync();
+
+                // =========================================================
+                // ترحيل محاسبي (LedgerEntries + تحديث حساب العميل)
+                // =========================================================
+                string? postedBy = User?.Identity?.Name ?? "SYSTEM";
+                await _ledgerPostingService.PostCashPaymentAsync(payment.CashPaymentId, postedBy);
+
+                // =========================================================
+                // إغلاق الإذن (تغيير الحالة إلى "مغلق")
+                // =========================================================
+                payment.Status = "مغلق";
+                payment.IsPosted = true;
+                await _context.SaveChangesAsync();
+
+                // =========================================================
+                // تسجيل في اللوج
+                // =========================================================
+                await _activityLogger.LogAsync(
+                    UserActionType.Create,
+                    "CashPayment",
+                    payment.CashPaymentId,
+                    $"إضافة وإغلاق إذن دفع رقم {payment.PaymentNumber} بمبلغ {payment.Amount}"
+                );
+
+                TempData["Success"] = "تم حفظ وترحيل وإغلاق إذن الدفع بنجاح.";
+                
+                // ✅ إعادة تحميل الصفحة بنفس الإذن (بدون توجيه للقائمة)
+                await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                if (payment.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+                return View(payment);
             }
-
-            _context.Add(payment);
-            await _context.SaveChangesAsync();
-
-            TempData["Success"] = "تم حفظ إذن الدفع بنجاح.";
-            return RedirectToAction(nameof(Index));
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"حدث خطأ أثناء حفظ إذن الدفع: {ex.Message}";
+                await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                if (payment.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+                return View(payment);
+            }
         }
 
         // =========================================================
-        // Edit — GET: تعديل إذن دفع
+        // Open — فتح إذن مغلق للتعديل
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Open(int id)
+        {
+            try
+            {
+                var payment = await _context.CashPayments
+                    .FirstOrDefaultAsync(p => p.CashPaymentId == id);
+
+                if (payment == null)
+                {
+                    TempData["Error"] = "الإذن غير موجود.";
+                    return RedirectToAction(nameof(Index));
+                }
+
+                // ================================
+                // 1) لازم يكون مغلق عشان ينفع "فتح"
+                // ================================
+                if (payment.Status != "مغلق")
+                {
+                    TempData["Error"] = "هذا الإذن غير مغلق، لا يوجد ما يمكن فتحه.";
+                    return RedirectToAction(nameof(Create), new { id });
+                }
+
+                // ================================
+                // 2) فتح الإذن للتعديل
+                // ================================
+                payment.Status = "مفتوحة للتعديل";
+                payment.IsPosted = false;
+                payment.PostedAt = null;
+                payment.PostedBy = null;
+                payment.UpdatedAt = DateTime.UtcNow;
+
+                await _context.SaveChangesAsync();
+
+                // ================================
+                // 3) تسجيل نشاط
+                // ================================
+                await _activityLogger.LogAsync(
+                    actionType: UserActionType.Edit,
+                    entityName: "CashPayment",
+                    entityId: payment.CashPaymentId,
+                    description: $"فتح إذن دفع رقم {payment.PaymentNumber} للتعديل"
+                );
+
+                TempData["Success"] = "تم فتح الإذن للتعديل بنجاح.";
+                return RedirectToAction(nameof(Create), new { id });
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                return RedirectToAction(nameof(Index));
+            }
+        }
+
+        // =========================================================
+        // Edit — GET: تعديل إذن دفع (يستخدم Create view)
         // =========================================================
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null || id <= 0)
                 return BadRequest();
 
-            var payment = await _context.CashPayments.FindAsync(id);
+            var payment = await _context.CashPayments
+                .Include(p => p.Customer)
+                .ThenInclude(c => c.Account)
+                .FirstOrDefaultAsync(p => p.CashPaymentId == id);
+
             if (payment == null)
                 return NotFound();
 
-            return View(payment);
+            // ✅ إذا كان العميل محددًا، نحفظ هذه المعلومة للواجهة
+            if (payment.CustomerId.HasValue)
+                ViewBag.LockCustomer = true;
+
+            await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+            return View("Create", payment);
         }
 
         // =========================================================
-        // Edit — POST: حفظ التعديل
+        // Edit — POST: حفظ التعديل (يستخدم Create POST)
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, CashPayment payment)
+        public async Task<IActionResult> Edit(int id,
+            [Bind("CashPaymentId,PaymentDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
+            CashPayment payment)
         {
             if (id != payment.CashPaymentId)
-                return BadRequest();
+                return NotFound();
+
+            // ✅ تجاهل خطأ التحقق لـ PaymentNumber
+            ModelState.Remove(nameof(CashPayment.PaymentNumber));
 
             if (!ModelState.IsValid)
             {
-                return View(payment);
+                await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                if (payment.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+                return View("Create", payment);
             }
 
             try
             {
-                // نحدد أن الكائن تم تعديله
-                payment.UpdatedAt = DateTime.UtcNow;
+                // =========================================================
+                // 1) جلب السجل الأصلي من قاعدة البيانات
+                // =========================================================
+                var existing = await _context.CashPayments
+                    .Include(p => p.Customer)
+                    .FirstOrDefaultAsync(p => p.CashPaymentId == id);
 
-                _context.Update(payment);
-                await _context.SaveChangesAsync();
-
-                TempData["Success"] = "تم تعديل إذن الدفع بنجاح.";
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!CashPaymentExists(payment.CashPaymentId))
+                if (existing == null)
                     return NotFound();
 
-                throw;
-            }
+                // =========================================================
+                // 2) حفظ Snapshot للقيم القديمة (للتسجيل في اللوج)
+                // =========================================================
+                var oldValues = new
+                {
+                    Amount = existing.Amount,
+                    CashAccountId = existing.CashAccountId,
+                    CounterAccountId = existing.CounterAccountId,
+                    PaymentDate = existing.PaymentDate,
+                    Description = existing.Description,
+                    IsPosted = existing.IsPosted,
+                    Status = existing.Status
+                };
 
-            return RedirectToAction(nameof(Index));
+                // =========================================================
+                // 3) تحديث الحقول المسموح بها
+                // =========================================================
+                existing.PaymentDate = payment.PaymentDate;
+                existing.CustomerId = payment.CustomerId;
+                existing.CashAccountId = payment.CashAccountId;
+                existing.CounterAccountId = payment.CounterAccountId;
+                existing.Amount = payment.Amount;
+                existing.Description = payment.Description;
+                existing.UpdatedAt = DateTime.UtcNow;
+
+                // =========================================================
+                // 4) حفظ التعديلات أولاً
+                // =========================================================
+                await _context.SaveChangesAsync();
+
+                // =========================================================
+                // 5) ترحيل محاسبي (يعكس القديم ويعمل جديد إذا كان مفتوح)
+                // =========================================================
+                if (!existing.IsPosted)
+                {
+                    string? postedBy = User?.Identity?.Name ?? "SYSTEM";
+                    await _ledgerPostingService.PostCashPaymentAsync(existing.CashPaymentId, postedBy);
+                }
+
+                // =========================================================
+                // 6) إغلاق الإذن بعد التعديل
+                // =========================================================
+                existing.Status = "مغلق";
+                existing.IsPosted = true;
+                await _context.SaveChangesAsync();
+
+                // =========================================================
+                // 7) تسجيل في اللوج
+                // =========================================================
+                await _activityLogger.LogAsync(
+                    UserActionType.Edit,
+                    "CashPayment",
+                    existing.CashPaymentId,
+                    $"تعديل إذن دفع رقم {existing.PaymentNumber}",
+                    oldValues: System.Text.Json.JsonSerializer.Serialize(oldValues),
+                    newValues: System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        Amount = existing.Amount,
+                        CashAccountId = existing.CashAccountId,
+                        CounterAccountId = existing.CounterAccountId,
+                        PaymentDate = existing.PaymentDate,
+                        Description = existing.Description,
+                        IsPosted = existing.IsPosted,
+                        Status = existing.Status
+                    })
+                );
+
+                TempData["Success"] = "تم تعديل وإغلاق إذن الدفع بنجاح.";
+                
+                // ✅ إعادة تحميل الصفحة بنفس الإذن
+                await PopulateDropdownsAsync(existing.CustomerId, existing.CashAccountId, existing.CounterAccountId);
+                if (existing.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+                return View("Create", existing);
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
+                if (payment.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+                return View("Create", payment);
+            }
         }
 
         // =========================================================

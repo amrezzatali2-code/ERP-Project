@@ -1,6 +1,7 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;           // خصائص Display / Required / StringLength
-using System.ComponentModel.DataAnnotations.Schema;    // DatabaseGenerated / Column
+using System;
+using System.ComponentModel.DataAnnotations;            // خصائص Display / Required / StringLength / Range
+using System.ComponentModel.DataAnnotations.Schema;     // DatabaseGenerated / Column / ForeignKey
+using Microsoft.AspNetCore.Mvc.ModelBinding.Validation; // ✅ ValidateNever
 
 namespace ERP.Models
 {
@@ -27,38 +28,45 @@ namespace ERP.Models
         // ===== الطرف (عميل / مورد / غيره) =====
 
         [Display(Name = "الطرف")]
-        public int? CustomerId { get; set; }        // متغير: رقم العميل/المورد/الطرف (اختياري)
+        public int? CustomerId { get; set; }        // متغير: رقم العميل/المورد/الطرف (حسب تصميمك: اختياري)
 
         [ForeignKey(nameof(CustomerId))]
+        [ValidateNever]                             // ✅ لا نتحقق من Navigation وقت البوست
         public virtual Customer? Customer { get; set; }  // متغير: كائن العميل/الطرف المرتبط بالإذن
 
         // ===== الحسابات المحاسبية =====
+        // ✅ نفس فكرة CashReceipt:
+        // - التحقق يتم على الـ IDs
+        // - ومنع التحقق على الـ Navigation Properties
 
-        [Required]                               // تعليق: لابد من تحديد حساب الصندوق/البنك
         [Display(Name = "حساب الصندوق / البنك")]
+        [Range(1, int.MaxValue, ErrorMessage = "حساب الصندوق / البنك مطلوب.")] // ✅ يمنع 0
         public int CashAccountId { get; set; }      // متغير: حساب النقدية (الصندوق/البنك) الذي نصرف منه
 
         [ForeignKey(nameof(CashAccountId))]
-        public virtual Account CashAccount { get; set; } = null!;  // متغير: كائن حساب الصندوق/البنك
+        [ValidateNever]                             // ✅ يمنع ModelState من اعتبار CashAccount مطلوب
+        public virtual Account? CashAccount { get; set; }  // متغير: كائن حساب الصندوق/البنك
 
-        [Required]                               // تعليق: لابد من تحديد حساب الطرف المقابل
         [Display(Name = "حساب الطرف")]
-        public int CounterAccountId { get; set; }   // متغير: الحساب المقابل (حساب المورد/العميل/طرف آخر)
+        [Range(1, int.MaxValue, ErrorMessage = "حساب الطرف مطلوب.")] // ✅ يمنع 0
+        public int CounterAccountId { get; set; }   // متغير: الحساب المقابل
 
         [ForeignKey(nameof(CounterAccountId))]
-        public virtual Account CounterAccount { get; set; } = null!; // متغير: كائن حساب الطرف
+        [ValidateNever]                             // ✅ يمنع ModelState من اعتبار CounterAccount مطلوب
+        public virtual Account? CounterAccount { get; set; } // متغير: كائن حساب الطرف
 
         // ===== المبلغ والبيان =====
 
         [Column(TypeName = "decimal(18,2)")]     // تعليق: حفظ المبلغ بدقة 2 رقم عشري
         [Display(Name = "المبلغ")]
+        [Range(0.01, 999999999, ErrorMessage = "المبلغ يجب أن يكون أكبر من صفر.")] // ✅ حماية إضافية
         public decimal Amount { get; set; }      // متغير: قيمة إذن الدفع
 
         [StringLength(250)]                      // تعليق: أقصى طول للبيان 250 خانة
         [Display(Name = "البيان")]
         public string? Description { get; set; }  // متغير: بيان/شرح الإذن
 
-        // ===== التواريخ وحالة الترحيل (نفس نظام CashReceipt) =====
+        // ===== التواريخ وحالة الترحيل =====
 
         [Display(Name = "تاريخ الإنشاء")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;   // متغير: تاريخ إنشاء الإذن
@@ -79,5 +87,9 @@ namespace ERP.Models
         [StringLength(100)]
         [Display(Name = "مرحّل بواسطة")]
         public string? PostedBy { get; set; }        // متغير: اسم المستخدم الذي قام بالترحيل
+
+        [Display(Name = "الحالة")]
+        [StringLength(20)]
+        public string Status { get; set; } = "غير مرحلة";   // متغير: حالة الإذن (غير مرحلة / مغلق / مفتوحة للتعديل)
     }
 }

@@ -103,14 +103,9 @@
                     <div class="col-md-4">
                         <label asp-for="CashAccountId" class="form-label"></label>
                         @* ✅ دائماً نستخدم select عادي مع asp-for لضمان إرسال القيمة *@
-                        <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId" name="CashAccountId">
+                        <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId">
                             <option value="">-- اختر حساب الصندوق/البنك --</option>
                         </select>
-                        @* ✅ Hidden input احتياطي لضمان إرسال القيمة *@
-                        @if (Model.CashAccountId > 0)
-                        {
-                            <input type="hidden" name="CashAccountId" value="@Model.CashAccountId" id="CashAccountIdHidden" />
-                        }
                         <small class="text-muted">سيتم اختيار حساب الخزينة تلقائياً</small>
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
@@ -128,7 +123,7 @@
                                     disabled>
                                 <option value="">-- سيتم تعبئته تلقائياً --</option>
                             </select>
-                            <input type="hidden" name="CounterAccountId" value="@Model.CounterAccountId" id="CounterAccountIdHidden" />
+                            <input type="hidden" asp-for="CounterAccountId" />
                         }
                         else
                         {
@@ -136,15 +131,9 @@
                             <select asp-for="CounterAccountId" 
                                     asp-items="ViewBag.CounterAccountId"
                                     class="form-select" 
-                                    id="counterAccountSelect"
-                                    name="CounterAccountId">
+                                    id="counterAccountSelect">
                                 <option value="">-- سيتم تعبئته تلقائياً --</option>
                             </select>
-                            @* ✅ Hidden input احتياطي لضمان إرسال القيمة *@
-                            @if (Model.CounterAccountId > 0)
-                            {
-                                <input type="hidden" name="CounterAccountId" value="@Model.CounterAccountId" id="CounterAccountIdHidden" />
-                            }
                         }
                         <span asp-validation-for="CounterAccountId" class="text-danger"></span>
                     </div>
@@ -183,20 +172,14 @@
             @if (Model.CashAccountId > 0)
             {
                 <text>
-                var cashAccountId = '@Model.CashAccountId';
-                $('#CashAccountId').val(cashAccountId);
-                // تحديث hidden input أيضاً
-                $('#CashAccountIdHidden').val(cashAccountId);
+                $('#CashAccountId').val('@Model.CashAccountId');
                 </text>
             }
             
             @if (Model.CounterAccountId > 0)
             {
                 <text>
-                var counterAccountId = '@Model.CounterAccountId';
-                $('#counterAccountSelect').val(counterAccountId);
-                // تحديث hidden input أيضاً
-                $('#CounterAccountIdHidden').val(counterAccountId);
+                $('#counterAccountSelect').val('@Model.CounterAccountId');
                 </text>
             }
             
@@ -207,7 +190,6 @@
                 
                 if (!customerId || customerId === '') {
                     counterAccountSelect.val('');
-                    $('#CounterAccountIdHidden').val('');
                     return;
                 }
 
@@ -219,11 +201,8 @@
                     success: function(response) {
                         if (response && response.success && response.accountId) {
                             counterAccountSelect.val(response.accountId);
-                            // تحديث hidden input أيضاً
-                            $('#CounterAccountIdHidden').val(response.accountId);
                         } else {
                             counterAccountSelect.val('');
-                            $('#CounterAccountIdHidden').val('');
                             if (response && response.message) {
                                 alert(response.message);
                             } else {
@@ -233,43 +212,9 @@
                     },
                     error: function() {
                         counterAccountSelect.val('');
-                        $('#CounterAccountIdHidden').val('');
                         alert('حدث خطأ أثناء جلب حساب العميل.');
                     }
                 });
-            });
-            
-            // ✅ التأكد من إرسال القيم قبل إرسال النموذج
-            $('#receiptForm').on('submit', function(e) {
-                var cashAccountId = $('#CashAccountId').val();
-                var counterAccountId = $('#counterAccountSelect').val();
-                
-                // إذا كانت القيم موجودة في select لكن hidden input غير موجود أو فارغ، نضيفهما
-                if (cashAccountId && cashAccountId !== '') {
-                    if ($('#CashAccountIdHidden').length === 0) {
-                        $('<input>').attr({
-                            type: 'hidden',
-                            name: 'CashAccountId',
-                            value: cashAccountId,
-                            id: 'CashAccountIdHidden'
-                        }).appendTo('#receiptForm');
-                    } else {
-                        $('#CashAccountIdHidden').val(cashAccountId);
-                    }
-                }
-                
-                if (counterAccountId && counterAccountId !== '') {
-                    if ($('#CounterAccountIdHidden').length === 0) {
-                        $('<input>').attr({
-                            type: 'hidden',
-                            name: 'CounterAccountId',
-                            value: counterAccountId,
-                            id: 'CounterAccountIdHidden'
-                        }).appendTo('#receiptForm');
-                    } else {
-                        $('#CounterAccountIdHidden').val(counterAccountId);
-                    }
-                }
             });
         });
     </script>

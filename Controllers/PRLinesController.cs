@@ -273,14 +273,25 @@ namespace ERP.Controllers
 
             if (existingLine != null)
             {
-                // تعديل السطر الموجود
-                int qtyDelta = dto.qty - existingLine.QtyRequested;
-                existingLine.QtyRequested = dto.qty;
-                existingLine.PriceRetail = dto.priceRetail;
-                existingLine.PurchaseDiscountPct = dto.purchaseDiscountPct;
+                // ✅ تعديل السطر الموجود (بدون تعديل سعر الجمهور)
+                // ❌ لا يمكن تعديل PriceRetail - يجب حذف السطر وإضافته من جديد
+                if (dto.priceRetail != existingLine.PriceRetail)
+                {
+                    return BadRequest(new 
+                    { 
+                        ok = false, 
+                        message = "لا يمكن تعديل سعر الجمهور. يجب حذف السطر وإضافته من جديد." 
+                    });
+                }
                 
-                // حساب التكلفة المتوقعة (بعد الخصم)
-                decimal expectedCost = dto.qty * dto.priceRetail * (1 - (dto.purchaseDiscountPct / 100m));
+                existingLine.QtyRequested = dto.qty;
+                // existingLine.PriceRetail = dto.priceRetail; // ❌ غير مسموح
+                existingLine.PurchaseDiscountPct = dto.purchaseDiscountPct;
+                existingLine.PreferredBatchNo = string.IsNullOrWhiteSpace(dto.PreferredBatchNo) ? null : dto.PreferredBatchNo.Trim(); // ✅ التشغيلة المفضلة
+                existingLine.PreferredExpiry = dto.PreferredExpiry?.Date; // ✅ الصلاحية المفضلة
+                
+                // حساب التكلفة المتوقعة (بعد الخصم) باستخدام السعر الأصلي
+                decimal expectedCost = existingLine.QtyRequested * existingLine.PriceRetail * (1 - (dto.purchaseDiscountPct / 100m));
                 existingLine.ExpectedCost = expectedCost;
 
                 await _context.SaveChangesAsync();
@@ -319,6 +330,8 @@ namespace ERP.Controllers
                 PriceRetail = dto.priceRetail,
                 PurchaseDiscountPct = dto.purchaseDiscountPct,
                 ExpectedCost = expectedCostNew,
+                PreferredBatchNo = string.IsNullOrWhiteSpace(dto.PreferredBatchNo) ? null : dto.PreferredBatchNo.Trim(), // ✅ التشغيلة المفضلة
+                PreferredExpiry = dto.PreferredExpiry?.Date, // ✅ الصلاحية المفضلة
                 QtyConverted = 0
             };
 
@@ -354,6 +367,8 @@ namespace ERP.Controllers
             public int qty { get; set; }
             public decimal priceRetail { get; set; }
             public decimal purchaseDiscountPct { get; set; }
+            public string? PreferredBatchNo { get; set; }  // ✅ التشغيلة المفضلة
+            public DateTime? PreferredExpiry { get; set; }  // ✅ الصلاحية المفضلة
         }
 
         /// <summary>
@@ -384,6 +399,8 @@ namespace ERP.Controllers
                     priceRetail = l.PriceRetail,
                     purchaseDiscountPct = l.PurchaseDiscountPct,
                     expectedCost = l.ExpectedCost,
+                    preferredBatchNo = l.PreferredBatchNo, // ✅ التشغيلة المفضلة
+                    preferredExpiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), // ✅ الصلاحية المفضلة
                     qtyConverted = l.QtyConverted
                 };
             }).ToList<object>();
@@ -409,16 +426,26 @@ namespace ERP.Controllers
         public async Task<IActionResult> Edit(int prId, int lineNo)
         {
             var line = await _context.PRLines
+                .Include(l => l.PurchaseRequest)
                 .FirstOrDefaultAsync(l => l.PRId == prId && l.LineNo == lineNo);
 
             if (line == null)
                 return NotFound();
+
+            // التحقق من أن الطلب غير محول
+            if (line.PurchaseRequest.IsConverted)
+            {
+                TempData["Error"] = "لا يمكن تعديل سطر في طلب تم تحويله إلى فاتورة.";
+                return RedirectToAction(nameof(Index), new { search = prId.ToString(), searchBy = "pr" });
+            }
 
             return View(line); // View: Edit.cshtml
         }
 
         // ============================================================
         // EDIT (POST): حفظ تعديل سطر طلب الشراء
+        // ✅ مسموح التعديل: الكمية، التشغيلة، الصلاحية
+        // ❌ غير مسموح: سعر الجمهور (يجب حذف السطر وإضافته من جديد)
         // ============================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -428,27 +455,41 @@ namespace ERP.Controllers
             if (prId != model.PRId || lineNo != model.LineNo)
                 return BadRequest();
 
-            if (!ModelState.IsValid)
-            {
-                return View(model);
-            }
-
             var existing = await _context.PRLines
+                .Include(l => l.PurchaseRequest)
                 .FirstOrDefaultAsync(l => l.PRId == prId && l.LineNo == lineNo);
 
             if (existing == null)
                 return NotFound();
 
-            // نسخ الحقول المسموح بتعديلها
-            existing.ProdId = model.ProdId;                       // كود الصنف
-            existing.QtyRequested = model.QtyRequested;           // الكمية المطلوبة
-            existing.PriceBasis = model.PriceBasis;               // مرجع السعر
-            existing.PriceRetail = model.PriceRetail;             // سعر الجمهور
-            existing.PurchaseDiscountPct = model.PurchaseDiscountPct; // خصم الشراء %
-            existing.ExpectedCost = model.ExpectedCost;           // التكلفة المتوقعة
-            existing.PreferredBatchNo = model.PreferredBatchNo;   // التشغيلة المفضلة
-            existing.PreferredExpiry = model.PreferredExpiry;     // الصلاحية المفضلة
-            existing.QtyConverted = model.QtyConverted;           // الكمية المحوّلة (لو محتاجها)
+            // ================================
+            // 1) التحقق من أن الطلب غير محول
+            // ================================
+            if (existing.PurchaseRequest.IsConverted)
+            {
+                TempData["Error"] = "لا يمكن تعديل سطر في طلب تم تحويله إلى فاتورة.";
+                return RedirectToAction(nameof(Index), new { search = existing.PRId.ToString(), searchBy = "pr" });
+            }
+
+            // ================================
+            // 2) التحقق من أن سعر الجمهور لم يتغير
+            // ================================
+            if (model.PriceRetail != existing.PriceRetail)
+            {
+                ModelState.AddModelError("PriceRetail", "لا يمكن تعديل سعر الجمهور. يجب حذف السطر وإضافته من جديد.");
+                return View(existing);
+            }
+
+            // ================================
+            // 3) نسخ الحقول المسموح بتعديلها فقط
+            // ================================
+            existing.QtyRequested = model.QtyRequested;           // ✅ الكمية المطلوبة
+            existing.PreferredBatchNo = model.PreferredBatchNo;   // ✅ التشغيلة المفضلة
+            existing.PreferredExpiry = model.PreferredExpiry;     // ✅ الصلاحية المفضلة
+            
+            // إعادة حساب التكلفة المتوقعة بناءً على الكمية الجديدة (مع الحفاظ على السعر والخصم)
+            decimal expectedCost = existing.QtyRequested * existing.PriceRetail * (1 - (existing.PurchaseDiscountPct / 100m));
+            existing.ExpectedCost = expectedCost;
 
             await _context.SaveChangesAsync();
 
