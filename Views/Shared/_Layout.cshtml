@@ -802,8 +802,7 @@
                         <li class="nav-item">
                             <button id="btnRefreshActiveTab"
                                     type="button"
-                                    class="btn btn-sm btn-light"
-                                    onclick="return ERP_refreshActiveTab();">
+                                    class="btn btn-sm btn-light">
                                 تحديث 
                             </button>
                         </li>
@@ -901,39 +900,27 @@
             // (B) إيجاد iframe الخاص بالتاب النشط (الأزرق)
             // =========================
             function getActiveTabIframe() {
+                // ✅ الطريقة الصحيحة: البحث عن iframe التاب النشط حسب نظام site.js
+                // التاب النشط: .app-tab.active في appTabsBar
+                // الإطار النشط: .app-tab-frame:not(.d-none) في appTabsContainer
 
-                // 1) زر التاب النشط (الأزرق) في شريط التابات
-                const activeTabBtn =
-                    document.querySelector('.nav-tabs .nav-link.active') ||
-                    document.querySelector('.nav-tabs [aria-selected="true"]') ||
-                    document.querySelector('.app-tabs-container .nav-link.active') ||
-                    document.querySelector('.app-tabs-container [aria-selected="true"]');
-
-                if (activeTabBtn) {
-                    // Bootstrap: data-bs-target أو href="#paneId"
-                    const targetSel =
-                        activeTabBtn.getAttribute('data-bs-target') ||
-                        activeTabBtn.getAttribute('data-target') ||
-                        activeTabBtn.getAttribute('href');
-
-                    if (targetSel && targetSel.startsWith('#')) {
-                        const pane = document.querySelector(targetSel);
-                        if (pane) {
-                            const fr = pane.querySelector('iframe');
-                            if (fr) return fr;
-                        }
+                // 1) البحث عن التاب النشط في شريط التابات
+                const activeTab = document.querySelector('#appTabsBar .app-tab.active');
+                if (activeTab) {
+                    const tabId = activeTab.getAttribute('data-tab-id');
+                    if (tabId) {
+                        // البحث عن الإطار المقابل لهذا التاب
+                        const frame = document.querySelector(`#appTabsContainer .app-tab-frame[data-tab-id="${tabId}"]:not(.d-none)`);
+                        if (frame) return frame;
                     }
                 }
 
-                // 2) fallback: tab-pane النشط
-                const pane = document.querySelector('.tab-pane.show.active') || document.querySelector('.tab-pane.active');
-                if (pane) {
-                    const fr = pane.querySelector('iframe');
-                    if (fr) return fr;
-                }
+                // 2) fallback: البحث عن أي iframe نشط (بدون d-none)
+                const activeFrame = document.querySelector('#appTabsContainer .app-tab-frame:not(.d-none)');
+                if (activeFrame) return activeFrame;
 
                 // 3) fallback أخير: أي iframe داخل محتوى التابات
-                const any = document.querySelector('#appTabsContainer iframe') || document.querySelector('.tab-content iframe');
+                const any = document.querySelector('#appTabsContainer .app-tab-frame');
                 return any || null;
             }
 
@@ -943,21 +930,95 @@
             function refreshIframe(iframe) {
                 if (!iframe) return;
 
-                const src = iframe.getAttribute('src') || '';
-                if (!src) return;
+                try {
+                    const frameWindow = iframe.contentWindow;
+                    const frameDocument = iframe.contentDocument;
 
-                // الطريقة الأضمن: تغيير src بإضافة ts (يكسر الكاش ويجبر تحميل جديد)
-                iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));
+                    // ✅ محاولة 1: استدعاء دالة __ERP_REFRESH__ إذا كانت موجودة
+                    if (frameWindow && typeof frameWindow.__ERP_REFRESH__ === 'function') {
+                        try {
+                            frameWindow.__ERP_REFRESH__();
+                            console.log('Refresh: تم استدعاء __ERP_REFRESH__ داخل الصفحة');
+                            return; // نجح، لا حاجة لإعادة تحميل
+                        } catch (e) {
+                            console.warn('Refresh: خطأ في استدعاء __ERP_REFRESH__:', e);
+                        }
+                    }
+
+                    // ✅ محاولة 2: البحث عن زر refresh داخل الصفحة
+                    if (frameDocument) {
+                        const refreshBtn = frameDocument.querySelector('[data-refresh], .btn-refresh, button[onclick*="refresh"], button[onclick*="Refresh"]');
+                        if (refreshBtn) {
+                            try {
+                                refreshBtn.click();
+                                console.log('Refresh: تم الضغط على زر refresh داخل الصفحة');
+                                return; // نجح، لا حاجة لإعادة تحميل
+                            } catch (e) {
+                                console.warn('Refresh: خطأ في الضغط على زر refresh:', e);
+                            }
+                        }
+                    }
+
+                    // ✅ محاولة 3: البحث عن form داخل الصفحة وإعادة submit
+                    if (frameDocument) {
+                        // البحث عن form (مثل customerSearchForm في حجم التعامل)
+                        const forms = frameDocument.querySelectorAll('form[method="get"], form[method="post"]');
+                        if (forms.length > 0) {
+                            // نبحث عن form يحتوي على بيانات أو form رئيسي
+                            for (let form of forms) {
+                                // نفضل forms التي لها id أو name
+                                const isMainForm = form.id || form.name || form.className.includes('search') || form.className.includes('filter');
+                                
+                                // التحقق من وجود بيانات
+                                const hasData = form.querySelector('input[type="hidden"][value]') || 
+                                               form.querySelector('input[type="text"][value]') ||
+                                               form.querySelector('input[type="number"][value]') ||
+                                               form.querySelector('select[value]') ||
+                                               form.querySelector('input[type="date"][value]');
+                                
+                                if (isMainForm || hasData) {
+                                    try {
+                                        form.submit();
+                                        console.log('Refresh: تم submit للـ form:', form.id || form.name || 'unnamed');
+                                        return; // نجح، لا حاجة لإعادة تحميل
+                                    } catch (e) {
+                                        console.warn('Refresh: خطأ في submit الـ form:', e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // ✅ محاولة 4: إعادة تحميل الـ iframe (fallback)
+                    const src = iframe.getAttribute('src') || '';
+                    if (!src) return;
+
+                    // الطريقة الأضمن: تغيير src بإضافة ts (يكسر الكاش ويجبر تحميل جديد)
+                    iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));
+                    console.log('Refresh: تم إعادة تحميل الـ iframe');
+
+                } catch (e) {
+                    // في حالة Cross-origin أو أي خطأ آخر، نعيد تحميل الـ iframe
+                    console.warn('Refresh: خطأ في الوصول للـ iframe، سيتم إعادة التحميل:', e);
+                    const src = iframe.getAttribute('src') || '';
+                    if (src) {
+                        iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));
+                    }
+                }
             }
 
             function refreshActiveTab() {
                 const iframe = getActiveTabIframe();
                 if (!iframe) {
                     console.warn('Refresh: لم يتم العثور على iframe للتاب النشط.');
-                    return;
+                    return false;
                 }
                 refreshIframe(iframe);
+                return true;
             }
+
+            // ✅ جعل الدالة متاحة عالمياً للاستخدام من أي مكان
+            window.ERP_refreshActiveTab = refreshActiveTab;
 
             // =========================
             // (D) ربط زر الريفريش بطريقة تشتغل حتى لو DOMContentLoaded خلص

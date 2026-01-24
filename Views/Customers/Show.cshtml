@@ -773,6 +773,26 @@
                     }
                 });
             });
+
+            // =========================
+            // ✅ دالة تحديث للصفحة (يتم استدعاؤها من زر التحديث في الناف بار)
+            // =========================
+            window.__ERP_REFRESH__ = function () {
+                var form = document.getElementById('customerSearchForm');
+                if (form) {
+                    // التحقق من وجود بيانات في الـ form قبل الـ submit
+                    var hiddenId = document.getElementById('partySearchId');
+                    if (hiddenId && hiddenId.value) {
+                        form.submit();
+                    } else {
+                        // لو مفيش عميل محدد، نعيد تحميل الصفحة فقط
+                        window.location.reload();
+                    }
+                } else {
+                    // لو مفيش form، نعيد تحميل الصفحة
+                    window.location.reload();
+                }
+            };
         })();
     </script>
 }

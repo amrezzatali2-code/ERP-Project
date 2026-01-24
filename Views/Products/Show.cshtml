@@ -705,7 +705,7 @@
                     .replace(/\s+/g, ' ');
             }
 
-            // تعليق: بحث بالاسم (تطابق كامل أو يبدأ بـ أو يحتوي على)
+            // تعليق: بحث بالاسم (تطابق تام أو يبدأ بـ — StartsWith فقط، لا Contains)
             function findProductByName(name) {
                 const search = normalizeText(name);
                 if (!search) return null;
@@ -720,11 +720,6 @@
                 // 2) يبدأ بـ
                 for (let i = 0; i < opts.length; i++) {
                     if (normalizeText(opts[i].value).startsWith(search)) return opts[i];
-                }
-
-                // 3) يحتوي على
-                for (let i = 0; i < opts.length; i++) {
-                    if (normalizeText(opts[i].value).includes(search)) return opts[i];
                 }
 
                 return null;

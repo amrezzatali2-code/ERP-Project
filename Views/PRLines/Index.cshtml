@@ -1,4 +1,4 @@
-﻿@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
+@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
 @using Microsoft.AspNetCore.Html          @* لاستخدام HtmlString *@
 @using ERP.Infrastructure                 @* لاستخدام PagedResult *@
 @using ERP.Models                         @* لاستخدام الموديل PRLine *@
@@ -260,12 +260,14 @@
                     <th data-col="prid">@sortLink("PRId", "رقم طلب الشراء")</th>
                     <th data-col="lineno">@sortLink("LineNo", "رقم السطر")</th>
                     <th data-col="prodid">@sortLink("ProdId", "كود الصنف")</th>
+                    <th data-col="prodname">@sortLink("prodname", "اسم الصنف")</th>
                     <th data-col="qty">@sortLink("QtyRequested", "الكمية المطلوبة")</th>
 
                     <th data-col="priceBasis">مرجع السعر</th>
                     <th data-col="priceRetail">سعر الجمهور المرجعي</th>
                     <th data-col="disc">خصم الشراء %</th>
                     <th data-col="expectedCost">التكلفة المتوقعة</th>
+                    <th data-col="linevalue">@sortLink("linevalue", "قيمة السطر")</th>
                     <th data-col="batch">التشغيلة المفضلة</th>
                     <th data-col="expiry">الصلاحية المفضلة</th>
                     <th data-col="qtyConv">الكمية المحوّلة</th>
@@ -277,7 +279,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="13" class="text-center text-muted py-4">
+                        <td colspan="15" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -287,6 +289,12 @@
                     foreach (var l in Model.Items)
                     {
                         var key = $"{l.PRId}_{l.LineNo}";   @* مفتاح مركّب للسطر: رقم الطلب + رقم السطر *@
+
+                        // ✅ اسم الصنف من جدول Products
+                        var prodName = l.Product?.ProdName ?? "";
+
+                        // ✅ حساب قيمة السطر = (QtyRequested * PriceRetail) * (1 - PurchaseDiscountPct / 100)
+                        decimal lineValue = (l.QtyRequested * l.PriceRetail) * (1m - (l.PurchaseDiscountPct / 100m));
 
                         <tr>
                             <td class="text-center no-print">
@@ -298,12 +306,14 @@
                             <td data-col="prid">@l.PRId</td>
                             <td data-col="lineno">@l.LineNo</td>
                             <td data-col="prodid">@l.ProdId</td>
+                            <td data-col="prodname">@prodName</td>
                             <td data-col="qty">@l.QtyRequested</td>
 
                             <td data-col="priceBasis">@l.PriceBasis</td>
                             <td data-col="priceRetail">@l.PriceRetail.ToString("0.00")</td>
                             <td data-col="disc">@l.PurchaseDiscountPct.ToString("0.00")</td>
                             <td data-col="expectedCost">@l.ExpectedCost.ToString("0.0000")</td>
+                            <td data-col="linevalue">@lineValue.ToString("0.00")</td>
                             <td data-col="batch">@l.PreferredBatchNo</td>
                             <td data-col="expiry">
                                 @(l.PreferredExpiry.HasValue
@@ -313,10 +323,10 @@
                             <td data-col="qtyConv">@l.QtyConverted</td>
 
                             <td class="text-center text-nowrap no-print">
-                                <a asp-action="Show"
-                                   asp-route-prId="@l.PRId"
-                                   asp-route-lineNo="@l.LineNo"
-                                   class="btn btn-erp btn-erp-secondary btn-erp-sm">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-tab"
+                                   href="@Url.Action("Show", "PurchaseRequests", new { id = l.PRId, frame = 1 })"
+                                   data-tab-id="pr-show-tab"
+                                   data-tab-title="طلب شراء">
                                     عرض
                                 </a>
 
@@ -337,12 +347,22 @@
                 }
             </tbody>
             <tfoot class="table-light">
-                <tr>
-                    <td colspan="13" class="text-end">
-                        <small class="text-muted">
-                            إجمالي السطور: @total
-                        </small>
-                    </td>
+                <tr class="fw-bold">
+                    <td class="text-center no-print" data-col="select"></td>
+                    <td data-col="prid" class="text-muted">إجمالي</td>
+                    <td data-col="lineno"></td>
+                    <td data-col="prodid"></td>
+                    <td data-col="prodname"></td>
+                    <td data-col="qty"></td>
+                    <td data-col="priceBasis"></td>
+                    <td data-col="priceRetail"></td>
+                    <td data-col="disc"></td>
+                    <td data-col="expectedCost"></td>
+                    <td data-col="linevalue">@((ViewBag.TotalLineValue != null ? (decimal)ViewBag.TotalLineValue : 0m).ToString("0.00"))</td>
+                    <td data-col="batch"></td>
+                    <td data-col="expiry"></td>
+                    <td data-col="qtyConv"></td>
+                    <td class="text-center no-print" data-col="actions"></td>
                 </tr>
             </tfoot>
         </table>

@@ -330,9 +330,11 @@ private int? GetCurrentUserId()
             int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
 
             // =========================================================
-            // (7) قراءة صفحة واحدة فقط
+            // (7) قراءة صفحة واحدة فقط (مع تحميل Customer و Warehouse)
             // =========================================================
             var items = await query
+                .Include(pr => pr.Customer)
+                .Include(pr => pr.Warehouse)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
@@ -1972,16 +1974,25 @@ private async Task PopulateDropDownsAsync(
                 .ToListAsync();
 
             // =========================
-            // 2) شرط أمان: منع الحذف حسب حالة الطلب (Status)
+            // 2) شرط أمان: منع الحذف حسب حالة الطلب (Status + IsConverted)
             // =========================
+            // متغير: التحقق من IsConverted أولاً
+            if (pr.IsConverted)
+            {
+                TempData["ErrorMessage"] = "لا يمكن حذف طلب الشراء لأنه تم تحويله إلى فاتورة شراء.";
+                return RedirectToAction(nameof(Index));
+            }
+
             // متغير: نص الحالة (لو عندك عمود Status)
             var status = (pr.Status ?? "").Trim();
 
             // تعليق: لو الحالة تدل أنه غير مفتوح للتعديل → امنع الحذف
             // (عدّل الكلمات حسب النصوص الفعلية عندك لو مختلفة)
-            if (status.Contains("معتمد") || status.Contains("مغلق") || status.Contains("منفذ") || status.Contains("مرحّل"))
+            if (status.Contains("معتمد") || status.Contains("مغلق") || status.Contains("منفذ") || status.Contains("مرحّل") || 
+                string.Equals(status, "Converted", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase))
             {
-                TempData["ErrorMessage"] = "لا يمكن حذف طلب الشراء لأنه غير مفتوح للتعديل (معتمد/مغلق/منفذ/مرحّل).";
+                TempData["ErrorMessage"] = "لا يمكن حذف طلب الشراء لأنه غير مفتوح للتعديل (معتمد/مغلق/منفذ/مرحّل/محوّل).";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -2054,59 +2065,91 @@ private async Task PopulateDropDownsAsync(
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkDelete([FromForm] int[] ids)
+        public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
-            if (ids == null || ids.Length == 0)
+            if (string.IsNullOrWhiteSpace(selectedIds))
             {
-                TempData["Error"] = "لم يتم تحديد أي طلبات للمسح.";
-                return RedirectToAction(nameof(Index), new { frame = 1 });
+                TempData["ErrorMessage"] = "لم يتم اختيار أي طلب للحذف.";
+                return RedirectToAction(nameof(Index));
             }
 
-            // متغير: تحميل الطلبات المطلوبة
-            var requests = await _context.PurchaseRequests
-                .Where(x => ids.Contains(x.PRId))
+            // تحويل "1,2,3" إلى List<int>
+            var ids = selectedIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => TryParseNullableInt(s))
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            if (!ids.Any())
+            {
+                TempData["ErrorMessage"] = "لم يتم التعرف على أرقام الطلبات المحددة.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // نجيب الطلبات الموجودة فقط
+            var existingIds = await _context.PurchaseRequests
+                .Where(p => ids.Contains(p.PRId))
+                .Select(p => p.PRId)
                 .ToListAsync();
 
-            if (requests.Count == 0)
+            if (!existingIds.Any())
             {
-                TempData["Error"] = "الطلبات المحددة غير موجودة.";
-                return RedirectToAction(nameof(Index), new { frame = 1 });
+                TempData["ErrorMessage"] = "لم يتم العثور على الطلبات المحددة في قاعدة البيانات.";
+                return RedirectToAction(nameof(Index));
             }
 
-            // متغير: أرقام الطلبات
-            var prIds = requests.Select(x => x.PRId).ToList();
+            int deletedCount = 0;     // متغير: عدد الطلبات التي تم حذفها
+            int blockedCount = 0;     // متغير: عدد الطلبات الممنوع حذفها
+            int failedCount = 0;      // متغير: عدد الطلبات التي فشل حذفها بسبب خطأ
 
-            // متغير: تحميل كل السطور التابعة مرة واحدة
-            var lines = await _context.PRLines
-                .Where(l => prIds.Contains(l.PRId))
-                .ToListAsync();
+            var blockedIds = new List<int>(); // متغير: أرقام الطلبات الممنوعة
+            var failedIds = new List<int>();  // متغير: أرقام الطلبات التي فشلت
 
-            await using var tx = await _context.Database.BeginTransactionAsync();
-
-            // ✅ أولاً: مسح السطور
-            if (lines.Count > 0)
-                _context.PRLines.RemoveRange(lines);
-
-            // ✅ ثانياً: مسح الهيدر
-            _context.PurchaseRequests.RemoveRange(requests);
-
-            await _context.SaveChangesAsync();
-            await tx.CommitAsync();
-
-            // لوج
-            try
+            // ✅ حذف كل طلب لوحده داخل Transaction مستقل
+            // علشان لو طلب فشل/ممنوع ما يوقفش باقي العملية
+            foreach (var id in existingIds)
             {
-                await _activityLogger.LogAsync(
-                    UserActionType.Delete,
-                    "PurchaseRequest",
-                    null,
-                    $"BulkDelete PurchaseRequests | Count={requests.Count} | Ids={string.Join(",", prIds)}"
-                );
-            }
-            catch { }
+                var result = await TryDeletePurchaseRequestDeepAsync(id);
 
-            TempData["SuccessMessage"] = $"تم حذف ({requests.Count}) طلب/طلبات شراء بنجاح.";
-            return RedirectToAction(nameof(Index), new { frame = 1 });
+                if (result.Status == DeleteInvoiceStatus.Deleted)
+                {
+                    deletedCount++;
+                }
+                else if (result.Status == DeleteInvoiceStatus.BlockedByStatus)
+                {
+                    blockedCount++;
+                    blockedIds.Add(id);
+                }
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(id);
+                }
+            }
+
+            // ✅ ملخص للمستخدم
+            var summary = $"تم حذف: {deletedCount} | تم منع: {blockedCount} | فشل: {failedCount}";
+
+            if (deletedCount > 0)
+            {
+                TempData["SuccessMessage"] = summary;
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"طلبات فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = $"لم يتم حذف أي طلب. {summary}";
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | طلبات فشل حذفها: {string.Join(", ", failedIds)}";
+            }
+
+            return RedirectToAction(nameof(Index));
         }
 
 
@@ -2125,41 +2168,62 @@ private async Task PopulateDropDownsAsync(
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            // متغير: تحميل كل الطلبات
-            var allRequests = await _context.PurchaseRequests.ToListAsync();
-            if (allRequests.Count == 0)
+            // نجيب كل IDs فقط لتقليل الذاكرة
+            var allIds = await _context.PurchaseRequests
+                .Select(x => x.PRId)
+                .ToListAsync();
+
+            if (!allIds.Any())
             {
-                TempData["Error"] = "لا توجد طلبات شراء لمسحها.";
-                return RedirectToAction(nameof(Index), new { frame = 1 });
+                TempData["ErrorMessage"] = "لا توجد طلبات شراء لحذفها.";
+                return RedirectToAction(nameof(Index));
             }
 
-            // متغير: تحميل كل السطور
-            var allLines = await _context.PRLines.ToListAsync();
+            int deletedCount = 0;  // متغير: عدد المحذوف
+            int blockedCount = 0;   // متغير: عدد الممنوع
+            int failedCount = 0;    // متغير: عدد الفاشل
 
-            await using var tx = await _context.Database.BeginTransactionAsync();
+            var blockedIds = new List<int>(); // متغير: أرقام الممنوع
+            var failedIds = new List<int>();  // متغير: أرقام الفاشل
 
-            if (allLines.Count > 0)
-                _context.PRLines.RemoveRange(allLines);
-
-            _context.PurchaseRequests.RemoveRange(allRequests);
-
-            await _context.SaveChangesAsync();
-            await tx.CommitAsync();
-
-            // لوج
-            try
+            foreach (var id in allIds)
             {
-                await _activityLogger.LogAsync(
-                    UserActionType.Delete,
-                    "PurchaseRequest",
-                    null,
-                    $"DeleteAll PurchaseRequests | Count={allRequests.Count}"
-                );
-            }
-            catch { }
+                var result = await TryDeletePurchaseRequestDeepAsync(id);
 
-            TempData["SuccessMessage"] = $"تم حذف كل طلبات الشراء ({allRequests.Count}) بنجاح.";
-            return RedirectToAction(nameof(Index), new { frame = 1 });
+                if (result.Status == DeleteInvoiceStatus.Deleted)
+                    deletedCount++;
+                else if (result.Status == DeleteInvoiceStatus.BlockedByStatus)
+                {
+                    blockedCount++;
+                    blockedIds.Add(id);
+                }
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(id);
+                }
+            }
+
+            var summary = $"تم حذف: {deletedCount} | تم منع: {blockedCount} | فشل: {failedCount}";
+
+            if (deletedCount > 0)
+            {
+                TempData["SuccessMessage"] = summary;
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"طلبات فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
+            }
+            else
+            {
+                TempData["ErrorMessage"] = $"لم يتم حذف أي طلب. {summary}";
+                if (blockedIds.Count > 0)
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                if (failedIds.Count > 0)
+                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | طلبات فشل حذفها: {string.Join(", ", failedIds)}";
+            }
+
+            return RedirectToAction(nameof(Index));
         }
 
 
@@ -2206,6 +2270,96 @@ private async Task PopulateDropDownsAsync(
                 Message = message; // متغير: رسالة تفصيلية
             }
         }
+
+        // ============================================================================
+        // ✅ دالة مساعدة: تحاول حذف طلب شراء واحد "حذف عميق" مثل زر Delete
+        // - ترجع حالة: Deleted / BlockedByStatus / Failed
+        // - كل طلب له Transaction مستقل (حتى لا نفشل العملية كلها)
+        // ============================================================================
+        private async Task<DeleteInvoiceResult> TryDeletePurchaseRequestDeepAsync(int id)
+        {
+            // =========================
+            // 0) تحميل الطلب (Tracked)
+            // =========================
+            var pr = await _context.PurchaseRequests
+                .FirstOrDefaultAsync(x => x.PRId == id);
+
+            if (pr == null)
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed, "الطلب غير موجود.");
+
+            // =========================
+            // 1) شرط أمان: منع الحذف حسب حالة الطلب (Status + IsConverted)
+            // =========================
+            if (pr.IsConverted)
+            {
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.BlockedByStatus,
+                    "ممنوع الحذف: تم تحويل الطلب إلى فاتورة شراء.");
+            }
+
+            var status = (pr.Status ?? "").Trim();
+            if (status.Contains("معتمد") || status.Contains("مغلق") || status.Contains("منفذ") || status.Contains("مرحّل") ||
+                string.Equals(status, "Converted", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase))
+            {
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.BlockedByStatus,
+                    "ممنوع الحذف: الطلب غير مفتوح للتعديل (معتمد/مغلق/منفذ/مرحّل/محوّل).");
+            }
+
+            // =========================
+            // 2) تحميل سطور الطلب
+            // =========================
+            var lines = await _context.PRLines
+                .Where(l => l.PRId == id)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            // =========================
+            // 3) Transaction لكل طلب
+            // =========================
+            await using var tx = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // =========================
+                // 4) حذف السطور أولاً
+                // =========================
+                if (lines.Count > 0)
+                    _context.PRLines.RemoveRange(lines);
+
+                // =========================
+                // 5) حذف الهيدر
+                // =========================
+                _context.PurchaseRequests.Remove(pr);
+
+                // =========================
+                // 6) SaveChanges + Commit
+                // =========================
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                // =========================
+                // 7) LogActivity (اختياري)
+                // =========================
+                try
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "PurchaseRequests",
+                        id,
+                        $"PRId={id} | Bulk/DeleteAll | Lines={lines.Count}"
+                    );
+                }
+                catch { }
+
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.Deleted, "تم الحذف.");
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed, ex.Message);
+            }
+        }
+
 
 
 
@@ -2767,6 +2921,14 @@ private async Task PopulateDropDownsAsync(
                         : query.OrderBy(p => p.Status).ThenBy(p => p.PRId);
                     break;
 
+                case "total":
+                case "expectedtotal":
+                case "expecteditemstotal":
+                    query = desc
+                        ? query.OrderByDescending(p => p.ExpectedItemsTotal).ThenByDescending(p => p.PRId)
+                        : query.OrderBy(p => p.ExpectedItemsTotal).ThenBy(p => p.PRId);
+                    break;
+
                 // ✅ بدل posted (طلبات الشراء عندك فيها IsConverted)
                 case "posted":
                 case "converted":
@@ -2795,12 +2957,6 @@ private async Task PopulateDropDownsAsync(
                         : query.OrderBy(p => p.TotalQtyRequested).ThenBy(p => p.PRId);
                     break;
 
-                case "expected":
-                case "expectedtotal":
-                    query = desc
-                        ? query.OrderByDescending(p => p.ExpectedItemsTotal).ThenByDescending(p => p.PRId)
-                        : query.OrderBy(p => p.ExpectedItemsTotal).ThenBy(p => p.PRId);
-                    break;
 
                 default:
                     // الترتيب الافتراضي: بتاريخ طلب الشراء ثم رقم الطلب
@@ -2854,6 +3010,31 @@ private async Task PopulateDropDownsAsync(
 
 
 
+
+        // ================================================================
+        // إعادة حساب إجماليات طلب محدد
+        // ================================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RecalcTotals(int id)
+        {
+            try
+            {
+                var pr = await _context.PurchaseRequests
+                    .FirstOrDefaultAsync(x => x.PRId == id);
+
+                if (pr == null)
+                    return NotFound(new { ok = false, message = "طلب الشراء غير موجود." });
+
+                await _docTotals.RecalcPurchaseRequestTotalsAsync(id);
+
+                return Json(new { ok = true, message = $"تم إعادة حساب إجماليات الطلب رقم {id} بنجاح." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { ok = false, message = ex.Message });
+            }
+        }
 
         // =========================================================
         // تحويل طلب شراء (PurchaseRequest) إلى فاتورة مشتريات (PurchaseInvoice)
@@ -3174,7 +3355,8 @@ private async Task PopulateDropDownsAsync(
                         prId = request.PRId,
                         piId = pi.PIId,
                         prStatus = request.Status,
-                        isConverted = request.IsConverted
+                        isConverted = request.IsConverted,
+                        postedLabel = "محول"
                     });
                 }
 
@@ -3210,7 +3392,33 @@ private async Task PopulateDropDownsAsync(
 
 
 
+        // ================================================================
+        // إعادة حساب إجماليات جميع الطلبات
+        // ================================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> RecalcAllTotals()
+        {
+            try
+            {
+                var allRequests = await _context.PurchaseRequests
+                    .Select(pr => pr.PRId)
+                    .ToListAsync();
 
+                int count = 0;
+                foreach (var prId in allRequests)
+                {
+                    await _docTotals.RecalcPurchaseRequestTotalsAsync(prId);
+                    count++;
+                }
+
+                return Json(new { ok = true, message = $"تم إعادة حساب إجماليات {count} طلب بنجاح." });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { ok = false, message = ex.Message });
+            }
+        }
 
     }
 }

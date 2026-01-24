@@ -218,6 +218,13 @@
                 <div class="col-lg-4">
                     <div class="erp-toolbar justify-content-lg-end">
 
+                        @* طلب جديد *@
+                        <button type="button"
+                                class="btn btn-erp btn-erp-success btn-erp-sm"
+                                id="btnNewPurchaseRequest">
+                            ➕ طلب جديد
+                        </button>
+
                         @* فلترة بالتاريخ/الوقت *@
                         <button type="button"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm"
@@ -328,7 +335,8 @@
                     <th data-col="id">@sortLink("id", "رقم الطلب")</th>
                     <th data-col="date">@sortLink("date", "تاريخ الطلب")</th>
                     <th data-col="needby">@sortLink("needby", "مطلوب قبل")</th>
-                    <th data-col="customer">@sortLink("customer", "العميل")</th>
+                    <th data-col="customer">@sortLink("customer", "اسم العميل")</th>
+                    <th data-col="total">@sortLink("total", "إجمالي الطلب")</th>
                     <th data-col="warehouse">@sortLink("warehouse", "المخزن")</th>
                     <th data-col="status">@sortLink("status", "الحالة")</th>
                     <th data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
@@ -340,7 +348,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-4">
+                        <td colspan="10" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -359,18 +367,18 @@
                             <td data-col="id">@pr.PRId</td>
                             <td data-col="date">@pr.PRDate.ToString("yyyy-MM-dd")</td>
                             <td data-col="needby">@pr.NeedByDate?.ToString("yyyy-MM-dd")</td>
-                            <td data-col="customer">@pr.Customer?.CustomerName (@pr.CustomerId)</td>
+                            <td data-col="customer">@(pr.Customer?.CustomerName ?? "غير محدد")</td>
+                            <td data-col="total">@pr.ExpectedItemsTotal.ToString("N2")</td>
                             <td data-col="warehouse">@pr.Warehouse?.WarehouseName (@pr.WarehouseId)</td>
                             <td data-col="status">@pr.Status</td>
                             <td data-col="created">@pr.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
 
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-tab"
                                    href="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })"
-                                   data-tab-id="PurchaseRequests"
-                                   data-tab-title="طلب شراء"
-                                   data-url="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })">
+                                   data-tab-id="pr-show-tab"
+                                   data-tab-title="طلب شراء">
                                     عرض
                                 </a>
                                 <a class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab"
@@ -380,11 +388,17 @@
                                    data-url="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })">
                                     تعديل
                                 </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@pr.PRId">
-                                    حذف
-                                </a>
+
+                                <form asp-action="Delete"
+                                      asp-route-id="@pr.PRId"
+                                      method="post"
+                                      class="d-inline"
+                                      onsubmit="return confirm('تأكيد حذف الطلب رقم @pr.PRId ؟');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">
+                                        حذف
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                     }
@@ -756,6 +770,38 @@
                 fromInp.value = "";
                 toInp.value = "";
                 window.location.href = buildUrl("", "");
+            });
+        })();
+        // =========================
+        // زر طلب جديد - يفتح في نفس التاب
+        // =========================
+        (function () {
+            const btnNew = document.getElementById('btnNewPurchaseRequest');
+            if (!btnNew) return;
+
+            btnNew.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                const url = '@Url.Action("Create", "PurchaseRequests", new { frame = 1 })';
+                
+                // ✅ لو في iframe: نستخدم postMessage لتحديث URL التاب الحالي
+                try {
+                    if (window.top && window.top !== window) {
+                        // ✅ الطريقة الأفضل: إرسال رسالة لتحديث URL التاب الحالي مباشرة
+                        window.top.postMessage({
+                            type: 'erp-update-current-tab',
+                            url: url,
+                            title: 'طلب شراء'
+                        }, '*');
+                        return;
+                    }
+                } catch (e) {
+                    console.error('خطأ في postMessage:', e);
+                }
+
+                // ✅ لو مش في iframe أو فشل postMessage: نستخدم window.location
+                window.location.href = url;
             });
         })();
     </script>

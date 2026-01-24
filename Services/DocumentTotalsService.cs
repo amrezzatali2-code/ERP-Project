@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;                      // أوامر LINQ: Where / Sum / ToList
 using System.Threading.Tasks;           // async / Task
 using ERP.Data;                         // سياق قاعدة البيانات AppDbContext
@@ -66,8 +66,11 @@ namespace ERP.Services
                 // إجمالي الكمية المطلوبة
                 var totalQty = lines.Sum(l => l.QtyRequested);
 
-                // إجمالي التكلفة المتوقعة = مجموع (الكمية × ExpectedCost)
-                var totalExpected = lines.Sum(l => l.QtyRequested * l.ExpectedCost);
+                // إجمالي التكلفة المتوقعة = مجموع (الكمية × سعر الجمهور × (1 - نسبة الخصم))
+                // هذا يطابق حساب totalAfterDiscount في صفحة Show.cshtml
+                var totalExpected = lines.Sum(l => 
+                    l.QtyRequested * l.PriceRetail * (1m - (l.PurchaseDiscountPct / 100m))
+                );
 
                 header.TotalQtyRequested = totalQty;
                 header.ExpectedItemsTotal = totalExpected;

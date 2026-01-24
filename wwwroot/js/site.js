@@ -168,11 +168,6 @@ if (window.__ERP_TABS_INITED__) {
                     // ✅ نقرأ URL من data-url أو href
                     var url = normalizeUrl(getTargetUrl(link));
 
-                    if (!tabId) {
-                        console.warn("⚠ open-same-tab: data-tab-id فارغ → تم إلغاء العملية لمنع تابات مكررة");
-                        return;
-                    }
-
                     if (!url) {
                         console.warn("⚠ open-same-tab: url غير موجود/فارغ (data-url/href)");
                         return;
@@ -184,12 +179,36 @@ if (window.__ERP_TABS_INITED__) {
 
                     event.preventDefault();
 
-                    window.top.postMessage({
-                        type: 'erp-open-tab',
-                        tabId: tabId,
-                        title: tabTitle,
-                        url: url
-                    }, '*');
+                    // ✅ لو في iframe: نستخدم update-current-tab لتحديث التاب الحالي مباشرة
+                    try {
+                        if (window.top && window.top !== window) {
+                            window.top.postMessage({
+                                type: 'erp-update-current-tab',
+                                url: url,
+                                title: tabTitle
+                            }, '*');
+                            return;
+                        }
+                    } catch (e) {
+                        console.error('خطأ في postMessage:', e);
+                    }
+
+                    // ✅ لو مش في iframe: نستخدم openTab مع tabId (أو بدون tabId لتحديث التاب الحالي)
+                    if (tabId) {
+                        // محاولة فتح/تحديث تاب بنفس tabId
+                        if (window.erpTabs && typeof window.erpTabs.openTab === 'function') {
+                            window.erpTabs.openTab(tabId, url, tabTitle);
+                        } else {
+                            window.location.href = url;
+                        }
+                    } else {
+                        // لو مفيش tabId: نحدث التاب الحالي
+                        if (window.erpTabs && typeof window.erpTabs.updateCurrentTabUrl === 'function') {
+                            window.erpTabs.updateCurrentTabUrl(url, tabTitle);
+                        } else {
+                            window.location.href = url;
+                        }
+                    }
 
                     return;
                 }
@@ -417,7 +436,20 @@ if (window.__ERP_TABS_INITED__) {
 
         window.addEventListener('message', function (event) {
             var data = event.data;
-            if (!data || data.type !== 'erp-open-tab') return;
+            if (!data) return;
+
+            // ✅ تحديث URL التاب الحالي (بدون فتح تاب جديد)
+            if (data.type === 'erp-update-current-tab') {
+                var url = normalizeUrl(data.url);
+                var title = (data.title || '').trim();
+                if (url) {
+                    updateCurrentTabUrl(url, title);
+                }
+                return;
+            }
+
+            // ✅ فتح تاب (بنفس المنطق القديم)
+            if (data.type !== 'erp-open-tab') return;
 
             var tabId = normalizeTabId(data.tabId || '');
             var url = normalizeUrl(data.url);
@@ -443,11 +475,43 @@ if (window.__ERP_TABS_INITED__) {
             }
         });
 
+        // ✅ تحديث URL للتاب الحالي (بدون فتح تاب جديد)
+        function updateCurrentTabUrl(url, title) {
+            var activeFrame = tabsContainer.querySelector('.app-tab-frame:not(.d-none)');
+            if (!activeFrame) return false;
+
+            var activeTabId = activeFrame.getAttribute('data-tab-id');
+            if (!activeTabId) return false;
+
+            url = normalizeUrl(url);
+            url = ensureFrameParam(url);
+            url = addNoCache(url);
+
+            activeFrame.onload = function () {
+                tryCallErpInitFromFrame(activeFrame);
+            };
+
+            activeFrame.src = url;
+
+            if (title) {
+                var activeTab = tabsBar.querySelector('.app-tab.active');
+                if (activeTab) {
+                    var titleEl = activeTab.querySelector('.app-tab-title');
+                    if (titleEl) {
+                        titleEl.textContent = title.trim();
+                    }
+                }
+            }
+
+            return true;
+        }
+
         window.erpTabs = {
             openTab: openTab,
             activateTab: activateTab,
             closeTab: closeTab,
-            refreshCurrentTab: refreshCurrentTab
+            refreshCurrentTab: refreshCurrentTab,
+            updateCurrentTabUrl: updateCurrentTabUrl
         };
 
     })();

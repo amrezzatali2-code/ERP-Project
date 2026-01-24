@@ -2389,6 +2389,11 @@ namespace ERP.Controllers
             await LoadProductsForAutoCompleteAsync();
 
             // =========================================================
+            // ✅ (4.2) تجهيز الأسهم حتى في الفاتورة الجديدة (SIId = 0)
+            // =========================================================
+            await FillSalesInvoiceNavAsync(model.SIId);
+
+            // =========================================================
             // (5) نرجّع فيو "Show"
             // =========================================================
             return View("Show", model);
@@ -2424,6 +2429,9 @@ namespace ERP.Controllers
 
                 // ✅ مهم: تجهيز الأصناف للداتا ليست حتى لا تختفي
                 await LoadProductsForAutoCompleteAsync();
+
+                // ✅ مهم: تجهيز الأسهم حتى في حالة الخطأ
+                await FillSalesInvoiceNavAsync(invoice.SIId);
 
                 // ✅ مهم: لأن التصميم عندك يعتمد Show
                 return View("Show", invoice);

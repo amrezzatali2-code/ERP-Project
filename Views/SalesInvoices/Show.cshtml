@@ -1348,6 +1348,38 @@
                     fillFromOption(findByCode(custHiddenId.value));
                 }
 
+                // =========================================================
+                // (7) Enter على اسم العميل: الانتقال إلى زر الحفظ ثم الضغط عليه
+                // =========================================================
+                let isSaveButtonFocused = false; // متغير: هل زر الحفظ في حالة focus
+
+                custNameInput?.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        
+                        const saveBtn = document.getElementById('btnSaveInvoiceHeader');
+                        if (!saveBtn) return;
+
+                        if (!isSaveButtonFocused) {
+                            // المرة الأولى: الانتقال إلى زر الحفظ
+                            isSaveButtonFocused = true;
+                            saveBtn.focus();
+                        } else {
+                            // المرة الثانية: الضغط على زر الحفظ
+                            isSaveButtonFocused = false;
+                            saveBtn.click();
+                        }
+                    } else {
+                        // أي مفتاح آخر: إعادة تعيين الحالة
+                        isSaveButtonFocused = false;
+                    }
+                });
+
+                // إعادة تعيين الحالة عند blur من حقل اسم العميل
+                custNameInput?.addEventListener('blur', function() {
+                    isSaveButtonFocused = false;
+                });
+
             })();
 
 
@@ -1434,14 +1466,9 @@
                                 if (normalizeText(opts[i].value) === search) return opts[i];
                             }
 
-                            // 2) يبدأ بـ
+                            // 2) يبدأ بـ (StartsWith فقط — لا Contains)
                             for (let i = 0; i < opts.length; i++) {
                                 if (normalizeText(opts[i].value).startsWith(search)) return opts[i];
-                            }
-
-                            // 3) يحتوي على
-                            for (let i = 0; i < opts.length; i++) {
-                                if (normalizeText(opts[i].value).includes(search)) return opts[i];
                             }
 
                             return null;
@@ -3958,9 +3985,22 @@
                             const btnNext = document.getElementById('btnNextInvoice');
                             const btnLast = document.getElementById('btnLastInvoice');
 
-                            // base URL للعرض
-                            const base = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
+                            // base URL للعرض (بدون id)
+                            let base = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
                                 || '@Url.Action("Show", "SalesInvoices", new { frame = 1 })';
+                            
+                            // ✅ إزالة id من base URL إذا كان موجوداً (لضمان بناء URL صحيح)
+                            try {
+                                const baseUrl = new URL(base, window.location.origin);
+                                baseUrl.searchParams.delete('id');
+                                base = baseUrl.toString();
+                            } catch {
+                                // لو فشل URL parsing، نستخدم regex لإزالة id
+                                base = base.replace(/[?&]id=\d+/g, '').replace(/[?&]id=[^&]*/g, '');
+                                if (!base.includes('?')) {
+                                    base = base.replace(/&/, '?');
+                                }
+                            }
 
                             // نجهز URLs
                             const urlFirst = setOrReplaceParam(base, 'id', navFirst);
@@ -3968,10 +4008,23 @@
                             const urlPrev = setOrReplaceParam(base, 'id', prevEffective);
                             const urlNext = setOrReplaceParam(base, 'id', nextEffective);
 
-                            if (btnFirst) { btnFirst.setAttribute('data-url', urlFirst); btnFirst.setAttribute('data-id', navFirst); }
-                            if (btnLast) { btnLast.setAttribute('data-url', urlLast); btnLast.setAttribute('data-id', navLast); }
-                            if (btnPrev) { btnPrev.setAttribute('data-url', urlPrev); btnPrev.setAttribute('data-id', prevEffective); }
-                            if (btnNext) { btnNext.setAttribute('data-url', urlNext); btnNext.setAttribute('data-id', nextEffective); }
+                            // ✅ تحديث data-url و data-id للأزرار (لجميع الأزرار، حتى المعطلة)
+                            if (btnFirst) { 
+                                btnFirst.setAttribute('data-url', urlFirst); 
+                                btnFirst.setAttribute('data-id', navFirst); 
+                            }
+                            if (btnLast) { 
+                                btnLast.setAttribute('data-url', urlLast); 
+                                btnLast.setAttribute('data-id', navLast); 
+                            }
+                            if (btnPrev) { 
+                                btnPrev.setAttribute('data-url', urlPrev); 
+                                btnPrev.setAttribute('data-id', prevEffective); 
+                            }
+                            if (btnNext) { 
+                                btnNext.setAttribute('data-url', urlNext); 
+                                btnNext.setAttribute('data-id', nextEffective); 
+                            }
 
                             // Disabled
                             setBtnState(btnFirst, canFirst);
@@ -4046,13 +4099,6 @@
 
                             // حماية: لو target مش Element (نادرًا) نخرج
                             if (!(t instanceof Element)) return;
-
-
-
-                                        // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
-                        // ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
-                        const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
-                        if (navBtn) return;
 
                                     // =========================
                         // (0) زر مسح سطر من الفاتورة
@@ -4181,8 +4227,22 @@
                                 return;
                             }
 
-                            const baseUrl = btn.getAttribute('data-base-url');
-                            if (!url) return;
+                            // ✅ للأزرار: نستخدم data-url (يحتوي على URL كامل مع id)
+                            // ✅ مهم: نحدث data-url فوراً قبل الاستخدام (لضمان القيم الصحيحة)
+                            refreshSideNavButtons();
+                            
+                            let url = btn.getAttribute('data-url');
+                            
+                            // ✅ لو data-url غير موجود أو فارغ، نبني URL من data-base-url و data-id
+                            if (!url || !url.trim()) {
+                                const baseUrl = btn.getAttribute('data-base-url');
+                                const btnId = btn.getAttribute('data-id');
+                                if (baseUrl && btnId) {
+                                    url = setOrReplaceParam(baseUrl, 'id', parseInt(btnId || '0', 10));
+                                }
+                            }
+                            
+                            if (!url || !url.trim()) return;
 
                             loadInvoiceBody(url);
                         }
@@ -4416,11 +4476,16 @@
 
                         document.addEventListener('DOMContentLoaded', function () {
 
-                            // ✅ أول ما الصفحة تفتح: نضبط الأزرار
+                            // ✅ أول ما الصفحة تفتح: نضبط الأزرار (فوراً)
                             refreshSideNavButtons();
 
                             // ✅ أول ما الصفحة تفتح: نضبط Tooltips (الأسهم فقط)
                             setupTooltips();
+                            
+                            // ✅ تأكد من تحديث data-url مرة أخرى بعد تأخير بسيط (لضمان التحديث)
+                            setTimeout(function() {
+                                refreshSideNavButtons();
+                            }, 100);
 
                             // ✅ إزالة Tooltip من البحث نهائيًا (Placeholder فقط)
                             const input = document.getElementById('NavInvoiceSearchInput');

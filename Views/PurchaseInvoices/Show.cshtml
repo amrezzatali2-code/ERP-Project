@@ -1281,6 +1281,38 @@
                 fillSupplierFromOption(findSupplierByCode(custHiddenId.value));
             }
 
+            // =========================================================
+            // Enter على اسم المورد: الانتقال إلى زر الحفظ ثم الضغط عليه
+            // =========================================================
+            let isSaveButtonFocused = false; // متغير: هل زر الحفظ في حالة focus
+
+            custNameInput?.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    
+                    const saveBtn = document.getElementById('btnSaveInvoiceHeader');
+                    if (!saveBtn) return;
+
+                    if (!isSaveButtonFocused) {
+                        // المرة الأولى: الانتقال إلى زر الحفظ
+                        isSaveButtonFocused = true;
+                        saveBtn.focus();
+                    } else {
+                        // المرة الثانية: الضغط على زر الحفظ
+                        isSaveButtonFocused = false;
+                        saveBtn.click();
+                    }
+                } else {
+                    // أي مفتاح آخر: إعادة تعيين الحالة
+                    isSaveButtonFocused = false;
+                }
+            });
+
+            // إعادة تعيين الحالة عند blur من حقل اسم المورد
+            custNameInput?.addEventListener('blur', function() {
+                isSaveButtonFocused = false;
+            });
+
         })();
 
         // =========================================================
@@ -1364,70 +1396,23 @@
 
             function findProductByName(name) {
                 const search = normalizeText(name);
-                if (!search) {
-                    console.warn('⚠️ findProductByName: نص البحث فارغ');
-                    return null;
-                }
+                if (!search) return null;
 
                 const opts = prodDataList.options;
-                if (!opts || opts.length === 0) {
-                    console.warn('⚠️ findProductByName: قائمة الأصناف فارغة');
-                    return null;
-                }
-
-                console.log('🔍 البحث عن:', search, 'من', opts.length, 'صنف');
+                if (!opts || opts.length === 0) return null;
 
                 // 1) تطابق تام
                 for (let i = 0; i < opts.length; i++) {
                     const optText = normalizeText(opts[i].value);
-                    if (optText === search) {
-                        console.log('✅ تطابق تام:', opts[i].value);
-                        return opts[i];
-                    }
+                    if (optText === search) return opts[i];
                 }
 
-                // 2) يبدأ بـ (أول تطابق)
+                // 2) يبدأ بـ (StartsWith فقط — لا Contains)
                 for (let i = 0; i < opts.length; i++) {
                     const optText = normalizeText(opts[i].value);
-                    if (optText.startsWith(search)) {
-                        console.log('✅ يبدأ بـ:', opts[i].value);
-                        return opts[i];
-                    }
+                    if (optText.startsWith(search)) return opts[i];
                 }
 
-                // 3) يحتوي على (أول تطابق)
-                for (let i = 0; i < opts.length; i++) {
-                    const optText = normalizeText(opts[i].value);
-                    if (optText.includes(search)) {
-                        console.log('✅ يحتوي على:', opts[i].value);
-                        return opts[i];
-                    }
-                }
-
-                // 4) البحث العكسي: هل النص المدخل يحتوي على اسم الصنف
-                for (let i = 0; i < opts.length; i++) {
-                    const optText = normalizeText(opts[i].value);
-                    if (optText.length > 3 && search.includes(optText)) {
-                        console.log('✅ بحث عكسي:', opts[i].value);
-                        return opts[i];
-                    }
-                }
-
-                // 5) البحث بكلمات منفصلة (إذا كان البحث يحتوي على عدة كلمات)
-                const searchWords = search.split(' ').filter(w => w.length > 2);
-                if (searchWords.length > 0) {
-                    for (let i = 0; i < opts.length; i++) {
-                        const optText = normalizeText(opts[i].value);
-                        // التحقق من أن جميع كلمات البحث موجودة في اسم الصنف
-                        const allWordsMatch = searchWords.every(word => optText.includes(word));
-                        if (allWordsMatch) {
-                            console.log('✅ تطابق كلمات:', opts[i].value);
-                            return opts[i];
-                        }
-                    }
-                }
-
-                console.warn('❌ لم يتم العثور على الصنف:', search);
                 return null;
             }
 

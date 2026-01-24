@@ -190,11 +190,12 @@
                             <button type="button"
                                     id="btnFirstInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
+                                    data-tab-id="pr-show-tab"
                                     data-tab-title="طلب  الشراء"
-                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (navFirst ?? 0), frame = 1 })"
+                                    data-url="@Url.Action("Show", "PurchaseRequests", new { id = (navFirst ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(navFirst ?? 0)"
-                                    title="أول فاتورة"
+                                    title="أول طلب شراء"
                                     @(canFirst ? "" : "disabled")>
                                 ⏮
                             </button>
@@ -202,11 +203,12 @@
                             <button type="button"
                                     id="btnPrevInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
+                                    data-tab-id="pr-show-tab"
                                     data-tab-title="طلب  الشراء"
-                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (prevEffective ?? 0), frame = 1 })"
+                                    data-url="@Url.Action("Show", "PurchaseRequests", new { id = (prevEffective ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(prevEffective ?? 0)"
-                                    title="الفاتورة السابقة"
+                                    title="الطلب السابق"
                                     @(canPrev ? "" : "disabled")>
                                 ◀
                             </button>
@@ -214,11 +216,12 @@
                             <button type="button"
                                     id="btnNextInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
+                                    data-tab-id="pr-show-tab"
                                     data-tab-title="طلب  الشراء"
-                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (nextEffective ?? 0), frame = 1 })"
+                                    data-url="@Url.Action("Show", "PurchaseRequests", new { id = (nextEffective ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(nextEffective ?? 0)"
-                                    title="الفاتورة التالية"
+                                    title="الطلب التالي"
                                     @(canNext ? "" : "disabled")>
                                 ▶
                             </button>
@@ -226,11 +229,12 @@
                             <button type="button"
                                     id="btnLastInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
+                                    data-tab-id="pr-show-tab"
                                     data-tab-title="طلب  الشراء"
-                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { id = (navLast ?? 0), frame = 1 })"
+                                    data-url="@Url.Action("Show", "PurchaseRequests", new { id = (navLast ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(navLast ?? 0)"
-                                    title="آخر فاتورة"
+                                    title="آخر طلب شراء"
                                     @(canLast ? "" : "disabled")>
                                 ⏭
                             </button>
@@ -240,13 +244,13 @@
                             <input type="number"
                                    id="NavInvoiceSearchInput"
                                    class="form-control form-control-sm"
-                                   placeholder="بحث برقم الفاتورة" />
+                                   placeholder="بحث برقم الطلب" />
 
 
                             <button type="button"
                                     id="btnNavInvoiceSearch"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    data-tab-id="pi-show-tab"
+                                    data-tab-id="pr-show-tab"
                                     data-tab-title="طلب الشراء"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })">
                                 بحث
@@ -256,7 +260,7 @@
                         <hr class="my-1" />
 
                         <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
-                           data-tab-id="pi-show-tab"
+                           data-tab-id="pr-show-tab"
                            data-tab-title="طلب الشراء"
                            data-url="@Url.Action("Create", "PurchaseRequests", new { frame = 1 })">
                             ➕ طلب جديد
@@ -266,7 +270,7 @@
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
                                 id="btnSaveInvoiceHeader"
                                 data-lock-posted="1">
-                            💾 حفظ الفاتورة
+                            💾 حفظ الطلب
                         </button>
 
                         <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnPostInvoice" data-lock-posted="1">
@@ -287,7 +291,7 @@
                                 id="btnClearInvoiceLines"
                                 data-invoice-id="@(Model?.PRId ?? 0)"
                                 data-lock-posted="1">
-                            🗑️ مسح كل أصناف الفاتورة
+                            🗑️ مسح كل أصناف الطلب
                         </button>
 
 
@@ -295,7 +299,7 @@
                         <button type="button"
                                 id="btnPrintInvoice"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
-                            🖨️ طباعة الفاتورة
+                            🖨️ طباعة الطلب
                         </button>
 
                         <hr class="my-1" />
@@ -391,7 +395,7 @@
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
 
-                                    <div class="col-lg-5 col-md-4">
+                                    <div class="col-lg-4 col-md-4">
                                         <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
 
                                         <input id="CustomerNameInput"
@@ -423,7 +427,7 @@
                                     </div>
 
                                     <div class="col-lg-2 col-md-2">
-                                        <label class="form-label form-label-sm">رقم الفاتورة</label>
+                                        <label class="form-label form-label-sm">رقم الطلب</label>
 
                                         <input type="hidden"
                                                id="InvoiceId"
@@ -438,13 +442,13 @@
                                     <div class="col-lg-2 col-md-6">
                                         <div class="row g-2">
                                             <div class="col-6">
-                                                <label class="form-label form-label-sm">تاريخ الفاتورة</label>
+                                                <label class="form-label form-label-sm">تاريخ الطلب</label>
                                                 <input id="InvoiceDateDisplay"
                                                        class="form-control form-control-sm text-center"
                                                        value="@invoiceDateText"
                                                        readonly />
                                             </div>
-                                            <div class="col-6">
+                                                    <div class="col-lg-2 col-md-6">
                                                 <label class="form-label form-label-sm">وقت الإنشاء</label>
                                                 <input id="InvoiceTimeDisplay"
                                                        class="form-control form-control-sm text-center"
@@ -463,10 +467,10 @@
                                 <div class="row g-3">
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">حالة الفاتورة</label>
+                                        <label class="form-label form-label-sm">حالة الطلب</label>
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
-                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "Draft" : Model.Status)"
+                                               value="@(Model.IsConverted ? "محول" : (string.IsNullOrWhiteSpace(Model.Status) ? "Draft" : Model.Status))"
                                                readonly />
                                     </div>
 
@@ -483,7 +487,7 @@
                                     </div>
 
                                     <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">كاتب الفاتورة</label>
+                                        <label class="form-label form-label-sm">كاتب الطلب</label>
                                         <input id="InvoiceCreatedByDisplay"
                                                class="form-control form-control-sm text-center"
                                                value="@Model.CreatedBy"
@@ -641,13 +645,13 @@
                                                data-lock-posted="1" />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-4">
+                                    <div class="col-lg-4 col-md-8">
                                         <label class="form-label form-label-sm">اسم الصنف</label>
 
                                         <input id="ProdNameInput"
                                                list="productsList"
                                                class="form-control form-control-sm pi-input"
-                                               placeholder="اكتب اسم الصنف..."
+                                               placeholder="اكتب اسم الصنف أو جزء منه..."
                                                autocomplete="off"
                                                data-lock-posted="1" />
 
@@ -767,7 +771,7 @@
                                     {
                                         <tr>
                                             <td colspan="9" class="text-center text-muted py-3">
-                                                لا يوجد سطور داخل الفاتورة حتى الآن.
+                                                لا يوجد سطور داخل الطلب حتى الآن.
                                             </td>
                                         </tr>
                                     }
@@ -950,7 +954,7 @@
                     </div> *@
 
                         @* =====================================================
-                       6) ملخص الفاتورة
+                       6) ملخص الطلب
                        ===================================================== *@
                         @{
                             var lines = Model.Lines?.ToList() ?? new List<ERP.Models.PRLine>();
@@ -1083,7 +1087,7 @@
             <hr class="my-2" />
 
             <div class="row g-2 small">
-                <div class="col-6">رقم الفاتورة: <strong id="piPrintInvoiceNo"></strong></div>
+                <div class="col-6">رقم الطلب: <strong id="piPrintInvoiceNo"></strong></div>
                 <div class="col-6 text-end">التاريخ: <strong id="piPrintInvoiceDate"></strong></div>
 
                 <div class="col-6">المورد: <strong id="piPrintSupplier"></strong></div>
@@ -1239,6 +1243,38 @@
                                  fillSupplierFromOption(findSupplierByCode(custHiddenId.value));
                              }
 
+                             // =========================================================
+                             // Enter على اسم المورد: الانتقال إلى زر الحفظ ثم الضغط عليه
+                             // =========================================================
+                             let isSaveButtonFocused = false; // متغير: هل زر الحفظ في حالة focus
+
+                             custNameInput?.addEventListener('keydown', function(e) {
+                                 if (e.key === 'Enter') {
+                                     e.preventDefault();
+                                     
+                                     const saveBtn = document.getElementById('btnSaveInvoiceHeader');
+                                     if (!saveBtn) return;
+
+                                     if (!isSaveButtonFocused) {
+                                         // المرة الأولى: الانتقال إلى زر الحفظ
+                                         isSaveButtonFocused = true;
+                                         saveBtn.focus();
+                                     } else {
+                                         // المرة الثانية: الضغط على زر الحفظ
+                                         isSaveButtonFocused = false;
+                                         saveBtn.click();
+                                     }
+                                 } else {
+                                     // أي مفتاح آخر: إعادة تعيين الحالة
+                                     isSaveButtonFocused = false;
+                                 }
+                             });
+
+                             // إعادة تعيين الحالة عند blur من حقل اسم المورد
+                             custNameInput?.addEventListener('blur', function() {
+                                 isSaveButtonFocused = false;
+                             });
+
                          })();
 
                          // =========================================================
@@ -1247,7 +1283,7 @@
                          function initProductSearch() {
                              console.log('🚀 بدء تحميل/إعادة تحميل كود الأصناف...');
 
-                             // 1) عناصر سطر الصنف في الفاتورة
+                             // 1) عناصر سطر الصنف في الطلب
                              const prodCodeInput   = document.getElementById('ProdCodeInput');     // متغير: كود الصنف للبحث
                              const prodNameInput   = document.getElementById('ProdNameInput');     // متغير: اسم الصنف (أوتوكومبليت)
                              const prodPriceInput  = document.getElementById('ProdPriceInput');    // متغير: سعر الجمهور
@@ -1290,7 +1326,7 @@
                              // دوال مساعدة (أرقام + توحيد نص)
                              // =========================================================
 
-                             // دالة: توحيد النص (تجاهل الألف + إزالة مسافات مكررة + توحيد الأرقام)
+                             // دالة: توحيد النص (تجاهل الألف + إزالة مسافات مكررة)
                              function normalizeText(txt) {
                                  if (!txt) return '';
                                  return txt
@@ -1317,75 +1353,81 @@
                              }
 
                              // =========================================================
+                             // قائمة الأصناف الكاملة + فلترة الـ datalist بـ StartsWith فقط
+                             // (القائمة المنسدلة أثناء الكتابة تعرض فقط ما يبدأ بنص البحث)
+                             // =========================================================
+                             let productsFullList = [];
+                             if (prodDataList && prodDataList.options) {
+                                 for (let i = 0; i < prodDataList.options.length; i++) {
+                                     const o = prodDataList.options[i];
+                                     productsFullList.push({
+                                         value: o.value || '',
+                                         id: (o.getAttribute('data-id') || '').toString(),
+                                         code: (o.getAttribute('data-code') || o.getAttribute('data-id') || '').toString(),
+                                         generic: (o.getAttribute('data-generic') || '').toString(),
+                                         company: (o.getAttribute('data-company') || '').toString(),
+                                         price: (o.getAttribute('data-price') || '0').toString(),
+                                         hasquota: (o.getAttribute('data-hasquota') === 'true')
+                                     });
+                                 }
+                             }
+
+                             function createOptionFromProduct(p) {
+                                 const o = document.createElement('option');
+                                 o.value = p.value;
+                                 o.setAttribute('data-id', p.id);
+                                 o.setAttribute('data-code', p.code);
+                                 o.setAttribute('data-generic', p.generic);
+                                 o.setAttribute('data-company', p.company);
+                                 o.setAttribute('data-price', p.price);
+                                 o.setAttribute('data-hasquota', p.hasquota ? 'true' : 'false');
+                                 return o;
+                             }
+
+                             function applyDatalistFilter(searchTxt) {
+                                 if (!prodDataList) return;
+                                 const search = normalizeText(searchTxt);
+                                 prodDataList.innerHTML = '';
+                                 for (let i = 0; i < productsFullList.length; i++) {
+                                     const p = productsFullList[i];
+                                     const n = normalizeText(p.value);
+                                     if (!search || n === search || n.startsWith(search)) {
+                                         prodDataList.appendChild(createOptionFromProduct(p));
+                                     }
+                                 }
+                             }
+
+                             function restoreDatalistFull() {
+                                 if (!prodDataList) return;
+                                 prodDataList.innerHTML = '';
+                                 for (let i = 0; i < productsFullList.length; i++) {
+                                     prodDataList.appendChild(createOptionFromProduct(productsFullList[i]));
+                                 }
+                             }
+
+                             // =========================================================
                              // البحث عن صنف بالاسم / بالكود داخل datalist
                              // =========================================================
 
                              function findProductByName(name) {
                                  const search = normalizeText(name);
-                                 if (!search) {
-                                     console.warn('⚠️ findProductByName: نص البحث فارغ');
-                                     return null;
-                                 }
+                                 if (!search) return null;
 
                                  const opts = prodDataList.options;
-                                 if (!opts || opts.length === 0) {
-                                     console.warn('⚠️ findProductByName: قائمة الأصناف فارغة');
-                                     return null;
-                                 }
-
-                                 console.log('🔍 البحث عن:', search, 'من', opts.length, 'صنف');
+                                 if (!opts || opts.length === 0) return null;
 
                                  // 1) تطابق تام
                                  for (let i = 0; i < opts.length; i++) {
                                      const optText = normalizeText(opts[i].value);
-                                     if (optText === search) {
-                                         console.log('✅ تطابق تام:', opts[i].value);
-                                         return opts[i];
-                                     }
+                                     if (optText === search) return opts[i];
                                  }
 
-                                 // 2) يبدأ بـ (أول تطابق)
+                                 // 2) يبدأ بـ (StartsWith فقط — لا Contains)
                                  for (let i = 0; i < opts.length; i++) {
                                      const optText = normalizeText(opts[i].value);
-                                     if (optText.startsWith(search)) {
-                                         console.log('✅ يبدأ بـ:', opts[i].value);
-                                         return opts[i];
-                                     }
+                                     if (optText.startsWith(search)) return opts[i];
                                  }
 
-                                 // 3) يحتوي على (أول تطابق)
-                                 for (let i = 0; i < opts.length; i++) {
-                                     const optText = normalizeText(opts[i].value);
-                                     if (optText.includes(search)) {
-                                         console.log('✅ يحتوي على:', opts[i].value);
-                                         return opts[i];
-                                     }
-                                 }
-
-                                 // 4) البحث العكسي: هل النص المدخل يحتوي على اسم الصنف
-                                 for (let i = 0; i < opts.length; i++) {
-                                     const optText = normalizeText(opts[i].value);
-                                     if (optText.length > 3 && search.includes(optText)) {
-                                         console.log('✅ بحث عكسي:', opts[i].value);
-                                         return opts[i];
-                                     }
-                                 }
-
-                                 // 5) البحث بكلمات منفصلة (إذا كان البحث يحتوي على عدة كلمات)
-                                 const searchWords = search.split(' ').filter(w => w.length > 2);
-                                 if (searchWords.length > 0) {
-                                     for (let i = 0; i < opts.length; i++) {
-                                         const optText = normalizeText(opts[i].value);
-                                         // التحقق من أن جميع كلمات البحث موجودة في اسم الصنف
-                                         const allWordsMatch = searchWords.every(word => optText.includes(word));
-                                         if (allWordsMatch) {
-                                             console.log('✅ تطابق كلمات:', opts[i].value);
-                                             return opts[i];
-                                         }
-                                     }
-                                 }
-
-                                 console.warn('❌ لم يتم العثور على الصنف:', search);
                                  return null;
                              }
 
@@ -1516,8 +1558,15 @@
                              if (prodNameInput) {
                                  console.log('✅ تم ربط event listeners لحقل اسم الصنف');
 
+                                 // ✅ فلترة القائمة المنسدلة بـ StartsWith فقط (أثناء الكتابة)
+                                 prodNameInput.addEventListener('input', function () {
+                                     applyDatalistFilter(this.value);
+                                 });
+                                 prodNameInput.addEventListener('focus', function () {
+                                     applyDatalistFilter(this.value);
+                                 });
+
                                  prodNameInput.addEventListener('change', function (e) {
-                                     console.log('📝 change event:', this.value);
                                      try {
                                          const found = findProductByName(this.value);
                                          fillProductFromOption(found);
@@ -1527,51 +1576,26 @@
                                  });
 
                                  prodNameInput.addEventListener('blur', function (e) {
-                                     console.log('👋 blur event:', this.value);
                                      try {
-                                         // عند الخروج من الحقل، نحاول البحث مرة أخرى
                                          const found = findProductByName(this.value);
-                                         if (found) {
-                                             fillProductFromOption(found);
-                                         } else if (this.value.trim()) {
-                                             // لو لم نجد صنفاً لكن المستخدم كتب شيئاً، نعرض رسالة
-                                             console.warn('⚠️ لم يتم العثور على صنف بهذا الاسم:', this.value);
-                                         }
+                                         if (found) fillProductFromOption(found);
                                      } catch (err) {
                                          console.error('❌ خطأ في blur event:', err);
                                      }
-                                 });
-
-                                 // عند الكتابة، نحاول البحث تلقائياً بعد تأخير قصير
-                                 let searchTimeout = null;
-                                 prodNameInput.addEventListener('input', function (e) {
-                                     clearTimeout(searchTimeout);
-                                     const value = this.value.trim();
-                                     if (value.length >= 3) {
-                                         searchTimeout = setTimeout(() => {
-                                             try {
-                                                 console.log('🔍 البحث التلقائي عن:', value);
-                                                 const found = findProductByName(value);
-                                                 if (found) {
-                                                     console.log('✅ تم العثور على صنف أثناء الكتابة');
-                                                     fillProductFromOption(found);
-                                                 }
-                                             } catch (err) {
-                                                 console.error('❌ خطأ في البحث التلقائي:', err);
-                                             }
-                                         }, 300); // تأخير 300ms بعد توقف الكتابة
-                                     }
+                                     setTimeout(restoreDatalistFull, 150);
                                  });
                              } else {
                                  console.error('❌ prodNameInput غير موجود!');
                              }
 
                              if (prodCodeInput) {
+                                 prodCodeInput.addEventListener('focus', function () {
+                                     restoreDatalistFull();
+                                 });
                                  prodCodeInput.addEventListener('change', function () {
                                      const found = findProductByCode(this.value);
                                      fillProductFromOption(found);
                                  });
-
                                  prodCodeInput.addEventListener('blur', function () {
                                      const found = findProductByCode(this.value);
                                      fillProductFromOption(found);
@@ -2548,7 +2572,7 @@
 
 
                                  // ===============================
-                         // دالة: تحديث ملخص الفاتورة (البادجات)
+                         // دالة: تحديث ملخص الطلب (البادجات)
                          // ===============================
                          function updateSummaryBadges(totals) {
 
@@ -3002,7 +3026,7 @@
 
                              // ==========================
                              // دالة مشتركة: حفظ الهيدر (SaveHeader) + تحديث الـ DOM
-                             // تُستخدم من زر "حفظ الفاتورة" ومن "إضافة صنف" عندما الطلب غير محفوظ بعد.
+                             // تُستخدم من زر "حفظ الطلب" ومن "إضافة صنف" عندما الطلب غير محفوظ بعد.
                              // ==========================
                              async function saveHeaderAndUpdateDom() {
                                  const customerId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
@@ -3029,11 +3053,11 @@
                                      if (!response.ok) {
                                          const txt = await response.text().catch(() => '');
                                          console.error('SaveHeader HTTP Error:', response.status, txt);
-                                         return { ok: false, message: 'حدث خطأ غير متوقع أثناء حفظ الفاتورة.' };
+                                         return { ok: false, message: 'حدث خطأ غير متوقع أثناء حفظ الطلب.' };
                                      }
                                      const data = await response.json().catch(() => null);
                                      if (!data || !data.success) {
-                                         return { ok: false, message: (data && data.message) ? data.message : 'تعذر حفظ الفاتورة.' };
+                                         return { ok: false, message: (data && data.message) ? data.message : 'تعذر حفظ الطلب.' };
                                      }
                                      const newId = data.PRId || 0;
                                      const invoiceIdInput = document.getElementById('InvoiceId');
@@ -3053,7 +3077,7 @@
                                      return { ok: true, prId: newId };
                                  } catch (err) {
                                      console.error(err);
-                                     return { ok: false, message: 'تعذر الاتصال بالخادم لحفظ الفاتورة.' };
+                                     return { ok: false, message: 'تعذر الاتصال بالخادم لحفظ الطلب.' };
                                  }
                              }
                              window.__saveHeaderAndUpdateDom = saveHeaderAndUpdateDom;
@@ -3215,7 +3239,7 @@
 
 
                              // =========================================================
-                             // سكربت زر: مسح جميع أصناف الفاتورة (AJAX)
+                             // سكربت زر: مسح جميع أصناف الطلب (AJAX)
                              // - نفس منطق RemoveLineJson: Token + Guard + رسالة
                              // =========================================================
                              document.addEventListener("DOMContentLoaded", function () {
@@ -3253,27 +3277,27 @@
                                      if (busy) return;
                                      if (btnClearAll.disabled) return;
 
-                                     // ✅ اقرأ رقم الفاتورة وقت الضغط
+                                     // ✅ اقرأ رقم الطلب وقت الضغط
                                      const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
                                      if (invoiceId <= 0) {
                                          if (msg) {
-                                             msg.textContent = "⚠️ لا يمكن مسح الأصناف قبل حفظ الفاتورة.";
+                                             msg.textContent = "⚠️ لا يمكن مسح الأصناف قبل حفظ الطلب.";
                                              msg.className = "small mt-2 text-warning";
                                          }
                                          return;
                                      }
 
-                                     // ✅ منع المسح لو الفاتورة مُرحّلة (نفس سياسة البرنامج)
+                                     // ✅ منع المسح لو الطلب مُرحّلة (نفس سياسة البرنامج)
                                      if (typeof isInvoicePosted === "function" && isInvoicePosted()) {
                                          if (msg) {
-                                             msg.textContent = "الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.";
+                                             msg.textContent = "الطلب مُرحّلة ومقفولة. استخدم زر (فتح الطلب) أولاً.";
                                              msg.className = "small mt-2 text-danger";
                                          }
                                          return;
                                      }
 
-                                     const ok = confirm("هل تريد مسح جميع الأصناف من الفاتورة؟");
+                                     const ok = confirm("هل تريد مسح جميع الأصناف من الطلب؟");
                                      if (!ok) return;
 
                                      busy = true;
@@ -3321,10 +3345,16 @@
                                              return;
                                          }
 
-                                         // ✅ تحديث الإجماليات لو عندك دالة (اختياري)
-                                         // لو عندك نفس دالة تحديث totals المستخدمة بعد حذف سطر واحد، نادِيها هنا
-                                         // مثال:
-                                         // if (typeof applyTotals === "function" && data.totals) applyTotals(data.totals);
+                                         // ✅ تحديث الإجماليات
+                                         if (typeof recalcTotalsFromPage === "function") {
+                                             recalcTotalsFromPage();
+                                         }
+
+                                         // ✅ إعادة تحميل body للطلب (بنفس طريقة RemoveLineJson)
+                                         const baseUrl = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
+                                             || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
+                                         const url = setOrReplaceParam(baseUrl, 'id', invoiceId);
+                                         await loadInvoiceBody(url);
 
                                          if (msg) {
                                              msg.textContent = data.message || "تم مسح جميع الأصناف.";
@@ -3401,78 +3431,8 @@
 
                  @* =========================================================
    سكربت التنقل (داخل نفس التاب)
+   ✅ يعتمد على site.js (open-same-tab) مثل فواتير المشتريات
    ========================================================= *@
-
-
-                 document.addEventListener('DOMContentLoaded', () => {
-
-                     // ==============================
-                     // (1) Tooltips (Bootstrap) لو موجود
-                     // ==============================
-                     try {
-                         if (window.bootstrap && typeof bootstrap.Tooltip === 'function') {
-                             document.querySelectorAll('[title]').forEach(el => new bootstrap.Tooltip(el));
-                         }
-                     } catch (e) { }
-
-                     // ==============================
-                     // (2) رابط Show الصحيح
-                     // ==============================
-                     const showBaseUrl = '@Url.Action("Show", "PurchaseRequests")'; // مثال: /PurchaseRequests/Show
-
-                     function openInvoice(id) {
-                         id = parseInt(id || '0', 10);
-                         if (!id || id <= 0) return;
-
-                         // ✅ مهم: Show عندك غالباً بالمسار /Show/{id}
-                         const base = showBaseUrl.replace(/\/$/, '');
-                         const url = base + '/' + encodeURIComponent(id) + '?frame=1';
-                         window.location.href = url;
-                     }
-
-                     function bindNavButton(btnId) {
-                         const btn = document.getElementById(btnId);
-                         if (!btn) return;
-
-                         btn.addEventListener('click', (e) => {
-                             e.preventDefault();
-                             if (btn.disabled) return;
-
-                             const id = btn.getAttribute('data-id');
-                             openInvoice(id);
-                         });
-                     }
-
-                     bindNavButton('btnFirstInvoice');
-                     bindNavButton('btnPrevInvoice');
-                     bindNavButton('btnNextInvoice');
-                     bindNavButton('btnLastInvoice');
-
-                     // ==============================
-                     // (3) البحث برقم الفاتورة
-                     // ==============================
-                     const searchInput = document.getElementById('NavInvoiceSearchInput');
-                     const searchBtn   = document.getElementById('btnNavInvoiceSearch');
-
-                     function doSearch() {
-                         const v = (searchInput?.value || '').trim();
-                         if (!v) return;
-                         openInvoice(v);
-                     }
-
-                     searchBtn?.addEventListener('click', (e) => {
-                         e.preventDefault();
-                         doSearch();
-                     });
-
-                     searchInput?.addEventListener('keydown', (e) => {
-                         if (e.key === 'Enter') {
-                             e.preventDefault();
-                             doSearch();
-                         }
-                     });
-
-                 });
 
 
 
@@ -3511,7 +3471,7 @@
                                      if (typeof applyPostedUiLock === "function") applyPostedUiLock();
 
                                      if (msg) {
-                                         msg.textContent = "هذه الفاتورة مترحّلة بالفعل.";
+                                         msg.textContent = "هذه الطلب مترحّلة بالفعل.";
                                          msg.className = "small mt-2 text-muted";
                                      }
                                      return;
@@ -3522,7 +3482,7 @@
                                      e.stopPropagation();
 
                                      // =========================
-                                     // 0) اقرأ رقم الفاتورة الآن
+                                     // 0) اقرأ رقم الطلب الآن
                                      // =========================
                                      const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
@@ -3591,11 +3551,12 @@
                                                             (data && typeof data.isPosted !== "undefined") ? !!data.isPosted : true; // fallback
 
                                          // =========================
-                                         // 4) تحديث البوكس (عرض فقط)
+                                         // 4) تحديث البوكس (عرض فقط): حالة الطلب ← "محول"
                                          // =========================
-                                         if (isPostedBox) {
-                                             isPostedBox.value = (data && data.postedLabel) ? data.postedLabel : "نعم";
-                                         }
+                                         const statusVal = (data && data.postedLabel) ? data.postedLabel : (data && data.prStatus) ? data.prStatus : "محول";
+                                         if (isPostedBox) isPostedBox.value = statusVal;
+                                         const statusHidden = document.getElementById('InvoiceStatusHidden');
+                                         if (statusHidden) statusHidden.value = statusVal;
 
                                          // =========================
                                          // 5) تحديث الفلاج الحقيقي + تطبيق القفل
@@ -3707,14 +3668,14 @@
                                      btnOpen.innerHTML = "⏳ جاري الفتح...";
 
                                      if (msg) {
-                                         msg.textContent = "جاري فتح الفاتورة للتعديل...";
+                                         msg.textContent = "جاري فتح الطلب للتعديل...";
                                          msg.className = "small mt-2 text-muted";
                                      }
 
                                      try {
 
 
-                                // ✅ (1) اقرأ رقم الفاتورة "وقت الضغط" (ده أهم سطر)
+                                // ✅ (1) اقرأ رقم الطلب "وقت الضغط" (ده أهم سطر)
                                   const invoiceId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
 
                              if (invoiceId <= 0) {
@@ -3746,7 +3707,7 @@
                               // =========================
                              // نجاح: نقرأ JSON مرة واحدة فقط
                              // =========================
-                             let okMsg = "تم فتح الفاتورة للتعديل.";
+                             let okMsg = "تم فتح الطلب للتعديل.";
                              try {
                                  const data = await res.json();
                                  if (data && data.message) okMsg = data.message;
@@ -3757,8 +3718,8 @@
                              applyPostedUiLock();
 
                              // ✅ زر الفتح: بعد نجاح الفتح نخليه Disabled (مالوش معنى نضغطه تاني)
-                             // ونعيد شكله الطبيعي "فتح الفاتورة" (مش "تم فتح" علشان يبقى واضح)
-                             btnOpen.innerHTML = "⏪ فتح الفاتورة";
+                             // ونعيد شكله الطبيعي "فتح الطلب" (مش "تم فتح" علشان يبقى واضح)
+                             btnOpen.innerHTML = "⏪ فتح الطلب";
                              btnOpen.disabled = true;
 
                              // ✅ تفعيل زر التحويل مرة أخرى (لو موجود)
@@ -3767,7 +3728,7 @@
                                  btnPost.innerHTML = "🔄 تحويل إلى فاتورة مشتريات";
 
                                  const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
-                                 if (btnPrint) btnPrint.disabled = true;                      // ✅ بعد فتح الفاتورة: الطباعة تتقفل
+                                 if (btnPrint) btnPrint.disabled = true;                      // ✅ بعد فتح الطلب: الطباعة تتقفل
 
 
                              }
@@ -3789,7 +3750,7 @@
                                          btnOpen.innerHTML = oldHtml;
 
                                          if (msg) {
-                                             msg.textContent = "فشل فتح الفاتورة: " + (err.message || "خطأ غير معروف");
+                                             msg.textContent = "فشل فتح الطلب: " + (err.message || "خطأ غير معروف");
                                              msg.className = "small mt-2 text-danger";
                                          }
                                      }
@@ -3826,7 +3787,7 @@
                              // =========================================================
                              function applyPostedUiLock() {
 
-                                 const posted = isInvoicePosted(); // متغير: هل الفاتورة مُرحّلة؟
+                                 const posted = isInvoicePosted(); // متغير: هل الطلب مُرحّلة؟
                                  const lockables = document.querySelectorAll('[data-lock-posted="1"]'); // متغير: العناصر المطلوب قفلها
 
                                  lockables.forEach(el => {
@@ -3912,7 +3873,7 @@
 
 
 
-                                          // تعليق: لو الفاتورة مترحلة من السيرفر وقت فتح الصفحة
+                                          // تعليق: لو الطلب مترحلة من السيرفر وقت فتح الصفحة
                                (function () {
                                    const posted = @Model.IsConverted.ToString().ToLower(); // true/false
                                    if (posted === true && typeof setInvoicePosted === "function") {
@@ -4059,7 +4020,7 @@
 
                                  const hasAny = (navFirst > 0 && navLast > 0);
 
-                                 // في الفاتورة الجديد: السابق=آخر، التالي=أول
+                                 // في الطلب الجديد: السابق=آخر، التالي=أول
                                  const prevEffective = (currentId === 0) ? navLast : navPrev;
                                  const nextEffective = (currentId === 0) ? navFirst : navNext;
 
@@ -4074,20 +4035,46 @@
                                  const btnNext = document.getElementById('btnNextInvoice');
                                  const btnLast = document.getElementById('btnLastInvoice');
 
-                                 // base URL للعرض
-                                 const base = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
-                                     || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
+                                // base URL للعرض (بدون id)
+                                let base = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
+                                    || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
+                                
+                                // ✅ إزالة id من base URL إذا كان موجوداً (لضمان بناء URL صحيح)
+                                try {
+                                    const baseUrl = new URL(base, window.location.origin);
+                                    baseUrl.searchParams.delete('id');
+                                    base = baseUrl.toString();
+                                } catch {
+                                    // لو فشل URL parsing، نستخدم regex لإزالة id
+                                    base = base.replace(/[?&]id=\d+/g, '').replace(/[?&]id=[^&]*/g, '');
+                                    if (!base.includes('?')) {
+                                        base = base.replace(/&/, '?');
+                                    }
+                                }
 
-                                 // نجهز URLs
-                                 const urlFirst = setOrReplaceParam(base, 'id', navFirst);
-                                 const urlLast = setOrReplaceParam(base, 'id', navLast);
-                                 const urlPrev = setOrReplaceParam(base, 'id', prevEffective);
-                                 const urlNext = setOrReplaceParam(base, 'id', nextEffective);
+                                // نجهز URLs
+                                const urlFirst = setOrReplaceParam(base, 'id', navFirst);
+                                const urlLast = setOrReplaceParam(base, 'id', navLast);
+                                const urlPrev = setOrReplaceParam(base, 'id', prevEffective);
+                                const urlNext = setOrReplaceParam(base, 'id', nextEffective);
 
-                                 if (btnFirst) { btnFirst.setAttribute('data-url', urlFirst); btnFirst.setAttribute('data-id', navFirst); }
-                                 if (btnLast) { btnLast.setAttribute('data-url', urlLast); btnLast.setAttribute('data-id', navLast); }
-                                 if (btnPrev) { btnPrev.setAttribute('data-url', urlPrev); btnPrev.setAttribute('data-id', prevEffective); }
-                                 if (btnNext) { btnNext.setAttribute('data-url', urlNext); btnNext.setAttribute('data-id', nextEffective); }
+                                // ✅ تحديث data-url و data-id للأزرار (لجميع الأزرار، حتى المعطلة)
+                                if (btnFirst) { 
+                                    btnFirst.setAttribute('data-url', urlFirst); 
+                                    btnFirst.setAttribute('data-id', navFirst); 
+                                }
+                                if (btnLast) { 
+                                    btnLast.setAttribute('data-url', urlLast); 
+                                    btnLast.setAttribute('data-id', navLast); 
+                                }
+                                if (btnPrev) { 
+                                    btnPrev.setAttribute('data-url', urlPrev); 
+                                    btnPrev.setAttribute('data-id', prevEffective); 
+                                }
+                                if (btnNext) { 
+                                    btnNext.setAttribute('data-url', urlNext); 
+                                    btnNext.setAttribute('data-id', nextEffective); 
+                                }
 
                                  // Disabled
                                  setBtnState(btnFirst, canFirst);
@@ -4109,7 +4096,7 @@
                                  if (host.dataset.loading === "1") return;
                                  host.dataset.loading = "1";
 
-                                 console.log('🔄 تحميل body الفاتورة:', url);
+                                 console.log('🔄 تحميل body الطلب:', url);
 
                                  try {
                                      const res = await fetch(url, {
@@ -4161,7 +4148,7 @@
 
                                  } catch (e) {
                                      console.error(e);
-                                     alert('حدث خطأ أثناء تحميل الفاتورة.');
+                                     alert('حدث خطأ أثناء تحميل الطلب.');
                                  } finally {
                                      host.dataset.loading = "0";
                                  }
@@ -4171,33 +4158,28 @@
 
 
 
-                             // =========================
-                             // اعتراض الضغط على الأسهم/بحث الفاتورة على مستوى document (Capture)
-                             // =========================
-                             async function docCaptureHandler(ev) {
+                            // =========================
+                            // اعتراض الضغط على الأسهم/بحث الطلب على مستوى document (Capture)
+                            // =========================
+                            async function docCaptureHandler(ev) {
 
-                                 // متغير: العنصر الذي تم الضغط عليه
-                                 const t = ev.target;
+                                // متغير: العنصر الذي تم الضغط عليه
+                                const t = ev.target;
 
-                                 // حماية: لو target مش Element (نادرًا) نخرج
-                                 if (!(t instanceof Element)) return;
+                                // حماية: لو target مش Element (نادرًا) نخرج
+                                if (!(t instanceof Element)) return;
 
-
-
-                                             // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
-                             // ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
-                             const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
-
-
-
-                             if (navBtn) return;
+                                // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
+                                // ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
+                                const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
+                                if (navBtn) return;
 
 
 
 
 
                               // =========================
-                             // (0) زر مسح سطر من الفاتورة
+                             // (0) زر مسح سطر من الطلب
                              // =========================
                              const removeBtn = t.closest('.btnRemoveLineFromInvoice');
                              if (removeBtn) {
@@ -4206,14 +4188,14 @@
                                  ev.stopPropagation();
                                  ev.stopImmediatePropagation();
 
-                                 // متغير: رقم السطر داخل الفاتورة
+                                 // متغير: رقم السطر داخل الطلب
                                  const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
 
-                                               // ✅ رقم الفاتورة (لازم يتقري وقت الضغط من الـ DOM لأنه بيتغير مع الـ Reload الجزئي)
+                                               // ✅ رقم الطلب (لازم يتقري وقت الضغط من الـ DOM لأنه بيتغير مع الـ Reload الجزئي)
                              const PRId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
 
 
-                                 if (!PRId || PRId <= 0) { alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.'); return; }
+                                 if (!PRId || PRId <= 0) { alert('لا يمكن مسح سطر: رقم الطلب غير معروف.'); return; }
                                  if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
 
                                  // تأكيد بسيط
@@ -4281,9 +4263,9 @@
 
 
                                      // =========================================================
-                                     // ✅ حفظ حالة الفاتورة الحالية قبل Reload
+                                     // ✅ حفظ حالة الطلب الحالية قبل Reload
                                      // =========================================================
-                                         const statusBox = document.getElementById('InvoiceIsPostedDisplay');      // متغير: بوكس حالة الفاتورة الظاهر
+                                         const statusBox = document.getElementById('InvoiceIsPostedDisplay');      // متغير: بوكس حالة الطلب الظاهر
                                          const statusHidden = document.getElementById('InvoiceStatusHidden');      // متغير: الحالة المخفية (لـ JS)
                                          const prevStatus = statusBox ? statusBox.value : '';                      // متغير: الحالة قبل المسح
 
@@ -4326,39 +4308,53 @@
 
 
 
-                                 // =========================
-                                 // (1) الأسهم + البحث
-                                 // =========================
-                                 const btn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
-                                 if (!btn) return;
+                                // =========================
+                                // (1) الأسهم + البحث
+                                // =========================
+                                const btn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
+                                if (!btn) return;
 
-                                 if (btn.hasAttribute('disabled')) return;
+                                if (btn.hasAttribute('disabled')) return;
 
-                                 // ✅ امنع أي نظام تابات/لينكات
-                                 ev.preventDefault();
-                                 ev.stopPropagation();
-                                 ev.stopImmediatePropagation();
+                                // ✅ امنع أي نظام تابات/لينكات
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                ev.stopImmediatePropagation();
 
-                                 // ✅ مهم: اقفل Tooltip + شيل فوكس بعد الضغط
-                                 hideTooltipAndBlur(btn);
+                                // ✅ مهم: اقفل Tooltip + شيل فوكس بعد الضغط
+                                hideTooltipAndBlur(btn);
 
-                                 if (btn.id === 'btnNavInvoiceSearch') {
-                                     const input = document.getElementById('NavInvoiceSearchInput');
-                                     const val = input ? parseInt(input.value || '0', 10) : 0;
-                                     if (!val || val <= 0) return;
+                                if (btn.id === 'btnNavInvoiceSearch') {
+                                    const input = document.getElementById('NavInvoiceSearchInput');
+                                    const val = input ? parseInt(input.value || '0', 10) : 0;
+                                    if (!val || val <= 0) return;
 
-                                     const baseUrl = btn.getAttribute('data-base-url');
-                                     if (!baseUrl) return;
+                                    const baseUrl = btn.getAttribute('data-base-url');
+                                    if (!baseUrl) return;
 
-                                     const url = setOrReplaceParam(baseUrl, 'id', val);
-                                     loadInvoiceBody(url);
-                                     return;
-                                 }
+                                    const url = setOrReplaceParam(baseUrl, 'id', val);
+                                    loadInvoiceBody(url);
+                                    return;
+                                }
 
-                                 const baseUrl = btn.getAttribute('data-base-url');
-                                 if (!url) return;
+                                // ✅ للأزرار: نستخدم data-url (يحتوي على URL كامل مع id)
+                                // ✅ مهم: نحدث data-url فوراً قبل الاستخدام (لضمان القيم الصحيحة)
+                                refreshSideNavButtons();
+                                
+                                let url = btn.getAttribute('data-url');
+                                
+                                // ✅ لو data-url غير موجود أو فارغ، نبني URL من data-base-url و data-id
+                                if (!url || !url.trim()) {
+                                    const baseUrl = btn.getAttribute('data-base-url');
+                                    const btnId = btn.getAttribute('data-id');
+                                    if (baseUrl && btnId) {
+                                        url = setOrReplaceParam(baseUrl, 'id', parseInt(btnId || '0', 10));
+                                    }
+                                }
+                                
+                                if (!url || !url.trim()) return;
 
-                                 loadInvoiceBody(url);
+                                loadInvoiceBody(url);
                              }
 
 
@@ -4369,15 +4365,15 @@
 
 
                              // =========================================================
-                 // ERP — زر طباعة الفاتورة (Purchase Invoice) [ثابت معتمد]
-                 // - ممنوع الطباعة إلا لو الفاتورة مُرحّلة (مغلقة)
+                 // ERP — زر طباعة الطلب (Purchase Invoice) [ثابت معتمد]
+                 // - ممنوع الطباعة إلا لو الطلب مُرحّلة (مغلقة)
                  // - نقرأ InvoiceId وقت الضغط
                  // - نطبع فقط .erp-print-area (حسب site.css)
                  // - نجهز (الهيدر + السطور + الإجماليات) قبل الطباعة
                  // =========================================================
                  document.addEventListener("DOMContentLoaded", function () {
 
-                     const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الفاتورة
+                     const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الطلب
                      const msg = document.getElementById("postInvoiceMsg");       // متغير: صندوق الرسائل
 
                      if (!btnPrint) return;
@@ -4386,7 +4382,7 @@
                      if (btnPrint.dataset.boundPrint) return;
                      btnPrint.dataset.boundPrint = "1";
 
-                     // ✅ عند فتح الصفحة: لو الفاتورة مش مُرحّلة نقفل زر الطباعة
+                     // ✅ عند فتح الصفحة: لو الطلب مش مُرحّلة نقفل زر الطباعة
                      if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
                          btnPrint.disabled = true;
                      }
@@ -4407,10 +4403,10 @@
                          // (1) هيدر الطباعة
                          // =========================
 
-                         // متغير: رقم الفاتورة
+                         // متغير: رقم الطلب
                          const invoiceId = (document.getElementById("InvoiceId")?.value || "").trim();
 
-                         // متغير: تاريخ الفاتورة (لو عندك input اسمه PIDate)
+                         // متغير: تاريخ الطلب (لو عندك input اسمه PIDate)
                          const invoiceDate =
                              (document.getElementById("PIDate")?.value || "").trim() ||
                              "";
@@ -4445,7 +4441,7 @@
 
                          linesWrap.innerHTML = "";
 
-                         const tbody = document.getElementById("PILinesTbody"); // متغير: tbody الخاص بسطور الفاتورة
+                         const tbody = document.getElementById("PILinesTbody"); // متغير: tbody الخاص بسطور الطلب
                          if (!tbody) {
                              linesWrap.innerHTML = `<div class="text-muted small">لا توجد سطور للطباعة.</div>`;
                          } else {
@@ -4507,7 +4503,7 @@
 
                      btnPrint.addEventListener("click", function () {
 
-                         // ✅ اقرأ رقم الفاتورة وقت الضغط
+                         // ✅ اقرأ رقم الطلب وقت الضغط
                          const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
                          if (invoiceId <= 0) {
@@ -4550,7 +4546,7 @@
                              // متغير: اسم المورد من نفس Input في الهيدر
                              const supplierName = (document.getElementById("CustomerNameInput")?.value || "").trim();
 
-                             // متغير: تاريخ الفاتورة من نفس Input في الهيدر
+                             // متغير: تاريخ الطلب من نفس Input في الهيدر
                              const invoiceDate = (document.getElementById("InvoiceDateDisplay")?.value || "").trim();
 
                              // دالة صغيرة: تكتب نص في عنصر طباعة لو موجود
@@ -4590,22 +4586,41 @@
 
                              document.addEventListener('DOMContentLoaded', function () {
 
-                                 // ✅ أول ما الصفحة تفتح: نضبط الأزرار
+                                 // ✅ أول ما الصفحة تفتح: نضبط الأزرار (فوراً)
                                  refreshSideNavButtons();
 
                                  // ✅ أول ما الصفحة تفتح: نضبط Tooltips (الأسهم فقط)
                                  setupTooltips();
+                                 
+                                 // ✅ تأكد من تحديث data-url مرة أخرى بعد تأخير بسيط (لضمان التحديث)
+                                 setTimeout(function() {
+                                     refreshSideNavButtons();
+                                 }, 100);
 
                                  // ✅ إزالة Tooltip من البحث نهائيًا (Placeholder فقط)
                                  const input = document.getElementById('NavInvoiceSearchInput');
                                  if (input) {
                                      input.removeAttribute('title');
                                      // تعليق: placeholder هو اللي هيوضح وظيفة البحث
-                                     if (!input.getAttribute('placeholder')) input.setAttribute('placeholder', 'بحث برقم الفاتورة');
+                                     if (!input.getAttribute('placeholder')) input.setAttribute('placeholder', 'بحث برقم الطلب');
                                  }
 
                                  const btn = document.getElementById('btnNavInvoiceSearch');
                                  if (btn) btn.removeAttribute('title');
+
+                                 // ✅ لو طلب جديد (PRId = 0): نعمل focus على حقل اسم المورد
+                                 const invoiceIdInput = document.getElementById('InvoiceId');
+                                 const invoiceId = invoiceIdInput ? parseInt(invoiceIdInput.value || '0', 10) : 0;
+                                 
+                                 if (invoiceId === 0) {
+                                     setTimeout(function() {
+                                         const customerNameInput = document.getElementById('CustomerNameInput');
+                                         if (customerNameInput) {
+                                             customerNameInput.focus();
+                                             customerNameInput.select();
+                                         }
+                                     }, 300);
+                                 }
                              });
 
                          })();

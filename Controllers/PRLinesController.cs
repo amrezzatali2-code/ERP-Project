@@ -64,10 +64,10 @@ namespace ERP.Controllers
             int ps = pageSize.GetValueOrDefault(50);               // حجم الصفحة
             if (ps <= 0) ps = 50;
 
-            // ٢) الكويري الأساسي من جدول PRLines
+            // ٢) الكويري الأساسي من جدول PRLines مع تحميل Product
             IQueryable<PRLine> query = _context.PRLines
-                .AsNoTracking()
-                .AsQueryable();
+                .Include(l => l.Product)          // ✅ تحميل اسم الصنف
+                .AsNoTracking();
 
             // ٣) تطبيق البحث
             if (!string.IsNullOrWhiteSpace(search) &&
@@ -132,6 +132,14 @@ namespace ERP.Controllers
                 _ => query.OrderByDescending(l => l.PRId).ThenByDescending(l => l.LineNo),
             };
 
+            // =========================================================
+            // حساب إجمالي قيمة السطر من نفس الاستعلام (بعد الفلاتر)
+            // قيمة السطر = (QtyRequested * PriceRetail) * (1 - PurchaseDiscountPct / 100)
+            // ✅ مهم: لازم قبل الـ Paging علشان ما تتحسبش على الصفحة بس
+            // =========================================================
+            decimal totalLineValue = await query.SumAsync(line => 
+                (decimal?)((line.QtyRequested * line.PriceRetail) * (1m - (line.PurchaseDiscountPct / 100m)))) ?? 0m;
+
             // ٦) إنشاء PagedResult (نفس نظام القوائم الموحّد)
             var model = await PagedResult<PRLine>.CreateAsync(
                 query,
@@ -150,6 +158,9 @@ namespace ERP.Controllers
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
+
+            // ✅ إجمالي قيمة السطر (بعد الفلاتر)
+            ViewBag.TotalLineValue = totalLineValue;
 
             return View(model);
         }
@@ -517,6 +528,24 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
+            // =========================
+            // منع الحذف لو الطلب تم تحويله
+            // =========================
+            var request = await _context.PurchaseRequests
+                .FirstOrDefaultAsync(pr => pr.PRId == prId);
+
+            if (request == null)
+            {
+                TempData["Error"] = "طلب الشراء غير موجود.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            if (request.IsConverted)
+            {
+                TempData["Error"] = "لا يمكن حذف سطر من طلب تم تحويله إلى فاتورة شراء.";
+                return RedirectToAction(nameof(Index));
+            }
+
             int headerId = line.PRId;   // نحفظ رقم الطلب علشان بعد الحذف نعيد حساب الإجماليات
 
             _context.PRLines.Remove(line);
@@ -566,8 +595,9 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // جلب السطور المراد حذفها
+            // جلب السطور المراد حذفها مع التحقق من حالة الطلبات
             var toDelete = new List<PRLine>();
+            var blockedRequests = new HashSet<int>(); // طلبات محوّلة (ممنوع حذف سطورها)
 
             foreach (var (prId, lineNo) in ids)
             {
@@ -575,12 +605,31 @@ namespace ERP.Controllers
                     .FirstOrDefaultAsync(l => l.PRId == prId && l.LineNo == lineNo);
 
                 if (line != null)
+                {
+                    // التحقق من حالة الطلب
+                    var request = await _context.PurchaseRequests
+                        .FirstOrDefaultAsync(pr => pr.PRId == prId);
+
+                    if (request != null && request.IsConverted)
+                    {
+                        blockedRequests.Add(prId);
+                        continue; // تخطي هذا السطر
+                    }
+
                     toDelete.Add(line);
+                }
             }
 
             if (!toDelete.Any())
             {
-                TempData["Error"] = "لم يتم العثور على الصفوف المحددة.";
+                if (blockedRequests.Any())
+                {
+                    TempData["Error"] = $"لا يمكن حذف السطور: الطلبات {string.Join(", ", blockedRequests)} تم تحويلها إلى فواتير شراء.";
+                }
+                else
+                {
+                    TempData["Error"] = "لم يتم العثور على الصفوف المحددة.";
+                }
                 return RedirectToAction(nameof(Index));
             }
 
