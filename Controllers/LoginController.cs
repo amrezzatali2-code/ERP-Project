@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Security.Claims;                        // الـ Claims الخاصة بالمستخدم
 using System.Security.Cryptography;
 using System.Text;

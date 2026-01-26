@@ -612,6 +612,56 @@
                                         </div>
                                     </div>
 
+                                    @* =====================================================
+                                       جدول المطلوب (غير محول)
+                                       ===================================================== *@
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-12">
+                                            <label class="form-label form-label-sm mb-2">المطلوب (طلبات غير محولة)</label>
+                                            <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                                                <table class="table table-sm table-bordered table-striped mb-0" id="RequiredTable">
+                                                    <thead class="table-light sticky-top">
+                                                        <tr>
+                                                            <th class="text-center">اسم العميل</th>
+                                                            <th class="text-center">التاريخ</th>
+                                                            <th class="text-center">الكمية</th>
+                                                            <th class="text-center">الخصم المرجح %</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="RequiredTableBody">
+                                                        <tr>
+                                                            <td colspan="4" class="text-center text-muted">لا توجد بيانات</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    @* =====================================================
+                                       جدول المبيعات والوسيط
+                                       ===================================================== *@
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-12">
+                                            <label class="form-label form-label-sm mb-2">المبيعات والوسيط</label>
+                                            <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                                                <table class="table table-sm table-bordered table-striped mb-0" id="SalesIntermediaryTable">
+                                                    <thead class="table-light sticky-top">
+                                                        <tr>
+                                                            <th class="text-center">النوع</th>
+                                                            <th class="text-center">التاريخ</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="SalesIntermediaryTableBody">
+                                                        <tr>
+                                                            <td colspan="2" class="text-center text-muted">لا توجد بيانات</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+
                                 </div>
                             </div>
                         </div>
@@ -1471,6 +1521,9 @@
                                      if (prodAltSelect) {
                                          prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
                                      }
+
+                                     // مسح جداول المطلوب والكمية المباعة والوسيط
+                                     clearProductDemandTables();
                                      return;
                                  }
 
@@ -1514,6 +1567,100 @@
                                  } else if (prodAltSelect) {
                                      prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
                                  }
+
+                                 // تحميل بيانات المطلوب والكمية المباعة والوسيط
+                                 if (id) {
+                                     loadProductDemandInfo(id);
+                                 } else {
+                                     // مسح الجدول إذا لم يكن هناك صنف محدد
+                                     clearProductDemandTable();
+                                 }
+                             }
+
+                             // =========================================================
+                             // تحميل بيانات المطلوب والكمية المباعة والوسيط
+                             // =========================================================
+                             function loadProductDemandInfo(prodId) {
+                                 if (!prodId) {
+                                     clearProductDemandTables();
+                                     return;
+                                 }
+
+                                 const url = '@Url.Action("GetProductDemandInfo", "PurchaseRequests")'
+                                     + '?prodId=' + encodeURIComponent(prodId);
+
+                                 const requiredTableBody = document.getElementById('RequiredTableBody');
+                                 const salesIntermediaryTableBody = document.getElementById('SalesIntermediaryTableBody');
+
+                                 // تعيين رسالة تحميل
+                                 if (requiredTableBody) requiredTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">... جاري التحميل</td></tr>';
+                                 if (salesIntermediaryTableBody) salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">... جاري التحميل</td></tr>';
+
+                                 fetch(url)
+                                     .then(r => r.ok ? r.json() : null)
+                                     .then(data => {
+                                         if (data && data.ok) {
+                                             // تحديث جدول المطلوب
+                                             if (requiredTableBody) {
+                                                 if (data.required && data.required.length > 0) {
+                                                     requiredTableBody.innerHTML = data.required.map(item => {
+                                                         const date = new Date(item.date);
+                                                         const dateStr = date.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                                                         return `<tr>
+                                                             <td>${item.customerName || ''}</td>
+                                                             <td class="text-center">${dateStr}</td>
+                                                             <td class="text-center">${item.qty || 0}</td>
+                                                             <td class="text-center">${(item.weightedDiscount || 0).toFixed(2)}</td>
+                                                         </tr>`;
+                                                     }).join('');
+                                                 } else {
+                                                     requiredTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">لا توجد بيانات</td></tr>';
+                                                 }
+                                             }
+
+                                             // تحديث جدول المبيعات والوسيط
+                                             if (salesIntermediaryTableBody) {
+                                                 const salesRows = (data.sales || []).map(item => {
+                                                     const date = new Date(item.date);
+                                                     const dateStr = date.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                                                     return `<tr>
+                                                         <td class="text-center">مبيعات</td>
+                                                         <td class="text-center">${dateStr}</td>
+                                                     </tr>`;
+                                                 });
+
+                                                 const intermediaryRows = (data.intermediary || []).map(item => {
+                                                     const date = new Date(item.date);
+                                                     const dateStr = date.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
+                                                     return `<tr>
+                                                         <td class="text-center">وسيط</td>
+                                                         <td class="text-center">${dateStr}</td>
+                                                     </tr>`;
+                                                 });
+
+                                                 const allRows = [...salesRows, ...intermediaryRows];
+                                                 if (allRows.length > 0) {
+                                                     salesIntermediaryTableBody.innerHTML = allRows.join('');
+                                                 } else {
+                                                     salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">لا توجد بيانات</td></tr>';
+                                                 }
+                                             }
+                                         } else {
+                                             clearProductDemandTables();
+                                         }
+                                     })
+                                     .catch(err => {
+                                         console.error('❌ خطأ في تحميل بيانات المطلوب والكمية المباعة والوسيط:', err);
+                                         clearProductDemandTables();
+                                     });
+                             }
+
+                             function clearProductDemandTables() {
+                                 const requiredTableBody = document.getElementById('RequiredTableBody');
+                                 const salesIntermediaryTableBody = document.getElementById('SalesIntermediaryTableBody');
+
+                                 if (requiredTableBody) requiredTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">لا توجد بيانات</td></tr>';
+                                 if (salesIntermediaryTableBody) salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">لا توجد بيانات</td></tr>';
                              }
 
                              // =========================================================
