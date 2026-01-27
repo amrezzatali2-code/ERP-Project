@@ -1,9 +1,11 @@
-﻿using ERP.Data;                                  // AppDbContext
+using ERP.Data;                                  // AppDbContext
 using ERP.Infrastructure;                        // كلاس PagedResult لتقسيم الصفحات
 using ERP.Models;                                // StockTransfer و Warehouse و StockTransferLine
+using ERP.Services;                              // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;                  // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;        // SelectList و SelectListItem
 using Microsoft.EntityFrameworkCore;             // Include, AsNoTracking, ToListAsync
+using Microsoft.Extensions.DependencyInjection;  // GetRequiredService
 using System;                                     // متغيرات التوقيت DateTime
 using System.Collections.Generic;                // القوائم List و ICollection
 using System.Globalization;
@@ -285,6 +287,85 @@ namespace ERP.Controllers
                 return NotFound();
 
             return View(transfer);
+        }
+
+        #endregion
+
+        #region Show (عرض التحويل مع إضافة السطور والترحيل)
+
+        [HttpGet]
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        {
+            bool isBodyOnly = string.Equals(frag, "body", StringComparison.OrdinalIgnoreCase);
+
+            if (!isBodyOnly && frame != 1)
+                return RedirectToAction(nameof(Show), new { id = id, frag = frag, frame = 1 });
+
+            ViewBag.Fragment = frag;
+
+            StockTransfer? transfer = null;
+
+            if (id > 0)
+            {
+                transfer = await _context.StockTransfers
+                    .Include(t => t.FromWarehouse)
+                    .Include(t => t.ToWarehouse)
+                    .Include(t => t.Lines)
+                        .ThenInclude(l => l.Product)
+                    .Include(t => t.Lines)
+                        .ThenInclude(l => l.Batch)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.Id == id);
+
+                if (transfer == null)
+                {
+                    if (isBodyOnly)
+                        return NotFound("التحويل غير موجود.");
+                    TempData["Error"] = "التحويل غير موجود.";
+                    return RedirectToAction("Index");
+                }
+            }
+            else
+            {
+                // إنشاء تحويل جديد
+                transfer = new StockTransfer
+                {
+                    Id = 0,
+                    TransferDate = DateTime.Now,
+                    FromWarehouseId = 0,
+                    ToWarehouseId = 0,
+                    IsPosted = false,
+                    Status = "مسودة",
+                    Lines = new List<StockTransferLine>()
+                };
+            }
+
+            await PopulateWarehousesDropDowns(
+                transfer.FromWarehouseId > 0 ? transfer.FromWarehouseId : null,
+                transfer.ToWarehouseId > 0 ? transfer.ToWarehouseId : null
+            );
+
+            // تجهيز قائمة المنتجات للأوتوكومبليت
+            var products = await _context.Products
+                .AsNoTracking()
+                .OrderBy(p => p.ProdName)
+                .Select(p => new
+                {
+                    Id = p.ProdId,
+                    Name = p.ProdName ?? string.Empty,
+                    GenericName = p.GenericName ?? string.Empty,
+                    Company = p.Company ?? string.Empty,
+                    HasQuota = p.HasQuota,
+                    PriceRetail = p.PriceRetail
+                })
+                .ToListAsync();
+
+            ViewBag.ProductsAuto = products;
+
+            ViewBag.IsLocked = transfer.IsPosted || transfer.Status == "Posted" || transfer.Status == "Closed";
+            ViewBag.Frame = (!isBodyOnly) ? 1 : 0;
+
+            return View("Show", transfer);
         }
 
         #endregion
@@ -619,6 +700,280 @@ namespace ERP.Controllers
             return await _context.StockTransfers.AnyAsync(t => t.Id == id);
         }
 
+        // =========================
+        // CreateHeaderJson — إنشاء/حفظ رأس التحويل (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> CreateHeaderJson([FromBody] StockTransferHeaderDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { ok = false, message = "بيانات غير صحيحة." });
+            }
+
+            if (dto.FromWarehouseId <= 0 || dto.ToWarehouseId <= 0)
+            {
+                return BadRequest(new { ok = false, message = "يجب اختيار المخازن صحيحة." });
+            }
+
+            if (dto.FromWarehouseId == dto.ToWarehouseId)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن أن يكون المخزن المصدر هو نفس المخزن الوجهة." });
+            }
+
+            var transfer = new StockTransfer
+            {
+                TransferDate = dto.TransferDate,
+                FromWarehouseId = dto.FromWarehouseId,
+                ToWarehouseId = dto.ToWarehouseId,
+                Note = dto.Note,
+                CreatedAt = DateTime.UtcNow,
+                IsPosted = false,
+                Status = "مسودة"
+            };
+
+            _context.StockTransfers.Add(transfer);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true, id = transfer.Id });
+        }
+
+        // =========================
+        // UpdateHeaderJson — تحديث رأس التحويل (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> UpdateHeaderJson([FromBody] StockTransferHeaderDto dto)
+        {
+            if (!ModelState.IsValid || dto.Id <= 0)
+            {
+                return BadRequest(new { ok = false, message = "بيانات غير صحيحة." });
+            }
+
+            var transfer = await _context.StockTransfers.FindAsync(dto.Id);
+            if (transfer == null)
+            {
+                return NotFound(new { ok = false, message = "التحويل غير موجود." });
+            }
+
+            if (transfer.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن تعديل تحويل مترحل." });
+            }
+
+            if (dto.FromWarehouseId == dto.ToWarehouseId)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن أن يكون المخزن المصدر هو نفس المخزن الوجهة." });
+            }
+
+            transfer.TransferDate = dto.TransferDate;
+            transfer.FromWarehouseId = dto.FromWarehouseId;
+            transfer.ToWarehouseId = dto.ToWarehouseId;
+            transfer.Note = dto.Note;
+            transfer.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true, id = transfer.Id });
+        }
+
+        // =========================
+        // AddLineJson — إضافة سطر للتحويل (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> AddLineJson([FromBody] StockTransferLineDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { ok = false, message = "بيانات غير صحيحة." });
+            }
+
+            var transfer = await _context.StockTransfers
+                .Include(t => t.Lines)
+                .FirstOrDefaultAsync(t => t.Id == dto.StockTransferId);
+
+            if (transfer == null)
+            {
+                return NotFound(new { ok = false, message = "التحويل غير موجود." });
+            }
+
+            if (transfer.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن إضافة سطور لتحويل مترحل." });
+            }
+
+            if (dto.ProductId <= 0)
+            {
+                return BadRequest(new { ok = false, message = "يجب اختيار صنف صحيح." });
+            }
+
+            if (dto.Qty <= 0)
+            {
+                return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
+            }
+
+            // البحث عن Batch إذا كان موجوداً
+            int? batchId = null;
+            if (!string.IsNullOrWhiteSpace(dto.BatchNo))
+            {
+                var batch = await _context.Batches
+                    .FirstOrDefaultAsync(b => b.BatchNo.Trim() == dto.BatchNo.Trim() && b.ProdId == dto.ProductId);
+                if (batch != null)
+                {
+                    batchId = batch.BatchId;
+                }
+            }
+
+            // حساب رقم السطر التالي
+            int nextLineNo = transfer.Lines.Any() ? transfer.Lines.Max(l => l.LineNo) + 1 : 1;
+
+            var line = new StockTransferLine
+            {
+                StockTransferId = dto.StockTransferId,
+                LineNo = nextLineNo,
+                ProductId = dto.ProductId,
+                BatchId = batchId,
+                Qty = dto.Qty,
+                UnitCost = dto.UnitCost,
+                Note = dto.Note
+            };
+
+            _context.StockTransferLines.Add(line);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true, lineId = line.Id });
+        }
+
+        // =========================
+        // DeleteLineJson — حذف سطر من التحويل (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> DeleteLineJson(int id)
+        {
+            var line = await _context.StockTransferLines
+                .Include(l => l.StockTransfer)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (line == null)
+            {
+                return NotFound(new { ok = false, message = "السطر غير موجود." });
+            }
+
+            if (line.StockTransfer.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن حذف سطر من تحويل مترحل." });
+            }
+
+            _context.StockTransferLines.Remove(line);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true });
+        }
+
+        // =========================
+        // ClearLinesJson — مسح كل سطور التحويل (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> ClearLinesJson(int id)
+        {
+            var transfer = await _context.StockTransfers
+                .Include(t => t.Lines)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (transfer == null)
+            {
+                return NotFound(new { ok = false, message = "التحويل غير موجود." });
+            }
+
+            if (transfer.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن مسح سطور تحويل مترحل." });
+            }
+
+            _context.StockTransferLines.RemoveRange(transfer.Lines);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true });
+        }
+
+        // =========================
+        // PostTransfer — ترحيل التحويل (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> PostTransfer(int id)
+        {
+            var transfer = await _context.StockTransfers
+                .Include(t => t.Lines)
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (transfer == null)
+            {
+                return NotFound(new { ok = false, message = "التحويل غير موجود." });
+            }
+
+            if (transfer.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "هذا التحويل مترحل بالفعل." });
+            }
+
+            if (!transfer.Lines.Any())
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن ترحيل تحويل بدون سطور." });
+            }
+
+            // استدعاء خدمة الترحيل
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            await ledgerPostingService.PostStockTransferAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+            return Json(new { ok = true, message = "تم الترحيل بنجاح." });
+        }
+
+        // =========================
+        // OpenTransfer — فتح التحويل (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> OpenTransfer(int id)
+        {
+            var transfer = await _context.StockTransfers.FindAsync(id);
+
+            if (transfer == null)
+            {
+                return NotFound(new { ok = false, message = "التحويل غير موجود." });
+            }
+
+            if (!transfer.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "هذا التحويل غير مترحل." });
+            }
+
+            // استدعاء خدمة فتح التحويل (عكس الترحيل)
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            await ledgerPostingService.ReverseStockTransferAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+            return Json(new { ok = true, message = "تم فتح التحويل بنجاح." });
+        }
         #endregion
+    }
+
+    // =========================
+    // DTOs
+    // =========================
+    public class StockTransferHeaderDto
+    {
+        public int Id { get; set; }
+        public DateTime TransferDate { get; set; }
+        public int FromWarehouseId { get; set; }
+        public int ToWarehouseId { get; set; }
+        public string? Note { get; set; }
+    }
+
+    public class StockTransferLineDto
+    {
+        public int StockTransferId { get; set; }
+        public int ProductId { get; set; }
+        public string? BatchNo { get; set; }
+        public int? BatchId { get; set; }
+        public int Qty { get; set; }
+        public decimal UnitCost { get; set; }
+        public string? Note { get; set; }
     }
 }

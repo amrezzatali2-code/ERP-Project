@@ -1,4 +1,4 @@
-﻿using System;                                     // استخدام DateTime
+using System;                                     // استخدام DateTime
 using System.Collections.Generic;                 // List, Dictionary
 using System.Linq;                                // أوامر LINQ
 using System.Linq.Expressions;                   // Expression<Func<...>>
@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToLi
 using ERP.Data;                                   // AppDbContext
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
 using ERP.Models;                                 // PurchaseReturn
+using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
 {
@@ -21,10 +22,12 @@ namespace ERP.Controllers
     {
         // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;
+        private readonly ILedgerPostingService _ledgerPostingService;
 
-        public PurchaseReturnsController(AppDbContext context)
+        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService)
         {
             _context = context;
+            _ledgerPostingService = ledgerPostingService;
         }
 
 
@@ -446,6 +449,86 @@ namespace ERP.Controllers
 
             TempData["Success"] = "تم حذف جميع مرتجعات الشراء.";
             return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // API: جلب أصناف فاتورة الشراء عند إدخال رقم الفاتورة
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetInvoiceItems(int invoiceId)
+        {
+            if (invoiceId <= 0)
+                return Json(new { ok = false, message = "رقم الفاتورة غير صحيح." });
+
+            // جلب الفاتورة مع التحقق من وجودها
+            var invoice = await _context.PurchaseInvoices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(pi => pi.PIId == invoiceId);
+
+            if (invoice == null)
+                return Json(new { ok = false, message = "الفاتورة غير موجودة." });
+
+            // جلب سطور الفاتورة مع بيانات الصنف
+            var lines = await _context.PILines
+                .AsNoTracking()
+                .Include(l => l.Product)
+                .Where(l => l.PIId == invoiceId)
+                .OrderBy(l => l.LineNo)
+                .Select(l => new
+                {
+                    lineNo = l.LineNo,
+                    prodId = l.ProdId,
+                    prodName = l.Product != null ? l.Product.ProdName : "",
+                    qty = l.Qty,
+                    batchNo = l.BatchNo ?? "",
+                    expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                    priceRetail = l.PriceRetail,
+                    unitCost = l.UnitCost,
+                    purchaseDiscountPct = l.PurchaseDiscountPct
+                })
+                .ToListAsync();
+
+            return Json(new
+            {
+                ok = true,
+                invoiceId = invoiceId,
+                customerId = invoice.CustomerId,
+                warehouseId = invoice.WarehouseId,
+                invoiceDate = invoice.PIDate.ToString("yyyy-MM-dd"),
+                items = lines
+            });
+        }
+
+        // =========================================================
+        // POST: ترحيل مرتجع الشراء
+        // =========================================================
+        [HttpPost]
+        public async Task<IActionResult> PostReturn(int id)
+        {
+            if (id <= 0)
+                return Json(new { ok = false, message = "رقم المرتجع غير صحيح." });
+
+            try
+            {
+                var purchaseReturn = await _context.PurchaseReturns
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(pr => pr.PRetId == id);
+
+                if (purchaseReturn == null)
+                    return Json(new { ok = false, message = "المرتجع غير موجود." });
+
+                if (purchaseReturn.IsPosted)
+                    return Json(new { ok = false, message = "هذا المرتجع مترحّل بالفعل." });
+
+                var postedBy = User?.Identity?.Name ?? "SYSTEM";
+                await _ledgerPostingService.PostPurchaseReturnAsync(id, postedBy);
+
+                return Json(new { ok = true, message = "تم ترحيل المرتجع بنجاح." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { ok = false, message = $"حدث خطأ: {ex.Message}" });
+            }
         }
     }
 }

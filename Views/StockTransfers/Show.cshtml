@@ -1,0 +1,637 @@
+@using Microsoft.AspNetCore.Mvc.Rendering
+@model ERP.Models.StockTransfer
+
+@{
+    ViewData["Title"] = Model.Id == 0
+        ? "تحويل مخزني جديد"
+        : $"تحويل مخزني — رقم {Model.Id}";
+}
+
+@section Styles {
+    <style>
+        .transfer-page {
+            background-color: #f3f6fb;
+            min-height: 100vh;
+            padding-bottom: 2rem;
+        }
+
+        .transfer-header-card,
+        .transfer-lines-card,
+        .transfer-add-card {
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        .transfer-header-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.75rem 1.25rem;
+        }
+
+        .transfer-add-card .card-header,
+        .transfer-lines-card .card-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.55rem 1rem;
+        }
+
+        .erp-table-wrapper {
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        /* إصلاح مشكلة اتجاه النص في حقول التاريخ */
+        input[type="date"],
+        input[type="datetime-local"],
+        input[type="time"] {
+            direction: ltr !important;
+            text-align: left !important;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+        }
+    </style>
+}
+
+<div class="transfer-page" dir="rtl">
+    <div class="container-fluid pt-3">
+        <form id="__AntiForgeryForm" method="post" style="display:none">
+            @Html.AntiForgeryToken()
+        </form>
+
+        <div class="row g-3">
+            @* العمود الجانبي *@
+            <div class="col-12 col-lg-2 order-1 order-lg-2">
+                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
+                    <div class="card-header py-2 text-center">
+                        <h6 class="mb-0">إجراءات التحويل المخزني</h6>
+                    </div>
+
+                    <input type="hidden" id="TransferId" value="@Model.Id" />
+                    <input type="hidden" id="TransferIsPostedFlag" value="@(Model.IsPosted ? "1" : "0")" />
+
+                    <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
+                        <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
+                            <button type="button" id="btnFirstTransfer" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" disabled>⏮</button>
+                            <button type="button" id="btnPrevTransfer" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" disabled>◀</button>
+                            <button type="button" id="btnNextTransfer" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" disabled>▶</button>
+                            <button type="button" id="btnLastTransfer" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" disabled>⏭</button>
+                        </div>
+
+                        <hr class="my-1" />
+
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm w-100"
+                           asp-action="Show"
+                           asp-route-id="0"
+                           asp-route-frame="1">
+                            ➕ تحويل جديد
+                        </a>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnSaveTransferHeader"
+                                data-lock-posted="1">
+                            💾 حفظ التحويل
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnPostTransfer"
+                                data-lock-posted="1">
+                            📤 ترحيل التحويل
+                        </button>
+
+                        <div id="postTransferMsg" class="small mt-2"></div>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnOpenTransfer">
+                            ⏪ فتح التحويل
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
+                                id="btnClearTransferLines"
+                                data-lock-posted="1">
+                            🗑️ مسح كل السطور
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            @* العمود الرئيسي *@
+            <div class="col-12 col-lg-10 order-2 order-lg-1">
+                @* كارت بيانات التحويل *@
+                <div class="card shadow-sm mb-2 transfer-header-card">
+                    <div class="transfer-header-bar d-flex justify-content-between align-items-center">
+                        <h5 class="mb-1">تحويل مخزني</h5>
+                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#TransferHeaderCollapse">
+                            <span>▾</span>
+                        </button>
+                    </div>
+
+                    <div id="TransferHeaderCollapse" class="collapse show">
+                        <div class="card-body">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-lg-2">
+                                    <label class="form-label form-label-sm">رقم التحويل</label>
+                                    <input id="TransferNumberDisplay" class="form-control form-control-sm text-center" value="@(Model.Id > 0 ? Model.Id.ToString() : "")" readonly />
+                                </div>
+
+                                <div class="col-lg-2">
+                                    <label class="form-label form-label-sm">تاريخ التحويل</label>
+                                    <input id="TransferDateInput" type="datetime-local" class="form-control form-control-sm" value="@Model.TransferDate.ToString("yyyy-MM-ddTHH:mm")" data-lock-posted="1" dir="ltr" style="text-align: left;" />
+                                </div>
+
+                                <div class="col-lg-3">
+                                    <label class="form-label form-label-sm">من مخزن</label>
+                                    <select asp-for="FromWarehouseId" asp-items="@(ViewData["FromWarehouseId"] as SelectList)" class="form-select form-select-sm" data-lock-posted="1">
+                                        <option value="">اختر المخزن المصدر</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-lg-3">
+                                    <label class="form-label form-label-sm">إلى مخزن</label>
+                                    <select asp-for="ToWarehouseId" asp-items="@(ViewData["ToWarehouseId"] as SelectList)" class="form-select form-select-sm" data-lock-posted="1">
+                                        <option value="">اختر المخزن الوجهة</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-lg-2">
+                                    <label class="form-label form-label-sm">الحالة</label>
+                                    <input id="TransferStatusDisplay" class="form-control form-control-sm text-center" value="@(string.IsNullOrWhiteSpace(Model.Status) ? "مسودة" : Model.Status)" readonly />
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-12">
+                                    <label class="form-label form-label-sm">ملاحظات</label>
+                                    <textarea asp-for="Note" class="form-control form-control-sm" rows="2" data-lock-posted="1"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* كارت إدخال السطر *@
+                <div class="card shadow-sm mb-3 transfer-add-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">إضافة سطر للتحويل</h6>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">كود الصنف</label>
+                                <input type="number" id="ProdCodeInput" class="form-control form-control-sm text-center" placeholder="بحث بالكود..." data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-4">
+                                <label class="form-label form-label-sm">اسم الصنف</label>
+                                <input id="ProdNameInput" list="productsList" class="form-control form-control-sm" placeholder="اكتب اسم الصنف..." autocomplete="off" data-lock-posted="1" />
+                                <datalist id="productsList">
+                                    @if (ViewBag.ProductsAuto != null)
+                                    {
+                                        foreach (var p in ViewBag.ProductsAuto)
+                                        {
+                                            <option value="@p.Name"
+                                                    data-id="@p.Id"
+                                                    data-code="@p.Id"
+                                                    data-generic="@p.GenericName"
+                                                    data-company="@p.Company"
+                                                    data-price="@p.PriceRetail"
+                                                    data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                            </option>
+                                        }
+                                    }
+                                </datalist>
+                                <input type="hidden" id="ProdId" />
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">التشغيلة</label>
+                                <input type="text" id="BatchNoInput" class="form-control form-control-sm text-center" placeholder="باتش" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">الكمية</label>
+                                <input type="number" id="QtyInput" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">تكلفة الوحدة</label>
+                                <input type="number" id="UnitCostInput" class="form-control form-control-sm text-center" step="0.0001" data-lock-posted="1" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mt-2">
+                            <div class="col-lg-10">
+                                <label class="form-label form-label-sm">ملاحظات السطر</label>
+                                <input type="text" id="LineNoteInput" class="form-control form-control-sm" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-2 d-grid">
+                                <label class="form-label form-label-sm">&nbsp;</label>
+                                <button type="button" id="btnAddTransferLine" class="btn btn-erp btn-erp-primary btn-erp-sm w-100" data-lock-posted="1">إضافة</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* جدول السطور *@
+                <div class="card shadow-sm mb-3 transfer-lines-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">سطور التحويل</h6>
+                    </div>
+
+                    <div class="card-body p-0">
+                        <div class="erp-table-wrapper">
+                            <table class="table table-sm table-striped table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">#</th>
+                                        <th>اسم الصنف</th>
+                                        <th class="text-center">التشغيلة</th>
+                                        <th class="text-center">الكمية</th>
+                                        <th class="text-center">تكلفة الوحدة</th>
+                                        <th class="text-center">الإجمالي</th>
+                                        <th class="text-center no-print">مسح</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="TransferLinesTbody">
+                                    @if (Model.Lines != null && Model.Lines.Any())
+                                    {
+                                        int lineNo = 1;
+                                        foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
+                                        {
+                                            <tr data-line-id="@line.Id">
+                                                <td class="text-center">@lineNo</td>
+                                                <td>@(line.Product?.ProdName ?? $"صنف #{line.ProductId}")</td>
+                                                <td class="text-center">@(line.BatchId?.ToString() ?? "-")</td>
+                                                <td class="text-center">@line.Qty</td>
+                                                <td class="text-center">@line.UnitCost.ToString("0.0000")</td>
+                                                <td class="text-center">@((line.Qty * line.UnitCost).ToString("0.00"))</td>
+                                                <td class="text-center no-print">
+                                                    <button type="button" class="btn btn-sm btn-danger btn-delete-line" data-line-id="@line.Id" data-lock-posted="1">🗑️</button>
+                                                </td>
+                                            </tr>
+                                            lineNo++;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr>
+                                            <td colspan="7" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Anti-forgery token
+        function getAntiForgeryToken() {
+            const form = document.getElementById('__AntiForgeryForm');
+            return form?.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
+        // Product selection
+        document.getElementById('ProdNameInput')?.addEventListener('input', function() {
+            const selectedOption = document.querySelector(`#productsList option[value="${this.value}"]`);
+            if (selectedOption) {
+                document.getElementById('ProdId').value = selectedOption.getAttribute('data-id');
+                document.getElementById('ProdCodeInput').value = selectedOption.getAttribute('data-id');
+            }
+        });
+
+        document.getElementById('ProdCodeInput')?.addEventListener('input', function() {
+            const code = this.value;
+            if (code && code > 0) {
+                const selectedOption = document.querySelector(`#productsList option[data-id="${code}"]`);
+                if (selectedOption) {
+                    document.getElementById('ProdId').value = code;
+                    document.getElementById('ProdNameInput').value = selectedOption.value;
+                }
+            }
+        });
+
+        // Add line
+        document.getElementById('btnAddTransferLine')?.addEventListener('click', async function() {
+            const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
+            if (!transferId || transferId <= 0) {
+                alert('لا يمكن إضافة سطور قبل حفظ التحويل. اضغط "حفظ التحويل" أولاً.');
+                return;
+            }
+
+            const prodId = parseInt(document.getElementById('ProdId').value || '0', 10);
+            const qty = parseInt(document.getElementById('QtyInput').value || '0', 10);
+            const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
+            const unitCost = parseFloat(document.getElementById('UnitCostInput').value || '0');
+            const note = document.getElementById('LineNoteInput').value?.trim() || '';
+
+            if (!prodId || prodId <= 0) {
+                alert('من فضلك اختر صنفاً صحيحاً.');
+                return;
+            }
+
+            if (!qty || qty <= 0) {
+                alert('الكمية يجب أن تكون أكبر من صفر.');
+                return;
+            }
+
+            const dto = {
+                stockTransferId: transferId,
+                productId: prodId,
+                batchNo: batchNo,
+                qty: qty,
+                unitCost: unitCost,
+                note: note
+            };
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const response = await fetch('@Url.Action("AddLineJson", "StockTransfers")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify(dto)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    alert('حدث خطأ أثناء إضافة السطر: ' + errorText);
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    location.reload();
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء إضافة السطر.');
+                }
+            } catch (error) {
+                console.error('Error adding line:', error);
+                alert('حدث خطأ أثناء إضافة السطر.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Delete line
+        document.querySelectorAll('.btn-delete-line').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const lineId = parseInt(this.getAttribute('data-line-id') || '0', 10);
+                if (!lineId || lineId <= 0) return;
+
+                if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
+
+                const token = getAntiForgeryToken();
+                this.disabled = true;
+
+                try {
+                    const response = await fetch(`@Url.Action("DeleteLineJson", "StockTransfers")?id=${lineId}`, {
+                        method: 'POST',
+                        headers: {
+                            'RequestVerificationToken': token
+                        }
+                    });
+
+                    if (!response.ok) {
+                        alert('حدث خطأ أثناء حذف السطر.');
+                        return;
+                    }
+
+                    const result = await response.json();
+                    if (result.ok) {
+                        location.reload();
+                    } else {
+                        alert(result.message || 'حدث خطأ أثناء حذف السطر.');
+                    }
+                } catch (error) {
+                    console.error('Error deleting line:', error);
+                    alert('حدث خطأ أثناء حذف السطر.');
+                } finally {
+                    this.disabled = false;
+                }
+            });
+        });
+
+        // Save header
+        document.getElementById('btnSaveTransferHeader')?.addEventListener('click', async function() {
+            const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
+            const transferDate = document.getElementById('TransferDateInput').value;
+            const fromWarehouseId = document.querySelector('[name="FromWarehouseId"]').value;
+            const toWarehouseId = document.querySelector('[name="ToWarehouseId"]').value;
+            const note = document.querySelector('[name="Note"]').value;
+
+            if (!fromWarehouseId || fromWarehouseId <= 0) {
+                alert('من فضلك اختر المخزن المصدر.');
+                return;
+            }
+
+            if (!toWarehouseId || toWarehouseId <= 0) {
+                alert('من فضلك اختر المخزن الوجهة.');
+                return;
+            }
+
+            if (fromWarehouseId == toWarehouseId) {
+                alert('لا يمكن أن يكون المخزن المصدر هو نفس المخزن الوجهة.');
+                return;
+            }
+
+            const dto = {
+                id: transferId,
+                transferDate: transferDate,
+                fromWarehouseId: parseInt(fromWarehouseId, 10),
+                toWarehouseId: parseInt(toWarehouseId, 10),
+                note: note
+            };
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const url = transferId > 0 
+                    ? '@Url.Action("UpdateHeaderJson", "StockTransfers")'
+                    : '@Url.Action("CreateHeaderJson", "StockTransfers")';
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify(dto)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    alert('حدث خطأ أثناء حفظ التحويل: ' + errorText);
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    if (result.id && result.id > 0) {
+                        document.getElementById('TransferId').value = result.id;
+                        document.getElementById('TransferNumberDisplay').value = result.id;
+                        if (window.location.pathname.includes('/Create')) {
+                            window.history.replaceState({}, '', `@Url.Action("Show", "StockTransfers")/${result.id}`);
+                        }
+                    }
+                    alert('تم حفظ التحويل بنجاح.');
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء حفظ التحويل.');
+                }
+            } catch (error) {
+                console.error('Error saving transfer:', error);
+                alert('حدث خطأ أثناء حفظ التحويل.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Post transfer
+        document.getElementById('btnPostTransfer')?.addEventListener('click', async function() {
+            const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
+            if (!transferId || transferId <= 0) {
+                alert('يجب حفظ التحويل أولاً قبل الترحيل.');
+                return;
+            }
+
+            if (!confirm('هل أنت متأكد من ترحيل هذا التحويل؟')) return;
+
+            const token = getAntiForgeryToken();
+            const msgDiv = document.getElementById('postTransferMsg');
+            this.disabled = true;
+            msgDiv.textContent = 'جاري الترحيل...';
+
+            try {
+                const response = await fetch(`@Url.Action("PostTransfer", "StockTransfers")?id=${transferId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    msgDiv.textContent = 'خطأ: ' + errorText;
+                    msgDiv.className = 'small mt-2 text-danger';
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    msgDiv.textContent = 'تم الترحيل بنجاح.';
+                    msgDiv.className = 'small mt-2 text-success';
+                    location.reload();
+                } else {
+                    msgDiv.textContent = result.message || 'حدث خطأ أثناء الترحيل.';
+                    msgDiv.className = 'small mt-2 text-danger';
+                }
+            } catch (error) {
+                console.error('Error posting transfer:', error);
+                msgDiv.textContent = 'حدث خطأ أثناء الترحيل.';
+                msgDiv.className = 'small mt-2 text-danger';
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Open transfer
+        document.getElementById('btnOpenTransfer')?.addEventListener('click', async function() {
+            const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
+            if (!transferId || transferId <= 0) {
+                alert('لا توجد تحويل لفتحه.');
+                return;
+            }
+
+            if (!confirm('هل أنت متأكد من فتح هذا التحويل؟')) return;
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const response = await fetch(`@Url.Action("OpenTransfer", "StockTransfers")?id=${transferId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                if (!response.ok) {
+                    alert('حدث خطأ أثناء فتح التحويل.');
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    alert('تم فتح التحويل بنجاح.');
+                    location.reload();
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء فتح التحويل.');
+                }
+            } catch (error) {
+                console.error('Error opening transfer:', error);
+                alert('حدث خطأ أثناء فتح التحويل.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Clear lines
+        document.getElementById('btnClearTransferLines')?.addEventListener('click', async function() {
+            const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
+            if (!transferId || transferId <= 0) {
+                alert('لا توجد تحويل لمسح سطوره.');
+                return;
+            }
+
+            if (!confirm('هل أنت متأكد من مسح كل سطور التحويل؟')) return;
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const response = await fetch(`@Url.Action("ClearLinesJson", "StockTransfers")?id=${transferId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                if (!response.ok) {
+                    alert('حدث خطأ أثناء مسح السطور.');
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    alert('تم مسح السطور بنجاح.');
+                    location.reload();
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء مسح السطور.');
+                }
+            } catch (error) {
+                console.error('Error clearing lines:', error);
+                alert('حدث خطأ أثناء مسح السطور.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+    </script>
+}

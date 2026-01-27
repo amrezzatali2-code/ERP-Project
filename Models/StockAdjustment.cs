@@ -1,4 +1,4 @@
-﻿using System;                                  // متغيرات التاريخ والوقت DateTime
+using System;                                  // متغيرات التاريخ والوقت DateTime
 using System.Collections.Generic;              // القوائم List
 using System.ComponentModel.DataAnnotations;   // خصائص التحقق من صحة البيانات
 
@@ -30,6 +30,22 @@ namespace ERP.Models
         [MaxLength(200)]
         [Display(Name = "سبب التسوية / ملاحظات")]
         public string? Reason { get; set; }            // سبب عام أو ملاحظات
+
+        // ========= حقول الترحيل =========
+
+        [Display(Name = "مترحلة")]
+        public bool IsPosted { get; set; } = false;    // حالة الترحيل
+
+        [MaxLength(50)]
+        [Display(Name = "الحالة")]
+        public string? Status { get; set; }            // حالة التسوية (مسودة، مترحلة، ...)
+
+        [Display(Name = "تاريخ الترحيل")]
+        public DateTime? PostedAt { get; set; }         // تاريخ الترحيل
+
+        [MaxLength(100)]
+        [Display(Name = "مرحل بواسطة")]
+        public string? PostedBy { get; set; }           // المستخدم الذي رحّل التسوية
 
         // ========= حقول التاريخ =========
 

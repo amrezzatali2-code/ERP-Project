@@ -66,6 +66,42 @@ namespace ERP.Controllers
         }
 
         // =========================================================
+        // CleanSearchFromColumnNames — تنظيف search من أسماء الأعمدة
+        // =========================================================
+        private string? CleanSearchFromColumnNames(string? search)
+        {
+            if (string.IsNullOrWhiteSpace(search))
+                return null;
+
+            var searchTrimmed = search.Trim();
+            var searchLower = searchTrimmed.ToLowerInvariant();
+
+            // قائمة أسماء الأعمدة المعروفة (بالإنجليزية والعربية)
+            var columnNames = new[]
+            {
+                "siid", "line", "lineno", "prodid", "prodname", "customername",
+                "qty", "price", "unit", "total", "net", "disc1", "disc2", "disc3", "discval",
+                "batch", "expiry", "رقم الفاتورة", "رقم السطر", "كود الصنف", "اسم الصنف",
+                "اسم العميل", "الكمية", "سعر الجمهور", "التشغيلة", "الصلاحية"
+            };
+
+            // إذا كان search مطابق تماماً لأي اسم عمود، نرجعه null
+            if (columnNames.Contains(searchLower))
+                return null;
+
+            // إذا كان search يبدأ أو ينتهي باسم عمود، ننظفه
+            foreach (var colName in columnNames)
+            {
+                if (searchLower == colName || searchLower.StartsWith(colName + " ") || searchLower.EndsWith(" " + colName))
+                {
+                    return null;
+                }
+            }
+
+            return searchTrimmed;
+        }
+
+        // =========================================================
         // دالة خاصة: بناء الاستعلام مع البحث + الترتيب (نستخدمها فى Index و Export)
         // =========================================================
         // المتغير siId: فلتر اختياري برقم الفاتورة
@@ -80,9 +116,13 @@ namespace ERP.Controllers
             string? sort,
             string? dir)
         {
-            // (1) الاستعلام الأساسي (بدون تتبّع لتحسين الأداء)
+            // (1) الاستعلام الأساسي مع تضمين العلاقات (Product و SalesInvoice.Customer)
             IQueryable<SalesInvoiceLine> q =
-                _context.SalesInvoiceLines.AsNoTracking();
+                _context.SalesInvoiceLines
+                    .Include(x => x.Product)
+                    .Include(x => x.SalesInvoice)
+                        .ThenInclude(si => si.Customer)
+                    .AsNoTracking();
 
             // (2) فلترة اختيارية برقم الفاتورة
             if (siId.HasValue)
@@ -94,7 +134,11 @@ namespace ERP.Controllers
             var stringFields =
                 new Dictionary<string, Expression<Func<SalesInvoiceLine, string?>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["batch"] = x => x.BatchNo ?? ""   // التشغيلة
+                    ["batch"] = x => x.BatchNo ?? "",                    // التشغيلة
+                    ["prodname"] = x => x.Product != null ? (x.Product.ProdName ?? "") : "",  // اسم الصنف
+                    ["customername"] = x => x.SalesInvoice != null && x.SalesInvoice.Customer != null 
+                        ? (x.SalesInvoice.Customer.CustomerName ?? "") : "",  // اسم العميل
+                    ["notes"] = x => x.Notes ?? ""                       // الملاحظات
                 };
 
             // الحقول الرقمية (int) — رقم الفاتورة / الصنف / السطر
@@ -102,8 +146,10 @@ namespace ERP.Controllers
                 new Dictionary<string, Expression<Func<SalesInvoiceLine, int>>>(StringComparer.OrdinalIgnoreCase)
                 {
                     ["id"] = x => x.SIId,      // رقم الفاتورة
+                    ["si"] = x => x.SIId,      // رقم الفاتورة (مرادف)
                     ["prod"] = x => x.ProdId,  // رقم الصنف (ProdId)
-                    ["line"] = x => x.LineNo   // رقم السطر
+                    ["line"] = x => x.LineNo,   // رقم السطر
+                    ["qty"] = x => x.Qty        // الكمية
                 };
 
             // مفاتيح الترتيب المسموحة
@@ -113,12 +159,20 @@ namespace ERP.Controllers
                     ["SIId"] = x => x.SIId,                      // رقم الفاتورة
                     ["LineNo"] = x => x.LineNo,                    // رقم السطر
                     ["ProdId"] = x => x.ProdId,                    // رقم الصنف
+                    ["ProdName"] = x => x.Product != null ? (x.Product.ProdName ?? "") : "",  // اسم الصنف
+                    ["CustomerName"] = x => x.SalesInvoice != null && x.SalesInvoice.Customer != null 
+                        ? (x.SalesInvoice.Customer.CustomerName ?? "") : "",  // اسم العميل
                     ["Qty"] = x => x.Qty,                       // الكمية
                     ["Price"] = x => x.PriceRetail,               // سعر الجمهور
                     ["Unit"] = x => x.UnitSalePrice,             // سعر الوحدة بعد الخصم
                     ["Total"] = x => x.LineTotalAfterDiscount,    // إجمالي السطر بعد الخصم
                     ["Net"] = x => x.LineNetTotal,              // الصافي بعد الضريبة
-                    ["Expiry"] = x => x.Expiry ?? DateTime.MaxValue// الصلاحية (لو null نخليها تاريخ كبير)
+                    ["Expiry"] = x => x.Expiry ?? DateTime.MaxValue,  // الصلاحية (لو null نخليها تاريخ كبير)
+                    ["Disc1"] = x => x.Disc1Percent,             // خصم 1%
+                    ["Disc2"] = x => x.Disc2Percent,             // خصم 2%
+                    ["Disc3"] = x => x.Disc3Percent,             // خصم 3%
+                    ["DiscVal"] = x => x.DiscountValue,          // قيمة الخصم
+                    ["Batch"] = x => x.BatchNo ?? ""             // التشغيلة
                 };
 
             // (4) تطبيق منظومة البحث/الترتيب الموحدة
@@ -150,7 +204,10 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 50)
         {
-            // تجهيز الاستعلام باستخدام الدالة الموحدة
+            // تنظيف search من أسماء الأعمدة المعروفة
+            var cleanedSearch = CleanSearchFromColumnNames(search);
+
+            // تجهيز الاستعلام باستخدام الدالة الموحدة (باستخدام search الأصلي للبحث)
             var q = BuildQuery(siId, search, searchBy, sort, dir);
 
             // =========================================================
@@ -166,8 +223,104 @@ namespace ERP.Controllers
             var dirNorm = (dir?.ToLower() == "asc") ? "asc" : "desc";
             bool descending = dirNorm == "desc";
 
-            // (5) إنشاء نتيجة مقسّمة صفحات بالنظام الموحد
-            var model = await PagedResult<SalesInvoiceLine>.CreateAsync(
+            // تعريف متغير model قبل if statement
+            PagedResult<SalesInvoiceLine> model;
+
+            // (5) تطبيق ترتيب مخصص للحقول التي تحتوي على navigation properties
+            // لأن EF Core لا يستطيع ترجمة OrderBy على navigation properties مباشرة
+            var sortNorm = (sort ?? "LineNo").Trim();
+            if (string.Equals(sortNorm, "ProdName", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(sortNorm, "CustomerName", StringComparison.OrdinalIgnoreCase))
+            {
+                // تحميل البيانات أولاً ثم الترتيب في الذاكرة
+                var allItems = await q.ToListAsync();
+                
+                if (string.Equals(sortNorm, "ProdName", StringComparison.OrdinalIgnoreCase))
+                {
+                    allItems = descending
+                        ? allItems.OrderByDescending(x => x.Product?.ProdName ?? "").ToList()
+                        : allItems.OrderBy(x => x.Product?.ProdName ?? "").ToList();
+                }
+                else if (string.Equals(sortNorm, "CustomerName", StringComparison.OrdinalIgnoreCase))
+                {
+                    allItems = descending
+                        ? allItems.OrderByDescending(x => x.SalesInvoice?.Customer?.CustomerName ?? "").ToList()
+                        : allItems.OrderBy(x => x.SalesInvoice?.Customer?.CustomerName ?? "").ToList();
+                }
+
+                // تطبيق Pagination يدوياً
+                var totalCount = allItems.Count;
+                var pagedItems = allItems
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .ToList();
+
+                // إنشاء PagedResult
+                model = new PagedResult<SalesInvoiceLine>(pagedItems, page, pageSize, totalCount)
+                {
+                    Search = cleanedSearch ?? "",
+                    SearchBy = searchBy ?? "all",
+                    SortColumn = sortNorm,
+                    SortDescending = descending
+                };
+
+                // تمرير حالة الفلاتر للواجهة
+                ViewBag.Search = cleanedSearch ?? "";
+                ViewBag.SearchBy = searchBy ?? "all";
+                ViewBag.Sort = sortNorm;
+                ViewBag.Dir = dirNorm;
+                ViewBag.Page = page;
+                ViewBag.PageSize = pageSize;
+                ViewBag.TotalCount = totalCount;
+                ViewBag.SIId = siId;
+
+                // إجماليات الأعمدة (بعد الفلاتر)
+                ViewBag.TotalQty = allItems.Sum(line => line.Qty);
+                ViewBag.TotalDiscountValue = allItems.Sum(line => line.DiscountValue);
+                ViewBag.TotalAfterDiscount = allItems.Sum(line => line.LineTotalAfterDiscount);
+                ViewBag.TotalNet = allItems.Sum(line => line.LineNetTotal);
+
+                // (7) خيارات البحث (القائمة المنسدلة في البارشال _IndexFilters)
+                ViewBag.SearchOptions = new List<SelectListItem>
+                {
+                    new("الكل",          "all")  { Selected = (ViewBag.SearchBy == "all")  },
+                    new("رقم الفاتورة",  "id")   { Selected = (ViewBag.SearchBy == "id")   },
+                    new("رقم الفاتورة",  "si")   { Selected = (ViewBag.SearchBy == "si")   },
+                    new("رقم السطر",     "line") { Selected = (ViewBag.SearchBy == "line") },
+                    new("كود الصنف",     "prod") { Selected = (ViewBag.SearchBy == "prod") },
+                    new("اسم الصنف",     "prodname") { Selected = (ViewBag.SearchBy == "prodname") },
+                    new("اسم العميل",    "customername") { Selected = (ViewBag.SearchBy == "customername") },
+                    new("الكمية",        "qty")   { Selected = (ViewBag.SearchBy == "qty") },
+                    new("التشغيلة",      "batch"){ Selected = (ViewBag.SearchBy == "batch")},
+                    new("الملاحظات",     "notes") { Selected = (ViewBag.SearchBy == "notes") },
+                };
+
+                // (8) خيارات الترتيب
+                ViewBag.SortOptions = new List<SelectListItem>
+                {
+                    new("رقم السطر",     "LineNo") { Selected = (ViewBag.Sort == "LineNo") },
+                    new("رقم الفاتورة",  "SIId")   { Selected = (ViewBag.Sort == "SIId")   },
+                    new("كود الصنف",     "ProdId") { Selected = (ViewBag.Sort == "ProdId") },
+                    new("اسم الصنف",     "ProdName") { Selected = (ViewBag.Sort == "ProdName") },
+                    new("اسم العميل",    "CustomerName") { Selected = (ViewBag.Sort == "CustomerName") },
+                    new("الكمية",        "Qty")    { Selected = (ViewBag.Sort == "Qty")    },
+                    new("سعر الجمهور",   "Price")  { Selected = (ViewBag.Sort == "Price")  },
+                    new("سعر الوحدة",    "Unit")   { Selected = (ViewBag.Sort == "Unit")   },
+                    new("خصم 1%",        "Disc1")  { Selected = (ViewBag.Sort == "Disc1")  },
+                    new("خصم 2%",        "Disc2")  { Selected = (ViewBag.Sort == "Disc2")  },
+                    new("خصم 3%",        "Disc3")  { Selected = (ViewBag.Sort == "Disc3")  },
+                    new("قيمة الخصم",    "DiscVal") { Selected = (ViewBag.Sort == "DiscVal") },
+                    new("إجمالي السطر",  "Total")  { Selected = (ViewBag.Sort == "Total")  },
+                    new("الصافي",        "Net")    { Selected = (ViewBag.Sort == "Net")    },
+                    new("التشغيلة",      "Batch")  { Selected = (ViewBag.Sort == "Batch")  },
+                    new("الصلاحية",      "Expiry") { Selected = (ViewBag.Sort == "Expiry") },
+                };
+
+                return View(model);
+            }
+
+            // (5) إنشاء نتيجة مقسّمة صفحات بالنظام الموحد (للحقول العادية)
+            model = await PagedResult<SalesInvoiceLine>.CreateAsync(
                 q,
                 page,
                 pageSize,
@@ -178,7 +331,7 @@ namespace ERP.Controllers
             );
 
             // (6) تمرير حالة الفلاتر للواجهة
-            ViewBag.Search = search ?? "";
+            ViewBag.Search = cleanedSearch ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "LineNo";
             ViewBag.Dir = dirNorm;
@@ -200,9 +353,14 @@ namespace ERP.Controllers
             {
                 new("الكل",          "all")  { Selected = (ViewBag.SearchBy == "all")  },
                 new("رقم الفاتورة",  "id")   { Selected = (ViewBag.SearchBy == "id")   },
-                new("الصنف",         "prod") { Selected = (ViewBag.SearchBy == "prod") },
-                new("التشغيلة",      "batch"){ Selected = (ViewBag.SearchBy == "batch")},
+                new("رقم الفاتورة",  "si")   { Selected = (ViewBag.SearchBy == "si")   },
                 new("رقم السطر",     "line") { Selected = (ViewBag.SearchBy == "line") },
+                new("كود الصنف",     "prod") { Selected = (ViewBag.SearchBy == "prod") },
+                new("اسم الصنف",     "prodname") { Selected = (ViewBag.SearchBy == "prodname") },
+                new("اسم العميل",    "customername") { Selected = (ViewBag.SearchBy == "customername") },
+                new("الكمية",        "qty")   { Selected = (ViewBag.SearchBy == "qty") },
+                new("التشغيلة",      "batch"){ Selected = (ViewBag.SearchBy == "batch")},
+                new("الملاحظات",     "notes") { Selected = (ViewBag.SearchBy == "notes") },
             };
 
             // (8) خيارات الترتيب
@@ -210,12 +368,19 @@ namespace ERP.Controllers
             {
                 new("رقم السطر",     "LineNo") { Selected = (ViewBag.Sort == "LineNo") },
                 new("رقم الفاتورة",  "SIId")   { Selected = (ViewBag.Sort == "SIId")   },
-                new("الصنف",         "ProdId") { Selected = (ViewBag.Sort == "ProdId") },
+                new("كود الصنف",     "ProdId") { Selected = (ViewBag.Sort == "ProdId") },
+                new("اسم الصنف",     "ProdName") { Selected = (ViewBag.Sort == "ProdName") },
+                new("اسم العميل",    "CustomerName") { Selected = (ViewBag.Sort == "CustomerName") },
                 new("الكمية",        "Qty")    { Selected = (ViewBag.Sort == "Qty")    },
                 new("سعر الجمهور",   "Price")  { Selected = (ViewBag.Sort == "Price")  },
                 new("سعر الوحدة",    "Unit")   { Selected = (ViewBag.Sort == "Unit")   },
+                new("خصم 1%",        "Disc1")  { Selected = (ViewBag.Sort == "Disc1")  },
+                new("خصم 2%",        "Disc2")  { Selected = (ViewBag.Sort == "Disc2")  },
+                new("خصم 3%",        "Disc3")  { Selected = (ViewBag.Sort == "Disc3")  },
+                new("قيمة الخصم",    "DiscVal") { Selected = (ViewBag.Sort == "DiscVal") },
                 new("إجمالي السطر",  "Total")  { Selected = (ViewBag.Sort == "Total")  },
                 new("الصافي",        "Net")    { Selected = (ViewBag.Sort == "Net")    },
+                new("التشغيلة",      "Batch")  { Selected = (ViewBag.Sort == "Batch")  },
                 new("الصلاحية",      "Expiry") { Selected = (ViewBag.Sort == "Expiry") },
             };
 
@@ -231,6 +396,9 @@ namespace ERP.Controllers
             if (siId <= 0) return BadRequest();
 
             var line = await _context.SalesInvoiceLines
+                                     .Include(x => x.Product)
+                                     .Include(x => x.SalesInvoice)
+                                         .ThenInclude(si => si.Customer)
                                      .AsNoTracking()
                                      .FirstOrDefaultAsync(x => x.SIId == siId &&
                                                                x.LineNo == lineNo);

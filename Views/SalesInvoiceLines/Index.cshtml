@@ -11,7 +11,24 @@
     var controller = Convert.ToString(ViewContext.RouteData.Values["controller"]) ?? "SalesInvoiceLines";
 
     // قيم البحث/الترتيب الحالية
-    var search = Model.Search ?? (string?)ViewBag.Search ?? "";
+    var searchRaw = Model.Search ?? (string?)ViewBag.Search ?? "";
+    
+    // تنظيف search من أسماء الأعمدة المعروفة
+    var columnNames = new[] { "siid", "line", "lineno", "prodid", "prodname", "customername",
+        "qty", "price", "unit", "total", "net", "disc1", "disc2", "disc3", "discval",
+        "batch", "expiry", "رقم الفاتورة", "رقم السطر", "كود الصنف", "اسم الصنف",
+        "اسم العميل", "الكمية", "سعر الجمهور", "التشغيلة", "الصلاحية" };
+    
+    var search = "";
+    if (!string.IsNullOrWhiteSpace(searchRaw))
+    {
+        var searchLower = searchRaw.Trim().ToLowerInvariant();
+        if (!columnNames.Contains(searchLower))
+        {
+            search = searchRaw.Trim();
+        }
+    }
+    
     var searchBy = (string?)ViewBag.SearchBy ?? "all";          // all | si | prod | batch | notes
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "LineNo";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
@@ -65,9 +82,27 @@
         var isCurrent = string.Equals(sort, col, StringComparison.OrdinalIgnoreCase);
         var newDir = (isCurrent && dir == "asc") ? "desc" : "asc";
 
+        // تنظيف search من أسماء الأعمدة المعروفة (منع ظهورها في حقل البحث)
+        var cleanSearch = "";
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.Trim().ToLowerInvariant();
+            // قائمة أسماء الأعمدة المعروفة
+            var columnNames = new[] { "siid", "line", "lineno", "prodid", "prodname", "customername", 
+                "qty", "price", "unit", "total", "net", "disc1", "disc2", "disc3", "discval", 
+                "batch", "expiry", "رقم الفاتورة", "رقم السطر", "كود الصنف", "اسم الصنف", 
+                "اسم العميل", "الكمية", "سعر الجمهور", "التشغيلة", "الصلاحية" };
+            
+            // إذا كان search يحتوي على اسم عمود، نجعله فارغاً
+            if (!columnNames.Contains(searchLower))
+            {
+                cleanSearch = search;
+            }
+        }
+
         var url = Url.Action(action, controller, new
         {
-            search,
+            search = cleanSearch,
             searchBy,
             sort = col,
             dir = newDir,
@@ -86,7 +121,7 @@
         if (isCurrent)
             icon = dir == "asc" ? "▲" : "▼";
 
-        return new HtmlString($@"<a href=""{url}"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>");
+        return new HtmlString($@"<a href=""{url}"" class=""sort-link"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>");
     };
 }
 
@@ -125,6 +160,10 @@
                                 </option>
 
                                 @* البحث برقم الفاتورة *@
+                                <option value="id"
+                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                    رقم الفاتورة
+                                </option>
                                 <option value="si"
                                         selected="@(searchBy == "si" ? "selected" : null)">
                                     رقم الفاتورة
@@ -140,6 +179,24 @@
                                 <option value="prod"
                                         selected="@(searchBy == "prod" ? "selected" : null)">
                                     كود الصنف
+                                </option>
+
+                                @* البحث باسم الصنف *@
+                                <option value="prodname"
+                                        selected="@(searchBy == "prodname" ? "selected" : null)">
+                                    اسم الصنف
+                                </option>
+
+                                @* البحث باسم العميل *@
+                                <option value="customername"
+                                        selected="@(searchBy == "customername" ? "selected" : null)">
+                                    اسم العميل
+                                </option>
+
+                                @* البحث بالكمية *@
+                                <option value="qty"
+                                        selected="@(searchBy == "qty" ? "selected" : null)">
+                                    الكمية
                                 </option>
 
                                 @* البحث بالتشغيلة *@
@@ -316,31 +373,34 @@
         <table id="silTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light">
                 <tr>
+                    @* زر العرض - تم نقله إلى اليسار *@
                     <th class="text-nowrap no-print"
                         data-col="actions"
                         data-col-fixed="true"
-                        style="width:150px;"></th>
+                        style="width:100px;">عرض</th>
 
-                    <th data-col="siId">@sortLink("si", "رقم الفاتورة")</th>
-                    <th data-col="lineNo">@sortLink("line", "رقم السطر")</th>
-                    <th data-col="prodId">@sortLink("prod", "كود الصنف")</th>
-                    <th data-col="qty">@sortLink("qty", "الكمية")</th>
-                    <th data-col="price">@sortLink("price", "سعر الجمهور")</th>
-                    <th data-col="disc1">@sortLink("disc1", "خصم 1 %")</th>
-                    <th data-col="disc2">@sortLink("disc2", "خصم 2 %")</th>
-                    <th data-col="disc3">@sortLink("disc3", "خصم 3 %")</th>
-                    <th data-col="discVal">@sortLink("discVal", "خصم (قيمة)")</th>
-                    <th data-col="totalAfterDisc">@sortLink("totalAfterDisc", "الإجمالي بعد الخصم")</th>
-                    <th data-col="net">@sortLink("net", "الصافي بعد الضريبة")</th>
-                    <th data-col="batch">@sortLink("batch", "التشغيلة")</th>
-                    <th data-col="expiry">@sortLink("expiry", "الصلاحية")</th>
+                    <th data-col="siId">@sortLink("SIId", "رقم الفاتورة")</th>
+                    <th data-col="lineNo">@sortLink("LineNo", "رقم السطر")</th>
+                    <th data-col="prodId">@sortLink("ProdId", "كود الصنف")</th>
+                    <th data-col="prodName">@sortLink("ProdName", "اسم الصنف")</th>
+                    <th data-col="customerName">@sortLink("CustomerName", "اسم العميل")</th>
+                    <th data-col="qty">@sortLink("Qty", "الكمية")</th>
+                    <th data-col="price">@sortLink("Price", "سعر الجمهور")</th>
+                    <th data-col="disc1">@sortLink("Disc1", "خصم 1 %")</th>
+                    <th data-col="disc2">@sortLink("Disc2", "خصم 2 %")</th>
+                    <th data-col="disc3">@sortLink("Disc3", "خصم 3 %")</th>
+                    <th data-col="discVal">@sortLink("DiscVal", "خصم (قيمة)")</th>
+                    <th data-col="totalAfterDisc">@sortLink("Total", "الإجمالي بعد الخصم")</th>
+                    <th data-col="net">@sortLink("Net", "الصافي بعد الضريبة")</th>
+                    <th data-col="batch">@sortLink("Batch", "التشغيلة")</th>
+                    <th data-col="expiry">@sortLink("Expiry", "الصلاحية")</th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="14" class="text-center text-muted py-4">
+                        <td colspan="16" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -350,19 +410,21 @@
                     foreach (var x in Model.Items)
                     {
                         <tr>
-                            @* زر تفاصيل السطر *@
+                            @* زر عرض السطر - تم نقله إلى اليسار وتغيير اسمه *@
                             <td class="text-nowrap no-print" data-col="actions">
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                    asp-action="Details"
                                    asp-route-siId="@x.SIId"
                                    asp-route-lineNo="@x.LineNo">
-                                    تفاصيل
+                                    عرض
                                 </a>
                             </td>
 
                             <td data-col="siId">@x.SIId</td>
                             <td data-col="lineNo">@x.LineNo</td>
                             <td data-col="prodId">@x.ProdId</td>
+                            <td data-col="prodName">@(x.Product?.ProdName ?? "-")</td>
+                            <td data-col="customerName">@(x.SalesInvoice?.Customer?.CustomerName ?? "-")</td>
                             <td data-col="qty">@x.Qty</td>
                             <td data-col="price">@x.PriceRetail.ToString("0.00")</td>
 
@@ -374,13 +436,9 @@
                             <td data-col="totalAfterDisc">@x.LineTotalAfterDiscount.ToString("0.00")</td>
                             <td data-col="net">@x.LineNetTotal.ToString("0.00")</td>
 
-                            <td data-col="batch">@x.BatchNo</td>
+                            <td data-col="batch">@(x.BatchNo ?? "-")</td>
                             <td data-col="expiry">
-                                @(
-                                                        x.Expiry.HasValue
-                                                        ? x.Expiry.Value.ToString("yyyy-MM")
-                                                        : ""
-                                                        )
+                                @(x.Expiry.HasValue ? x.Expiry.Value.ToString("yyyy-MM") : "-")
                             </td>
                         </tr>
                     }
@@ -399,6 +457,12 @@
 
                     @* كود الصنف *@
                     <td data-col="prodId"></td>
+
+                    @* اسم الصنف *@
+                    <td data-col="prodName"></td>
+
+                    @* اسم العميل *@
+                    <td data-col="customerName"></td>
 
                     @* ✅ الكمية *@
                     <td data-col="qty">@((ViewBag.TotalQty != null ? (int)ViewBag.TotalQty : 0))</td>
@@ -748,6 +812,65 @@
                 fromInp.value = "";
                 toInp.value   = "";
                 window.location.href = buildUrl("", "");
+            });
+        })();
+
+        // =========================
+        // منع النقر على روابط الترتيب من التأثير على حقل البحث
+        // =========================
+        (function () {
+            const searchInput = document.querySelector('input[name="search"]');
+            if (!searchInput) return;
+
+            // قائمة أسماء الأعمدة المعروفة (لتنظيف حقل البحث)
+            const columnNames = ['siid', 'line', 'lineno', 'prodid', 'prodname', 'customername',
+                'qty', 'price', 'unit', 'total', 'net', 'disc1', 'disc2', 'disc3', 'discval',
+                'batch', 'expiry', 'رقم الفاتورة', 'رقم السطر', 'كود الصنف', 'اسم الصنف',
+                'اسم العميل', 'الكمية', 'سعر الجمهور', 'التشغيلة', 'الصلاحية'];
+
+            // دالة للتحقق من أن القيمة ليست اسم عمود
+            function isColumnName(value) {
+                if (!value) return false;
+                const valueLower = value.trim().toLowerCase();
+                return columnNames.some(col => valueLower === col || valueLower.includes(col));
+            }
+
+            // منع أي JavaScript من وضع قيمة في حقل البحث عند النقر على روابط الترتيب
+            document.addEventListener('click', function (e) {
+                const sortLink = e.target.closest('a.sort-link, a[href*="sort="]');
+                if (sortLink) {
+                    // حفظ القيمة الحالية
+                    const currentValue = searchInput.value;
+                    
+                    // منع أي تغيير في حقل البحث عند النقر على رابط الترتيب
+                    setTimeout(function() {
+                        // التحقق من القيمة من URL
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const searchParam = urlParams.get('search') || '';
+                        
+                        // إذا كانت القيمة من URL هي اسم عمود، نجعله فارغاً
+                        if (isColumnName(searchParam)) {
+                            searchInput.value = '';
+                        } else if (searchInput.value !== currentValue && isColumnName(searchInput.value)) {
+                            // إذا تغيرت القيمة وأصبحت اسم عمود، نعيد القيمة السابقة
+                            searchInput.value = currentValue || '';
+                        } else if (searchInput.value !== searchParam && searchParam) {
+                            // إذا كانت القيمة من URL صحيحة، نستخدمها
+                            if (!isColumnName(searchParam)) {
+                                searchInput.value = searchParam;
+                            }
+                        }
+                    }, 50);
+                }
+            });
+
+            // تنظيف حقل البحث عند تحميل الصفحة إذا كان يحتوي على اسم عمود
+            window.addEventListener('load', function() {
+                const urlParams = new URLSearchParams(window.location.search);
+                const searchParam = urlParams.get('search') || '';
+                if (isColumnName(searchParam)) {
+                    searchInput.value = '';
+                }
             });
         })();
     </script>

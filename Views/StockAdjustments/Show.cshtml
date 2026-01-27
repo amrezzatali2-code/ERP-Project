@@ -1,0 +1,699 @@
+@model ERP.Models.StockAdjustment
+
+@{
+    ViewData["Title"] = Model.Id == 0
+        ? "تسوية جرد جديدة"
+        : $"تسوية جرد — رقم {Model.Id}";
+}
+
+@section Styles {
+    <style>
+        .adjustment-page {
+            background-color: #f3f6fb;
+            min-height: 100vh;
+            padding-bottom: 2rem;
+        }
+
+        .adjustment-header-card,
+        .adjustment-lines-card,
+        .adjustment-add-card {
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        .adjustment-header-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.75rem 1.25rem;
+        }
+
+        .adjustment-add-card .card-header,
+        .adjustment-lines-card .card-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.55rem 1rem;
+        }
+
+        .erp-table-wrapper {
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        /* إصلاح مشكلة اتجاه النص في حقول التاريخ */
+        input[type="date"],
+        input[type="datetime-local"],
+        input[type="time"] {
+            direction: ltr !important;
+            text-align: left !important;
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+            cursor: pointer;
+        }
+    </style>
+}
+
+<div class="adjustment-page" dir="rtl">
+    <div class="container-fluid pt-3">
+        <form id="__AntiForgeryForm" method="post" style="display:none">
+            @Html.AntiForgeryToken()
+        </form>
+
+        <div class="row g-3">
+            @* العمود الجانبي *@
+            <div class="col-12 col-lg-2 order-1 order-lg-2">
+                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
+                    <div class="card-header py-2 text-center">
+                        <h6 class="mb-0">إجراءات تسوية الجرد</h6>
+                    </div>
+
+                    <input type="hidden" id="AdjustmentId" value="@Model.Id" />
+                    <input type="hidden" id="AdjustmentIsPostedFlag" value="@(Model.IsPosted ? "1" : "0")" />
+
+                    <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
+                        @{
+                            int? navFirst = ViewBag.NavFirstId == null ? (int?)null : (int)ViewBag.NavFirstId;
+                            int? navLast = ViewBag.NavLastId == null ? (int?)null : (int)ViewBag.NavLastId;
+                            int? navPrev = ViewBag.NavPrevId == null ? (int?)null : (int)ViewBag.NavPrevId;
+                            int? navNext = ViewBag.NavNextId == null ? (int?)null : (int)ViewBag.NavNextId;
+
+                            int currentId = Model?.Id ?? 0;
+                            bool hasAny = navFirst.HasValue && navLast.HasValue && navFirst.Value > 0 && navLast.Value > 0;
+                            int? prevEffective = (currentId == 0) ? navLast : navPrev;
+                            int? nextEffective = (currentId == 0) ? navFirst : navNext;
+                            bool canFirst = hasAny && navFirst.HasValue && navFirst.Value > 0 && navFirst.Value != currentId;
+                            bool canLast = hasAny && navLast.HasValue && navLast.Value > 0 && navLast.Value != currentId;
+                            bool canPrev = hasAny && prevEffective.HasValue && prevEffective.Value > 0 && prevEffective.Value != currentId;
+                            bool canNext = hasAny && nextEffective.HasValue && nextEffective.Value > 0 && nextEffective.Value != currentId;
+                        }
+
+                        <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
+                            <button type="button"
+                                    id="btnFirstAdjustment"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    title="أول تسوية"
+                                    @(canFirst ? "" : "disabled")>
+                                ⏮
+                            </button>
+
+                            <button type="button"
+                                    id="btnPrevAdjustment"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    title="التسوية السابقة"
+                                    @(canPrev ? "" : "disabled")>
+                                ◀
+                            </button>
+
+                            <button type="button"
+                                    id="btnNextAdjustment"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    title="التسوية التالية"
+                                    @(canNext ? "" : "disabled")>
+                                ▶
+                            </button>
+
+                            <button type="button"
+                                    id="btnLastAdjustment"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    title="آخر تسوية"
+                                    @(canLast ? "" : "disabled")>
+                                ⏭
+                            </button>
+                        </div>
+
+                        <hr class="my-1" />
+
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm w-100"
+                           asp-action="Show"
+                           asp-route-id="0"
+                           asp-route-frame="1">
+                            ➕ تسوية جديدة
+                        </a>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnSaveAdjustmentHeader"
+                                data-lock-posted="1">
+                            💾 حفظ التسوية
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnPostAdjustment"
+                                data-lock-posted="1">
+                            📤 ترحيل التسوية
+                        </button>
+
+                        <div id="postAdjustmentMsg" class="small mt-2"></div>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnOpenAdjustment">
+                            ⏪ فتح التسوية
+                        </button>
+
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
+                                id="btnClearAdjustmentLines"
+                                data-lock-posted="1">
+                            🗑️ مسح كل السطور
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            @* العمود الرئيسي *@
+            <div class="col-12 col-lg-10 order-2 order-lg-1">
+                @* كارت بيانات التسوية *@
+                <div class="card shadow-sm mb-2 adjustment-header-card">
+                    <div class="adjustment-header-bar d-flex justify-content-between align-items-center">
+                        <h5 class="mb-1">تسوية جرد</h5>
+                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#AdjustmentHeaderCollapse">
+                            <span>▾</span>
+                        </button>
+                    </div>
+
+                    <div id="AdjustmentHeaderCollapse" class="collapse show">
+                        <div class="card-body">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-lg-2">
+                                    <label class="form-label form-label-sm">رقم التسوية</label>
+                                    <input id="AdjustmentNumberDisplay" class="form-control form-control-sm text-center" value="@(Model.Id > 0 ? Model.Id.ToString() : "")" readonly />
+                                </div>
+
+                                <div class="col-lg-2">
+                                    <label class="form-label form-label-sm">تاريخ التسوية</label>
+                                    <input id="AdjustmentDateInput" type="date" class="form-control form-control-sm" value="@Model.AdjustmentDate.ToString("yyyy-MM-dd")" data-lock-posted="1" dir="ltr" style="text-align: left;" />
+                                </div>
+
+                                <div class="col-lg-3">
+                                    <label class="form-label form-label-sm">المخزن</label>
+                                    <select asp-for="WarehouseId" asp-items="ViewBag.Warehouses" class="form-select form-select-sm" data-lock-posted="1">
+                                        <option value="">اختر المخزن</option>
+                                    </select>
+                                </div>
+
+                                <div class="col-lg-3">
+                                    <label class="form-label form-label-sm">رقم مرجعي</label>
+                                    <input asp-for="ReferenceNo" class="form-control form-control-sm" data-lock-posted="1" />
+                                </div>
+
+                                <div class="col-lg-2">
+                                    <label class="form-label form-label-sm">الحالة</label>
+                                    <input id="AdjustmentStatusDisplay" class="form-control form-control-sm text-center" value="@(string.IsNullOrWhiteSpace(Model.Status) ? "مسودة" : Model.Status)" readonly />
+                                </div>
+                            </div>
+
+                            <div class="row g-3 mt-2">
+                                <div class="col-12">
+                                    <label class="form-label form-label-sm">السبب / ملاحظات</label>
+                                    <textarea asp-for="Reason" class="form-control form-control-sm" rows="2" data-lock-posted="1"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* كارت إدخال السطر *@
+                <div class="card shadow-sm mb-3 adjustment-add-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">إضافة سطر للتسوية</h6>
+                    </div>
+
+                    <div class="card-body">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">كود الصنف</label>
+                                <input type="number" id="ProdCodeInput" class="form-control form-control-sm text-center" placeholder="بحث بالكود..." data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-4">
+                                <label class="form-label form-label-sm">اسم الصنف</label>
+                                <input id="ProdNameInput" list="productsList" class="form-control form-control-sm" placeholder="اكتب اسم الصنف..." autocomplete="off" data-lock-posted="1" />
+                                <datalist id="productsList">
+                                    @if (ViewBag.ProductsAuto != null)
+                                    {
+                                        foreach (var p in ViewBag.ProductsAuto)
+                                        {
+                                            <option value="@p.Name"
+                                                    data-id="@p.Id"
+                                                    data-code="@p.Id"
+                                                    data-generic="@p.GenericName"
+                                                    data-company="@p.Company"
+                                                    data-price="@p.PriceRetail"
+                                                    data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                            </option>
+                                        }
+                                    }
+                                </datalist>
+                                <input type="hidden" id="ProdId" />
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">التشغيلة</label>
+                                <input type="text" id="BatchNoInput" class="form-control form-control-sm text-center" placeholder="باتش" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">الكمية قبل</label>
+                                <input type="number" id="QtyBeforeInput" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">الكمية بعد</label>
+                                <input type="number" id="QtyAfterInput" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
+                            </div>
+                        </div>
+
+                        <div class="row g-2 mt-2">
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">تكلفة الوحدة</label>
+                                <input type="number" id="CostPerUnitInput" class="form-control form-control-sm text-center" step="0.0001" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-8">
+                                <label class="form-label form-label-sm">ملاحظات السطر</label>
+                                <input type="text" id="LineNoteInput" class="form-control form-control-sm" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-2 d-grid">
+                                <label class="form-label form-label-sm">&nbsp;</label>
+                                <button type="button" id="btnAddAdjustmentLine" class="btn btn-erp btn-erp-primary btn-erp-sm w-100" data-lock-posted="1">إضافة</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* جدول السطور *@
+                <div class="card shadow-sm mb-3 adjustment-lines-card">
+                    <div class="card-header">
+                        <h6 class="mb-0">سطور التسوية</h6>
+                    </div>
+
+                    <div class="card-body p-0">
+                        <div class="erp-table-wrapper">
+                            <table class="table table-sm table-striped table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th class="text-center">#</th>
+                                        <th>اسم الصنف</th>
+                                        <th class="text-center">التشغيلة</th>
+                                        <th class="text-center">الكمية قبل</th>
+                                        <th class="text-center">الكمية بعد</th>
+                                        <th class="text-center">الفرق</th>
+                                        <th class="text-center">تكلفة الوحدة</th>
+                                        <th class="text-center">فرق التكلفة</th>
+                                        <th class="text-center no-print">مسح</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="AdjustmentLinesTbody">
+                                    @if (Model.Lines != null && Model.Lines.Any())
+                                    {
+                                        int lineNo = 1;
+                                        foreach (var line in Model.Lines.OrderBy(l => l.Id))
+                                        {
+                                            <tr data-line-id="@line.Id">
+                                                <td class="text-center">@lineNo</td>
+                                                <td>@(line.Product?.ProdName ?? $"صنف #{line.ProductId}")</td>
+                                                <td class="text-center">@(line.BatchId?.ToString() ?? "-")</td>
+                                                <td class="text-center">@line.QtyBefore</td>
+                                                <td class="text-center">@line.QtyAfter</td>
+                                                <td class="text-center">@line.QtyDiff</td>
+                                                <td class="text-center">@(line.CostPerUnit?.ToString("0.0000") ?? "-")</td>
+                                                <td class="text-center">@(line.CostDiff?.ToString("0.00") ?? "-")</td>
+                                                <td class="text-center no-print">
+                                                    <button type="button" class="btn btn-sm btn-danger btn-delete-line" data-line-id="@line.Id" data-lock-posted="1">🗑️</button>
+                                                </td>
+                                            </tr>
+                                            lineNo++;
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr>
+                                            <td colspan="9" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        // Anti-forgery token
+        function getAntiForgeryToken() {
+            const form = document.getElementById('__AntiForgeryForm');
+            return form?.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+        }
+
+        // Product selection
+        document.getElementById('ProdNameInput')?.addEventListener('input', function() {
+            const selectedOption = document.querySelector(`#productsList option[value="${this.value}"]`);
+            if (selectedOption) {
+                document.getElementById('ProdId').value = selectedOption.getAttribute('data-id');
+                document.getElementById('ProdCodeInput').value = selectedOption.getAttribute('data-id');
+            }
+        });
+
+        document.getElementById('ProdCodeInput')?.addEventListener('input', function() {
+            const code = this.value;
+            if (code && code > 0) {
+                const selectedOption = document.querySelector(`#productsList option[data-id="${code}"]`);
+                if (selectedOption) {
+                    document.getElementById('ProdId').value = code;
+                    document.getElementById('ProdNameInput').value = selectedOption.value;
+                }
+            }
+        });
+
+        // Add line
+        document.getElementById('btnAddAdjustmentLine')?.addEventListener('click', async function() {
+            const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
+            if (!adjustmentId || adjustmentId <= 0) {
+                alert('لا يمكن إضافة سطور قبل حفظ التسوية. اضغط "حفظ التسوية" أولاً.');
+                return;
+            }
+
+            const prodId = parseInt(document.getElementById('ProdId').value || '0', 10);
+            const qtyBefore = parseInt(document.getElementById('QtyBeforeInput').value || '0', 10);
+            const qtyAfter = parseInt(document.getElementById('QtyAfterInput').value || '0', 10);
+            const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
+            const costPerUnit = parseFloat(document.getElementById('CostPerUnitInput').value || '0');
+            const note = document.getElementById('LineNoteInput').value?.trim() || '';
+
+            if (!prodId || prodId <= 0) {
+                alert('من فضلك اختر صنفاً صحيحاً.');
+                return;
+            }
+
+            if (qtyBefore < 0 || qtyAfter < 0) {
+                alert('الكميات يجب أن تكون أكبر من أو تساوي صفر.');
+                return;
+            }
+
+            const dto = {
+                stockAdjustmentId: adjustmentId,
+                productId: prodId,
+                batchId: batchNo ? parseInt(batchNo, 10) : null,
+                qtyBefore: qtyBefore,
+                qtyAfter: qtyAfter,
+                costPerUnit: costPerUnit || null,
+                note: note
+            };
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const response = await fetch('@Url.Action("AddLineJson", "StockAdjustments")', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify(dto)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    alert('حدث خطأ أثناء إضافة السطر: ' + errorText);
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    location.reload();
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء إضافة السطر.');
+                }
+            } catch (error) {
+                console.error('Error adding line:', error);
+                alert('حدث خطأ أثناء إضافة السطر.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Delete line
+        document.querySelectorAll('.btn-delete-line').forEach(btn => {
+            btn.addEventListener('click', async function() {
+                const lineId = parseInt(this.getAttribute('data-line-id') || '0', 10);
+                if (!lineId || lineId <= 0) return;
+
+                if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
+
+                const token = getAntiForgeryToken();
+                this.disabled = true;
+
+                try {
+                    const response = await fetch(`@Url.Action("DeleteLineJson", "StockAdjustments")?id=${lineId}`, {
+                        method: 'POST',
+                        headers: {
+                            'RequestVerificationToken': token
+                        }
+                    });
+
+                    if (!response.ok) {
+                        alert('حدث خطأ أثناء حذف السطر.');
+                        return;
+                    }
+
+                    const result = await response.json();
+                    if (result.ok) {
+                        location.reload();
+                    } else {
+                        alert(result.message || 'حدث خطأ أثناء حذف السطر.');
+                    }
+                } catch (error) {
+                    console.error('Error deleting line:', error);
+                    alert('حدث خطأ أثناء حذف السطر.');
+                } finally {
+                    this.disabled = false;
+                }
+            });
+        });
+
+        // Save header
+        document.getElementById('btnSaveAdjustmentHeader')?.addEventListener('click', async function() {
+            const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
+            const adjustmentDate = document.getElementById('AdjustmentDateInput').value;
+            const warehouseId = document.querySelector('[name="WarehouseId"]').value;
+            const referenceNo = document.querySelector('[name="ReferenceNo"]').value;
+            const reason = document.querySelector('[name="Reason"]').value;
+
+            if (!warehouseId || warehouseId <= 0) {
+                alert('من فضلك اختر مخزناً.');
+                return;
+            }
+
+            const dto = {
+                id: adjustmentId,
+                adjustmentDate: adjustmentDate,
+                warehouseId: parseInt(warehouseId, 10),
+                referenceNo: referenceNo,
+                reason: reason
+            };
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const url = adjustmentId > 0 
+                    ? '@Url.Action("UpdateHeaderJson", "StockAdjustments")'
+                    : '@Url.Action("CreateHeaderJson", "StockAdjustments")';
+
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'RequestVerificationToken': token
+                    },
+                    body: JSON.stringify(dto)
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    alert('حدث خطأ أثناء حفظ التسوية: ' + errorText);
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    if (result.id && result.id > 0) {
+                        document.getElementById('AdjustmentId').value = result.id;
+                        document.getElementById('AdjustmentNumberDisplay').value = result.id;
+                        if (window.location.pathname.includes('/Create')) {
+                            window.history.replaceState({}, '', `@Url.Action("Show", "StockAdjustments")/${result.id}`);
+                        }
+                    }
+                    alert('تم حفظ التسوية بنجاح.');
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء حفظ التسوية.');
+                }
+            } catch (error) {
+                console.error('Error saving adjustment:', error);
+                alert('حدث خطأ أثناء حفظ التسوية.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Post adjustment
+        document.getElementById('btnPostAdjustment')?.addEventListener('click', async function() {
+            const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
+            if (!adjustmentId || adjustmentId <= 0) {
+                alert('يجب حفظ التسوية أولاً قبل الترحيل.');
+                return;
+            }
+
+            if (!confirm('هل أنت متأكد من ترحيل هذه التسوية؟')) return;
+
+            const token = getAntiForgeryToken();
+            const msgDiv = document.getElementById('postAdjustmentMsg');
+            this.disabled = true;
+            msgDiv.textContent = 'جاري الترحيل...';
+
+            try {
+                const response = await fetch(`@Url.Action("PostAdjustment", "StockAdjustments")?id=${adjustmentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    msgDiv.textContent = 'خطأ: ' + errorText;
+                    msgDiv.className = 'small mt-2 text-danger';
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    msgDiv.textContent = 'تم الترحيل بنجاح.';
+                    msgDiv.className = 'small mt-2 text-success';
+                    location.reload();
+                } else {
+                    msgDiv.textContent = result.message || 'حدث خطأ أثناء الترحيل.';
+                    msgDiv.className = 'small mt-2 text-danger';
+                }
+            } catch (error) {
+                console.error('Error posting adjustment:', error);
+                msgDiv.textContent = 'حدث خطأ أثناء الترحيل.';
+                msgDiv.className = 'small mt-2 text-danger';
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Open adjustment
+        document.getElementById('btnOpenAdjustment')?.addEventListener('click', async function() {
+            const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
+            if (!adjustmentId || adjustmentId <= 0) {
+                alert('لا توجد تسوية لفتحها.');
+                return;
+            }
+
+            if (!confirm('هل أنت متأكد من فتح هذه التسوية؟')) return;
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const response = await fetch(`@Url.Action("OpenAdjustment", "StockAdjustments")?id=${adjustmentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                if (!response.ok) {
+                    alert('حدث خطأ أثناء فتح التسوية.');
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    alert('تم فتح التسوية بنجاح.');
+                    location.reload();
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء فتح التسوية.');
+                }
+            } catch (error) {
+                console.error('Error opening adjustment:', error);
+                alert('حدث خطأ أثناء فتح التسوية.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Clear lines
+        document.getElementById('btnClearAdjustmentLines')?.addEventListener('click', async function() {
+            const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
+            if (!adjustmentId || adjustmentId <= 0) {
+                alert('لا توجد تسوية لمسح سطورها.');
+                return;
+            }
+
+            if (!confirm('هل أنت متأكد من مسح كل سطور التسوية؟')) return;
+
+            const token = getAntiForgeryToken();
+            this.disabled = true;
+
+            try {
+                const response = await fetch(`@Url.Action("ClearLinesJson", "StockAdjustments")?id=${adjustmentId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                if (!response.ok) {
+                    alert('حدث خطأ أثناء مسح السطور.');
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    alert('تم مسح السطور بنجاح.');
+                    location.reload();
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء مسح السطور.');
+                }
+            } catch (error) {
+                console.error('Error clearing lines:', error);
+                alert('حدث خطأ أثناء مسح السطور.');
+            } finally {
+                this.disabled = false;
+            }
+        });
+
+        // Navigation
+        document.getElementById('btnFirstAdjustment')?.addEventListener('click', function() {
+            const firstId = @(ViewBag.NavFirstId ?? 0);
+            if (firstId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + firstId + '?frame=1';
+        });
+
+        document.getElementById('btnPrevAdjustment')?.addEventListener('click', function() {
+            const prevId = @(ViewBag.NavPrevId ?? 0);
+            if (prevId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + prevId + '?frame=1';
+        });
+
+        document.getElementById('btnNextAdjustment')?.addEventListener('click', function() {
+            const nextId = @(ViewBag.NavNextId ?? 0);
+            if (nextId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + nextId + '?frame=1';
+        });
+
+        document.getElementById('btnLastAdjustment')?.addEventListener('click', function() {
+            const lastId = @(ViewBag.NavLastId ?? 0);
+            if (lastId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + lastId + '?frame=1';
+        });
+    </script>
+}

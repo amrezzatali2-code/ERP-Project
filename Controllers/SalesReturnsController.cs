@@ -1,7 +1,8 @@
-﻿using DocumentFormat.OpenXml.InkML;
+using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                        // سياق قاعدة البيانات AppDbContext
 using ERP.Infrastructure;              // PagedResult + ApplySearchSort
 using ERP.Models;                      // الموديل SalesReturn
+using ERP.Services;                    // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -26,8 +27,13 @@ namespace ERP.Controllers
     {
         // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext context;
+        private readonly ILedgerPostingService _ledgerPostingService;
 
-        public SalesReturnsController(AppDbContext ctx) => context = ctx;
+        public SalesReturnsController(AppDbContext ctx, ILedgerPostingService ledgerPostingService)
+        {
+            context = ctx;
+            _ledgerPostingService = ledgerPostingService;
+        }
 
 
 
@@ -562,6 +568,89 @@ namespace ERP.Controllers
             var fileName = $"SalesReturns_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
 
             return File(bytes, "text/csv", fileName);
+        }
+
+        // =========================================================
+        // API: جلب أصناف فاتورة البيع عند إدخال رقم الفاتورة
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetInvoiceItems(int invoiceId)
+        {
+            if (invoiceId <= 0)
+                return Json(new { ok = false, message = "رقم الفاتورة غير صحيح." });
+
+            // جلب الفاتورة مع التحقق من وجودها
+            var invoice = await context.SalesInvoices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(si => si.SIId == invoiceId);
+
+            if (invoice == null)
+                return Json(new { ok = false, message = "الفاتورة غير موجودة." });
+
+            // جلب سطور الفاتورة مع بيانات الصنف
+            var lines = await context.SalesInvoiceLines
+                .AsNoTracking()
+                .Include(l => l.Product)
+                .Where(l => l.SIId == invoiceId)
+                .OrderBy(l => l.LineNo)
+                .Select(l => new
+                {
+                    lineNo = l.LineNo,
+                    prodId = l.ProdId,
+                    prodName = l.Product != null ? l.Product.ProdName : "",
+                    qty = l.Qty,
+                    batchNo = l.BatchNo ?? "",
+                    expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                    priceRetail = l.PriceRetail,
+                    unitSalePrice = l.UnitSalePrice,
+                    disc1Percent = l.Disc1Percent,
+                    disc2Percent = l.Disc2Percent,
+                    disc3Percent = l.Disc3Percent,
+                    lineNetTotal = l.LineNetTotal
+                })
+                .ToListAsync();
+
+            return Json(new
+            {
+                ok = true,
+                invoiceId = invoiceId,
+                customerId = invoice.CustomerId,
+                warehouseId = invoice.WarehouseId,
+                invoiceDate = invoice.SIDate.ToString("yyyy-MM-dd"),
+                items = lines
+            });
+        }
+
+        // =========================================================
+        // POST: ترحيل مرتجع البيع
+        // =========================================================
+        [HttpPost]
+        public async Task<IActionResult> PostReturn(int id)
+        {
+            if (id <= 0)
+                return Json(new { ok = false, message = "رقم المرتجع غير صحيح." });
+
+            try
+            {
+                var salesReturn = await context.SalesReturns
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(sr => sr.SRId == id);
+
+                if (salesReturn == null)
+                    return Json(new { ok = false, message = "المرتجع غير موجود." });
+
+                if (salesReturn.IsPosted)
+                    return Json(new { ok = false, message = "هذا المرتجع مترحّل بالفعل." });
+
+                var postedBy = User?.Identity?.Name ?? "SYSTEM";
+                await _ledgerPostingService.PostSalesReturnAsync(id, postedBy);
+
+                return Json(new { ok = true, message = "تم ترحيل المرتجع بنجاح." });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { ok = false, message = $"حدث خطأ: {ex.Message}" });
+            }
         }
     }
 }

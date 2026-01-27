@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.StockAdjustment>
 
@@ -347,6 +347,12 @@
                             <td data-col="created">@a.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
+                                   asp-action="Show"
+                                   asp-route-id="@a.Id"
+                                   asp-route-frame="1">
+                                    عرض
+                                </a>
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                    asp-action="Details"
                                    asp-route-id="@a.Id">

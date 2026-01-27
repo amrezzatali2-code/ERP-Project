@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;                  // القوائم List و ICollection
 using System.ComponentModel.DataAnnotations;       // خصائص العرض Display و Required
 using System.ComponentModel.DataAnnotations.Schema;
@@ -36,6 +36,22 @@ namespace ERP.Models
 
         [Display(Name = "المستخدم")]
         public int? UserId { get; set; }                // متغير: كود المستخدم الذي أنشأ التحويل
+
+        // ========= حقول الترحيل =========
+
+        [Display(Name = "مترحل")]
+        public bool IsPosted { get; set; } = false;    // حالة الترحيل
+
+        [MaxLength(50)]
+        [Display(Name = "الحالة")]
+        public string? Status { get; set; }            // حالة التحويل (مسودة، مترحل، ...)
+
+        [Display(Name = "تاريخ الترحيل")]
+        public DateTime? PostedAt { get; set; }         // تاريخ الترحيل
+
+        [MaxLength(100)]
+        [Display(Name = "مرحل بواسطة")]
+        public string? PostedBy { get; set; }           // المستخدم الذي رحّل التحويل
 
         [Display(Name = "تاريخ الإنشاء")]
         public DateTime CreatedAt { get; set; } = DateTime.Now;

@@ -29,6 +29,12 @@ namespace ERP.Services
         Task PostSalesInvoiceAsync(int salesInvoiceId, string? postedBy);
         Task PostCashReceiptAsync(int cashReceiptId, string? postedBy);
         Task PostCashPaymentAsync(int cashPaymentId, string? postedBy);
+        Task PostSalesReturnAsync(int salesReturnId, string? postedBy);
+        Task PostPurchaseReturnAsync(int purchaseReturnId, string? postedBy);
+        Task PostStockAdjustmentAsync(int stockAdjustmentId, string? postedBy);
+        Task ReverseStockAdjustmentAsync(int stockAdjustmentId, string? postedBy);
+        Task PostStockTransferAsync(int stockTransferId, string? postedBy);
+        Task ReverseStockTransferAsync(int stockTransferId, string? postedBy);
         Task RecalcAllCustomerBalancesAsync();
 
 
@@ -1500,8 +1506,927 @@ namespace ERP.Services
             await _db.SaveChangesAsync();
         }
 
+        // =========================================================
+        // ترحيل مرتجع البيع إلى LedgerEntries + StockLedger + StockBatch + تحديث رصيد العميل
+        // ✅ مرتجع البيع يزيد المخزون (QtyIn في StockLedger)
+        // ✅ قيد المرتجع:
+        // (1) إيرادات   مدين   = صافي المرتجع (عكس المبيعات)
+        // (2) العميل    دائن   = صافي المرتجع (نقصان دين العميل)
+        // (3) مخزون     مدين   = تكلفة المرتجع (عكس COGS)
+        // (4) COGS      دائن   = تكلفة المرتجع (عكس تكلفة المبيعات)
+        // =========================================================
+        public async Task PostSalesReturnAsync(int salesReturnId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
 
+            try
+            {
+                // 1) تحميل المرتجع + العميل + السطور
+                var salesReturn = await _db.SalesReturns
+                    .Include(sr => sr.Customer)
+                    .Include(sr => sr.Lines)
+                    .FirstOrDefaultAsync(sr => sr.SRId == salesReturnId);
 
+                if (salesReturn == null)
+                    throw new Exception("مرتجع البيع غير موجود.");
+
+                if (salesReturn.IsPosted)
+                    throw new Exception("هذا المرتجع مترحّل بالفعل.");
+
+                if (salesReturn.Customer == null || salesReturn.Customer.AccountId == null || salesReturn.Customer.AccountId <= 0)
+                    throw new Exception("العميل غير مرتبط بحساب محاسبي.");
+
+                // 2) حل AccountId من الأكواد
+                int salesRevenueAccountId = await ResolveAccountIdByCodeAsync(SalesRevenueAccountCode);
+                int inventoryAccountId = await ResolveAccountIdByCodeAsync(InventoryAccountCode);
+                int cogsAccountId = await ResolveAccountIdByCodeAsync(CogsAccountCode);
+
+                var now = DateTime.UtcNow;
+                decimal returnAmount = salesReturn.NetTotal;
+                string voucherNo = salesReturn.SRId.ToString();
+
+                // 3) حساب تكلفة المرتجع (من تكلفة البيع الأصلية أو متوسط التكلفة)
+                decimal costTotal = 0m;
+                foreach (var line in salesReturn.Lines)
+                {
+                    // استخدام تكلفة الوحدة من الفاتورة الأصلية أو متوسط التكلفة
+                    var avgCost = await GetAverageCostAsync(line.ProdId, salesReturn.WarehouseId);
+                    costTotal += line.Qty * avgCost;
+                }
+
+                // 4) تحديد آخر مرحلة
+                int lastStage = await _db.LedgerEntries
+                    .Where(e =>
+                        e.SourceType == LedgerSourceType.SalesReturn &&
+                        e.SourceId == salesReturnId &&
+                        (e.LineNo == 1 || e.LineNo == 2 || e.LineNo == 3 || e.LineNo == 4) &&
+                        e.PostVersion > 0)
+                    .OrderByDescending(e => e.PostVersion)
+                    .Select(e => e.PostVersion)
+                    .FirstOrDefaultAsync();
+
+                int newStage = lastStage + 1;
+
+                // 5) عكس المرحلة السابقة إن وجدت
+                if (lastStage > 0)
+                {
+                    await ReverseSalesReturnEntriesAsync(salesReturnId, lastStage);
+                }
+
+                // 6) إنشاء قيود المرتجع (عكس المبيعات)
+                // (1) مدين: إيرادات (عكس المبيعات)
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = salesReturn.SRDate,
+                    SourceType = LedgerSourceType.SalesReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = salesReturnId,
+                    LineNo = 1,
+                    PostVersion = newStage,
+                    AccountId = salesRevenueAccountId,
+                    CustomerId = null,
+                    Debit = returnAmount,
+                    Credit = 0m,
+                    Description = $"ترحيل مرتجع بيع رقم {salesReturnId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // (2) دائن: العميل (نقصان دين العميل)
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = salesReturn.SRDate,
+                    SourceType = LedgerSourceType.SalesReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = salesReturnId,
+                    LineNo = 2,
+                    PostVersion = newStage,
+                    AccountId = salesReturn.Customer.AccountId.Value,
+                    CustomerId = salesReturn.CustomerId,
+                    Debit = 0m,
+                    Credit = returnAmount,
+                    Description = $"ترحيل مرتجع بيع رقم {salesReturnId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // (3) مدين: مخزون + (4) دائن: COGS (لو التكلفة > 0)
+                if (costTotal > 0m)
+                {
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = salesReturn.SRDate,
+                        SourceType = LedgerSourceType.SalesReturn,
+                        VoucherNo = voucherNo,
+                        SourceId = salesReturnId,
+                        LineNo = 3,
+                        PostVersion = newStage,
+                        AccountId = inventoryAccountId,
+                        CustomerId = null,
+                        Debit = costTotal,
+                        Credit = 0m,
+                        Description = $"إرجاع مخزون مرتجع بيع رقم {salesReturnId} (مرحلة {newStage})",
+                        CreatedAt = now
+                    });
+
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = salesReturn.SRDate,
+                        SourceType = LedgerSourceType.SalesReturn,
+                        VoucherNo = voucherNo,
+                        SourceId = salesReturnId,
+                        LineNo = 4,
+                        PostVersion = newStage,
+                        AccountId = cogsAccountId,
+                        CustomerId = null,
+                        Debit = 0m,
+                        Credit = costTotal,
+                        Description = $"عكس تكلفة مبيعات مرتجع بيع رقم {salesReturnId} (مرحلة {newStage})",
+                        CreatedAt = now
+                    });
+                }
+
+                // 7) جلب أسماء الأصناف
+                var prodIds = salesReturn.Lines.Select(l => l.ProdId).Distinct().ToList();
+                var prodNames = await _db.Products
+                    .AsNoTracking()
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .ToDictionaryAsync(p => p.ProdId, p => p.ProdName ?? "");
+
+                // 8) تحديث StockLedger (زيادة المخزون - QtyIn)
+                foreach (var line in salesReturn.Lines)
+                {
+                    var avgCost = await GetAverageCostAsync(line.ProdId, salesReturn.WarehouseId);
+                    var prodName = prodNames.TryGetValue(line.ProdId, out var name) ? name : "";
+
+                    var stockLedger = new StockLedger
+                    {
+                        TranDate = now,
+                        WarehouseId = salesReturn.WarehouseId,
+                        ProdId = line.ProdId,
+                        BatchNo = line.BatchNo ?? "",
+                        Expiry = line.Expiry,
+                        QtyIn = line.Qty,
+                        QtyOut = 0,
+                        UnitCost = avgCost,
+                        RemainingQty = line.Qty,
+                        SourceType = "SalesReturn",
+                        SourceId = salesReturnId,
+                        SourceLine = line.LineNo,
+                        Note = $"Sales Return Line: {prodName}"
+                    };
+
+                    _db.StockLedger.Add(stockLedger);
+
+                    // 9) تحديث StockBatch (زيادة QtyOnHand)
+                    if (!string.IsNullOrWhiteSpace(line.BatchNo) && line.Expiry.HasValue)
+                    {
+                        var batch = await _db.StockBatches
+                            .FirstOrDefaultAsync(sb =>
+                                sb.WarehouseId == salesReturn.WarehouseId &&
+                                sb.ProdId == line.ProdId &&
+                                sb.BatchNo == line.BatchNo &&
+                                sb.Expiry.HasValue &&
+                                sb.Expiry.Value.Date == line.Expiry.Value.Date);
+
+                        if (batch != null)
+                        {
+                            batch.QtyOnHand += line.Qty;
+                            batch.UpdatedAt = now;
+                            batch.Note = $"SR:{salesReturnId} Line:{line.LineNo} (+{line.Qty})";
+                        }
+                        else
+                        {
+                            // إنشاء batch جديد
+                            _db.StockBatches.Add(new StockBatch
+                            {
+                                WarehouseId = salesReturn.WarehouseId,
+                                ProdId = line.ProdId,
+                                BatchNo = line.BatchNo,
+                                Expiry = line.Expiry.Value,
+                                QtyOnHand = line.Qty,
+                                UpdatedAt = now,
+                                Note = $"SR:{salesReturnId} Line:{line.LineNo}"
+                            });
+                        }
+                    }
+                }
+
+                // 9) تحديث حالة المرتجع
+                salesReturn.IsPosted = true;
+                salesReturn.Status = "Posted";
+                salesReturn.PostedAt = now;
+                salesReturn.PostedBy = string.IsNullOrWhiteSpace(postedBy) ? "SYSTEM" : postedBy;
+
+                // 10) حفظ التغييرات
+                await _db.SaveChangesAsync();
+
+                // 11) تحديث رصيد العميل
+                await RecalcCustomerCurrentBalanceAsync(salesReturn.CustomerId);
+                await _db.SaveChangesAsync();
+
+                // 12) Commit
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        // =========================================================
+        // ترحيل مرتجع الشراء إلى LedgerEntries + StockLedger + StockBatch + تحديث رصيد المورد
+        // ✅ مرتجع الشراء يقلل المخزون (QtyOut في StockLedger)
+        // ✅ قيد المرتجع:
+        // (1) المورد      مدين   = صافي المرتجع (زيادة دين المورد)
+        // (2) مشتريات     دائن   = صافي المرتجع (عكس المشتريات)
+        // (3) COGS        مدين   = تكلفة المرتجع (عكس تكلفة الشراء)
+        // (4) مخزون       دائن   = تكلفة المرتجع (نقصان المخزون)
+        // =========================================================
+        public async Task PostPurchaseReturnAsync(int purchaseReturnId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                // 1) تحميل المرتجع + المورد + السطور
+                var purchaseReturn = await _db.PurchaseReturns
+                    .Include(pr => pr.Customer)
+                    .Include(pr => pr.Lines)
+                    .FirstOrDefaultAsync(pr => pr.PRetId == purchaseReturnId);
+
+                if (purchaseReturn == null)
+                    throw new Exception("مرتجع الشراء غير موجود.");
+
+                if (purchaseReturn.IsPosted)
+                    throw new Exception("هذا المرتجع مترحّل بالفعل.");
+
+                if (purchaseReturn.Customer == null || purchaseReturn.Customer.AccountId == null || purchaseReturn.Customer.AccountId <= 0)
+                    throw new Exception("المورد غير مرتبط بحساب محاسبي.");
+
+                // 2) حل AccountId من الأكواد
+                int purchaseAccountId = await ResolveAccountIdByCodeAsync("5000"); // حساب المشتريات
+                int inventoryAccountId = await ResolveAccountIdByCodeAsync(InventoryAccountCode);
+                int cogsAccountId = await ResolveAccountIdByCodeAsync(CogsAccountCode);
+
+                var now = DateTime.UtcNow;
+                decimal returnAmount = purchaseReturn.NetTotal;
+                string voucherNo = purchaseReturn.PRetId.ToString();
+
+                // 3) حساب تكلفة المرتجع
+                decimal costTotal = 0m;
+                foreach (var line in purchaseReturn.Lines)
+                {
+                    costTotal += line.Qty * line.UnitCost;
+                }
+
+                // 4) تحديد آخر مرحلة
+                int lastStage = await _db.LedgerEntries
+                    .Where(e =>
+                        e.SourceType == LedgerSourceType.PurchaseReturn &&
+                        e.SourceId == purchaseReturnId &&
+                        (e.LineNo == 1 || e.LineNo == 2 || e.LineNo == 3 || e.LineNo == 4) &&
+                        e.PostVersion > 0)
+                    .OrderByDescending(e => e.PostVersion)
+                    .Select(e => e.PostVersion)
+                    .FirstOrDefaultAsync();
+
+                int newStage = lastStage + 1;
+
+                // 5) عكس المرحلة السابقة إن وجدت
+                if (lastStage > 0)
+                {
+                    await ReversePurchaseReturnEntriesAsync(purchaseReturnId, lastStage);
+                }
+
+                // 6) إنشاء قيود المرتجع (عكس المشتريات)
+                // (1) مدين: المورد (زيادة دين المورد)
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = purchaseReturn.PRetDate,
+                    SourceType = LedgerSourceType.PurchaseReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = purchaseReturnId,
+                    LineNo = 1,
+                    PostVersion = newStage,
+                    AccountId = purchaseReturn.Customer.AccountId.Value,
+                    CustomerId = purchaseReturn.CustomerId,
+                    Debit = returnAmount,
+                    Credit = 0m,
+                    Description = $"ترحيل مرتجع شراء رقم {purchaseReturnId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // (2) دائن: مشتريات (عكس المشتريات)
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = purchaseReturn.PRetDate,
+                    SourceType = LedgerSourceType.PurchaseReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = purchaseReturnId,
+                    LineNo = 2,
+                    PostVersion = newStage,
+                    AccountId = purchaseAccountId,
+                    CustomerId = null,
+                    Debit = 0m,
+                    Credit = returnAmount,
+                    Description = $"ترحيل مرتجع شراء رقم {purchaseReturnId} (مرحلة {newStage})",
+                    CreatedAt = now
+                });
+
+                // (3) مدين: COGS + (4) دائن: مخزون (لو التكلفة > 0)
+                if (costTotal > 0m)
+                {
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = purchaseReturn.PRetDate,
+                        SourceType = LedgerSourceType.PurchaseReturn,
+                        VoucherNo = voucherNo,
+                        SourceId = purchaseReturnId,
+                        LineNo = 3,
+                        PostVersion = newStage,
+                        AccountId = cogsAccountId,
+                        CustomerId = null,
+                        Debit = costTotal,
+                        Credit = 0m,
+                        Description = $"عكس تكلفة شراء مرتجع شراء رقم {purchaseReturnId} (مرحلة {newStage})",
+                        CreatedAt = now
+                    });
+
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = purchaseReturn.PRetDate,
+                        SourceType = LedgerSourceType.PurchaseReturn,
+                        VoucherNo = voucherNo,
+                        SourceId = purchaseReturnId,
+                        LineNo = 4,
+                        PostVersion = newStage,
+                        AccountId = inventoryAccountId,
+                        CustomerId = null,
+                        Debit = 0m,
+                        Credit = costTotal,
+                        Description = $"نقصان مخزون مرتجع شراء رقم {purchaseReturnId} (مرحلة {newStage})",
+                        CreatedAt = now
+                    });
+                }
+
+                // 7) جلب أسماء الأصناف
+                var prodIds = purchaseReturn.Lines.Select(l => l.ProdId).Distinct().ToList();
+                var prodNames = await _db.Products
+                    .AsNoTracking()
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .ToDictionaryAsync(p => p.ProdId, p => p.ProdName ?? "");
+
+                // 8) تحديث StockLedger (نقصان المخزون - QtyOut)
+                foreach (var line in purchaseReturn.Lines)
+                {
+                    var prodName = prodNames.TryGetValue(line.ProdId, out var name) ? name : "";
+                    var stockLedger = new StockLedger
+                    {
+                        TranDate = now,
+                        WarehouseId = purchaseReturn.WarehouseId,
+                        ProdId = line.ProdId,
+                        BatchNo = line.BatchNo ?? "",
+                        Expiry = line.Expiry,
+                        QtyIn = 0,
+                        QtyOut = line.Qty,
+                        UnitCost = line.UnitCost,
+                        RemainingQty = null,
+                        SourceType = "PurchaseReturn",
+                        SourceId = purchaseReturnId,
+                        SourceLine = line.LineNo,
+                        Note = $"Purchase Return Line: {prodName}"
+                    };
+
+                    _db.StockLedger.Add(stockLedger);
+
+                    // 9) تحديث StockBatch (نقصان QtyOnHand)
+                    if (!string.IsNullOrWhiteSpace(line.BatchNo) && line.Expiry.HasValue)
+                    {
+                        var batch = await _db.StockBatches
+                            .FirstOrDefaultAsync(sb =>
+                                sb.WarehouseId == purchaseReturn.WarehouseId &&
+                                sb.ProdId == line.ProdId &&
+                                sb.BatchNo == line.BatchNo &&
+                                sb.Expiry.HasValue &&
+                                sb.Expiry.Value.Date == line.Expiry.Value.Date);
+
+                        if (batch != null && batch.QtyOnHand >= line.Qty)
+                        {
+                            batch.QtyOnHand -= line.Qty;
+                            batch.UpdatedAt = now;
+                            batch.Note = $"PR:{purchaseReturnId} Line:{line.LineNo} (-{line.Qty})";
+                        }
+                    }
+                }
+
+                // 9) تحديث حالة المرتجع
+                purchaseReturn.IsPosted = true;
+                purchaseReturn.Status = "Posted";
+                purchaseReturn.PostedAt = now;
+                purchaseReturn.PostedBy = string.IsNullOrWhiteSpace(postedBy) ? "SYSTEM" : postedBy;
+
+                // 10) حفظ التغييرات
+                await _db.SaveChangesAsync();
+
+                // 11) تحديث رصيد المورد
+                await RecalcCustomerCurrentBalanceAsync(purchaseReturn.CustomerId);
+                await _db.SaveChangesAsync();
+
+                // 12) Commit
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        // =========================================================
+        // دوال مساعدة للترحيل
+        // =========================================================
+        private async Task<decimal> GetAverageCostAsync(int prodId, int warehouseId)
+        {
+            var avgCost = await _db.StockLedger
+                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0)
+                .AverageAsync(sl => (decimal?)sl.UnitCost) ?? 0m;
+
+            return avgCost > 0m ? avgCost : 0m;
+        }
+
+        private async Task ReverseSalesReturnEntriesAsync(int salesReturnId, int stage)
+        {
+            var entries = await _db.LedgerEntries
+                .Where(e =>
+                    e.SourceType == LedgerSourceType.SalesReturn &&
+                    e.SourceId == salesReturnId &&
+                    e.PostVersion == stage)
+                .ToListAsync();
+
+            foreach (var entry in entries)
+            {
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = entry.EntryDate,
+                    SourceType = entry.SourceType,
+                    VoucherNo = entry.VoucherNo,
+                    SourceId = entry.SourceId,
+                    LineNo = entry.LineNo,
+                    PostVersion = -stage, // سالب للعكس
+                    AccountId = entry.AccountId,
+                    CustomerId = entry.CustomerId,
+                    Debit = entry.Credit, // عكس
+                    Credit = entry.Debit, // عكس
+                    Description = $"عكس: {entry.Description}",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        private async Task ReversePurchaseReturnEntriesAsync(int purchaseReturnId, int stage)
+        {
+            var entries = await _db.LedgerEntries
+                .Where(e =>
+                    e.SourceType == LedgerSourceType.PurchaseReturn &&
+                    e.SourceId == purchaseReturnId &&
+                    e.PostVersion == stage)
+                .ToListAsync();
+
+            foreach (var entry in entries)
+            {
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = entry.EntryDate,
+                    SourceType = entry.SourceType,
+                    VoucherNo = entry.VoucherNo,
+                    SourceId = entry.SourceId,
+                    LineNo = entry.LineNo,
+                    PostVersion = -stage, // سالب للعكس
+                    AccountId = entry.AccountId,
+                    CustomerId = entry.CustomerId,
+                    Debit = entry.Credit, // عكس
+                    Credit = entry.Debit, // عكس
+                    Description = $"عكس: {entry.Description}",
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
+        }
+
+        // =========================
+        // PostStockAdjustmentAsync — ترحيل تسوية الجرد
+        // =========================
+        public async Task PostStockAdjustmentAsync(int stockAdjustmentId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                var adjustment = await _db.StockAdjustments
+                    .Include(a => a.Lines)
+                        .ThenInclude(l => l.Product)
+                    .Include(a => a.Lines)
+                        .ThenInclude(l => l.Batch)
+                    .FirstOrDefaultAsync(a => a.Id == stockAdjustmentId);
+
+                if (adjustment == null)
+                    throw new Exception("التسوية غير موجودة.");
+
+                if (adjustment.IsPosted)
+                    throw new Exception("هذه التسوية مترحلة بالفعل.");
+
+                if (!adjustment.Lines.Any())
+                    throw new Exception("لا يمكن ترحيل تسوية بدون سطور.");
+
+                var now = DateTime.UtcNow;
+                int newStage = 1;
+
+                // حساب إجمالي فرق التكلفة
+                decimal totalCostDiff = adjustment.Lines
+                    .Where(l => l.CostDiff.HasValue)
+                    .Sum(l => l.CostDiff.Value);
+
+                // إنشاء قيود محاسبية
+                // مدين: المخزون (زيادة) أو دائن (نقصان) حسب الفرق
+                // دائن/مدين: حساب التسويات الجردية
+
+                // ملاحظة: في تسويات الجرد، الفرق الإيجابي = زيادة مخزون، الفرق السلبي = نقصان مخزون
+                // القيد المحاسبي:
+                // - لو الفرق موجب (زيادة): مدين المخزون / دائن حساب التسويات
+                // - لو الفرق سالب (نقصان): مدين حساب التسويات / دائن المخزون
+
+                string inventoryAccountId = "1000"; // حساب المخزون
+                string adjustmentAccountId = "6000"; // حساب التسويات الجردية
+
+                int lineNo = 1;
+                foreach (var line in adjustment.Lines.OrderBy(l => l.Id))
+                {
+                    if (line.QtyDiff == 0) continue; // تخطي السطور بدون فرق
+
+                    // تحديث StockLedger
+                    var ledger = new StockLedger
+                    {
+                        TranDate = adjustment.AdjustmentDate,
+                        WarehouseId = adjustment.WarehouseId,
+                        ProdId = line.ProductId,
+                        BatchNo = line.Batch?.BatchNo,
+                        BatchId = line.BatchId,
+                        Expiry = line.Batch?.Expiry,
+                        SourceType = "Adjustment",
+                        SourceId = adjustment.Id,
+                        SourceLine = lineNo,
+                        AdjustmentReason = adjustment.Reason,
+                        Note = $"تسوية جرد: {line.Product?.ProdName ?? $"صنف #{line.ProductId}"}"
+                    };
+
+                    if (line.QtyDiff > 0)
+                    {
+                        // زيادة مخزون
+                        ledger.QtyIn = line.QtyDiff;
+                        ledger.QtyOut = 0;
+                        ledger.UnitCost = line.CostPerUnit ?? 0m;
+                        ledger.RemainingQty = line.QtyDiff;
+                    }
+                    else
+                    {
+                        // نقصان مخزون
+                        ledger.QtyIn = 0;
+                        ledger.QtyOut = Math.Abs(line.QtyDiff);
+                        ledger.UnitCost = line.CostPerUnit ?? 0m;
+                        ledger.RemainingQty = null;
+                    }
+
+                    _db.StockLedger.Add(ledger);
+
+                    // تحديث StockBatch
+                    if (line.Batch != null && !string.IsNullOrWhiteSpace(line.Batch.BatchNo))
+                    {
+                        var stockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b => 
+                                b.BatchNo.Trim() == line.Batch.BatchNo.Trim() && 
+                                b.ProdId == line.ProductId && 
+                                b.WarehouseId == adjustment.WarehouseId &&
+                                (b.Expiry.HasValue ? b.Expiry.Value.Date : (DateTime?)null) == (line.Batch.Expiry.Date));
+
+                        if (stockBatch != null)
+                        {
+                            stockBatch.QtyOnHand = line.QtyAfter;
+                            stockBatch.UpdatedAt = DateTime.UtcNow;
+                        }
+                        else if (line.QtyAfter > 0)
+                        {
+                            // إنشاء StockBatch جديد
+                            var newStockBatch = new StockBatch
+                            {
+                                WarehouseId = adjustment.WarehouseId,
+                                ProdId = line.ProductId,
+                                BatchNo = line.Batch.BatchNo.Trim(),
+                                Expiry = line.Batch.Expiry,
+                                QtyOnHand = line.QtyAfter,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            _db.StockBatches.Add(newStockBatch);
+                        }
+                    }
+
+                    lineNo++;
+                }
+
+                // تحديث حالة التسوية
+                adjustment.IsPosted = true;
+                adjustment.Status = "مترحلة";
+                adjustment.PostedAt = now;
+                adjustment.PostedBy = postedBy ?? "SYSTEM";
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        // =========================
+        // ReverseStockAdjustmentAsync — عكس ترحيل تسوية الجرد
+        // =========================
+        public async Task ReverseStockAdjustmentAsync(int stockAdjustmentId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                var adjustment = await _db.StockAdjustments
+                    .Include(a => a.Lines)
+                    .FirstOrDefaultAsync(a => a.Id == stockAdjustmentId);
+
+                if (adjustment == null)
+                    throw new Exception("التسوية غير موجودة.");
+
+                if (!adjustment.IsPosted)
+                    throw new Exception("هذه التسوية غير مترحلة.");
+
+                // حذف حركات StockLedger المرتبطة
+                var ledgers = await _db.StockLedger
+                    .Where(l => l.SourceType == "Adjustment" && l.SourceId == adjustment.Id)
+                    .ToListAsync();
+
+                _db.StockLedger.RemoveRange(ledgers);
+
+                // استعادة الكميات في StockBatch
+                foreach (var line in adjustment.Lines)
+                {
+                    if (line.Batch != null && !string.IsNullOrWhiteSpace(line.Batch.BatchNo))
+                    {
+                        var stockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b => 
+                                b.BatchNo.Trim() == line.Batch.BatchNo.Trim() && 
+                                b.ProdId == line.ProductId && 
+                                b.WarehouseId == adjustment.WarehouseId &&
+                                (b.Expiry.HasValue ? b.Expiry.Value.Date : (DateTime?)null) == (line.Batch.Expiry.Date));
+
+                        if (stockBatch != null)
+                        {
+                            // استعادة الكمية قبل التسوية
+                            stockBatch.QtyOnHand = line.QtyBefore;
+                            stockBatch.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
+                }
+
+                // تحديث حالة التسوية
+                adjustment.IsPosted = false;
+                adjustment.Status = "مسودة";
+                adjustment.PostedAt = null;
+                adjustment.PostedBy = null;
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        // =========================
+        // PostStockTransferAsync — ترحيل تحويل بين المخازن
+        // =========================
+        public async Task PostStockTransferAsync(int stockTransferId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                var transfer = await _db.StockTransfers
+                    .Include(t => t.Lines)
+                        .ThenInclude(l => l.Product)
+                    .Include(t => t.Lines)
+                        .ThenInclude(l => l.Batch)
+                    .FirstOrDefaultAsync(t => t.Id == stockTransferId);
+
+                if (transfer == null)
+                    throw new Exception("التحويل غير موجود.");
+
+                if (transfer.IsPosted)
+                    throw new Exception("هذا التحويل مترحل بالفعل.");
+
+                if (!transfer.Lines.Any())
+                    throw new Exception("لا يمكن ترحيل تحويل بدون سطور.");
+
+                var now = DateTime.UtcNow;
+                int movementGroupId = transfer.Id; // استخدام ID التحويل كرقم مجموعة
+
+                int lineNo = 1;
+                foreach (var line in transfer.Lines.OrderBy(l => l.LineNo))
+                {
+                    // حركة خروج من المخزن المصدر
+                    var outLedger = new StockLedger
+                    {
+                        TranDate = transfer.TransferDate,
+                        WarehouseId = transfer.FromWarehouseId,
+                        ProdId = line.ProductId,
+                        BatchNo = line.Batch?.BatchNo,
+                        BatchId = line.BatchId,
+                        Expiry = line.Batch?.Expiry,
+                        QtyIn = 0,
+                        QtyOut = line.Qty,
+                        UnitCost = line.UnitCost,
+                        RemainingQty = null,
+                        SourceType = "TransferOut",
+                        SourceId = transfer.Id,
+                        SourceLine = lineNo,
+                        MovementGroupId = movementGroupId,
+                        CounterWarehouseId = transfer.ToWarehouseId,
+                        Note = $"تحويل مخزني: {line.Product?.ProdName ?? $"صنف #{line.ProductId}"}"
+                    };
+                    _db.StockLedger.Add(outLedger);
+
+                    // حركة دخول للمخزن الوجهة
+                    var inLedger = new StockLedger
+                    {
+                        TranDate = transfer.TransferDate,
+                        WarehouseId = transfer.ToWarehouseId,
+                        ProdId = line.ProductId,
+                        BatchNo = line.Batch?.BatchNo,
+                        BatchId = line.BatchId,
+                        Expiry = line.Batch?.Expiry,
+                        QtyIn = line.Qty,
+                        QtyOut = 0,
+                        UnitCost = line.UnitCost,
+                        RemainingQty = line.Qty,
+                        SourceType = "TransferIn",
+                        SourceId = transfer.Id,
+                        SourceLine = lineNo,
+                        MovementGroupId = movementGroupId,
+                        CounterWarehouseId = transfer.FromWarehouseId,
+                        Note = $"تحويل مخزني: {line.Product?.ProdName ?? $"صنف #{line.ProductId}"}"
+                    };
+                    _db.StockLedger.Add(inLedger);
+
+                    // تحديث StockBatch للمخزن المصدر (نقصان)
+                    if (line.Batch != null && !string.IsNullOrWhiteSpace(line.Batch.BatchNo))
+                    {
+                        var fromStockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b => 
+                                b.BatchNo.Trim() == line.Batch.BatchNo.Trim() && 
+                                b.ProdId == line.ProductId && 
+                                b.WarehouseId == transfer.FromWarehouseId &&
+                                (b.Expiry.HasValue ? b.Expiry.Value.Date : (DateTime?)null) == (line.Batch.Expiry.Date));
+
+                        if (fromStockBatch != null)
+                        {
+                            fromStockBatch.QtyOnHand = Math.Max(0, fromStockBatch.QtyOnHand - line.Qty);
+                            fromStockBatch.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
+
+                    // تحديث/إنشاء StockBatch للمخزن الوجهة (زيادة)
+                    if (line.Batch != null && !string.IsNullOrWhiteSpace(line.Batch.BatchNo))
+                    {
+                        var toStockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b => 
+                                b.BatchNo.Trim() == line.Batch.BatchNo.Trim() && 
+                                b.ProdId == line.ProductId && 
+                                b.WarehouseId == transfer.ToWarehouseId &&
+                                (b.Expiry.HasValue ? b.Expiry.Value.Date : (DateTime?)null) == (line.Batch.Expiry.Date));
+
+                        if (toStockBatch != null)
+                        {
+                            toStockBatch.QtyOnHand += line.Qty;
+                            toStockBatch.UpdatedAt = DateTime.UtcNow;
+                        }
+                        else
+                        {
+                            var newStockBatch = new StockBatch
+                            {
+                                WarehouseId = transfer.ToWarehouseId,
+                                ProdId = line.ProductId,
+                                BatchNo = line.Batch.BatchNo.Trim(),
+                                Expiry = line.Batch.Expiry,
+                                QtyOnHand = line.Qty,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            _db.StockBatches.Add(newStockBatch);
+                        }
+                    }
+
+                    lineNo++;
+                }
+
+                // تحديث حالة التحويل
+                transfer.IsPosted = true;
+                transfer.Status = "مترحل";
+                transfer.PostedAt = now;
+                transfer.PostedBy = postedBy ?? "SYSTEM";
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
+
+        // =========================
+        // ReverseStockTransferAsync — عكس ترحيل تحويل بين المخازن
+        // =========================
+        public async Task ReverseStockTransferAsync(int stockTransferId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+
+            try
+            {
+                var transfer = await _db.StockTransfers
+                    .Include(t => t.Lines)
+                    .FirstOrDefaultAsync(t => t.Id == stockTransferId);
+
+                if (transfer == null)
+                    throw new Exception("التحويل غير موجود.");
+
+                if (!transfer.IsPosted)
+                    throw new Exception("هذا التحويل غير مترحل.");
+
+                // حذف حركات StockLedger المرتبطة
+                var ledgers = await _db.StockLedger
+                    .Where(l => (l.SourceType == "TransferOut" || l.SourceType == "TransferIn") && l.SourceId == transfer.Id)
+                    .ToListAsync();
+
+                _db.StockLedger.RemoveRange(ledgers);
+
+                // استعادة الكميات في StockBatch
+                foreach (var line in transfer.Lines)
+                {
+                    if (line.Batch != null && !string.IsNullOrWhiteSpace(line.Batch.BatchNo))
+                    {
+                        // استعادة للمخزن المصدر (زيادة)
+                        var fromStockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b => 
+                                b.BatchNo.Trim() == line.Batch.BatchNo.Trim() && 
+                                b.ProdId == line.ProductId && 
+                                b.WarehouseId == transfer.FromWarehouseId &&
+                                (b.Expiry.HasValue ? b.Expiry.Value.Date : (DateTime?)null) == (line.Batch.Expiry.Date));
+
+                        if (fromStockBatch != null)
+                        {
+                            fromStockBatch.QtyOnHand += line.Qty;
+                            fromStockBatch.UpdatedAt = DateTime.UtcNow;
+                        }
+
+                        // استعادة للمخزن الوجهة (نقصان)
+                        var toStockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b => 
+                                b.BatchNo.Trim() == line.Batch.BatchNo.Trim() && 
+                                b.ProdId == line.ProductId && 
+                                b.WarehouseId == transfer.ToWarehouseId &&
+                                (b.Expiry.HasValue ? b.Expiry.Value.Date : (DateTime?)null) == (line.Batch.Expiry.Date));
+
+                        if (toStockBatch != null)
+                        {
+                            toStockBatch.QtyOnHand = Math.Max(0, toStockBatch.QtyOnHand - line.Qty);
+                            toStockBatch.UpdatedAt = DateTime.UtcNow;
+                        }
+                    }
+                }
+
+                // تحديث حالة التحويل
+                transfer.IsPosted = false;
+                transfer.Status = "مسودة";
+                transfer.PostedAt = null;
+                transfer.PostedBy = null;
+
+                await _db.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+        }
 
     }
 }

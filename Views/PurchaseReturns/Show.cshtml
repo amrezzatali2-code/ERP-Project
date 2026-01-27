@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.PurchaseReturn
 
 @{
@@ -285,10 +285,14 @@
                             </div>
 
                             <div class="col-lg-4 col-md-4">
-                                <label class="form-label form-label-sm">فاتورة الشراء المرجعية</label>
-                                <input class="form-control form-control-sm text-center"
+                                <label class="form-label form-label-sm">رقم فاتورة الشراء</label>
+                                <input type="number" 
+                                       id="PurchaseInvoiceIdInput"
+                                       class="form-control form-control-sm text-center"
                                        value="@(Model.RefPIId?.ToString() ?? "")"
-                                       readonly />
+                                       placeholder="أدخل رقم الفاتورة"
+                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
+                                <input type="hidden" asp-for="RefPIId" id="RefPIId" />
                             </div>
                         </div>
                     </div>
@@ -419,74 +423,66 @@
                    ===================================================== *@
                 <div class="card shadow-sm mb-3 invoice-Add-card">
                     <div class="card-header">
-                        <h6 class="mb-0">إضافة صنف إلى مرتجع المشتريات</h6>
+                        <h6 class="mb-0">تسجيل أصناف المرتجع من فاتورة الشراء</h6>
                     </div>
 
                     <div class="card-body">
-                        <div class="row g-2 align-items-end">
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">كود الصنف</label>
-                                <input type="text"
-                                       id="ItemCodeInput"
-                                       class="form-control form-control-sm"
-                                       placeholder="بحث بالكود..." />
+                        <div class="row g-2 align-items-end mb-3">
+                            <div class="col-lg-4 col-md-6">
+                                <label class="form-label form-label-sm">اختر صنف من فاتورة الشراء</label>
+                                <select id="InvoiceItemSelect"
+                                        class="form-select form-select-sm"
+                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                    <option value="">-- اختر صنف من الفاتورة --</option>
+                                </select>
                             </div>
 
-                            <div class="col-lg-4 col-md-8">
-                                <label class="form-label form-label-sm">اسم الصنف</label>
-                                <input type="text"
-                                       id="ItemNameInput"
-                                       class="form-control form-control-sm"
-                                       placeholder="اكتب اسم الصنف أو جزء منه..." />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">سعر الجمهور المرجعي</label>
-                                <input type="number"
-                                       class="form-control form-control-sm text-center"
-                                       placeholder="0.00" />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4">
+                            <div class="col-lg-2 col-md-3">
                                 <label class="form-label form-label-sm">الكمية المرتجعة</label>
                                 <input type="number"
+                                       id="ReturnQtyInput"
                                        class="form-control form-control-sm text-center"
-                                       placeholder="1" />
+                                       placeholder="0"
+                                       min="1"
+                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
                             </div>
 
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">خصم الشراء %</label>
+                            <div class="col-lg-2 col-md-3">
+                                <label class="form-label form-label-sm">الكمية في الفاتورة</label>
                                 <input type="number"
+                                       id="InvoiceQtyDisplay"
                                        class="form-control form-control-sm text-center"
-                                       placeholder="0" />
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-2 col-md-6">
+                                <label class="form-label form-label-sm">التشغيلة</label>
+                                <input type="text"
+                                       id="ReturnBatchDisplay"
+                                       class="form-control form-control-sm text-center"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-2 col-md-6">
+                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                <input type="text"
+                                       id="ReturnExpiryDisplay"
+                                       class="form-control form-control-sm text-center"
+                                       readonly />
                             </div>
                         </div>
 
-                        <div class="row g-2 align-items-end mt-2">
-                            <div class="col-lg-3 col-md-4">
-                                <label class="form-label form-label-sm">ملاحظات للسطر</label>
-                                <input type="text"
-                                       class="form-control form-control-sm"
-                                       placeholder="مثال: عرض، استرجاع جزء من الكمية..." />
-                            </div>
-
-                            <div class="col-lg-3 col-md-4">
-                                <label class="form-label form-label-sm">تاريخ تسجيل المرتجع للسطر</label>
-                                <input type="date"
-                                       id="LineReturnDate"
-                                       class="form-control form-control-sm text-center" />
-                            </div>
-
-                            <div class="col-lg-3 col-md-4">
-                                <div class="d-grid gap-1 invoice-item-actions mt-4">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-lg-12">
+                                <div class="d-grid gap-1 invoice-item-actions">
                                     <button type="button"
-                                            class="btn btn-erp btn-erp-success btn-erp-sm ">
+                                            id="btnAddReturnLine"
+                                            class="btn btn-erp btn-erp-primary btn-erp-sm"
+                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")">
                                         إضافة الصنف للمرتجع
                                     </button>
                                 </div>
                             </div>
-
-                            <div class="col-lg-3 d-none d-lg-block"></div>
                         </div>
                     </div>
                 </div>
@@ -808,6 +804,141 @@
                     customerInput.value = opt.value;
                     fillCustomerFromOption(opt);
                 }
+            }
+
+            // =========================================================
+            // جلب أصناف فاتورة الشراء عند إدخال رقم الفاتورة
+            // =========================================================
+            var invoiceIdInput = document.getElementById('PurchaseInvoiceIdInput');
+            var invoiceIdHidden = document.getElementById('RefPIId');
+            var itemSelect = document.getElementById('InvoiceItemSelect');
+            var returnQtyInput = document.getElementById('ReturnQtyInput');
+            var invoiceQtyDisplay = document.getElementById('InvoiceQtyDisplay');
+            var returnBatchDisplay = document.getElementById('ReturnBatchDisplay');
+            var returnExpiryDisplay = document.getElementById('ReturnExpiryDisplay');
+            var btnAddReturnLine = document.getElementById('btnAddReturnLine');
+
+            var invoiceItems = []; // متغير: قائمة أصناف الفاتورة
+
+            // عند تغيير رقم الفاتورة
+            invoiceIdInput.addEventListener('change', async function () {
+                var invoiceId = parseInt(invoiceIdInput.value || '0', 10);
+                
+                if (invoiceId <= 0) {
+                    invoiceIdHidden.value = '';
+                    itemSelect.innerHTML = '<option value="">-- اختر صنف من الفاتورة --</option>';
+                    invoiceItems = [];
+                    return;
+                }
+
+                try {
+                    var response = await fetch(`/PurchaseReturns/GetInvoiceItems?invoiceId=${invoiceId}`);
+                    var data = await response.json();
+
+                    if (!data.ok) {
+                        alert(data.message || 'حدث خطأ في جلب بيانات الفاتورة.');
+                        return;
+                    }
+
+                    // حفظ رقم الفاتورة
+                    invoiceIdHidden.value = invoiceId.toString();
+
+                    // تحديث المورد والمخزن إذا كانا فارغين
+                    if (data.customerId && !document.getElementById('CustomerId').value) {
+                        document.getElementById('CustomerId').value = data.customerId;
+                        document.getElementById('CustomerCodeDisplay').value = data.customerId;
+                    }
+
+                    if (data.warehouseId && !document.getElementById('WarehouseId').value) {
+                        document.getElementById('WarehouseId').value = data.warehouseId;
+                    }
+
+                    // تحديث قائمة الأصناف
+                    invoiceItems = data.items || [];
+                    itemSelect.innerHTML = '<option value="">-- اختر صنف من الفاتورة --</option>';
+                    
+                    invoiceItems.forEach(function(item, index) {
+                        var option = document.createElement('option');
+                        option.value = index.toString();
+                        option.textContent = item.prodName + ' - كمية: ' + item.qty + ' - تشغيلة: ' + (item.batchNo || 'بدون');
+                        option.setAttribute('data-prodId', item.prodId);
+                        option.setAttribute('data-lineNo', item.lineNo);
+                        option.setAttribute('data-qty', item.qty);
+                        option.setAttribute('data-batchNo', item.batchNo || '');
+                        option.setAttribute('data-expiry', item.expiry || '');
+                        option.setAttribute('data-priceRetail', item.priceRetail);
+                        itemSelect.appendChild(option);
+                    });
+
+                    // إعادة تعيين الحقول
+                    returnQtyInput.value = '';
+                    invoiceQtyDisplay.value = '';
+                    returnBatchDisplay.value = '';
+                    returnExpiryDisplay.value = '';
+
+                } catch (error) {
+                    console.error('Error loading invoice items:', error);
+                    alert('حدث خطأ في جلب بيانات الفاتورة.');
+                }
+            });
+
+            // عند اختيار صنف من القائمة
+            itemSelect.addEventListener('change', function () {
+                var selectedIndex = parseInt(itemSelect.value || '-1', 10);
+                
+                if (selectedIndex < 0 || selectedIndex >= invoiceItems.length) {
+                    returnQtyInput.value = '';
+                    invoiceQtyDisplay.value = '';
+                    returnBatchDisplay.value = '';
+                    returnExpiryDisplay.value = '';
+                    return;
+                }
+
+                var item = invoiceItems[selectedIndex];
+                invoiceQtyDisplay.value = item.qty;
+                returnBatchDisplay.value = item.batchNo || '';
+                returnExpiryDisplay.value = item.expiry || '';
+                returnQtyInput.value = item.qty; // افتراضي: نفس كمية الفاتورة
+                returnQtyInput.max = item.qty; // لا يمكن إرجاع أكثر من الكمية في الفاتورة
+            });
+
+            // عند إضافة سطر للمرتجع
+            btnAddReturnLine.addEventListener('click', async function () {
+                var selectedIndex = parseInt(itemSelect.value || '-1', 10);
+                var returnQty = parseInt(returnQtyInput.value || '0', 10);
+                var returnId = parseInt('@Model.PRetId' || '0', 10);
+
+                if (selectedIndex < 0 || selectedIndex >= invoiceItems.length) {
+                    alert('من فضلك اختر صنف من الفاتورة.');
+                    return;
+                }
+
+                if (returnQty <= 0) {
+                    alert('الكمية المرتجعة يجب أن تكون أكبر من صفر.');
+                    return;
+                }
+
+                var item = invoiceItems[selectedIndex];
+                if (returnQty > item.qty) {
+                    alert('الكمية المرتجعة لا يمكن أن تكون أكبر من الكمية في الفاتورة (' + item.qty + ').');
+                    return;
+                }
+
+                if (returnId <= 0) {
+                    alert('يجب حفظ المرتجع أولاً قبل إضافة الأصناف.');
+                    return;
+                }
+
+                // هنا سنضيف API endpoint لإضافة السطر
+                // TODO: إضافة API endpoint في PurchaseReturnLinesController
+                alert('سيتم إضافة السطر قريباً - تحتاج إلى API endpoint لإضافة السطر');
+            });
+
+            // تهيئة رقم الفاتورة إذا كان موجوداً
+            var initialInvoiceId = '@(Model.RefPIId?.ToString() ?? "")';
+            if (initialInvoiceId) {
+                invoiceIdInput.value = initialInvoiceId;
+                invoiceIdInput.dispatchEvent(new Event('change'));
             }
         });
     </script>

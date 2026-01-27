@@ -1,0 +1,99 @@
+@model ERP.Models.SalesInvoiceLine
+
+@{
+    ViewData["Title"] = "تفاصيل سطر فاتورة البيع";
+}
+
+<div class="container-fluid" dir="rtl">
+    <h2 class="mt-3 mb-3">تفاصيل سطر فاتورة البيع</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th style="width:200px;">رقم الفاتورة</th>
+                    <td>@Model.SIId</td>
+                </tr>
+                <tr>
+                    <th>رقم السطر</th>
+                    <td>@Model.LineNo</td>
+                </tr>
+                <tr>
+                    <th>كود الصنف</th>
+                    <td>@Model.ProdId</td>
+                </tr>
+                <tr>
+                    <th>اسم الصنف</th>
+                    <td>@(Model.Product?.ProdName ?? "-")</td>
+                </tr>
+                <tr>
+                    <th>اسم العميل</th>
+                    <td>@(Model.SalesInvoice?.Customer?.CustomerName ?? "-")</td>
+                </tr>
+                <tr>
+                    <th>الكمية</th>
+                    <td>@Model.Qty</td>
+                </tr>
+                <tr>
+                    <th>سعر الجمهور</th>
+                    <td>@Model.PriceRetail.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>خصم 1%</th>
+                    <td>@Model.Disc1Percent.ToString("0.##")</td>
+                </tr>
+                <tr>
+                    <th>خصم 2%</th>
+                    <td>@Model.Disc2Percent.ToString("0.##")</td>
+                </tr>
+                <tr>
+                    <th>خصم 3%</th>
+                    <td>@Model.Disc3Percent.ToString("0.##")</td>
+                </tr>
+                <tr>
+                    <th>قيمة الخصم</th>
+                    <td>@Model.DiscountValue.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>سعر الوحدة بعد الخصم</th>
+                    <td>@Model.UnitSalePrice.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>إجمالي السطر بعد الخصم</th>
+                    <td>@Model.LineTotalAfterDiscount.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>نسبة الضريبة</th>
+                    <td>@Model.TaxPercent.ToString("0.##")</td>
+                </tr>
+                <tr>
+                    <th>قيمة الضريبة</th>
+                    <td>@Model.TaxValue.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>الصافي بعد الضريبة</th>
+                    <td>@Model.LineNetTotal.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>التشغيلة</th>
+                    <td>@(Model.BatchNo ?? "-")</td>
+                </tr>
+                <tr>
+                    <th>الصلاحية</th>
+                    <td>@(Model.Expiry.HasValue ? Model.Expiry.Value.ToString("yyyy-MM") : "-")</td>
+                </tr>
+                <tr>
+                    <th>ملاحظات</th>
+                    <td>@(Model.Notes ?? "-")</td>
+                </tr>
+            </table>
+
+            <div class="d-flex gap-2 mt-3">
+                <a asp-action="Index"
+                   class="btn btn-erp btn-erp-secondary">
+                    رجوع للقائمة
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

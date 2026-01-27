@@ -427,6 +427,28 @@
 
                                 <li>
                                     <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockAdjustments" asp-action="Show"
+                                       asp-route-id="0"
+                                       asp-route-frame="1"
+                                       data-tab-id="stock-adjustment-create"
+                                       data-tab-title="فاتورة تسوية جردية">
+                                        فاتورة تسوية جردية
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="StockTransfers" asp-action="Show"
+                                       asp-route-id="0"
+                                       asp-route-frame="1"
+                                       data-tab-id="stock-transfer-create"
+                                       data-tab-title="تحويل جديد بين المخازن">
+                                        تحويل جديد بين المخازن
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
                                        asp-controller="Warehouses" asp-action="Index"
                                        data-tab-id="warehouses"
                                        data-tab-title="المخازن">
@@ -488,15 +510,16 @@
                                        asp-controller="StockAdjustments" asp-action="Index"
                                        data-tab-id="Stock-Adjustment"
                                        data-tab-title="التسويات الجردية">
-                                        التسويات الجردية
+                                        قائمة التسويات الجردية
                                     </a>
                                 </li>
+                             
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="StockAdjustmentLines" asp-action="Index"
                                        data-tab-id="Stock-Adjustment-Line"
                                        data-tab-title="تفاصيل التسويات الجردية">
-                                        تفاصيل التسويات الجردية
+                                        قائمة أصناف التسويات الجردية
                                     </a>
                                 </li>
                                 <li>
@@ -504,15 +527,16 @@
                                        asp-controller="StockTransfers" asp-action="Index"
                                        data-tab-id="Stock-Transfer"
                                        data-tab-title="التحويل بين المخازن">
-                                        التحويل بين المخازن
+                                        قائمة التحويلات بين المخازن
                                     </a>
                                 </li>
+                               
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="StockTransferLines" asp-action="Index"
                                        data-tab-id="Stock-Transfer-Line"
                                        data-tab-title="تفاصيل التحويل بين المخازن">
-                                        تفاصيل التحويل بين المخازن
+                                        قائمة أصناف التحويلات بين المخازن
                                     </a>
                                 </li>
                             </ul>
@@ -538,8 +562,8 @@
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="SalesReturns"
                                        asp-action="Create"
-                                       data-tab-id="Sales eturns"
-                                       data-tab-title="مرتجع مبيعات جديدة">
+                                       data-tab-id="sales-returns-create"
+                                       data-tab-title="مرتجع مبيعات جديد">
                                         مرتجع مبيعات جديد
                                     </a>
                                 </li>
@@ -633,7 +657,7 @@
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="PurchaseReturns" asp-action="Create"
-                                       data-tab-id="Purchase Returns"
+                                       data-tab-id="purchase-returns-create"
                                        data-tab-title="مرتجع مشتريات جديد">
                                         مرتجع مشتريات جديد
                                     </a>

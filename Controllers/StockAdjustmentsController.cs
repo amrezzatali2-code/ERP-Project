@@ -1,8 +1,11 @@
-﻿using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
+using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Infrastructure;                  // كلاس PagedResult + ApplySearchSort
 using ERP.Models;                          // الموديل StockAdjustment
+using ERP.Services;                        // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;  // SelectList
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;          // Dictionary
 using System.Linq;
@@ -219,6 +222,103 @@ namespace ERP.Controllers
         }
 
         // =========================
+        // Show — شاشة عرض التسوية مع إضافة السطور والترحيل
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        {
+            bool isBodyOnly = string.Equals(frag, "body", StringComparison.OrdinalIgnoreCase);
+
+            if (!isBodyOnly && frame != 1)
+                return RedirectToAction(nameof(Show), new { id = id, frag = frag, frame = 1 });
+
+            ViewBag.Fragment = frag;
+
+            StockAdjustment? adjustment = null;
+
+            if (id > 0)
+            {
+                adjustment = await _context.StockAdjustments
+                    .Include(a => a.Warehouse)
+                    .Include(a => a.Lines)
+                        .ThenInclude(l => l.Product)
+                    .Include(a => a.Lines)
+                        .ThenInclude(l => l.Batch)
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(a => a.Id == id);
+
+                if (adjustment == null)
+                {
+                    if (isBodyOnly)
+                        return NotFound("التسوية غير موجودة.");
+                    TempData["Error"] = "التسوية غير موجودة.";
+                    return RedirectToAction("Index");
+                }
+            }
+            else
+            {
+                // إنشاء تسوية جديدة
+                adjustment = new StockAdjustment
+                {
+                    Id = 0,
+                    AdjustmentDate = DateTime.Today,
+                    WarehouseId = 0,
+                    IsPosted = false,
+                    Status = "مسودة",
+                    Lines = new List<StockAdjustmentLine>()
+                };
+            }
+
+            // تجهيز قائمة المخازن
+            var warehouses = await _context.Warehouses
+                .AsNoTracking()
+                .OrderBy(w => w.WarehouseId)
+                .Select(w => new { w.WarehouseId, w.WarehouseName })
+                .ToListAsync();
+
+            ViewBag.Warehouses = new Microsoft.AspNetCore.Mvc.Rendering.SelectList(
+                warehouses,
+                "WarehouseId",
+                "WarehouseName",
+                adjustment.WarehouseId > 0 ? adjustment.WarehouseId : null);
+
+            // تجهيز قائمة المنتجات للأوتوكومبليت
+            var products = await _context.Products
+                .AsNoTracking()
+                .OrderBy(p => p.ProdName)
+                .Select(p => new
+                {
+                    Id = p.ProdId,
+                    Name = p.ProdName ?? string.Empty,
+                    GenericName = p.GenericName ?? string.Empty,
+                    Company = p.Company ?? string.Empty,
+                    HasQuota = p.HasQuota,
+                    PriceRetail = p.PriceRetail
+                })
+                .ToListAsync();
+
+            ViewBag.ProductsAuto = products;
+
+            // تجهيز نظام الأسهم (فقط إذا كان id > 0)
+            if (adjustment.Id > 0)
+            {
+                await FillStockAdjustmentNavAsync(adjustment.Id);
+            }
+            else
+            {
+                ViewBag.NavFirstId = 0;
+                ViewBag.NavLastId = 0;
+                ViewBag.NavPrevId = 0;
+                ViewBag.NavNextId = 0;
+            }
+
+            ViewBag.IsLocked = adjustment.IsPosted || adjustment.Status == "Posted" || adjustment.Status == "Closed";
+            ViewBag.Frame = (!isBodyOnly) ? 1 : 0;
+
+            return View("Show", adjustment);
+        }
+
+        // =========================
         // Details — عرض رأس التسوية (قراءة فقط)
         // =========================
         public async Task<IActionResult> Details(int? id)
@@ -234,6 +334,55 @@ namespace ERP.Controllers
                 return NotFound();
 
             return View(adjustment);
+        }
+
+        /// <summary>
+        /// دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر) لتسوية الجرد.
+        /// </summary>
+        private async Task FillStockAdjustmentNavAsync(int currentId)
+        {
+            var minMax = await _context.StockAdjustments
+                .AsNoTracking()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    FirstId = g.Min(x => x.Id),
+                    LastId = g.Max(x => x.Id)
+                })
+                .FirstOrDefaultAsync();
+
+            int? prevId = null;
+            int? nextId = null;
+
+            if (currentId > 0)
+            {
+                prevId = await _context.StockAdjustments
+                    .AsNoTracking()
+                    .Where(x => x.Id < currentId)
+                    .OrderByDescending(x => x.Id)
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefaultAsync();
+
+                nextId = await _context.StockAdjustments
+                    .AsNoTracking()
+                    .Where(x => x.Id > currentId)
+                    .OrderBy(x => x.Id)
+                    .Select(x => (int?)x.Id)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                prevId = minMax?.LastId;
+                nextId = minMax?.FirstId;
+            }
+
+            int firstId = minMax?.FirstId ?? 0;
+            int lastId = minMax?.LastId ?? 0;
+
+            ViewBag.NavFirstId = firstId;
+            ViewBag.NavLastId = lastId;
+            ViewBag.NavPrevId = prevId ?? 0;
+            ViewBag.NavNextId = nextId ?? 0;
         }
 
         // =========================
@@ -443,5 +592,273 @@ namespace ERP.Controllers
             TempData["Msg"] = $"تم حذف جميع تسويات الجرد ({adjustments.Count}).";
             return RedirectToAction(nameof(Index));
         }
+
+        // =========================
+        // CreateHeaderJson — إنشاء/حفظ رأس التسوية (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> CreateHeaderJson([FromBody] StockAdjustmentHeaderDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { ok = false, message = "بيانات غير صحيحة." });
+            }
+
+            if (dto.WarehouseId <= 0)
+            {
+                return BadRequest(new { ok = false, message = "يجب اختيار مخزن صحيح." });
+            }
+
+            var adjustment = new StockAdjustment
+            {
+                AdjustmentDate = dto.AdjustmentDate,
+                WarehouseId = dto.WarehouseId,
+                ReferenceNo = dto.ReferenceNo,
+                Reason = dto.Reason,
+                CreatedAt = DateTime.UtcNow,
+                IsPosted = false,
+                Status = "مسودة"
+            };
+
+            _context.StockAdjustments.Add(adjustment);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true, id = adjustment.Id });
+        }
+
+        // =========================
+        // UpdateHeaderJson — تحديث رأس التسوية (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> UpdateHeaderJson([FromBody] StockAdjustmentHeaderDto dto)
+        {
+            if (!ModelState.IsValid || dto.Id <= 0)
+            {
+                return BadRequest(new { ok = false, message = "بيانات غير صحيحة." });
+            }
+
+            var adjustment = await _context.StockAdjustments.FindAsync(dto.Id);
+            if (adjustment == null)
+            {
+                return NotFound(new { ok = false, message = "التسوية غير موجودة." });
+            }
+
+            if (adjustment.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن تعديل تسوية مترحلة." });
+            }
+
+            adjustment.AdjustmentDate = dto.AdjustmentDate;
+            adjustment.WarehouseId = dto.WarehouseId;
+            adjustment.ReferenceNo = dto.ReferenceNo;
+            adjustment.Reason = dto.Reason;
+            adjustment.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true, id = adjustment.Id });
+        }
+
+        // =========================
+        // AddLineJson — إضافة سطر للتسوية (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> AddLineJson([FromBody] StockAdjustmentLineDto dto)
+        {
+            if (!ModelState.IsValid)
+            {
+                return BadRequest(new { ok = false, message = "بيانات غير صحيحة." });
+            }
+
+            var adjustment = await _context.StockAdjustments
+                .Include(a => a.Lines)
+                .FirstOrDefaultAsync(a => a.Id == dto.StockAdjustmentId);
+
+            if (adjustment == null)
+            {
+                return NotFound(new { ok = false, message = "التسوية غير موجودة." });
+            }
+
+            if (adjustment.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن إضافة سطور لتسوية مترحلة." });
+            }
+
+            if (dto.ProductId <= 0)
+            {
+                return BadRequest(new { ok = false, message = "يجب اختيار صنف صحيح." });
+            }
+
+            // حساب الفروق
+            int qtyDiff = dto.QtyAfter - dto.QtyBefore;
+            decimal? costDiff = null;
+            if (dto.CostPerUnit.HasValue)
+            {
+                costDiff = qtyDiff * dto.CostPerUnit.Value;
+            }
+
+            // البحث عن Batch إذا كان موجوداً
+            int? batchId = dto.BatchId;
+            if (!batchId.HasValue && !string.IsNullOrWhiteSpace(dto.BatchNo))
+            {
+                var batch = await _context.Batches
+                    .FirstOrDefaultAsync(b => b.BatchNo.Trim() == dto.BatchNo.Trim() && b.ProdId == dto.ProductId);
+                if (batch != null)
+                {
+                    batchId = batch.BatchId;
+                }
+            }
+
+            var line = new StockAdjustmentLine
+            {
+                StockAdjustmentId = dto.StockAdjustmentId,
+                ProductId = dto.ProductId,
+                BatchId = batchId,
+                QtyBefore = dto.QtyBefore,
+                QtyAfter = dto.QtyAfter,
+                QtyDiff = qtyDiff,
+                CostPerUnit = dto.CostPerUnit,
+                CostDiff = costDiff,
+                Note = dto.Note
+            };
+
+            _context.StockAdjustmentLines.Add(line);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true, lineId = line.Id });
+        }
+
+        // =========================
+        // DeleteLineJson — حذف سطر من التسوية (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> DeleteLineJson(int id)
+        {
+            var line = await _context.StockAdjustmentLines
+                .Include(l => l.StockAdjustment)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (line == null)
+            {
+                return NotFound(new { ok = false, message = "السطر غير موجود." });
+            }
+
+            if (line.StockAdjustment.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن حذف سطر من تسوية مترحلة." });
+            }
+
+            _context.StockAdjustmentLines.Remove(line);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true });
+        }
+
+        // =========================
+        // ClearLinesJson — مسح كل سطور التسوية (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> ClearLinesJson(int id)
+        {
+            var adjustment = await _context.StockAdjustments
+                .Include(a => a.Lines)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (adjustment == null)
+            {
+                return NotFound(new { ok = false, message = "التسوية غير موجودة." });
+            }
+
+            if (adjustment.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن مسح سطور تسوية مترحلة." });
+            }
+
+            _context.StockAdjustmentLines.RemoveRange(adjustment.Lines);
+            await _context.SaveChangesAsync();
+
+            return Json(new { ok = true });
+        }
+
+        // =========================
+        // PostAdjustment — ترحيل التسوية (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> PostAdjustment(int id)
+        {
+            var adjustment = await _context.StockAdjustments
+                .Include(a => a.Lines)
+                .FirstOrDefaultAsync(a => a.Id == id);
+
+            if (adjustment == null)
+            {
+                return NotFound(new { ok = false, message = "التسوية غير موجودة." });
+            }
+
+            if (adjustment.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "هذه التسوية مترحلة بالفعل." });
+            }
+
+            if (!adjustment.Lines.Any())
+            {
+                return BadRequest(new { ok = false, message = "لا يمكن ترحيل تسوية بدون سطور." });
+            }
+
+            // استدعاء خدمة الترحيل
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            await ledgerPostingService.PostStockAdjustmentAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+            return Json(new { ok = true, message = "تم الترحيل بنجاح." });
+        }
+
+        // =========================
+        // OpenAdjustment — فتح التسوية (JSON API)
+        // =========================
+        [HttpPost]
+        public async Task<IActionResult> OpenAdjustment(int id)
+        {
+            var adjustment = await _context.StockAdjustments.FindAsync(id);
+
+            if (adjustment == null)
+            {
+                return NotFound(new { ok = false, message = "التسوية غير موجودة." });
+            }
+
+            if (!adjustment.IsPosted)
+            {
+                return BadRequest(new { ok = false, message = "هذه التسوية غير مترحلة." });
+            }
+
+            // استدعاء خدمة فتح التسوية (عكس الترحيل)
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            await ledgerPostingService.ReverseStockAdjustmentAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+            return Json(new { ok = true, message = "تم فتح التسوية بنجاح." });
+        }
+    }
+
+    // =========================
+    // DTOs
+    // =========================
+    public class StockAdjustmentHeaderDto
+    {
+        public int Id { get; set; }
+        public DateTime AdjustmentDate { get; set; }
+        public int WarehouseId { get; set; }
+        public string? ReferenceNo { get; set; }
+        public string? Reason { get; set; }
+    }
+
+    public class StockAdjustmentLineDto
+    {
+        public int StockAdjustmentId { get; set; }
+        public int ProductId { get; set; }
+        public string? BatchNo { get; set; }
+        public int? BatchId { get; set; }
+        public int QtyBefore { get; set; }
+        public int QtyAfter { get; set; }
+        public decimal? CostPerUnit { get; set; }
+        public string? Note { get; set; }
     }
 }

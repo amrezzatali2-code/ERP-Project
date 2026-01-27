@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html 
+@using Microsoft.AspNetCore.Html 
                                         <!-- لاستخدام HtmlString في sortLink -->
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.Warehouse>
@@ -352,7 +352,8 @@
                     <th class="text-nowrap no-print"
                         data-col="actions"
                         data-col-fixed="true"
-                        style="width:220px;">
+                        style="width:350px;">
+                        إجراءات
                     </th>
                 </tr>
             </thead>
@@ -376,8 +377,22 @@
                                        value="@w.WarehouseId" />
                             </td>
 
-                            <td data-col="id">@w.WarehouseId</td>
-                            <td data-col="name">@w.WarehouseName</td>
+                            <td data-col="id">
+                                <a asp-action="Show"
+                                   asp-route-id="@w.WarehouseId"
+                                   class="text-decoration-none fw-semibold"
+                                   title="عرض تفاصيل المخزن">
+                                    @w.WarehouseId
+                                </a>
+                            </td>
+                            <td data-col="name">
+                                <a asp-action="Show"
+                                   asp-route-id="@w.WarehouseId"
+                                   class="text-decoration-none fw-semibold"
+                                   title="عرض تفاصيل المخزن">
+                                    @w.WarehouseName
+                                </a>
+                            </td>
                             <td data-col="branch">@w.Branch?.BranchName</td>
                             <td data-col="active">@((w.IsActive) ? "نشط" : "موقوف")</td>
                             <td data-col="created">
@@ -392,17 +407,40 @@
                             <td class="text-nowrap no-print" data-col="actions">
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                    asp-action="Show"
-                                   asp-route-id="@w.WarehouseId">
+                                   asp-route-id="@w.WarehouseId"
+                                   title="عرض تفاصيل المخزن">
                                     عرض
                                 </a>
                                 <a class="btn btn-erp btn-erp-primary btn-erp-sm"
                                    asp-action="Edit"
-                                   asp-route-id="@w.WarehouseId">
+                                   asp-route-id="@w.WarehouseId"
+                                   title="تعديل بيانات المخزن">
                                     تعديل
+                                </a>
+                                <a class="btn btn-erp btn-erp-info btn-erp-sm app-menu-link"
+                                   asp-controller="StockBatches"
+                                   asp-action="Index"
+                                   asp-route-search="@w.WarehouseId"
+                                   asp-route-searchBy="warehouse"
+                                   data-tab-id="stock-batches-@w.WarehouseId"
+                                   data-tab-title="مخزون التشغيلات - @w.WarehouseName"
+                                   title="مخزون التشغيلات لهذا المخزن">
+                                    مخزون
+                                </a>
+                                <a class="btn btn-erp btn-erp-outline-secondary btn-erp-sm app-menu-link"
+                                   asp-controller="StockLedger"
+                                   asp-action="Index"
+                                   asp-route-search="@w.WarehouseId"
+                                   asp-route-searchBy="warehouse"
+                                   data-tab-id="stock-ledger-@w.WarehouseId"
+                                   data-tab-title="حركة المخزن - @w.WarehouseName"
+                                   title="حركة المخزن">
+                                    حركة
                                 </a>
                                 <a class="btn btn-erp btn-erp-danger btn-erp-sm"
                                    asp-action="Delete"
-                                   asp-route-id="@w.WarehouseId">
+                                   asp-route-id="@w.WarehouseId"
+                                   title="حذف المخزن">
                                     حذف
                                 </a>
                             </td>
