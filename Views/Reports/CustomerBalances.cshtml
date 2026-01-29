@@ -6,6 +6,7 @@
     var totalBalance = ViewBag.TotalBalance as decimal? ?? 0m;
     var totalSales = ViewBag.TotalSales as decimal? ?? 0m;
     var totalPurchases = ViewBag.TotalPurchases as decimal? ?? 0m;
+    var totalReturns = ViewBag.TotalReturns as decimal? ?? 0m;
     var totalCreditLimit = ViewBag.TotalCreditLimit as decimal? ?? 0m;
     var totalAvailableCredit = ViewBag.TotalAvailableCredit as decimal? ?? 0m;
 
@@ -321,6 +322,11 @@
                                         المشتريات @if (sortBy == "purchases") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
                                     </a>
                                 </th>
+                                <th class="text-end" style="min-width: 120px;">
+                                    <a href="@sortUrl("returns", sortBy == "returns" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
+                                        المرتجعات @if (sortBy == "returns") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
+                                    </a>
+                                </th>
                                 <th class="text-end" style="min-width: 130px;">الائتمان المتاح</th>
                             </tr>
                         </thead>
@@ -336,6 +342,7 @@
                                     <td class="text-end">@item.CreditLimit.ToString("N2")</td>
                                     <td class="text-end">@item.TotalSales.ToString("N2")</td>
                                     <td class="text-end">@item.TotalPurchases.ToString("N2")</td>
+                                    <td class="text-end">@item.TotalReturns.ToString("N2")</td>
                                     <td class="text-end">@item.AvailableCredit.ToString("N2")</td>
                                 </tr>
                             }
@@ -347,6 +354,7 @@
                                 <td class="text-end"><strong>@totalCreditLimit.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalSales.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalPurchases.ToString("N2")</strong></td>
+                                <td class="text-end"><strong>@totalReturns.ToString("N2")</strong></td>
                                 <td class="text-end">
                                     <strong class="text-primary" style="font-size: 1.1rem;">@totalAvailableCredit.ToString("N2")</strong>
                                 </td>

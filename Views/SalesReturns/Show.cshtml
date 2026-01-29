@@ -233,6 +233,7 @@
                                        readonly />
 
                                 <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                                <input type="hidden" id="SRId" value="@Model.SRId" />
                             </div>
 
                             @* المخزن *@
@@ -250,13 +251,13 @@
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <label class="form-label form-label-sm">تاريخ المرتجع</label>
-                                        <input class="form-control form-control-sm text-center"
+                                        <input id="ReturnDateDisplay" class="form-control form-control-sm text-center"
                                                value="@returnDateText"
                                                readonly />
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label form-label-sm">وقت المرتجع</label>
-                                        <input class="form-control form-control-sm text-center"
+                                        <input id="ReturnTimeDisplay" class="form-control form-control-sm text-center"
                                                value="@returnTimeText"
                                                readonly />
                                     </div>
@@ -268,20 +269,25 @@
                         <hr class="my-3" />
 
                         <div class="row g-3">
-                            <div class="col-lg-4 col-md-4">
+                            <div class="col-lg-3 col-md-4">
+                                <label class="form-label form-label-sm">رقم المرتجع</label>
+                                <input id="ReturnNumberDisplay"
+                                       class="form-control form-control-sm text-center fw-semibold"
+                                       value="@(Model.SRId > 0 ? Model.SRId.ToString() : "—")"
+                                       readonly />
+                            </div>
+                            <div class="col-lg-3 col-md-4">
                                 <label class="form-label form-label-sm">حالة المرتجع</label>
-                                <input class="form-control form-control-sm text-center"
+                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center"
                                        value="@Model.Status"
                                        readonly />
                             </div>
-
-                            <div class="col-lg-4 col-md-4">
+                            <div class="col-lg-2 col-md-4">
                                 <label class="form-label form-label-sm">مرحّل؟</label>
-                                <input class="form-control form-control-sm text-center"
+                                <input id="ReturnIsPostedDisplay" class="form-control form-control-sm text-center"
                                        value="@(Model.IsPosted ? "نعم" : "لا")"
                                        readonly />
                             </div>
-
                             <div class="col-lg-4 col-md-4">
                                 <label class="form-label form-label-sm">رقم فاتورة البيع</label>
                                 <input type="number" 
@@ -487,14 +493,42 @@
                                         <th class="text-center">خصم 2 %</th>
                                         <th class="text-center">خصم 3 %</th>
                                         <th class="text-center">الإجمالي</th>
+                                        <th class="text-center">مسح</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted py-4">
-                                            لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.
-                                        </td>
-                                    </tr>
+                                <tbody id="SalesReturnLinesTableBody">
+                                    @if (Model.Lines != null && Model.Lines.Any())
+                                    {
+                                        var _prodNames = ViewBag.ProdNames as Dictionary<int, string>;
+                                        foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
+                                        {
+                                            var prodName = (_prodNames != null && _prodNames.TryGetValue(line.ProdId, out var _pn)) ? _pn : line.ProdId.ToString();
+                                            <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                <td class="text-center">@line.LineNo</td>
+                                                <td>@prodName</td>
+                                                <td class="text-center">@line.Qty</td>
+                                                <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
+                                                <td class="text-center">@line.Disc1Percent.ToString("0.##")</td>
+                                                <td class="text-center">@line.Disc2Percent.ToString("0.##")</td>
+                                                <td class="text-center">@line.Disc3Percent.ToString("0.##")</td>
+                                                <td class="text-center">@line.LineNetTotal.ToString("0.00")</td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine"
+                                                            data-line-no="@line.LineNo" data-sr-id="@Model.SRId"
+                                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")"
+                                                            title="مسح السطر">🗑</button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr id="SalesReturnLinesEmptyRow">
+                                            <td colspan="9" class="text-center text-muted py-4">
+                                                لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.
+                                            </td>
+                                        </tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
@@ -511,51 +545,33 @@
                             <div class="col-md-3">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">إجمالي قبل الخصم</span>
-                                    <span class="badge bg-light text-dark summary-badge">
-                                        @Model.TotalBeforeDiscount.ToString("0.00")
-                                    </span>
+                                    <span id="TotalBeforeDiscountBadge" class="badge bg-light text-dark summary-badge">@Model.TotalBeforeDiscount.ToString("0.00")</span>
                                 </div>
                             </div>
-
                             <div class="col-md-3">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">خصم الهيدر (قيمة)</span>
-                                    <span class="badge bg-warning text-dark summary-badge">
-                                        @Model.HeaderDiscountValue.ToString("0.00")
-                                        <span class="small">
-                                            (@Model.HeaderDiscountPercent.ToString("0.##") %)
-                                        </span>
-                                    </span>
+                                    <span class="badge bg-warning text-dark summary-badge">@Model.HeaderDiscountValue.ToString("0.00") <span class="small">(@Model.HeaderDiscountPercent.ToString("0.##") %)</span></span>
                                 </div>
                             </div>
-
                             <div class="col-md-3">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">إجمالي بعد الخصم وقبل الضريبة</span>
-                                    <span class="badge bg-light text-dark summary-badge">
-                                        @Model.TotalAfterDiscountBeforeTax.ToString("0.00")
-                                    </span>
+                                    <span id="TotalAfterDiscountBeforeTaxBadge" class="badge bg-light text-dark summary-badge">@Model.TotalAfterDiscountBeforeTax.ToString("0.00")</span>
                                 </div>
                             </div>
-
                             <div class="col-md-3">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">قيمة الضريبة</span>
-                                    <span class="badge bg-info text-dark summary-badge">
-                                        @Model.TaxAmount.ToString("0.00")
-                                    </span>
+                                    <span id="TaxAmountBadge" class="badge bg-info text-dark summary-badge">@Model.TaxAmount.ToString("0.00")</span>
                                 </div>
                             </div>
                         </div>
-
                         <hr class="my-3" />
-
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
                                 <span class="small text-muted d-block">الصافي النهائي للمرتجع</span>
-                                <h3 class="mb-0 text-success">
-                                    @Model.NetTotal.ToString("0.00")
-                                </h3>
+                                <h3 id="NetTotalBadge" class="mb-0 text-success">@Model.NetTotal.ToString("0.00")</h3>
                             </div>
 
                             <div class="text-end small text-muted">
@@ -591,25 +607,37 @@
                         </a>
 
                         <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnSaveReturnHeader">
+                            💾 حفظ المرتجع
+                        </button>
+
+                        <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
                                 id="btnClearReturnLines"
                                 data-return-id="@Model.SRId">
                             🗑️ مسح كل أصناف المرتجع
                         </button>
 
+                        <input type="number" id="NavReturnSearchInput" class="form-control form-control-sm mt-2" placeholder="بحث برقم المرتجع" />
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" id="btnNavReturnSearch">بحث</button>
+
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnOpenReturn">
                             ⏪ فتح المرتجع
                         </button>
 
                         <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                           id="btnEditReturn"
                            asp-action="Edit"
                            asp-route-id="@Model.SRId">
                             ✏️ تعديل المرتجع
                         </a>
 
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnPostReturn">
                             📤 ترحيل المرتجع
                         </button>
 
@@ -818,36 +846,89 @@
                 returnQtyInput.max = item.qty; // لا يمكن إرجاع أكثر من الكمية في الفاتورة
             });
 
+            function refreshReturnLinesAndTotals(data) {
+                var tbody = document.getElementById('SalesReturnLinesTableBody');
+                var emptyRow = document.getElementById('SalesReturnLinesEmptyRow');
+                if (!tbody) return;
+                var lines = (data && data.lines) ? data.lines : [];
+                var totals = (data && data.totals) ? data.totals : {};
+                while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+                if (lines.length === 0) {
+                    var tr = document.createElement('tr');
+                    tr.id = 'SalesReturnLinesEmptyRow';
+                    tr.innerHTML = '<td colspan="9" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع.</td>';
+                    tbody.appendChild(tr);
+                } else {
+                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
+                    var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                    var lockPosted = (isPostedEl && isPostedEl.value === 'نعم') ? '1' : '0';
+                    lines.forEach(function(l) {
+                        var tr = document.createElement('tr');
+                        tr.setAttribute('data-line-no', l.lineNo);
+                        tr.setAttribute('data-prodid', l.prodId);
+                        var btn = '<button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine" data-line-no="' + l.lineNo + '" data-sr-id="' + srId + '" data-lock-posted="' + lockPosted + '" title="مسح السطر">\uD83D\uDDD1</button>';
+                        tr.innerHTML = '<td class="text-center">' + l.lineNo + '</td><td>' + (l.prodName || '') + '</td><td class="text-center">' + l.qty + '</td><td class="text-center">' + (l.priceRetail != null ? Number(l.priceRetail).toFixed(2) : '') + '</td><td class="text-center">' + (l.disc1Percent != null ? Number(l.disc1Percent).toFixed(2) : '') + '</td><td class="text-center">0</td><td class="text-center">0</td><td class="text-center">' + (l.lineNetTotal != null ? Number(l.lineNetTotal).toFixed(2) : '') + '</td><td class="text-center">' + btn + '</td>';
+                        tbody.appendChild(tr);
+                    });
+                }
+                var bid = document.getElementById('TotalBeforeDiscountBadge');
+                if (bid && totals.totalBeforeDiscount != null) bid.textContent = Number(totals.totalBeforeDiscount).toFixed(2);
+                bid = document.getElementById('TotalAfterDiscountBeforeTaxBadge');
+                if (bid && totals.totalAfterDiscountBeforeTax != null) bid.textContent = Number(totals.totalAfterDiscountBeforeTax).toFixed(2);
+                bid = document.getElementById('TaxAmountBadge');
+                if (bid && totals.taxAmount != null) bid.textContent = Number(totals.taxAmount).toFixed(2);
+                bid = document.getElementById('NetTotalBadge');
+                if (bid && totals.netTotal != null) bid.textContent = Number(totals.netTotal).toFixed(2);
+            }
+
             // عند إضافة سطر للمرتجع
             btnAddReturnLine.addEventListener('click', async function () {
                 var selectedIndex = parseInt(itemSelect.value || '-1', 10);
                 var returnQty = parseInt(returnQtyInput.value || '0', 10);
-                var returnId = parseInt('@Model.SRId' || '0', 10);
+                var returnId = parseInt(document.getElementById('SRId').value || '0', 10);
 
                 if (selectedIndex < 0 || selectedIndex >= invoiceItems.length) {
                     alert('من فضلك اختر صنف من الفاتورة.');
                     return;
                 }
-
                 if (returnQty <= 0) {
                     alert('الكمية المرتجعة يجب أن تكون أكبر من صفر.');
                     return;
                 }
-
                 var item = invoiceItems[selectedIndex];
                 if (returnQty > item.qty) {
                     alert('الكمية المرتجعة لا يمكن أن تكون أكبر من الكمية في الفاتورة (' + item.qty + ').');
                     return;
                 }
-
                 if (returnId <= 0) {
                     alert('يجب حفظ المرتجع أولاً قبل إضافة الأصناف.');
                     return;
                 }
 
-                // هنا سنضيف API endpoint لإضافة السطر
-                // TODO: إضافة API endpoint في SalesReturnLinesController
-                alert('سيتم إضافة السطر قريباً - تحتاج إلى API endpoint لإضافة السطر');
+                var salesInvoiceId = parseInt(document.getElementById('SalesInvoiceId').value || '0', 10) || null;
+                var dto = { SRId: returnId, ProdId: item.prodId, Qty: returnQty, BatchNo: item.batchNo || null, ExpiryText: item.expiry || null, PriceRetail: item.priceRetail || 0, Disc1Percent: item.disc1Percent != null ? item.disc1Percent : 0, SalesInvoiceId: salesInvoiceId, SalesInvoiceLineNo: item.lineNo };
+                btnAddReturnLine.disabled = true;
+                try {
+                    var res = await fetch('@Url.Action("AddLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dto) });
+                    var txt = await res.text();
+                    var data = null;
+                    if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                    if (!res.ok || !data || !data.ok) {
+                        alert((data && data.message) ? data.message : 'فشل إضافة السطر.');
+                        return;
+                    }
+                    refreshReturnLinesAndTotals(data);
+                    returnQtyInput.value = '';
+                    itemSelect.value = '';
+                    invoiceQtyDisplay.value = '';
+                    returnBatchDisplay.value = '';
+                    returnExpiryDisplay.value = '';
+                } catch (e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء إضافة السطر.');
+                } finally {
+                    btnAddReturnLine.disabled = false;
+                }
             });
 
             // تهيئة رقم الفاتورة إذا كان موجوداً
@@ -855,6 +936,177 @@
             if (initialInvoiceId) {
                 invoiceIdInput.value = initialInvoiceId;
                 invoiceIdInput.dispatchEvent(new Event('change'));
+            }
+
+            // =========================================================
+            // زر حفظ المرتجع (SaveHeader) — يحفظ الهيدر ويسجّل رقم المرتجع
+            // =========================================================
+            var btnSaveReturn = document.getElementById('btnSaveReturnHeader');
+            var editBaseUrl = '@Url.Action("Edit", "SalesReturns")';
+            if (btnSaveReturn) {
+                btnSaveReturn.addEventListener('click', async function () {
+                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
+                    var customerId = parseInt(document.getElementById('CustomerId').value || '0', 10);
+                    var warehouseId = parseInt(document.getElementById('WarehouseId').value || '0', 10);
+                    var salesInvoiceIdInput = document.getElementById('SalesInvoiceId');
+                    var salesInvoiceId = 0;
+                    if (salesInvoiceIdInput && salesInvoiceIdInput.value.trim() !== '') {
+                        var v = parseInt(salesInvoiceIdInput.value.trim(), 10);
+                        if (!isNaN(v)) salesInvoiceId = v;
+                    }
+
+                    if (!customerId || !warehouseId) {
+                        alert('من فضلك اختر العميل والمخزن أولاً قبل حفظ المرتجع.');
+                        return;
+                    }
+
+                    var dto = { srId: srId, customerId: customerId, warehouseId: warehouseId, salesInvoiceId: salesInvoiceId || null };
+                    btnSaveReturn.disabled = true;
+                    try {
+                        var response = await fetch('@Url.Action("SaveHeader", "SalesReturns")', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(dto)
+                        });
+                        var txt = await response.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!response.ok) {
+                            alert((data && data.message) ? data.message : 'حدث خطأ أثناء حفظ المرتجع.');
+                            return;
+                        }
+                        if (!data || !data.success) {
+                            alert((data && data.message) ? data.message : 'تعذر حفظ المرتجع.');
+                            return;
+                        }
+                        var newId = data.srId || 0;
+                        document.getElementById('SRId').value = newId.toString();
+                        var dateEl = document.getElementById('ReturnDateDisplay');
+                        var timeEl = document.getElementById('ReturnTimeDisplay');
+                        if (dateEl && data.returnDate) dateEl.value = data.returnDate;
+                        if (timeEl && data.returnTime) timeEl.value = data.returnTime;
+                        var editLink = document.getElementById('btnEditReturn');
+                        if (editLink) editLink.href = editBaseUrl + '/' + newId;
+                        var clearBtn = document.getElementById('btnClearReturnLines');
+                        if (clearBtn) clearBtn.setAttribute('data-return-id', newId.toString());
+                        var numDisp = document.getElementById('ReturnNumberDisplay');
+                        if (numDisp) numDisp.value = newId.toString();
+                        alert('تم حفظ المرتجع بنجاح. رقم المرتجع: ' + newId);
+                        var prodSelect = document.getElementById('InvoiceItemSelect');
+                        if (prodSelect) { prodSelect.focus(); prodSelect.click(); }
+                    } catch (err) {
+                        console.error(err);
+                        alert('تعذر الاتصال بالخادم لحفظ المرتجع.');
+                    } finally {
+                        btnSaveReturn.disabled = false;
+                    }
+                });
+            }
+
+            // مسح السطر
+            document.addEventListener('click', async function(ev) {
+                var btn = ev.target.closest('.btnRemoveReturnLine');
+                if (!btn) return;
+                ev.preventDefault();
+                var srId = parseInt(btn.getAttribute('data-sr-id') || '0', 10);
+                var lineNo = parseInt(btn.getAttribute('data-line-no') || '0', 10);
+                if (srId <= 0 || lineNo <= 0) return;
+                var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                if (isPostedEl && isPostedEl.value === 'نعم') { alert('المرتجع مترحّل. استخدم "فتح المرتجع" أولاً.'); return; }
+                if (!confirm('هل تريد مسح هذا السطر؟')) return;
+                btn.disabled = true;
+                try {
+                    var res = await fetch('@Url.Action("RemoveLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ SRId: srId, LineNo: lineNo }) });
+                    var txt = await res.text();
+                    var data = null;
+                    if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                    if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح السطر.'); return; }
+                    refreshReturnLinesAndTotals(data);
+                } catch (e) { console.error(e); alert('حدث خطأ أثناء مسح السطر.'); }
+                finally { btn.disabled = false; }
+            });
+
+            // مسح كل أصناف المرتجع
+            var btnClear = document.getElementById('btnClearReturnLines');
+            if (btnClear) {
+                btnClear.addEventListener('click', async function() {
+                    var srId = parseInt(document.getElementById('SRId').value || btnClear.getAttribute('data-return-id') || '0', 10);
+                    if (srId <= 0) { alert('يجب حفظ المرتجع أولاً.'); return; }
+                    if (!confirm('هل تريد مسح كل أصناف المرتجع؟')) return;
+                    btnClear.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("ClearLinesJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ SRId: srId }) });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح الأصناف.'); return; }
+                        refreshReturnLinesAndTotals(data);
+                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                        if (isPostedEl) isPostedEl.value = 'لا';
+                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
+                    finally { btnClear.disabled = false; }
+                });
+            }
+
+            // ترحيل المرتجع
+            var btnPost = document.getElementById('btnPostReturn');
+            if (btnPost) {
+                btnPost.addEventListener('click', async function() {
+                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
+                    if (srId <= 0) { alert('يجب حفظ المرتجع أولاً قبل الترحيل.'); return; }
+                    if (!confirm('هل تريد ترحيل هذا المرتجع؟')) return;
+                    btnPost.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("PostReturn", "SalesReturns")?id=' + srId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل الترحيل.'); return; }
+                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                        if (isPostedEl) isPostedEl.value = 'نعم';
+                        var statusEl = document.getElementById('ReturnStatusDisplay');
+                        if (statusEl) statusEl.value = 'Posted';
+                        alert('تم ترحيل المرتجع بنجاح.');
+                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
+                    finally { btnPost.disabled = false; }
+                });
+            }
+
+            // فتح المرتجع (إلغاء الترحيل)
+            var btnOpen = document.getElementById('btnOpenReturn');
+            if (btnOpen) {
+                btnOpen.addEventListener('click', async function() {
+                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
+                    if (srId <= 0) { alert('اختر مرتجعاً أولاً.'); return; }
+                    if (!confirm('هل تريد فتح المرتجع (إلغاء الترحيل)؟')) return;
+                    btnOpen.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("OpenReturn", "SalesReturns")?id=' + srId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل فتح المرتجع.'); return; }
+                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                        if (isPostedEl) isPostedEl.value = 'لا';
+                        var statusEl = document.getElementById('ReturnStatusDisplay');
+                        if (statusEl) statusEl.value = 'Draft';
+                        alert('تم فتح المرتجع للتعديل.');
+                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
+                    finally { btnOpen.disabled = false; }
+                });
+            }
+
+            // بحث برقم المرتجع
+            var navSearchInput = document.getElementById('NavReturnSearchInput');
+            var btnNavSearch = document.getElementById('btnNavReturnSearch');
+            if (navSearchInput && btnNavSearch) {
+                function doNavSearch() {
+                    var v = parseInt((navSearchInput.value || '').trim(), 10);
+                    if (!v || v <= 0) return;
+                    window.location.href = '@Url.Action("Edit", "SalesReturns")/' + v;
+                }
+                btnNavSearch.addEventListener('click', doNavSearch);
+                navSearchInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); doNavSearch(); } });
             }
         });
     </script>

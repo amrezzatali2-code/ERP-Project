@@ -244,6 +244,26 @@ namespace ERP.Controllers
                     .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
             }
 
+            // 6.4.1) تحميل مرتجعات البيع (خصم من كمية المبيعات) عند وجود فلاتر تاريخ
+            Dictionary<int, decimal> returnQuantities = new Dictionary<int, decimal>();
+            if (fromDate.HasValue || toDate.HasValue)
+            {
+                var returnsQuery = _context.SalesReturnLines
+                    .AsNoTracking()
+                    .Include(srl => srl.SalesReturn)
+                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null);
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
+                if (fromDate.HasValue)
+                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
+                if (toDate.HasValue)
+                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
+                returnQuantities = await returnsQuery
+                    .GroupBy(srl => srl.ProdId)
+                    .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
+                    .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+            }
+
             // 6.5) بناء reportData من البيانات المحملة
             var reportData = new List<ProductBalanceReportDto>();
 
@@ -268,8 +288,10 @@ namespace ERP.Controllers
                     }
                 }
 
-                // المبيعات
+                // صافي المبيعات (المبيعات − مرتجعات البيع)
                 decimal salesQty = salesQuantities.TryGetValue(prodId, out var sales) ? sales : 0m;
+                if (returnQuantities.TryGetValue(prodId, out var retQty))
+                    salesQty = Math.Max(0m, salesQty - retQty);
 
                 // تكلفة العلبة
                 decimal unitCost = 0m;
@@ -451,6 +473,7 @@ namespace ERP.Controllers
                 ViewBag.TotalBalance = 0m;
                 ViewBag.TotalSales = 0m;
                 ViewBag.TotalPurchases = 0m;
+                ViewBag.TotalReturns = 0m;
                 ViewBag.Page = 1;
                 ViewBag.PageSize = pageSize;
                 ViewBag.TotalPages = 1;
@@ -509,6 +532,7 @@ namespace ERP.Controllers
                 ViewBag.TotalBalance = 0m;
                 ViewBag.TotalSales = 0m;
                 ViewBag.TotalPurchases = 0m;
+                ViewBag.TotalReturns = 0m;
                 ViewBag.Page = 1;
                 ViewBag.PageSize = pageSize;
                 ViewBag.TotalPages = 1;
@@ -631,6 +655,47 @@ namespace ERP.Controllers
                 }
             }
 
+            // 6.3.1) تحميل المرتجعات (مرتجعات البيع + مرتجعات الشراء) من LedgerEntries
+            Dictionary<int, decimal> returnsTotals = new Dictionary<int, decimal>();
+            {
+                var salesReturnQ = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.CustomerId.HasValue &&
+                        customerIds.Contains(e.CustomerId.Value) &&
+                        e.SourceType == LedgerSourceType.SalesReturn &&
+                        e.LineNo == 2 &&
+                        e.PostVersion > 0);
+                if (fromDate.HasValue) salesReturnQ = salesReturnQ.Where(e => e.EntryDate >= fromDate.Value.Date);
+                if (toDate.HasValue) salesReturnQ = salesReturnQ.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+                var srByCustomer = await salesReturnQ
+                    .GroupBy(e => e.CustomerId!.Value)
+                    .Select(g => new { CustomerId = g.Key, Sum = g.Sum(e => e.Credit) })
+                    .ToDictionaryAsync(x => x.CustomerId, x => x.Sum);
+
+                var purchaseReturnQ = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e =>
+                        e.CustomerId.HasValue &&
+                        customerIds.Contains(e.CustomerId.Value) &&
+                        e.SourceType == LedgerSourceType.PurchaseReturn &&
+                        e.LineNo == 1 &&
+                        e.PostVersion > 0);
+                if (fromDate.HasValue) purchaseReturnQ = purchaseReturnQ.Where(e => e.EntryDate >= fromDate.Value.Date);
+                if (toDate.HasValue) purchaseReturnQ = purchaseReturnQ.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+                var prByCustomer = await purchaseReturnQ
+                    .GroupBy(e => e.CustomerId!.Value)
+                    .Select(g => new { CustomerId = g.Key, Sum = g.Sum(e => e.Debit) })
+                    .ToDictionaryAsync(x => x.CustomerId, x => x.Sum);
+
+                foreach (var cid in customerIds)
+                {
+                    decimal sr = srByCustomer.TryGetValue(cid, out var s) ? s : 0m;
+                    decimal pr = prByCustomer.TryGetValue(cid, out var p) ? p : 0m;
+                    returnsTotals[cid] = sr + pr;
+                }
+            }
+
             // 6.4) بناء reportData من البيانات المحملة
             var reportData = new List<CustomerBalanceReportDto>();
 
@@ -647,6 +712,7 @@ namespace ERP.Controllers
 
                 decimal totalSales = salesTotals.TryGetValue(customerId, out var sales) ? sales : 0m;
                 decimal totalPurchases = purchasesTotals.TryGetValue(customerId, out var purchases) ? purchases : 0m;
+                decimal totalReturns = returnsTotals.TryGetValue(customerId, out var ret) ? ret : 0m;
                 decimal availableCredit = creditLimit - currentBalance;
 
                 reportData.Add(new CustomerBalanceReportDto
@@ -660,6 +726,7 @@ namespace ERP.Controllers
                     CreditLimit = creditLimit,
                     TotalSales = totalSales,
                     TotalPurchases = totalPurchases,
+                    TotalReturns = totalReturns,
                     AvailableCredit = availableCredit
                 });
             }
@@ -690,6 +757,11 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.TotalPurchases).ToList()
                         : reportData.OrderBy(r => r.TotalPurchases).ToList();
                     break;
+                case "returns":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.TotalReturns).ToList()
+                        : reportData.OrderBy(r => r.TotalReturns).ToList();
+                    break;
                 default: // "name"
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.CustomerName).ToList()
@@ -703,6 +775,7 @@ namespace ERP.Controllers
             decimal totalBalance = reportData.Sum(r => r.CurrentBalance);
             decimal totalSalesSum = reportData.Sum(r => r.TotalSales);
             decimal totalPurchasesSum = reportData.Sum(r => r.TotalPurchases);
+            decimal totalReturnsSum = reportData.Sum(r => r.TotalReturns);
             decimal totalCreditLimit = reportData.Sum(r => r.CreditLimit);
             decimal totalAvailableCredit = reportData.Sum(r => r.AvailableCredit);
 
@@ -737,6 +810,7 @@ namespace ERP.Controllers
             ViewBag.TotalBalance = totalBalance;
             ViewBag.TotalSales = totalSalesSum;
             ViewBag.TotalPurchases = totalPurchasesSum;
+            ViewBag.TotalReturns = totalReturnsSum;
             ViewBag.TotalCreditLimit = totalCreditLimit;
             ViewBag.TotalAvailableCredit = totalAvailableCredit;
 
@@ -905,6 +979,34 @@ namespace ERP.Controllers
                 }
             }
 
+            Dictionary<int, decimal> returnsTotals = new Dictionary<int, decimal>();
+            {
+                var salesReturnQ = _context.LedgerEntries.AsNoTracking()
+                    .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value) &&
+                        e.SourceType == LedgerSourceType.SalesReturn && e.LineNo == 2 && e.PostVersion > 0);
+                if (fromDate.HasValue) salesReturnQ = salesReturnQ.Where(e => e.EntryDate >= fromDate.Value.Date);
+                if (toDate.HasValue) salesReturnQ = salesReturnQ.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+                var srByCustomer = await salesReturnQ
+                    .GroupBy(e => e.CustomerId!.Value)
+                    .Select(g => new { CustomerId = g.Key, Sum = g.Sum(e => e.Credit) })
+                    .ToDictionaryAsync(x => x.CustomerId, x => x.Sum);
+                var purchaseReturnQ = _context.LedgerEntries.AsNoTracking()
+                    .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value) &&
+                        e.SourceType == LedgerSourceType.PurchaseReturn && e.LineNo == 1 && e.PostVersion > 0);
+                if (fromDate.HasValue) purchaseReturnQ = purchaseReturnQ.Where(e => e.EntryDate >= fromDate.Value.Date);
+                if (toDate.HasValue) purchaseReturnQ = purchaseReturnQ.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+                var prByCustomer = await purchaseReturnQ
+                    .GroupBy(e => e.CustomerId!.Value)
+                    .Select(g => new { CustomerId = g.Key, Sum = g.Sum(e => e.Debit) })
+                    .ToDictionaryAsync(x => x.CustomerId, x => x.Sum);
+                foreach (var cid in customerIds)
+                {
+                    decimal sr = srByCustomer.TryGetValue(cid, out var s) ? s : 0m;
+                    decimal pr = prByCustomer.TryGetValue(cid, out var p) ? p : 0m;
+                    returnsTotals[cid] = sr + pr;
+                }
+            }
+
             var reportData = new List<CustomerBalanceReportDto>();
 
             foreach (var customerId in customerIds)
@@ -919,6 +1021,7 @@ namespace ERP.Controllers
 
                 decimal totalSales = salesTotals.TryGetValue(customerId, out var sales) ? sales : 0m;
                 decimal totalPurchases = purchasesTotals.TryGetValue(customerId, out var purchases) ? purchases : 0m;
+                decimal totalReturns = returnsTotals.TryGetValue(customerId, out var ret) ? ret : 0m;
                 decimal availableCredit = creditLimit - currentBalance;
 
                 reportData.Add(new CustomerBalanceReportDto
@@ -932,6 +1035,7 @@ namespace ERP.Controllers
                     CreditLimit = creditLimit,
                     TotalSales = totalSales,
                     TotalPurchases = totalPurchases,
+                    TotalReturns = totalReturns,
                     AvailableCredit = availableCredit
                 });
             }
@@ -960,6 +1064,11 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.TotalPurchases).ToList()
                         : reportData.OrderBy(r => r.TotalPurchases).ToList();
                     break;
+                case "returns":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.TotalReturns).ToList()
+                        : reportData.OrderBy(r => r.TotalReturns).ToList();
+                    break;
                 default: // "name"
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.CustomerName).ToList()
@@ -982,9 +1091,10 @@ namespace ERP.Controllers
             worksheet.Cell(row, 6).Value = "الحد الائتماني";
             worksheet.Cell(row, 7).Value = "المبيعات";
             worksheet.Cell(row, 8).Value = "المشتريات";
-            worksheet.Cell(row, 9).Value = "الائتمان المتاح";
+            worksheet.Cell(row, 9).Value = "المرتجعات";
+            worksheet.Cell(row, 10).Value = "الائتمان المتاح";
 
-            worksheet.Range(row, 1, row, 9).Style.Font.Bold = true;
+            worksheet.Range(row, 1, row, 10).Style.Font.Bold = true;
 
             // البيانات
             row = 2;
@@ -998,7 +1108,8 @@ namespace ERP.Controllers
                 worksheet.Cell(row, 6).Value = item.CreditLimit;
                 worksheet.Cell(row, 7).Value = item.TotalSales;
                 worksheet.Cell(row, 8).Value = item.TotalPurchases;
-                worksheet.Cell(row, 9).Value = item.AvailableCredit;
+                worksheet.Cell(row, 9).Value = item.TotalReturns;
+                worksheet.Cell(row, 10).Value = item.AvailableCredit;
                 row++;
             }
 
@@ -1135,6 +1246,25 @@ namespace ERP.Controllers
                     .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
             }
 
+            Dictionary<int, decimal> returnQuantities = new Dictionary<int, decimal>();
+            if (fromDate.HasValue || toDate.HasValue)
+            {
+                var returnsQuery = _context.SalesReturnLines
+                    .AsNoTracking()
+                    .Include(srl => srl.SalesReturn)
+                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null);
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
+                if (fromDate.HasValue)
+                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
+                if (toDate.HasValue)
+                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
+                returnQuantities = await returnsQuery
+                    .GroupBy(srl => srl.ProdId)
+                    .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
+                    .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+            }
+
             var reportData = new List<ProductBalanceReportDto>();
 
             foreach (var prodId in productIds)
@@ -1156,6 +1286,8 @@ namespace ERP.Controllers
                 }
 
                 decimal salesQty = salesQuantities.TryGetValue(prodId, out var sales) ? sales : 0m;
+                if (returnQuantities.TryGetValue(prodId, out var retQty))
+                    salesQty = Math.Max(0m, salesQty - retQty);
 
                 decimal unitCost = 0m;
                 if (stockLedgerDiscount.TryGetValue(prodId, out var costData))
@@ -1408,6 +1540,41 @@ namespace ERP.Controllers
                 .ToDictionaryAsync(x => x.ProdId);
 
             // =========================================================
+            // 5.1) مرتجعات البيع – خصم من الإيرادات والتكلفة والكمية
+            // =========================================================
+            var salesReturnProfitQuery = _context.SalesReturnLines
+                .AsNoTracking()
+                .Include(srl => srl.SalesReturn)
+                .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null);
+
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                salesReturnProfitQuery = salesReturnProfitQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
+            if (fromDate.HasValue)
+                salesReturnProfitQuery = salesReturnProfitQuery.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                salesReturnProfitQuery = salesReturnProfitQuery.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
+
+            var returnRevenueQty = await salesReturnProfitQuery
+                .GroupBy(srl => srl.ProdId)
+                .Select(g => new { ProdId = g.Key, ReturnRevenue = g.Sum(srl => srl.LineNetTotal), ReturnQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
+                .ToDictionaryAsync(x => x.ProdId);
+
+            var srIdsInRange = await salesReturnProfitQuery
+                .Select(srl => srl.SalesReturn!.SRId)
+                .Distinct()
+                .ToListAsync();
+            Dictionary<int, decimal> returnCostData = new Dictionary<int, decimal>();
+            if (srIdsInRange.Any())
+            {
+                returnCostData = await _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.SourceType == "SalesReturn" && srIdsInRange.Contains(sl.SourceId) && productIds.Contains(sl.ProdId))
+                    .GroupBy(sl => sl.ProdId)
+                    .Select(g => new { ProdId = g.Key, ReturnCost = g.Sum(sl => sl.UnitCost * sl.QtyIn) })
+                    .ToDictionaryAsync(x => x.ProdId, x => x.ReturnCost);
+            }
+
+            // =========================================================
             // 6) حساب الربح من الميزانية (LedgerEntries)
             // =========================================================
             // نحتاج إلى حساب الإيرادات والتكلفة من LedgerEntries
@@ -1528,6 +1695,61 @@ namespace ERP.Controllers
                         }
                     }
                 }
+
+                // خصم مرتجعات البيع من Ledger (4100 إيرادات: LineNo 1 Debit، 5100 COGS: LineNo 4 Credit)
+                if (srIdsInRange.Any())
+                {
+                    var srRevenueEntries = await _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == salesRevenueAccount!.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesReturn &&
+                            e.LineNo == 1 &&
+                            e.PostVersion > 0 &&
+                            srIdsInRange.Contains(e.SourceId!.Value))
+                        .ToListAsync();
+                    foreach (var entry in srRevenueEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+                        var lines = await _context.SalesReturnLines
+                            .AsNoTracking()
+                            .Where(srl => srl.SRId == entry.SourceId.Value && productIds.Contains(srl.ProdId))
+                            .ToListAsync();
+                        decimal totalNet = lines.Sum(srl => srl.LineNetTotal);
+                        if (totalNet <= 0) continue;
+                        foreach (var line in lines)
+                        {
+                            decimal share = entry.Debit * (line.LineNetTotal / totalNet);
+                            if (ledgerRevenueData.ContainsKey(line.ProdId))
+                                ledgerRevenueData[line.ProdId] = Math.Max(0m, ledgerRevenueData[line.ProdId] - share);
+                        }
+                    }
+                    var srCogsEntries = await _context.LedgerEntries
+                        .AsNoTracking()
+                        .Where(e =>
+                            e.AccountId == cogsAccount!.AccountId &&
+                            e.SourceType == LedgerSourceType.SalesReturn &&
+                            e.LineNo == 4 &&
+                            e.PostVersion > 0 &&
+                            srIdsInRange.Contains(e.SourceId!.Value))
+                        .ToListAsync();
+                    foreach (var entry in srCogsEntries)
+                    {
+                        if (!entry.SourceId.HasValue) continue;
+                        var lines = await _context.SalesReturnLines
+                            .AsNoTracking()
+                            .Where(srl => srl.SRId == entry.SourceId.Value && productIds.Contains(srl.ProdId))
+                            .ToListAsync();
+                        decimal totalNet = lines.Sum(srl => srl.LineNetTotal);
+                        if (totalNet <= 0) continue;
+                        foreach (var line in lines)
+                        {
+                            decimal share = entry.Credit * (line.LineNetTotal / totalNet);
+                            if (ledgerCostData.ContainsKey(line.ProdId))
+                                ledgerCostData[line.ProdId] = Math.Max(0m, ledgerCostData[line.ProdId] - share);
+                        }
+                    }
+                }
             }
 
             // =========================================================
@@ -1548,14 +1770,21 @@ namespace ERP.Controllers
             {
                 if (!productsDict.TryGetValue(prodId, out var product)) continue;
 
-                // الربح من البيع
+                // الربح من البيع (بعد خصم مرتجعات البيع)
                 decimal salesRevenue = salesProfitData.TryGetValue(prodId, out var salesData) ? salesData.SalesRevenue : 0m;
                 decimal salesCost = salesProfitData.TryGetValue(prodId, out var salesData2) ? salesData2.SalesCost : 0m;
+                decimal salesQty = salesProfitData.TryGetValue(prodId, out var salesData3) ? salesData3.SalesQty : 0m;
+                if (returnRevenueQty.TryGetValue(prodId, out var ret))
+                {
+                    salesRevenue = Math.Max(0m, salesRevenue - ret.ReturnRevenue);
+                    salesQty = Math.Max(0m, salesQty - ret.ReturnQty);
+                }
+                if (returnCostData.TryGetValue(prodId, out var retCost))
+                    salesCost = Math.Max(0m, salesCost - retCost);
                 decimal salesProfit = salesRevenue - salesCost;
                 decimal salesProfitPercent = salesRevenue > 0 ? (salesProfit / salesRevenue) * 100m : 0m;
-                decimal salesQty = salesProfitData.TryGetValue(prodId, out var salesData3) ? salesData3.SalesQty : 0m;
 
-                // الربح من الميزانية
+                // الربح من الميزانية (مرتجعات البيع مُخصّمة لاحقاً في الـ Ledger)
                 decimal ledgerRevenue = ledgerRevenueData.TryGetValue(prodId, out var rev) ? rev : 0m;
                 decimal ledgerCost = ledgerCostData.TryGetValue(prodId, out var cost) ? cost : 0m;
                 decimal ledgerProfit = ledgerRevenue - ledgerCost;
@@ -1567,7 +1796,7 @@ namespace ERP.Controllers
                 decimal accountBalanceProfit = 0m;
                 decimal accountBalanceProfitPercent = 0m;
 
-                // متوسطات
+                // متوسطات (بعد خصم المرتجعات)
                 decimal avgUnitPrice = salesQty > 0 ? salesRevenue / salesQty : 0m;
                 decimal avgUnitCost = salesQty > 0 ? salesCost / salesQty : 0m;
 

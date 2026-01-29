@@ -1644,71 +1644,7 @@ namespace ERP.Services
                     });
                 }
 
-                // 7) جلب أسماء الأصناف
-                var prodIds = salesReturn.Lines.Select(l => l.ProdId).Distinct().ToList();
-                var prodNames = await _db.Products
-                    .AsNoTracking()
-                    .Where(p => prodIds.Contains(p.ProdId))
-                    .ToDictionaryAsync(p => p.ProdId, p => p.ProdName ?? "");
-
-                // 8) تحديث StockLedger (زيادة المخزون - QtyIn)
-                foreach (var line in salesReturn.Lines)
-                {
-                    var avgCost = await GetAverageCostAsync(line.ProdId, salesReturn.WarehouseId);
-                    var prodName = prodNames.TryGetValue(line.ProdId, out var name) ? name : "";
-
-                    var stockLedger = new StockLedger
-                    {
-                        TranDate = now,
-                        WarehouseId = salesReturn.WarehouseId,
-                        ProdId = line.ProdId,
-                        BatchNo = line.BatchNo ?? "",
-                        Expiry = line.Expiry,
-                        QtyIn = line.Qty,
-                        QtyOut = 0,
-                        UnitCost = avgCost,
-                        RemainingQty = line.Qty,
-                        SourceType = "SalesReturn",
-                        SourceId = salesReturnId,
-                        SourceLine = line.LineNo,
-                        Note = $"Sales Return Line: {prodName}"
-                    };
-
-                    _db.StockLedger.Add(stockLedger);
-
-                    // 9) تحديث StockBatch (زيادة QtyOnHand)
-                    if (!string.IsNullOrWhiteSpace(line.BatchNo) && line.Expiry.HasValue)
-                    {
-                        var batch = await _db.StockBatches
-                            .FirstOrDefaultAsync(sb =>
-                                sb.WarehouseId == salesReturn.WarehouseId &&
-                                sb.ProdId == line.ProdId &&
-                                sb.BatchNo == line.BatchNo &&
-                                sb.Expiry.HasValue &&
-                                sb.Expiry.Value.Date == line.Expiry.Value.Date);
-
-                        if (batch != null)
-                        {
-                            batch.QtyOnHand += line.Qty;
-                            batch.UpdatedAt = now;
-                            batch.Note = $"SR:{salesReturnId} Line:{line.LineNo} (+{line.Qty})";
-                        }
-                        else
-                        {
-                            // إنشاء batch جديد
-                            _db.StockBatches.Add(new StockBatch
-                            {
-                                WarehouseId = salesReturn.WarehouseId,
-                                ProdId = line.ProdId,
-                                BatchNo = line.BatchNo,
-                                Expiry = line.Expiry.Value,
-                                QtyOnHand = line.Qty,
-                                UpdatedAt = now,
-                                Note = $"SR:{salesReturnId} Line:{line.LineNo}"
-                            });
-                        }
-                    }
-                }
+                // 8) StockLedger + StockBatch يُسجّلان عند إضافة السطر (AddLineJson)، لا عند الترحيل.
 
                 // 9) تحديث حالة المرتجع
                 salesReturn.IsPosted = true;
@@ -1869,55 +1805,7 @@ namespace ERP.Services
                     });
                 }
 
-                // 7) جلب أسماء الأصناف
-                var prodIds = purchaseReturn.Lines.Select(l => l.ProdId).Distinct().ToList();
-                var prodNames = await _db.Products
-                    .AsNoTracking()
-                    .Where(p => prodIds.Contains(p.ProdId))
-                    .ToDictionaryAsync(p => p.ProdId, p => p.ProdName ?? "");
-
-                // 8) تحديث StockLedger (نقصان المخزون - QtyOut)
-                foreach (var line in purchaseReturn.Lines)
-                {
-                    var prodName = prodNames.TryGetValue(line.ProdId, out var name) ? name : "";
-                    var stockLedger = new StockLedger
-                    {
-                        TranDate = now,
-                        WarehouseId = purchaseReturn.WarehouseId,
-                        ProdId = line.ProdId,
-                        BatchNo = line.BatchNo ?? "",
-                        Expiry = line.Expiry,
-                        QtyIn = 0,
-                        QtyOut = line.Qty,
-                        UnitCost = line.UnitCost,
-                        RemainingQty = null,
-                        SourceType = "PurchaseReturn",
-                        SourceId = purchaseReturnId,
-                        SourceLine = line.LineNo,
-                        Note = $"Purchase Return Line: {prodName}"
-                    };
-
-                    _db.StockLedger.Add(stockLedger);
-
-                    // 9) تحديث StockBatch (نقصان QtyOnHand)
-                    if (!string.IsNullOrWhiteSpace(line.BatchNo) && line.Expiry.HasValue)
-                    {
-                        var batch = await _db.StockBatches
-                            .FirstOrDefaultAsync(sb =>
-                                sb.WarehouseId == purchaseReturn.WarehouseId &&
-                                sb.ProdId == line.ProdId &&
-                                sb.BatchNo == line.BatchNo &&
-                                sb.Expiry.HasValue &&
-                                sb.Expiry.Value.Date == line.Expiry.Value.Date);
-
-                        if (batch != null && batch.QtyOnHand >= line.Qty)
-                        {
-                            batch.QtyOnHand -= line.Qty;
-                            batch.UpdatedAt = now;
-                            batch.Note = $"PR:{purchaseReturnId} Line:{line.LineNo} (-{line.Qty})";
-                        }
-                    }
-                }
+                // 8) StockLedger + StockBatch يُسجّلان عند إضافة السطر (AddLineJson)، لا عند الترحيل.
 
                 // 9) تحديث حالة المرتجع
                 purchaseReturn.IsPosted = true;

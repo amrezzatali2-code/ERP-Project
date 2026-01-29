@@ -1,8 +1,8 @@
-using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                        // سياق قاعدة البيانات AppDbContext
 using ERP.Infrastructure;              // PagedResult + ApplySearchSort
 using ERP.Models;                      // الموديل SalesReturn
-using ERP.Services;                    // ILedgerPostingService
+using ERP.Services;                    // ILedgerPostingService, DocumentTotalsService
+using ERP.ViewModels;                  // SalesReturnHeaderDto
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -25,14 +25,15 @@ namespace ERP.Controllers
     /// </summary>
     public class SalesReturnsController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext context;
         private readonly ILedgerPostingService _ledgerPostingService;
+        private readonly DocumentTotalsService _docTotals;
 
-        public SalesReturnsController(AppDbContext ctx, ILedgerPostingService ledgerPostingService)
+        public SalesReturnsController(AppDbContext ctx, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals)
         {
             context = ctx;
             _ledgerPostingService = ledgerPostingService;
+            _docTotals = docTotals;
         }
 
 
@@ -159,11 +160,17 @@ namespace ERP.Controllers
             if (model == null)
                 return NotFound();                 // المرتجع غير موجود
 
-            // تعبئة القوائم المنسدلة (العملاء + المخازن + ... )
             await PopulateDropDownsAsync();
 
-            // فتح شاشة المرتجع (Edit = شاشة عرض + أزرار فتح/ترحيل/طباعة)
-            return View(model);
+            var prodIds = model.Lines.Select(l => l.ProdId).Distinct().ToList();
+            var prodNames = await context.Products
+                .AsNoTracking()
+                .Where(p => prodIds.Contains(p.ProdId))
+                .Select(p => new { p.ProdId, p.ProdName })
+                .ToListAsync();
+            ViewBag.ProdNames = prodNames.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+
+            return View("Show", model);
         }
 
 
@@ -234,6 +241,52 @@ namespace ERP.Controllers
 
 
 
+
+
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> SaveHeader([FromBody] SalesReturnHeaderDto dto)
+        {
+            if (dto == null)
+                return BadRequest("حدث خطأ في البيانات المرسلة.");
+            if (dto.CustomerId <= 0)
+                return BadRequest("يجب اختيار العميل قبل حفظ المرتجع.");
+            if (dto.WarehouseId <= 0)
+                return BadRequest("يجب اختيار المخزن قبل حفظ المرتجع.");
+            var now = DateTime.Now;
+            var userName = User?.Identity?.Name ?? "system";
+            if (dto.SRId == 0)
+            {
+                var entity = new SalesReturn
+                {
+                    SRDate = now.Date,
+                    SRTime = now.TimeOfDay,
+                    CustomerId = dto.CustomerId,
+                    WarehouseId = dto.WarehouseId,
+                    SalesInvoiceId = dto.SalesInvoiceId > 0 ? dto.SalesInvoiceId : null,
+                    Status = "Draft",
+                    IsPosted = false,
+                    CreatedAt = now,
+                    CreatedBy = userName
+                };
+                context.SalesReturns.Add(entity);
+                await context.SaveChangesAsync();
+                return Json(new { success = true, srId = entity.SRId, returnNumber = entity.SRId.ToString(), returnDate = entity.SRDate.ToString("yyyy/MM/dd"), returnTime = DateTime.Today.Add(entity.SRTime).ToString("HH:mm"), status = entity.Status, isPosted = entity.IsPosted, createdBy = entity.CreatedBy });
+            }
+            var existing = await context.SalesReturns.FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
+            if (existing == null)
+                return NotFound("لم يتم العثور على المرتجع المطلوب.");
+            if (existing.IsPosted)
+                return BadRequest("لا يمكن تعديل مرتجع تم ترحيله.");
+            existing.CustomerId = dto.CustomerId;
+            existing.WarehouseId = dto.WarehouseId;
+            existing.SalesInvoiceId = dto.SalesInvoiceId > 0 ? dto.SalesInvoiceId : null;
+            existing.UpdatedAt = now;
+            await context.SaveChangesAsync();
+
+            return Json(new { success = true, srId = existing.SRId, returnNumber = existing.SRId.ToString(), returnDate = existing.SRDate.ToString("yyyy/MM/dd"), returnTime = DateTime.Today.Add(existing.SRTime).ToString("HH:mm"), status = existing.Status, isPosted = existing.IsPosted, createdBy = existing.CreatedBy });
+        }
 
         // =========================================================
         // دالة مساعدة: تبنى الاستعلام الأساسى مع البحث والترتيب
@@ -621,10 +674,285 @@ namespace ERP.Controllers
             });
         }
 
+        private async Task<decimal> GetAverageCostAsync(int prodId, int warehouseId)
+        {
+            var avg = await context.StockLedger
+                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0)
+                .AverageAsync(sl => (decimal?)sl.UnitCost);
+            return avg ?? 0m;
+        }
+
+        // =========================================================
+        // AddLineJson — إضافة سطر لمرتجع البيع + StockLedger (QtyIn) + StockBatch
+        // مرتجع البيع = عكس البيع → زيادة المخزون
+        // =========================================================
+        public class AddLineJsonDto
+        {
+            public int SRId { get; set; }
+            public int ProdId { get; set; }
+            public int Qty { get; set; }
+            public string? BatchNo { get; set; }
+            public string? ExpiryText { get; set; }
+            public decimal PriceRetail { get; set; }
+            public decimal Disc1Percent { get; set; }
+            public int? SalesInvoiceId { get; set; }
+            public int? SalesInvoiceLineNo { get; set; }
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
+        {
+            if (dto == null || dto.SRId <= 0 || dto.ProdId <= 0 || dto.Qty <= 0)
+                return BadRequest(new { ok = false, message = "بيانات السطر غير صحيحة." });
+
+            await using var tx = await context.Database.BeginTransactionAsync();
+            try
+            {
+                var ret = await context.SalesReturns.Include(sr => sr.Lines).FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
+                if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
+                if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "لا يمكن تعديل مرتجع مترحّل." }); }
+                if (ret.WarehouseId <= 0) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "يجب اختيار المخزن." }); }
+
+                DateTime? exp = null;
+                if (!string.IsNullOrWhiteSpace(dto.ExpiryText))
+                {
+                    var s = dto.ExpiryText.Trim();
+                    if (DateTime.TryParse(s, out var p)) exp = p.Date;
+                    else
+                    {
+                        var parts = s.Split('/');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out var mm) && int.TryParse(parts[1], out var yyyy) && mm >= 1 && mm <= 12)
+                            exp = new DateTime(yyyy, mm, 1).Date;
+                    }
+                }
+
+                var batchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
+                var disc1 = Math.Max(0, Math.Min(100, dto.Disc1Percent));
+                var unitPrice = Math.Max(0, dto.PriceRetail);
+                var totalBefore = dto.Qty * unitPrice;
+                var discVal = totalBefore * (disc1 / 100m);
+                var totalAfter = totalBefore - discVal;
+                var taxVal = 0m;
+                var netLine = totalAfter + taxVal;
+
+                var nextLineNo = (ret.Lines.Any() ? ret.Lines.Max(x => x.LineNo) : 0) + 1;
+                var line = new SalesReturnLine
+                {
+                    SRId = dto.SRId,
+                    LineNo = nextLineNo,
+                    ProdId = dto.ProdId,
+                    Qty = dto.Qty,
+                    PriceRetail = unitPrice,
+                    Disc1Percent = disc1,
+                    Disc2Percent = 0,
+                    Disc3Percent = 0,
+                    DiscountValue = discVal,
+                    UnitSalePrice = unitPrice,
+                    LineTotalAfterDiscount = totalAfter,
+                    TaxPercent = 0,
+                    TaxValue = taxVal,
+                    LineNetTotal = netLine,
+                    BatchNo = batchNo,
+                    Expiry = exp,
+                    SalesInvoiceId = dto.SalesInvoiceId > 0 ? dto.SalesInvoiceId : null,
+                    SalesInvoiceLineNo = dto.SalesInvoiceLineNo
+                };
+                context.SalesReturnLines.Add(line);
+                await context.SaveChangesAsync();
+
+                var avgCost = await GetAverageCostAsync(dto.ProdId, ret.WarehouseId);
+                var now = DateTime.UtcNow;
+                context.StockLedger.Add(new StockLedger
+                {
+                    TranDate = now,
+                    WarehouseId = ret.WarehouseId,
+                    ProdId = dto.ProdId,
+                    BatchNo = batchNo ?? "",
+                    Expiry = exp,
+                    QtyIn = dto.Qty,
+                    QtyOut = 0,
+                    UnitCost = avgCost,
+                    RemainingQty = dto.Qty,
+                    SourceType = "SalesReturn",
+                    SourceId = dto.SRId,
+                    SourceLine = nextLineNo,
+                    Note = "Sales Return Line"
+                });
+                await context.SaveChangesAsync();
+
+                if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                {
+                    var sb = await context.StockBatches.FirstOrDefaultAsync(b =>
+                        b.WarehouseId == ret.WarehouseId && b.ProdId == dto.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value.Date);
+                    if (sb != null)
+                    {
+                        sb.QtyOnHand += dto.Qty;
+                        sb.UpdatedAt = now;
+                        sb.Note = $"SR:{dto.SRId} Line:{nextLineNo} (+{dto.Qty})";
+                    }
+                    else
+                    {
+                        context.StockBatches.Add(new StockBatch
+                        {
+                            WarehouseId = ret.WarehouseId,
+                            ProdId = dto.ProdId,
+                            BatchNo = batchNo,
+                            Expiry = exp.Value,
+                            QtyOnHand = dto.Qty,
+                            UpdatedAt = now,
+                            Note = $"SR:{dto.SRId} Line:{nextLineNo}"
+                        });
+                    }
+                    await context.SaveChangesAsync();
+                }
+
+                await _docTotals.RecalcSalesReturnTotalsAsync(dto.SRId);
+                await context.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
+
+            var linesNow = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var linesDto = linesNow.Select(l => new
+            {
+                lineNo = l.LineNo,
+                prodId = l.ProdId,
+                prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "",
+                qty = l.Qty,
+                priceRetail = l.PriceRetail,
+                disc1Percent = l.Disc1Percent,
+                batchNo = l.BatchNo,
+                expiry = l.Expiry?.ToString("yyyy-MM-dd"),
+                lineNetTotal = l.LineNetTotal
+            }).ToList();
+            var h = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId);
+            return Json(new { ok = true, message = "تمت إضافة السطر.", lines = linesDto, totals = new { totalBeforeDiscount = h.TotalBeforeDiscount, totalAfterDiscountBeforeTax = h.TotalAfterDiscountBeforeTax, taxAmount = h.TaxAmount, netTotal = h.NetTotal } });
+        }
+
+        // =========================================================
+        // RemoveLineJson — حذف سطر من مرتجع البيع + عكس StockLedger/StockBatch
+        // =========================================================
+        public class RemoveLineJsonDto { public int SRId { get; set; } public int LineNo { get; set; } }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
+        {
+            if (dto == null || dto.SRId <= 0 || dto.LineNo <= 0)
+                return BadRequest(new { ok = false, message = "بيانات المسح غير صحيحة." });
+
+            await using var tx = await context.Database.BeginTransactionAsync();
+            try
+            {
+                var ret = await context.SalesReturns.FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
+                if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
+                if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "لا يمكن تعديل مرتجع مترحّل." }); }
+
+                var line = await context.SalesReturnLines.FirstOrDefaultAsync(l => l.SRId == dto.SRId && l.LineNo == dto.LineNo);
+                if (line == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "السطر غير موجود." }); }
+
+                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                var exp = line.Expiry?.Date;
+                if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                {
+                    var sb = await context.StockBatches.FirstOrDefaultAsync(b =>
+                        b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
+                    if (sb != null) { sb.QtyOnHand -= line.Qty; sb.UpdatedAt = DateTime.UtcNow; sb.Note = $"SR:{dto.SRId} Line:{dto.LineNo} (-{line.Qty})"; }
+                }
+                var ledgers = await context.StockLedger.Where(x => x.SourceType == "SalesReturn" && x.SourceId == dto.SRId && x.SourceLine == dto.LineNo).ToListAsync();
+                context.StockLedger.RemoveRange(ledgers);
+                context.SalesReturnLines.Remove(line);
+                await context.SaveChangesAsync();
+                await _docTotals.RecalcSalesReturnTotalsAsync(dto.SRId);
+                await context.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch { await tx.RollbackAsync(); throw; }
+
+            var linesNow = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, priceRetail = l.PriceRetail, disc1Percent = l.Disc1Percent, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineNetTotal = l.LineNetTotal }).ToList();
+            var h = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId);
+            return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { totalBeforeDiscount = h.TotalBeforeDiscount, totalAfterDiscountBeforeTax = h.TotalAfterDiscountBeforeTax, taxAmount = h.TaxAmount, netTotal = h.NetTotal } });
+        }
+
+        // =========================================================
+        // ClearLinesJson — مسح كل سطور مرتجع البيع + عكس StockLedger/StockBatch
+        // =========================================================
+        public class ClearLinesJsonDto { public int SRId { get; set; } }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> ClearLinesJson([FromBody] ClearLinesJsonDto dto)
+        {
+            if (dto == null || dto.SRId <= 0)
+                return BadRequest(new { ok = false, message = "رقم المرتجع غير صحيح." });
+
+            await using var tx = await context.Database.BeginTransactionAsync();
+            try
+            {
+                var ret = await context.SalesReturns.Include(sr => sr.Lines).FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
+                if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
+                if (ret.IsPosted) { ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; await context.SaveChangesAsync(); }
+                var lines = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).ToListAsync();
+                if (lines.Count == 0) { await tx.CommitAsync(); var header0 = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId); return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = new object[0], totals = new { totalBeforeDiscount = header0.TotalBeforeDiscount, totalAfterDiscountBeforeTax = header0.TotalAfterDiscountBeforeTax, taxAmount = header0.TaxAmount, netTotal = header0.NetTotal } }); }
+                foreach (var line in lines)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                    var exp = line.Expiry?.Date;
+                    if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                    {
+                        var sb = await context.StockBatches.FirstOrDefaultAsync(b => b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
+                        if (sb != null) { sb.QtyOnHand -= line.Qty; sb.UpdatedAt = DateTime.UtcNow; }
+                    }
+                    var ledgers = await context.StockLedger.Where(x => x.SourceType == "SalesReturn" && x.SourceId == dto.SRId && x.SourceLine == line.LineNo).ToListAsync();
+                    context.StockLedger.RemoveRange(ledgers);
+                }
+                context.SalesReturnLines.RemoveRange(lines);
+                await context.SaveChangesAsync();
+                await _docTotals.RecalcSalesReturnTotalsAsync(dto.SRId);
+                await context.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch { await tx.RollbackAsync(); throw; }
+
+            var linesNow = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, priceRetail = l.PriceRetail, disc1Percent = l.Disc1Percent, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineNetTotal = l.LineNetTotal }).ToList();
+            var h = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId);
+            return Json(new { ok = true, message = "تم مسح كل الأصناف.", lines = linesDto, totals = new { totalBeforeDiscount = h.TotalBeforeDiscount, totalAfterDiscountBeforeTax = h.TotalAfterDiscountBeforeTax, taxAmount = h.TaxAmount, netTotal = h.NetTotal } });
+        }
+
+        // =========================================================
+        // OpenReturn — فتح المرتجع (إلغاء الترحيل)
+        // =========================================================
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> OpenReturn(int id)
+        {
+            if (id <= 0) return BadRequest(new { ok = false, message = "رقم المرتجع غير صحيح." });
+            var ret = await context.SalesReturns.FirstOrDefaultAsync(sr => sr.SRId == id);
+            if (ret == null) return NotFound(new { ok = false, message = "المرتجع غير موجود." });
+            if (!ret.IsPosted) return BadRequest(new { ok = false, message = "المرتجع غير مترحّل." });
+            ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; ret.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+            return Json(new { ok = true, message = "تم فتح المرتجع للتعديل.", isPosted = false });
+        }
+
         // =========================================================
         // POST: ترحيل مرتجع البيع
         // =========================================================
         [HttpPost]
+        [IgnoreAntiforgeryToken]
         public async Task<IActionResult> PostReturn(int id)
         {
             if (id <= 0)

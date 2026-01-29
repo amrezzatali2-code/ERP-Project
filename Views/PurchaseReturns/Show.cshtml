@@ -235,6 +235,7 @@
                                        readonly />
 
                                 <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                                <input type="hidden" id="PRetId" value="@Model.PRetId" />
                             </div>
 
                             @* المخزن *@
@@ -252,13 +253,13 @@
                                 <div class="row g-2">
                                     <div class="col-6">
                                         <label class="form-label form-label-sm">تاريخ المرتجع</label>
-                                        <input class="form-control form-control-sm text-center"
+                                        <input id="ReturnDateDisplay" class="form-control form-control-sm text-center"
                                                value="@returnDateText"
                                                readonly />
                                     </div>
                                     <div class="col-6">
                                         <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                        <input class="form-control form-control-sm text-center"
+                                        <input id="ReturnTimeDisplay" class="form-control form-control-sm text-center"
                                                value="@returnTimeText"
                                                readonly />
                                     </div>
@@ -270,27 +271,24 @@
                         <br />
 
                         <div class="row g-3">
-                            <div class="col-lg-4 col-md-4">
+                            <div class="col-lg-3 col-md-4">
+                                <label class="form-label form-label-sm">رقم المرتجع</label>
+                                <input id="ReturnNumberDisplay" class="form-control form-control-sm text-center fw-semibold"
+                                       value="@(Model.PRetId > 0 ? Model.PRetId.ToString() : "—")" readonly />
+                            </div>
+                            <div class="col-lg-3 col-md-4">
                                 <label class="form-label form-label-sm">حالة المرتجع</label>
-                                <input class="form-control form-control-sm text-center"
-                                       value="@Model.Status"
-                                       readonly />
+                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@Model.Status" readonly />
                             </div>
-
-                            <div class="col-lg-4 col-md-4">
+                            <div class="col-lg-2 col-md-4">
                                 <label class="form-label form-label-sm">مرحّل؟</label>
-                                <input class="form-control form-control-sm text-center"
-                                       value="@(Model.IsPosted ? "نعم" : "لا")"
-                                       readonly />
+                                <input id="ReturnIsPostedDisplay" class="form-control form-control-sm text-center"
+                                       value="@(Model.IsPosted ? "نعم" : "لا")" readonly />
                             </div>
-
                             <div class="col-lg-4 col-md-4">
                                 <label class="form-label form-label-sm">رقم فاتورة الشراء</label>
-                                <input type="number" 
-                                       id="PurchaseInvoiceIdInput"
-                                       class="form-control form-control-sm text-center"
-                                       value="@(Model.RefPIId?.ToString() ?? "")"
-                                       placeholder="أدخل رقم الفاتورة"
+                                <input type="number" id="PurchaseInvoiceIdInput" class="form-control form-control-sm text-center"
+                                       value="@(Model.RefPIId?.ToString() ?? "")" placeholder="أدخل رقم الفاتورة"
                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
                                 <input type="hidden" asp-for="RefPIId" id="RefPIId" />
                             </div>
@@ -505,19 +503,41 @@
                                     <tr>
                                         <th class="text-center">#</th>
                                         <th>اسم الصنف</th>
-                                        <th class="text-center">الكمية المرتجعة</th>
-                                        <th class="text-center">سعر الجمهور</th>
+                                        <th class="text-center">الكمية</th>
                                         <th class="text-center">تكلفة الوحدة</th>
+                                        <th class="text-center">سعر الجمهور</th>
                                         <th class="text-center">قيمة السطر</th>
+                                        <th class="text-center">مسح</th>
                                     </tr>
                                 </thead>
-                                <tbody>
-                                    @* حالياً: رسالة فقط. لاحقاً نربطها بـ Model.Lines *@
-                                    <tr>
-                                        <td colspan="6" class="text-center text-muted py-4">
-                                            لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.
-                                        </td>
-                                    </tr>
+                                <tbody id="PurchaseReturnLinesTableBody">
+                                    @if (Model.Lines != null && Model.Lines.Any())
+                                    {
+                                        var _prProdNames = ViewBag.ProdNames as Dictionary<int, string>;
+                                        foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
+                                        {
+                                            var prodName = (_prProdNames != null && _prProdNames.TryGetValue(line.ProdId, out var _pn)) ? _pn : line.ProdId.ToString();
+                                            <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                <td class="text-center">@line.LineNo</td>
+                                                <td>@prodName</td>
+                                                <td class="text-center">@line.Qty</td>
+                                                <td class="text-center">@line.UnitCost.ToString("0.00")</td>
+                                                <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
+                                                <td class="text-center">@((line.Qty * line.UnitCost).ToString("0.00"))</td>
+                                                <td class="text-center">
+                                                    <button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine"
+                                                            data-line-no="@line.LineNo" data-pret-id="@Model.PRetId"
+                                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")" title="مسح السطر">🗑</button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                    else
+                                    {
+                                        <tr id="PurchaseReturnLinesEmptyRow">
+                                            <td colspan="7" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع.</td>
+                                        </tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
@@ -610,44 +630,28 @@
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">إجمالي قبل الخصم</span>
-                                    <span class="badge bg-light text-dark summary-badge">
-                                        @totalRetail.ToString("0.00")
-                                    </span>
+                                    <span id="ItemsTotalBadge" class="badge bg-light text-dark summary-badge">@totalRetail.ToString("0.00")</span>
                                 </div>
                             </div>
-
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">الإجمالي بعد الخصم</span>
-                                    <span class="badge bg-light text-dark summary-badge">
-                                        @totalAfterDiscount.ToString("0.00")
-                                    </span>
+                                    <span id="AfterDiscountBadge" class="badge bg-light text-dark summary-badge">@totalAfterDiscount.ToString("0.00")</span>
                                 </div>
                             </div>
 
                             <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">قيمة الضريبة</span>
-                                    <span class="badge bg-info text-dark summary-badge">
-                                        @taxAmount.ToString("0.00")
-                                    </span>
+                                    <span id="TaxAmountBadge" class="badge bg-info text-dark summary-badge">@taxAmount.ToString("0.00")</span>
                                 </div>
                             </div>
                         </div>
-
                         <hr class="my-3" />
-
                         <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
-                                <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
-                                <h5 class="mb-1">
-                                    @totalAfterDiscountAndTax.ToString("0.00")
-                                </h5>
-
-                                <span class="small text-muted d-block mt-2">الصافي النهائي للمرتجع</span>
-                                <h3 class="mb-0 text-success">
-                                    @netTotal.ToString("0.00")
-                                </h3>
+                                <span class="small text-muted d-block">الصافي النهائي للمرتجع</span>
+                                <h3 id="NetTotalBadge" class="mb-0 text-success">@netTotal.ToString("0.00")</h3>
                             </div>
 
                             <div class="text-end small text-muted">
@@ -684,25 +688,37 @@
                         </a>
 
                         <button type="button"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnSaveReturnHeader">
+                            💾 حفظ المرتجع
+                        </button>
+
+                        <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
                                 id="btnClearReturnLines"
                                 data-pret-id="@Model.PRetId">
                             🗑️ مسح كل أصناف المرتجع
                         </button>
 
+                        <input type="number" id="NavReturnSearchInput" class="form-control form-control-sm mt-2" placeholder="بحث برقم المرتجع" />
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" id="btnNavReturnSearch">بحث</button>
+
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnOpenReturn">
                             ⏪ فتح المرتجع
                         </button>
 
                         <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                           id="btnEditReturn"
                            asp-action="Edit"
                            asp-route-id="@Model.PRetId">
                             ✏️ تعديل المرتجع
                         </a>
 
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm">
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnPostReturn">
                             📤 ترحيل المرتجع
                         </button>
 
@@ -843,14 +859,33 @@
                     // حفظ رقم الفاتورة
                     invoiceIdHidden.value = invoiceId.toString();
 
-                    // تحديث المورد والمخزن إذا كانا فارغين
-                    if (data.customerId && !document.getElementById('CustomerId').value) {
+                    // مزامنة المورد والمخزن مع الفاتورة (دائماً) حتى يتطابق مخزن المرتجع مع فاتورة الشراء
+                    if (data.customerId) {
                         document.getElementById('CustomerId').value = data.customerId;
-                        document.getElementById('CustomerCodeDisplay').value = data.customerId;
+                        var codeDisp = document.getElementById('CustomerCodeDisplay');
+                        if (codeDisp) codeDisp.value = data.customerId;
+                    }
+                    if (data.warehouseId) {
+                        document.getElementById('WarehouseId').value = data.warehouseId;
                     }
 
-                    if (data.warehouseId && !document.getElementById('WarehouseId').value) {
-                        document.getElementById('WarehouseId').value = data.warehouseId;
+                    // إذا كان المرتجع محفوظاً، تحديث الهيدر بالمورد والمخزن من الفاتورة (حتى ينجح إضافة السطر)
+                    var pretIdEl = document.getElementById('PRetId');
+                    var pretId = pretIdEl ? parseInt(pretIdEl.value || '0', 10) : 0;
+                    if (pretId > 0 && data.customerId && data.warehouseId) {
+                        try {
+                            var shRes = await fetch('@Url.Action("SaveHeader", "PurchaseReturns")', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                                body: JSON.stringify({ pretId: pretId, customerId: data.customerId, warehouseId: data.warehouseId, refPIId: invoiceId })
+                            });
+                            var shTxt = await shRes.text();
+                            var shData = null;
+                            if (shTxt) { try { shData = JSON.parse(shTxt); } catch (e) {} }
+                            if (!shRes.ok || !shData || !shData.success) {
+                                if (typeof console !== 'undefined' && console.warn) console.warn('SaveHeader on PI load', shRes.status, shTxt?.substring(0, 200));
+                            }
+                        } catch (e) { if (typeof console !== 'undefined' && console.warn) console.warn('SaveHeader on PI load', e); }
                     }
 
                     // تحديث قائمة الأصناف
@@ -902,36 +937,94 @@
                 returnQtyInput.max = item.qty; // لا يمكن إرجاع أكثر من الكمية في الفاتورة
             });
 
+            function refreshReturnLinesAndTotals(data) {
+                var tbody = document.getElementById('PurchaseReturnLinesTableBody');
+                if (!tbody) return;
+                var lines = (data && data.lines) ? data.lines : [];
+                var totals = (data && data.totals) ? data.totals : {};
+                while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
+                if (lines.length === 0) {
+                    var tr = document.createElement('tr');
+                    tr.id = 'PurchaseReturnLinesEmptyRow';
+                    tr.innerHTML = '<td colspan="7" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع.</td>';
+                    tbody.appendChild(tr);
+                } else {
+                    var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
+                    var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                    var lockPosted = (isPostedEl && isPostedEl.value === 'نعم') ? '1' : '0';
+                    lines.forEach(function(l) {
+                        var tr = document.createElement('tr');
+                        tr.setAttribute('data-line-no', l.lineNo);
+                        tr.setAttribute('data-prodid', l.prodId);
+                        var btn = '<button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine" data-line-no="' + l.lineNo + '" data-pret-id="' + pretId + '" data-lock-posted="' + lockPosted + '" title="مسح السطر">\uD83D\uDDD1</button>';
+                        var lv = (l.lineValue != null) ? Number(l.lineValue).toFixed(2) : (l.qty && l.unitCost != null) ? (l.qty * l.unitCost).toFixed(2) : '';
+                        tr.innerHTML = '<td class="text-center">' + l.lineNo + '</td><td>' + (l.prodName || '') + '</td><td class="text-center">' + l.qty + '</td><td class="text-center">' + (l.unitCost != null ? Number(l.unitCost).toFixed(2) : '') + '</td><td class="text-center">' + (l.priceRetail != null ? Number(l.priceRetail).toFixed(2) : '') + '</td><td class="text-center">' + lv + '</td><td class="text-center">' + btn + '</td>';
+                        tbody.appendChild(tr);
+                    });
+                }
+                var b = document.getElementById('ItemsTotalBadge');
+                if (b && totals.itemsTotal != null) b.textContent = Number(totals.itemsTotal).toFixed(2);
+                b = document.getElementById('AfterDiscountBadge');
+                if (b && totals.itemsTotal != null && totals.discountTotal != null) b.textContent = (Number(totals.itemsTotal) - Number(totals.discountTotal)).toFixed(2);
+                b = document.getElementById('TaxAmountBadge');
+                if (b && totals.taxTotal != null) b.textContent = Number(totals.taxTotal).toFixed(2);
+                b = document.getElementById('NetTotalBadge');
+                if (b && totals.netTotal != null) b.textContent = Number(totals.netTotal).toFixed(2);
+            }
+
             // عند إضافة سطر للمرتجع
             btnAddReturnLine.addEventListener('click', async function () {
                 var selectedIndex = parseInt(itemSelect.value || '-1', 10);
                 var returnQty = parseInt(returnQtyInput.value || '0', 10);
-                var returnId = parseInt('@Model.PRetId' || '0', 10);
+                var returnId = parseInt(document.getElementById('PRetId').value || '0', 10);
 
                 if (selectedIndex < 0 || selectedIndex >= invoiceItems.length) {
                     alert('من فضلك اختر صنف من الفاتورة.');
                     return;
                 }
-
                 if (returnQty <= 0) {
                     alert('الكمية المرتجعة يجب أن تكون أكبر من صفر.');
                     return;
                 }
-
                 var item = invoiceItems[selectedIndex];
                 if (returnQty > item.qty) {
                     alert('الكمية المرتجعة لا يمكن أن تكون أكبر من الكمية في الفاتورة (' + item.qty + ').');
                     return;
                 }
-
                 if (returnId <= 0) {
                     alert('يجب حفظ المرتجع أولاً قبل إضافة الأصناف.');
                     return;
                 }
 
-                // هنا سنضيف API endpoint لإضافة السطر
-                // TODO: إضافة API endpoint في PurchaseReturnLinesController
-                alert('سيتم إضافة السطر قريباً - تحتاج إلى API endpoint لإضافة السطر');
+                var refPIId = parseInt(document.getElementById('RefPIId').value || '0', 10) || null;
+                var dto = { PRetId: returnId, ProdId: item.prodId, Qty: returnQty, BatchNo: item.batchNo || null, ExpiryText: item.expiry || null, UnitCost: item.unitCost != null ? item.unitCost : 0, PurchaseDiscountPct: item.purchaseDiscountPct != null ? item.purchaseDiscountPct : 0, PriceRetail: item.priceRetail != null ? item.priceRetail : 0, RefPIId: refPIId, RefPILineNo: item.lineNo };
+                btnAddReturnLine.disabled = true;
+                try {
+                    var res = await fetch('@Url.Action("AddLineJson", "PurchaseReturns")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify(dto)
+                    });
+                    var txt = await res.text();
+                    var data = null;
+                    if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                    if (!res.ok || !data || !data.ok) {
+                        if (typeof console !== 'undefined' && console.warn) console.warn('AddLineJson failed', res.status, res.statusText, (txt || '').substring(0, 400));
+                        alert((data && data.message) ? data.message : 'فشل إضافة السطر.');
+                        return;
+                    }
+                    refreshReturnLinesAndTotals(data);
+                    returnQtyInput.value = '';
+                    itemSelect.value = '';
+                    invoiceQtyDisplay.value = '';
+                    returnBatchDisplay.value = '';
+                    returnExpiryDisplay.value = '';
+                } catch (e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء إضافة السطر.');
+                } finally {
+                    btnAddReturnLine.disabled = false;
+                }
             });
 
             // تهيئة رقم الفاتورة إذا كان موجوداً
@@ -939,6 +1032,172 @@
             if (initialInvoiceId) {
                 invoiceIdInput.value = initialInvoiceId;
                 invoiceIdInput.dispatchEvent(new Event('change'));
+            }
+
+            // =========================================================
+            // زر حفظ المرتجع (SaveHeader) — يحفظ الهيدر ويسجّل رقم المرتجع
+            // =========================================================
+            var btnSaveReturn = document.getElementById('btnSaveReturnHeader');
+            var editBaseUrl = '@Url.Action("Edit", "PurchaseReturns")';
+            if (btnSaveReturn) {
+                btnSaveReturn.addEventListener('click', async function () {
+                    var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
+                    var customerId = parseInt(document.getElementById('CustomerId').value || '0', 10);
+                    var warehouseId = parseInt(document.getElementById('WarehouseId').value || '0', 10);
+                    var refPiInput = document.getElementById('RefPIId');
+                    var refPIId = 0;
+                    if (refPiInput && refPiInput.value.trim() !== '') {
+                        var v = parseInt(refPiInput.value.trim(), 10);
+                        if (!isNaN(v)) refPIId = v;
+                    }
+
+                    if (!customerId || !warehouseId) {
+                        alert('من فضلك اختر المورد والمخزن أولاً قبل حفظ المرتجع.');
+                        return;
+                    }
+
+                    var dto = { pretId: pretId, customerId: customerId, warehouseId: warehouseId, refPIId: refPIId || null };
+                    btnSaveReturn.disabled = true;
+                    try {
+                        var response = await fetch('@Url.Action("SaveHeader", "PurchaseReturns")', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(dto)
+                        });
+                        var txt = await response.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!response.ok) {
+                            alert((data && data.message) ? data.message : 'حدث خطأ أثناء حفظ المرتجع.');
+                            return;
+                        }
+                        if (!data || !data.success) {
+                            alert((data && data.message) ? data.message : 'تعذر حفظ المرتجع.');
+                            return;
+                        }
+                        var newId = data.pretId || 0;
+                        document.getElementById('PRetId').value = newId.toString();
+                        var dateEl = document.getElementById('ReturnDateDisplay');
+                        var timeEl = document.getElementById('ReturnTimeDisplay');
+                        if (dateEl && data.returnDate) dateEl.value = data.returnDate;
+                        if (timeEl && data.returnTime) timeEl.value = data.returnTime;
+                        var editLink = document.getElementById('btnEditReturn');
+                        if (editLink) editLink.href = editBaseUrl + '/' + newId;
+                        var clearBtn = document.getElementById('btnClearReturnLines');
+                        if (clearBtn) clearBtn.setAttribute('data-pret-id', newId.toString());
+                        var numDisp = document.getElementById('ReturnNumberDisplay');
+                        if (numDisp) numDisp.value = newId.toString();
+                        alert('تم حفظ المرتجع بنجاح. رقم المرتجع: ' + newId);
+                        var itemSel = document.getElementById('InvoiceItemSelect');
+                        if (itemSel) { itemSel.focus(); itemSel.click(); }
+                    } catch (err) {
+                        console.error(err);
+                        alert('تعذر الاتصال بالخادم لحفظ المرتجع.');
+                    } finally {
+                        btnSaveReturn.disabled = false;
+                    }
+                });
+            }
+
+            document.addEventListener('click', async function(ev) {
+                var btn = ev.target.closest('.btnRemoveReturnLine');
+                if (!btn) return;
+                ev.preventDefault();
+                var pretId = parseInt(btn.getAttribute('data-pret-id') || '0', 10);
+                var lineNo = parseInt(btn.getAttribute('data-line-no') || '0', 10);
+                if (pretId <= 0 || lineNo <= 0) return;
+                var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                if (isPostedEl && isPostedEl.value === 'نعم') { alert('المرتجع مترحّل. استخدم "فتح المرتجع" أولاً.'); return; }
+                if (!confirm('هل تريد مسح هذا السطر؟')) return;
+                btn.disabled = true;
+                try {
+                    var res = await fetch('@Url.Action("RemoveLineJson", "PurchaseReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ PRetId: pretId, LineNo: lineNo }) });
+                    var txt = await res.text();
+                    var data = null;
+                    if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                    if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح السطر.'); return; }
+                    refreshReturnLinesAndTotals(data);
+                } catch (e) { console.error(e); alert('حدث خطأ أثناء مسح السطر.'); }
+                finally { btn.disabled = false; }
+            });
+
+            var btnClear = document.getElementById('btnClearReturnLines');
+            if (btnClear) {
+                btnClear.addEventListener('click', async function() {
+                    var pretId = parseInt(document.getElementById('PRetId').value || btnClear.getAttribute('data-pret-id') || '0', 10);
+                    if (pretId <= 0) { alert('يجب حفظ المرتجع أولاً.'); return; }
+                    if (!confirm('هل تريد مسح كل أصناف المرتجع؟')) return;
+                    btnClear.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("ClearLinesJson", "PurchaseReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ PRetId: pretId }) });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح الأصناف.'); return; }
+                        refreshReturnLinesAndTotals(data);
+                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                        if (isPostedEl) isPostedEl.value = 'لا';
+                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
+                    finally { btnClear.disabled = false; }
+                });
+            }
+
+            var btnPost = document.getElementById('btnPostReturn');
+            if (btnPost) {
+                btnPost.addEventListener('click', async function() {
+                    var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
+                    if (pretId <= 0) { alert('يجب حفظ المرتجع أولاً قبل الترحيل.'); return; }
+                    if (!confirm('هل تريد ترحيل هذا المرتجع؟')) return;
+                    btnPost.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("PostReturn", "PurchaseReturns")?id=' + pretId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل الترحيل.'); return; }
+                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                        if (isPostedEl) isPostedEl.value = 'نعم';
+                        var statusEl = document.getElementById('ReturnStatusDisplay');
+                        if (statusEl) statusEl.value = 'Posted';
+                        alert('تم ترحيل المرتجع بنجاح.');
+                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
+                    finally { btnPost.disabled = false; }
+                });
+            }
+
+            var btnOpen = document.getElementById('btnOpenReturn');
+            if (btnOpen) {
+                btnOpen.addEventListener('click', async function() {
+                    var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
+                    if (pretId <= 0) { alert('اختر مرتجعاً أولاً.'); return; }
+                    if (!confirm('هل تريد فتح المرتجع (إلغاء الترحيل)؟')) return;
+                    btnOpen.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("OpenReturn", "PurchaseReturns")?id=' + pretId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل فتح المرتجع.'); return; }
+                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
+                        if (isPostedEl) isPostedEl.value = 'لا';
+                        var statusEl = document.getElementById('ReturnStatusDisplay');
+                        if (statusEl) statusEl.value = 'Draft';
+                        alert('تم فتح المرتجع للتعديل.');
+                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
+                    finally { btnOpen.disabled = false; }
+                });
+            }
+
+            var navSearchInput = document.getElementById('NavReturnSearchInput');
+            var btnNavSearch = document.getElementById('btnNavReturnSearch');
+            if (navSearchInput && btnNavSearch) {
+                function doNavSearch() {
+                    var v = parseInt((navSearchInput.value || '').trim(), 10);
+                    if (!v || v <= 0) return;
+                    window.location.href = '@Url.Action("Edit", "PurchaseReturns")/' + v;
+                }
+                btnNavSearch.addEventListener('click', doNavSearch);
+                navSearchInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); doNavSearch(); } });
             }
         });
     </script>

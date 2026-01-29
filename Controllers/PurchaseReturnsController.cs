@@ -9,8 +9,9 @@ using Microsoft.AspNetCore.Mvc.Rendering;         // SelectListItem لقوائم
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // PurchaseReturn
-using ERP.Services;                               // ILedgerPostingService
+using ERP.Models;                                 // PurchaseReturn, PurchaseReturnLine, StockLedger, StockBatch
+using ERP.Services;                               // ILedgerPostingService, DocumentTotalsService
+using ERP.ViewModels;                             // PurchaseReturnHeaderDto
 
 namespace ERP.Controllers
 {
@@ -20,14 +21,15 @@ namespace ERP.Controllers
     /// </summary>
     public class PurchaseReturnsController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;
         private readonly ILedgerPostingService _ledgerPostingService;
+        private readonly DocumentTotalsService _docTotals;
 
-        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService)
+        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
+            _docTotals = docTotals;
         }
 
 
@@ -89,11 +91,17 @@ namespace ERP.Controllers
             if (model == null)
                 return NotFound();
 
-            // تعبئة القوائم المنسدلة (العملاء + المخازن + فواتير الشراء ...)
             await PopulateDropDownsAsync();
 
-            // فتح شاشة Edit.cshtml الخاصة بمرتجع الشراء
-            return View(model);
+            var prodIds = model.Lines.Select(l => l.ProdId).Distinct().ToList();
+            var prodNames = await _context.Products
+                .AsNoTracking()
+                .Where(p => prodIds.Contains(p.ProdId))
+                .Select(p => new { p.ProdId, p.ProdName })
+                .ToListAsync();
+            ViewBag.ProdNames = prodNames.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+
+            return View("Show", model);
         }
 
         // =========================
@@ -110,9 +118,8 @@ namespace ERP.Controllers
             // التحقق من صلاحية البيانات
             if (!ModelState.IsValid)
             {
-                // لو فيه أخطاء، رجّع نفس الشاشة مع إعادة تحميل القوائم
                 await PopulateDropDownsAsync();
-                return View(purchaseReturn);
+                return View("Show", purchaseReturn);
             }
 
             try
@@ -137,23 +144,59 @@ namespace ERP.Controllers
                 if (!exists)
                     return NotFound();
 
-                // تعارض (نظريًا) في التعديل
                 ModelState.AddModelError(
                     string.Empty,
                     "تعذر حفظ التعديل بسبب تعارض في البيانات. من فضلك أعد تحميل الصفحة ثم حاول مرة أخرى."
                 );
-
                 await PopulateDropDownsAsync();
-                return View(purchaseReturn);
+                return View("Show", purchaseReturn);
             }
 
             // بعد الحفظ نرجع لقائمة مرتجعات الشراء
             return RedirectToAction(nameof(Index));
         }
 
-
-
-
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> SaveHeader([FromBody] PurchaseReturnHeaderDto dto)
+        {
+            if (dto == null)
+                return BadRequest("حدث خطأ في البيانات المرسلة.");
+            if (dto.CustomerId <= 0)
+                return BadRequest("يجب اختيار المورد قبل حفظ المرتجع.");
+            if (dto.WarehouseId <= 0)
+                return BadRequest("يجب اختيار المخزن قبل حفظ المرتجع.");
+            var now = DateTime.UtcNow;
+            var userName = User?.Identity?.Name ?? "system";
+            if (dto.PRetId == 0)
+            {
+                var entity = new PurchaseReturn
+                {
+                    PRetDate = now.Date,
+                    CustomerId = dto.CustomerId,
+                    WarehouseId = dto.WarehouseId,
+                    RefPIId = (dto.RefPIId ?? 0) > 0 ? dto.RefPIId : null,
+                    Status = "Draft",
+                    IsPosted = false,
+                    CreatedAt = now,
+                    CreatedBy = userName
+                };
+                _context.PurchaseReturns.Add(entity);
+                await _context.SaveChangesAsync();
+                return Json(new { success = true, pretId = entity.PRetId, returnNumber = entity.PRetId.ToString(), returnDate = entity.PRetDate.ToString("yyyy/MM/dd"), returnTime = entity.CreatedAt.ToLocalTime().ToString("HH:mm"), status = entity.Status, isPosted = entity.IsPosted, createdBy = entity.CreatedBy });
+            }
+            var existing = await _context.PurchaseReturns.FirstOrDefaultAsync(pr => pr.PRetId == dto.PRetId);
+            if (existing == null)
+                return NotFound("لم يتم العثور على المرتجع المطلوب.");
+            if (existing.IsPosted)
+                return BadRequest("لا يمكن تعديل مرتجع تم ترحيله.");
+            existing.CustomerId = dto.CustomerId;
+            existing.WarehouseId = dto.WarehouseId;
+            existing.RefPIId = (dto.RefPIId ?? 0) > 0 ? dto.RefPIId : null;
+            existing.UpdatedAt = now;
+            await _context.SaveChangesAsync();
+            return Json(new { success = true, pretId = existing.PRetId, returnNumber = existing.PRetId.ToString(), returnDate = existing.PRetDate.ToString("yyyy/MM/dd"), returnTime = existing.CreatedAt.ToLocalTime().ToString("HH:mm"), status = existing.Status, isPosted = existing.IsPosted, createdBy = existing.CreatedBy });
+        }
 
         // ---------------------------------------------------------
         // دالة خاصة: تجهيز الاستعلام مع كل الفلاتر + البحث + الترتيب
@@ -468,11 +511,11 @@ namespace ERP.Controllers
             if (invoice == null)
                 return Json(new { ok = false, message = "الفاتورة غير موجودة." });
 
-            // جلب سطور الفاتورة مع بيانات الصنف
+            // جلب سطور الفاتورة مع بيانات الصنف (فقط الأصناف الموجودة في Products)
             var lines = await _context.PILines
                 .AsNoTracking()
                 .Include(l => l.Product)
-                .Where(l => l.PIId == invoiceId)
+                .Where(l => l.PIId == invoiceId && l.Product != null)
                 .OrderBy(l => l.LineNo)
                 .Select(l => new
                 {
@@ -500,9 +543,230 @@ namespace ERP.Controllers
         }
 
         // =========================================================
+        // AddLineJson — إضافة سطر لمرتجع المشتريات + StockLedger (QtyOut) + StockBatch
+        // مرتجع الشراء = عكس الشراء → نقصان المخزون
+        // =========================================================
+        public class AddLineJsonDto
+        {
+            public int PRetId { get; set; }
+            public int ProdId { get; set; }
+            public int Qty { get; set; }
+            public string? BatchNo { get; set; }
+            public string? ExpiryText { get; set; }
+            public decimal UnitCost { get; set; }
+            public decimal PurchaseDiscountPct { get; set; }
+            public decimal PriceRetail { get; set; }
+            public int? RefPIId { get; set; }
+            public int? RefPILineNo { get; set; }
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
+        {
+            if (dto == null || dto.PRetId <= 0 || dto.ProdId <= 0 || dto.Qty <= 0)
+                return Json(new { ok = false, message = "بيانات السطر غير صحيحة." });
+
+            await using var tx = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var ret = await _context.PurchaseReturns.Include(pr => pr.Lines).FirstOrDefaultAsync(pr => pr.PRetId == dto.PRetId);
+                if (ret == null) { await tx.RollbackAsync(); return Json(new { ok = false, message = "المرتجع غير موجود." }); }
+                if (ret.IsPosted) { await tx.RollbackAsync(); return Json(new { ok = false, message = "لا يمكن تعديل مرتجع مترحّل." }); }
+                if (ret.WarehouseId <= 0) { await tx.RollbackAsync(); return Json(new { ok = false, message = "يجب اختيار المخزن. احفظ المرتجع بعد تعيين المورد والمخزن." }); }
+
+                var productExists = await _context.Products.AnyAsync(p => p.ProdId == dto.ProdId);
+                if (!productExists) { await tx.RollbackAsync(); return Json(new { ok = false, message = "الصنف المحدد غير موجود في قاعدة البيانات (جدول الأصناف). قد يكون الصنف محذوفاً. استبعد سطور الفاتورة المحذوف أصنافها." }); }
+
+                DateTime? exp = null;
+                if (!string.IsNullOrWhiteSpace(dto.ExpiryText) && DateTime.TryParse(dto.ExpiryText.Trim(), out var pe))
+                    exp = pe.Date;
+                var batchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
+                var unitCost = Math.Max(0, dto.UnitCost);
+                var discPct = Math.Max(0, Math.Min(100, dto.PurchaseDiscountPct));
+
+                if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                {
+                    var sb = await _context.StockBatches.FirstOrDefaultAsync(b =>
+                        b.WarehouseId == ret.WarehouseId && b.ProdId == dto.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value.Date);
+                    if (sb == null || sb.QtyOnHand < dto.Qty)
+                    {
+                        await tx.RollbackAsync();
+                        return Json(new { ok = false, message = sb == null ? "التشغيلة غير موجودة في المخزن. تأكد أن مخزن المرتجع = مخزن فاتورة الشراء واحفظ المرتجع." : "الكمية المتاحة في التشغيلة أقل من المطلوب." });
+                    }
+                }
+
+                var nextLineNo = (ret.Lines?.Any() == true ? ret.Lines!.Max(x => x.LineNo) : 0) + 1;
+                var line = new PurchaseReturnLine
+                {
+                    PRetId = dto.PRetId,
+                    LineNo = nextLineNo,
+                    ProdId = dto.ProdId,
+                    Qty = dto.Qty,
+                    UnitCost = unitCost,
+                    PurchaseDiscountPct = discPct,
+                    PriceRetail = Math.Max(0, dto.PriceRetail),
+                    BatchNo = batchNo,
+                    Expiry = exp
+                };
+                _context.PurchaseReturnLines.Add(line);
+                // الجدول يستخدم ProductProdId كـ FK للصنف؛ تعيينه حتى لا ينتج انتهاك FK
+                _context.Entry(line).Property("ProductProdId").CurrentValue = dto.ProdId;
+                await _context.SaveChangesAsync();
+
+                var now = DateTime.UtcNow;
+                _context.StockLedger.Add(new StockLedger
+                {
+                    TranDate = now,
+                    WarehouseId = ret.WarehouseId,
+                    ProdId = dto.ProdId,
+                    BatchNo = batchNo ?? "",
+                    Expiry = exp,
+                    QtyIn = 0,
+                    QtyOut = dto.Qty,
+                    UnitCost = unitCost,
+                    RemainingQty = null,
+                    SourceType = "PurchaseReturn",
+                    SourceId = dto.PRetId,
+                    SourceLine = nextLineNo,
+                    Note = "Purchase Return Line"
+                });
+                await _context.SaveChangesAsync();
+
+                if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                {
+                    var sb = await _context.StockBatches.FirstOrDefaultAsync(b =>
+                        b.WarehouseId == ret.WarehouseId && b.ProdId == dto.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value.Date);
+                    if (sb != null) { sb.QtyOnHand -= dto.Qty; sb.UpdatedAt = now; sb.Note = $"PR:{dto.PRetId} Line:{nextLineNo} (-{dto.Qty})"; }
+                    await _context.SaveChangesAsync();
+                }
+
+                await _docTotals.RecalcPurchaseReturnTotalsAsync(dto.PRetId);
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return Json(new { ok = false, message = "حدث خطأ أثناء إضافة السطر. " + (ex.InnerException?.Message ?? ex.Message) });
+            }
+
+            var linesNow = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
+            var h = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId);
+            return Json(new { ok = true, message = "تمت إضافة السطر.", lines = linesDto, totals = new { itemsTotal = h.ItemsTotal, discountTotal = h.DiscountTotal, taxTotal = h.TaxTotal, netTotal = h.NetTotal } });
+        }
+
+        public class RemoveLineJsonDto { public int PRetId { get; set; } public int LineNo { get; set; } }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
+        {
+            if (dto == null || dto.PRetId <= 0 || dto.LineNo <= 0)
+                return BadRequest(new { ok = false, message = "بيانات المسح غير صحيحة." });
+
+            await using var tx = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var ret = await _context.PurchaseReturns.FirstOrDefaultAsync(pr => pr.PRetId == dto.PRetId);
+                if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
+                if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "لا يمكن تعديل مرتجع مترحّل." }); }
+
+                var line = await _context.PurchaseReturnLines.FirstOrDefaultAsync(l => l.PRetId == dto.PRetId && l.LineNo == dto.LineNo);
+                if (line == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "السطر غير موجود." }); }
+
+                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                var exp = line.Expiry?.Date;
+                if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                {
+                    var sb = await _context.StockBatches.FirstOrDefaultAsync(b =>
+                        b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
+                    if (sb != null) { sb.QtyOnHand += line.Qty; sb.UpdatedAt = DateTime.UtcNow; sb.Note = $"PR:{dto.PRetId} Line:{dto.LineNo} (+{line.Qty})"; }
+                }
+                var ledgers = await _context.StockLedger.Where(x => x.SourceType == "PurchaseReturn" && x.SourceId == dto.PRetId && x.SourceLine == dto.LineNo).ToListAsync();
+                _context.StockLedger.RemoveRange(ledgers);
+                _context.PurchaseReturnLines.Remove(line);
+                await _context.SaveChangesAsync();
+                await _docTotals.RecalcPurchaseReturnTotalsAsync(dto.PRetId);
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch { await tx.RollbackAsync(); throw; }
+
+            var linesNow = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
+            var h = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId);
+            return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { itemsTotal = h.ItemsTotal, discountTotal = h.DiscountTotal, taxTotal = h.TaxTotal, netTotal = h.NetTotal } });
+        }
+
+        public class ClearLinesJsonDto { public int PRetId { get; set; } }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> ClearLinesJson([FromBody] ClearLinesJsonDto dto)
+        {
+            if (dto == null || dto.PRetId <= 0)
+                return BadRequest(new { ok = false, message = "رقم المرتجع غير صحيح." });
+
+            await using var tx = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                var ret = await _context.PurchaseReturns.Include(pr => pr.Lines).FirstOrDefaultAsync(pr => pr.PRetId == dto.PRetId);
+                if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
+                if (ret.IsPosted) { ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; await _context.SaveChangesAsync(); }
+                var lines = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).ToListAsync();
+                if (lines.Count == 0) { await tx.CommitAsync(); var header0 = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId); return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = new object[0], totals = new { itemsTotal = header0.ItemsTotal, discountTotal = header0.DiscountTotal, taxTotal = header0.TaxTotal, netTotal = header0.NetTotal } }); }
+                foreach (var line in lines)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                    var exp = line.Expiry?.Date;
+                    if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                    {
+                        var sb = await _context.StockBatches.FirstOrDefaultAsync(b => b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
+                        if (sb != null) { sb.QtyOnHand += line.Qty; sb.UpdatedAt = DateTime.UtcNow; }
+                    }
+                    var ledgers = await _context.StockLedger.Where(x => x.SourceType == "PurchaseReturn" && x.SourceId == dto.PRetId && x.SourceLine == line.LineNo).ToListAsync();
+                    _context.StockLedger.RemoveRange(ledgers);
+                }
+                _context.PurchaseReturnLines.RemoveRange(lines);
+                await _context.SaveChangesAsync();
+                await _docTotals.RecalcPurchaseReturnTotalsAsync(dto.PRetId);
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+            }
+            catch { await tx.RollbackAsync(); throw; }
+
+            var linesNow = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
+            var h = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId);
+            return Json(new { ok = true, message = "تم مسح كل الأصناف.", lines = linesDto, totals = new { itemsTotal = h.ItemsTotal, discountTotal = h.DiscountTotal, taxTotal = h.TaxTotal, netTotal = h.NetTotal } });
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> OpenReturn(int id)
+        {
+            if (id <= 0) return BadRequest(new { ok = false, message = "رقم المرتجع غير صحيح." });
+            var ret = await _context.PurchaseReturns.FirstOrDefaultAsync(pr => pr.PRetId == id);
+            if (ret == null) return NotFound(new { ok = false, message = "المرتجع غير موجود." });
+            if (!ret.IsPosted) return BadRequest(new { ok = false, message = "المرتجع غير مترحّل." });
+            ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; ret.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+            return Json(new { ok = true, message = "تم فتح المرتجع للتعديل.", isPosted = false });
+        }
+
+        // =========================================================
         // POST: ترحيل مرتجع الشراء
         // =========================================================
         [HttpPost]
+        [IgnoreAntiforgeryToken]
         public async Task<IActionResult> PostReturn(int id)
         {
             if (id <= 0)

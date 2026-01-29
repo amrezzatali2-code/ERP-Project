@@ -736,10 +736,23 @@ namespace ERP.Controllers
             if (toExclusive.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate < toExclusive.Value);
 
             // =========================================================
-            // 8) إجمالي المرتجعات
-            // تعليق: مؤقتًا = 0 لحد ما تربط SalesReturns / PurchaseReturns
+            // 8) إجمالي المرتجعات (مرتجعات البيع + مرتجعات الشراء) للعميل/المورد
             // =========================================================
-            decimal totalReturns = 0m;
+            var salesReturnsQ = _context.SalesReturns
+                .AsNoTracking()
+                .Where(sr => sr.CustomerId == customer.CustomerId);
+            if (from.HasValue) salesReturnsQ = salesReturnsQ.Where(sr => sr.SRDate >= from.Value);
+            if (toExclusive.HasValue) salesReturnsQ = salesReturnsQ.Where(sr => sr.SRDate < toExclusive.Value);
+
+            var purchaseReturnsQ = _context.PurchaseReturns
+                .AsNoTracking()
+                .Where(pr => pr.CustomerId == customer.CustomerId);
+            if (from.HasValue) purchaseReturnsQ = purchaseReturnsQ.Where(pr => pr.PRetDate >= from.Value);
+            if (toExclusive.HasValue) purchaseReturnsQ = purchaseReturnsQ.Where(pr => pr.PRetDate < toExclusive.Value);
+
+            decimal totalSalesReturns = await salesReturnsQ.SumAsync(sr => (decimal?)sr.NetTotal) ?? 0m;
+            decimal totalPurchaseReturns = await purchaseReturnsQ.SumAsync(pr => (decimal?)pr.NetTotal) ?? 0m;
+            decimal totalReturns = totalSalesReturns + totalPurchaseReturns;
 
             // =========================================================
             // 9) عدد الفواتير + آخر تاريخ حركة (داخل نفس فترة البحث)
@@ -759,11 +772,18 @@ namespace ERP.Controllers
                 .Select(x => (DateTime?)x.PIDate)
                 .FirstOrDefaultAsync();
 
-            DateTime? lastTransactionDate =
-                (lastSalesDate == null && lastPurchaseDate == null) ? null :
-                (lastSalesDate == null) ? lastPurchaseDate :
-                (lastPurchaseDate == null) ? lastSalesDate :
-                (lastSalesDate > lastPurchaseDate ? lastSalesDate : lastPurchaseDate);
+            DateTime? lastSalesReturnDate = await salesReturnsQ
+                .OrderByDescending(sr => sr.SRDate)
+                .Select(sr => (DateTime?)sr.SRDate)
+                .FirstOrDefaultAsync();
+            DateTime? lastPurchaseReturnDate = await purchaseReturnsQ
+                .OrderByDescending(pr => pr.PRetDate)
+                .Select(pr => (DateTime?)pr.PRetDate)
+                .FirstOrDefaultAsync();
+
+            var lastDates = new[] { lastSalesDate, lastPurchaseDate, lastSalesReturnDate, lastPurchaseReturnDate }
+                .Where(d => d.HasValue).Select(d => d!.Value).ToList();
+            DateTime? lastTransactionDate = lastDates.Count > 0 ? lastDates.Max() : null;
 
             // =========================================================
             // 10) الرصيد الحالي (مصدر الحقيقة = LedgerEntries) ✅ بدون فلتر تاريخ
@@ -779,7 +799,7 @@ namespace ERP.Controllers
             customer.CurrentBalance = currentBalance;
 
             // =========================================================
-            // 11) تحميل قوائم الفواتير للعرض في الجداول
+            // 11) تحميل قوائم الفواتير والمرتجعات للعرض في الجداول
             // =========================================================
             var salesInvoicesList = await salesQ
                 .Include(s => s.Customer)
@@ -794,11 +814,53 @@ namespace ERP.Controllers
                 .OrderByDescending(p => p.PIDate)
                 .ToListAsync();
 
+            var salesReturnsList = await _context.SalesReturns
+                .AsNoTracking()
+                .Include(sr => sr.Lines)
+                .Where(sr => sr.CustomerId == customer.CustomerId)
+                .Where(sr => !from.HasValue || sr.SRDate >= from.Value)
+                .Where(sr => !toExclusive.HasValue || sr.SRDate < toExclusive.Value)
+                .OrderByDescending(sr => sr.SRDate)
+                .ThenByDescending(sr => sr.SRId)
+                .ToListAsync();
+
+            var purchaseReturnsList = await _context.PurchaseReturns
+                .AsNoTracking()
+                .Include(pr => pr.Lines)
+                .Where(pr => pr.CustomerId == customer.CustomerId)
+                .Where(pr => !from.HasValue || pr.PRetDate >= from.Value)
+                .Where(pr => !toExclusive.HasValue || pr.PRetDate < toExclusive.Value)
+                .OrderByDescending(pr => pr.PRetDate)
+                .ThenByDescending(pr => pr.PRetId)
+                .ToListAsync();
+
+            var cashReceiptsList = await _context.CashReceipts
+                .AsNoTracking()
+                .Include(r => r.CashAccount)
+                .Where(r => r.CustomerId == customer.CustomerId && r.IsPosted)
+                .Where(r => !from.HasValue || r.ReceiptDate >= from.Value)
+                .Where(r => !toExclusive.HasValue || r.ReceiptDate < toExclusive.Value)
+                .OrderByDescending(r => r.ReceiptDate)
+                .ThenByDescending(r => r.CashReceiptId)
+                .ToListAsync();
+
+            var cashPaymentsList = await _context.CashPayments
+                .AsNoTracking()
+                .Include(p => p.CashAccount)
+                .Where(p => p.CustomerId == customer.CustomerId && p.IsPosted)
+                .Where(p => !from.HasValue || p.PaymentDate >= from.Value)
+                .Where(p => !toExclusive.HasValue || p.PaymentDate < toExclusive.Value)
+                .OrderByDescending(p => p.PaymentDate)
+                .ThenByDescending(p => p.CashPaymentId)
+                .ToListAsync();
+
             // =========================================================
-            // 11.1) تحميل أسماء المخازن للعرض (اختياري - يمكن عرض WarehouseId فقط)
+            // 11.1) تحميل أسماء المخازن (فواتير + مرتجعات)
             // =========================================================
             var warehouseIds = salesInvoicesList.Select(s => s.WarehouseId)
                 .Union(purchaseInvoicesList.Select(p => p.WarehouseId))
+                .Union(salesReturnsList.Select(sr => sr.WarehouseId))
+                .Union(purchaseReturnsList.Select(pr => pr.WarehouseId))
                 .Distinct()
                 .ToList();
 
@@ -819,6 +881,10 @@ namespace ERP.Controllers
             ViewBag.LastTransactionDate = lastTransactionDate;
             ViewBag.SalesInvoicesList = salesInvoicesList;
             ViewBag.PurchaseInvoicesList = purchaseInvoicesList;
+            ViewBag.SalesReturnsList = salesReturnsList;
+            ViewBag.PurchaseReturnsList = purchaseReturnsList;
+            ViewBag.CashReceiptsList = cashReceiptsList;
+            ViewBag.CashPaymentsList = cashPaymentsList;
             ViewBag.Warehouses = warehouses;
 
             return View(customer);

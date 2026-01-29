@@ -34,6 +34,10 @@
     // متغيرات: قوائم الفواتير والمخازن (للعرض في التبويبات)
     var salesInvoices = ViewBag.SalesInvoicesList as IEnumerable<ERP.Models.SalesInvoice> ?? Enumerable.Empty<ERP.Models.SalesInvoice>();
     var purchaseInvoices = ViewBag.PurchaseInvoicesList as IEnumerable<ERP.Models.PurchaseInvoice> ?? Enumerable.Empty<ERP.Models.PurchaseInvoice>();
+    var salesReturns = ViewBag.SalesReturnsList as IEnumerable<ERP.Models.SalesReturn> ?? Enumerable.Empty<ERP.Models.SalesReturn>();
+    var purchaseReturns = ViewBag.PurchaseReturnsList as IEnumerable<ERP.Models.PurchaseReturn> ?? Enumerable.Empty<ERP.Models.PurchaseReturn>();
+    var cashReceipts = ViewBag.CashReceiptsList as IEnumerable<ERP.Models.CashReceipt> ?? Enumerable.Empty<ERP.Models.CashReceipt>();
+    var cashPayments = ViewBag.CashPaymentsList as IEnumerable<ERP.Models.CashPayment> ?? Enumerable.Empty<ERP.Models.CashPayment>();
     var warehouses = ViewBag.Warehouses as Dictionary<int, string> ?? new Dictionary<int, string>();
 }
 
@@ -437,10 +441,35 @@
                                         <th>المخزن</th>
                                         <th class="text-end">الكمية</th>
                                         <th class="text-end">المبلغ</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط مرتجعات المبيعات بعد.</small></td></tr>
+                                    @if (salesReturns != null && salesReturns.Any())
+                                    {
+                                        @foreach (var r in salesReturns)
+                                        {
+                                            var qty = r.Lines?.Sum(l => l.Qty) ?? 0;
+                                            <tr>
+                                                <td>@r.SRDate.ToString("yyyy-MM-dd")</td>
+                                                <td><a asp-controller="SalesReturns" asp-action="Edit" asp-route-id="@r.SRId" target="_blank" class="text-primary">@r.SRId</a></td>
+                                                <td>@(warehouses.TryGetValue(r.WarehouseId, out var wsr) ? wsr : r.WarehouseId.ToString())</td>
+                                                <td class="text-end">@qty</td>
+                                                <td class="text-end">@r.NetTotal.ToString("N2")</td>
+                                                <td><a asp-controller="SalesReturns" asp-action="Edit" asp-route-id="@r.SRId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@salesReturns.Sum(r => r.Lines?.Sum(l => l.Qty) ?? 0)</td>
+                                            <td class="text-end fw-bold">@salesReturns.Sum(r => r.NetTotal).ToString("N2")</td>
+                                            <td></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مبيعات للعميل المحدد في الفترة.</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
@@ -496,14 +525,39 @@
                                 <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
-                                        <th>رقم المستند</th>
+                                        <th>رقم المرتجع</th>
                                         <th>المخزن</th>
                                         <th class="text-end">الكمية</th>
                                         <th class="text-end">المبلغ</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط مرتجعات المشتريات بعد.</small></td></tr>
+                                    @if (purchaseReturns != null && purchaseReturns.Any())
+                                    {
+                                        @foreach (var r in purchaseReturns)
+                                        {
+                                            var qty = r.Lines?.Sum(l => l.Qty) ?? 0;
+                                            <tr>
+                                                <td>@r.PRetDate.ToString("yyyy-MM-dd")</td>
+                                                <td><a asp-controller="PurchaseReturns" asp-action="Edit" asp-route-id="@r.PRetId" target="_blank" class="text-primary">@r.PRetId</a></td>
+                                                <td>@(warehouses.TryGetValue(r.WarehouseId, out var wpr) ? wpr : r.WarehouseId.ToString())</td>
+                                                <td class="text-end">@qty</td>
+                                                <td class="text-end">@r.NetTotal.ToString("N2")</td>
+                                                <td><a asp-controller="PurchaseReturns" asp-action="Edit" asp-route-id="@r.PRetId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@purchaseReturns.Sum(r => r.Lines?.Sum(l => l.Qty) ?? 0)</td>
+                                            <td class="text-end fw-bold">@purchaseReturns.Sum(r => r.NetTotal).ToString("N2")</td>
+                                            <td></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مشتريات للمورد المحدد في الفترة.</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
@@ -538,10 +592,33 @@
                                         <th>نوع الخزينة</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>ملاحظات</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط إيصالات الاستلام بعد.</small></td></tr>
+                                    @if (cashReceipts != null && cashReceipts.Any())
+                                    {
+                                        @foreach (var r in cashReceipts)
+                                        {
+                                            <tr>
+                                                <td>@r.ReceiptDate.ToString("yyyy-MM-dd")</td>
+                                                <td><a asp-controller="CashReceipts" asp-action="Show" asp-route-id="@r.CashReceiptId" target="_blank" class="text-primary">@(r.ReceiptNumber ?? r.CashReceiptId.ToString())</a></td>
+                                                <td>@(r.CashAccount != null ? $"{r.CashAccount.AccountCode} - {r.CashAccount.AccountName}" : "-")</td>
+                                                <td class="text-end">@r.Amount.ToString("N2")</td>
+                                                <td><small class="text-muted">@(r.Description ?? "")</small></td>
+                                                <td><a asp-controller="CashReceipts" asp-action="Show" asp-route-id="@r.CashReceiptId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@cashReceipts.Sum(r => r.Amount).ToString("N2")</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد إيصالات استلام للعميل في الفترة.</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
@@ -557,10 +634,33 @@
                                         <th>نوع الخزينة</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>ملاحظات</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="5" class="text-center text-muted py-2"><small>لم يتم ربط إيصالات الدفع بعد.</small></td></tr>
+                                    @if (cashPayments != null && cashPayments.Any())
+                                    {
+                                        @foreach (var p in cashPayments)
+                                        {
+                                            <tr>
+                                                <td>@p.PaymentDate.ToString("yyyy-MM-dd")</td>
+                                                <td><a asp-controller="CashPayments" asp-action="Details" asp-route-id="@p.CashPaymentId" target="_blank" class="text-primary">@(p.PaymentNumber ?? p.CashPaymentId.ToString())</a></td>
+                                                <td>@(p.CashAccount != null ? $"{p.CashAccount.AccountCode} - {p.CashAccount.AccountName}" : "-")</td>
+                                                <td class="text-end">@p.Amount.ToString("N2")</td>
+                                                <td><small class="text-muted">@(p.Description ?? "")</small></td>
+                                                <td><a asp-controller="CashPayments" asp-action="Details" asp-route-id="@p.CashPaymentId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@cashPayments.Sum(p => p.Amount).ToString("N2")</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد إيصالات دفع للعميل في الفترة.</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>

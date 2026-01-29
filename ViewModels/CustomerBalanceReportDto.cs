@@ -14,6 +14,7 @@ namespace ERP.ViewModels
         public decimal CreditLimit { get; set; }
         public decimal TotalSales { get; set; }
         public decimal TotalPurchases { get; set; }
+        public decimal TotalReturns { get; set; }
         public decimal AvailableCredit { get; set; }
     }
 }

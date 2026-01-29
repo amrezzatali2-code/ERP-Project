@@ -1273,35 +1273,28 @@ namespace ERP.Controllers
             ViewBag.PriceRetail = product.PriceRetail;        // سعر الجمهور من جدول الأصناف
 
             // ===== 8) جلب بيانات المبيعات من SalesInvoiceLines =====
+            // تجميعات الملخص: كل الفترات، كل الفواتير (مرحّل + غير مرحّل) — مثل قائمة أصناف المبيعات
+            var salesAllTimeQuery = _db.SalesInvoiceLines
+                .AsNoTracking()
+                .Where(sil => sil.ProdId == finalProdId.Value);
+            ViewBag.TotalQtySold = await salesAllTimeQuery.SumAsync(sil => sil.Qty);
+            ViewBag.TotalAmountSold = await salesAllTimeQuery.SumAsync(sil => sil.LineNetTotal);
+
             var salesQuery = _db.SalesInvoiceLines
                 .AsNoTracking()
                 .Include(sil => sil.SalesInvoice)
                     .ThenInclude(si => si.Customer)
-                .Where(sil => sil.ProdId == finalProdId.Value && sil.SalesInvoice.IsPosted);
+                .Where(sil => sil.ProdId == finalProdId.Value);
 
-            // فلترة بالمخزن
             if (warehouseId.HasValue)
-            {
                 salesQuery = salesQuery.Where(sil => sil.SalesInvoice.WarehouseId == warehouseId.Value);
-            }
-
-            // فلترة بالتاريخ
             if (from.HasValue)
-            {
                 salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate >= from.Value);
-            }
             if (to.HasValue)
-            {
                 salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate <= to.Value);
-            }
-
-            // فلترة بالعميل
             if (finalCustomerId.HasValue)
-            {
                 salesQuery = salesQuery.Where(sil => sil.SalesInvoice.CustomerId == finalCustomerId.Value);
-            }
 
-            // جلب قائمة المبيعات للعرض
             var salesList = await salesQuery
                 .OrderByDescending(sil => sil.SalesInvoice.SIDate)
                 .ThenByDescending(sil => sil.SalesInvoice.SIId)
@@ -1312,8 +1305,6 @@ namespace ERP.Controllers
                     Customer = sil.SalesInvoice.Customer != null ? sil.SalesInvoice.Customer.CustomerName : "",
                     Qty = sil.Qty,
                     UnitPrice = sil.UnitSalePrice,
-                    // حساب الخصم الإجمالي المتراكم من الخصومات الثلاثة
-                    // الخصم المتراكم = 1 - ((1 - D1/100) * (1 - D2/100) * (1 - D3/100))
                     DiscountPercent = sil.PriceRetail > 0 
                         ? ((sil.PriceRetail - sil.UnitSalePrice) / sil.PriceRetail) * 100m
                         : 0m,
@@ -1322,10 +1313,6 @@ namespace ERP.Controllers
                 .ToListAsync();
 
             ViewBag.SalesLines = salesList;
-
-            // حساب إجماليات المبيعات
-            ViewBag.TotalQtySold = salesList.Sum(s => s.Qty);
-            ViewBag.TotalAmountSold = salesList.Sum(s => (decimal)s.NetAmount);
 
             // ===== 9) حساب صافي الكمية من StockLedger =====
             var stockLedgerQuery = _db.StockLedger
@@ -1371,29 +1358,26 @@ namespace ERP.Controllers
             ViewBag.WeightedDiscount = calculatedWeightedDiscount;
 
             // ===== 11) جلب بيانات المشتريات من PILines =====
+            // تجميعات الملخص: كل الفترات، كل الفواتير (مرحّل + غير مرحّل) — مثل قائمة أصناف فواتير المشتريات
+            var purchasesAllTimeQuery = _db.PILines
+                .AsNoTracking()
+                .Where(pil => pil.ProdId == finalProdId.Value);
+            ViewBag.TotalQtyPurchased = await purchasesAllTimeQuery.SumAsync(pil => pil.Qty);
+            ViewBag.TotalAmountPurchased = await purchasesAllTimeQuery.SumAsync(pil => pil.Qty * pil.UnitCost);
+
             var purchasesQuery = _db.PILines
                 .AsNoTracking()
                 .Include(pil => pil.PurchaseInvoice)
                     .ThenInclude(pi => pi.Customer)
-                .Where(pil => pil.ProdId == finalProdId.Value && pil.PurchaseInvoice.IsPosted);
+                .Where(pil => pil.ProdId == finalProdId.Value);
 
-            // فلترة بالمخزن
             if (warehouseId.HasValue)
-            {
                 purchasesQuery = purchasesQuery.Where(pil => pil.PurchaseInvoice.WarehouseId == warehouseId.Value);
-            }
-
-            // فلترة بالتاريخ
             if (from.HasValue)
-            {
                 purchasesQuery = purchasesQuery.Where(pil => pil.PurchaseInvoice.PIDate >= from.Value);
-            }
             if (to.HasValue)
-            {
                 purchasesQuery = purchasesQuery.Where(pil => pil.PurchaseInvoice.PIDate <= to.Value);
-            }
 
-            // جلب قائمة المشتريات للعرض
             var purchasesList = await purchasesQuery
                 .OrderByDescending(pil => pil.PurchaseInvoice.PIDate)
                 .ThenByDescending(pil => pil.PurchaseInvoice.PIId)
@@ -1404,22 +1388,85 @@ namespace ERP.Controllers
                     Supplier = pil.PurchaseInvoice.Customer != null ? pil.PurchaseInvoice.Customer.CustomerName : "",
                     Qty = pil.Qty,
                     UnitCost = pil.UnitCost,
-                    Amount = pil.Qty * pil.UnitCost  // القيمة = الكمية × سعر الوحدة
+                    Amount = pil.Qty * pil.UnitCost
                 })
                 .ToListAsync();
 
             ViewBag.PurchaseLines = purchasesList;
 
-            // حساب إجماليات المشتريات
-            ViewBag.TotalQtyPurchased = purchasesList.Sum(p => p.Qty);
-            ViewBag.TotalAmountPurchased = purchasesList.Sum(p => (decimal)p.Amount);
+            // ===== 12) مرتجعات المبيعات من SalesReturnLines =====
+            var salesReturnsAllTime = _db.SalesReturnLines
+                .AsNoTracking()
+                .Where(srl => srl.ProdId == finalProdId.Value);
+            ViewBag.TotalQtyReturned = await salesReturnsAllTime.SumAsync(srl => srl.Qty);
+            ViewBag.TotalAmountReturned = await salesReturnsAllTime.SumAsync(srl => srl.LineNetTotal);
 
-            // ===== 12) لاحقاً: هنا هنضيف باقي الربط =====
-            // - مرتجعات المبيعات من SalesReturnLines
-            // - مرتجعات المشتريات من PurchaseReturnLines
-            // - تسويات الجرد من StockAdjustmentLines
-            // - طلبات الشراء من PRLines
-            // - التحويلات بين المخازن من StockTransferLines
+            var salesReturnsQuery = _db.SalesReturnLines
+                .AsNoTracking()
+                .Include(srl => srl.SalesReturn)
+                    .ThenInclude(sr => sr!.Customer)
+                .Where(srl => srl.ProdId == finalProdId.Value);
+            if (warehouseId.HasValue)
+                salesReturnsQuery = salesReturnsQuery.Where(srl => srl.SalesReturn != null && srl.SalesReturn.WarehouseId == warehouseId.Value);
+            if (from.HasValue)
+                salesReturnsQuery = salesReturnsQuery.Where(srl => srl.SalesReturn != null && srl.SalesReturn.SRDate >= from.Value);
+            if (to.HasValue)
+                salesReturnsQuery = salesReturnsQuery.Where(srl => srl.SalesReturn != null && srl.SalesReturn.SRDate <= to.Value);
+            if (finalCustomerId.HasValue)
+                salesReturnsQuery = salesReturnsQuery.Where(srl => srl.SalesReturn != null && srl.SalesReturn.CustomerId == finalCustomerId.Value);
+
+            var salesReturnLinesList = await salesReturnsQuery
+                .OrderByDescending(srl => srl.SalesReturn!.SRDate)
+                .ThenByDescending(srl => srl.SalesReturn!.SRId)
+                .ThenBy(srl => srl.LineNo)
+                .Select(srl => new
+                {
+                    Date = srl.SalesReturn!.SRDate,
+                    DocNo = srl.SalesReturn.SRId,
+                    Customer = srl.SalesReturn.Customer != null ? srl.SalesReturn.Customer.CustomerName : "",
+                    Qty = srl.Qty,
+                    UnitPrice = srl.UnitSalePrice,
+                    Amount = srl.LineNetTotal
+                })
+                .ToListAsync();
+            ViewBag.SalesReturnLines = salesReturnLinesList;
+
+            // ===== 13) مرتجعات المشتريات من PurchaseReturnLines =====
+            var purchaseReturnsAllTime = _db.PurchaseReturnLines
+                .AsNoTracking()
+                .Where(prl => prl.ProdId == finalProdId.Value);
+            ViewBag.TotalQtyPurchaseReturned = await purchaseReturnsAllTime.SumAsync(prl => prl.Qty);
+            ViewBag.TotalAmountPurchaseReturned = await purchaseReturnsAllTime.SumAsync(prl => prl.Qty * prl.UnitCost);
+
+            var purchaseReturnsQuery = _db.PurchaseReturnLines
+                .AsNoTracking()
+                .Include(prl => prl.PurchaseReturn)
+                    .ThenInclude(pr => pr!.Customer)
+                .Where(prl => prl.ProdId == finalProdId.Value);
+            if (warehouseId.HasValue)
+                purchaseReturnsQuery = purchaseReturnsQuery.Where(prl => prl.PurchaseReturn != null && prl.PurchaseReturn.WarehouseId == warehouseId.Value);
+            if (from.HasValue)
+                purchaseReturnsQuery = purchaseReturnsQuery.Where(prl => prl.PurchaseReturn != null && prl.PurchaseReturn.PRetDate >= from.Value);
+            if (to.HasValue)
+                purchaseReturnsQuery = purchaseReturnsQuery.Where(prl => prl.PurchaseReturn != null && prl.PurchaseReturn.PRetDate <= to.Value);
+            if (finalCustomerId.HasValue)
+                purchaseReturnsQuery = purchaseReturnsQuery.Where(prl => prl.PurchaseReturn != null && prl.PurchaseReturn.CustomerId == finalCustomerId.Value);
+
+            var purchaseReturnLinesList = await purchaseReturnsQuery
+                .OrderByDescending(prl => prl.PurchaseReturn!.PRetDate)
+                .ThenByDescending(prl => prl.PurchaseReturn!.PRetId)
+                .ThenBy(prl => prl.LineNo)
+                .Select(prl => new
+                {
+                    Date = prl.PurchaseReturn!.PRetDate,
+                    DocNo = prl.PurchaseReturn.PRetId,
+                    Supplier = prl.PurchaseReturn.Customer != null ? prl.PurchaseReturn.Customer.CustomerName : "",
+                    Qty = prl.Qty,
+                    UnitCost = prl.UnitCost,
+                    Amount = prl.Qty * prl.UnitCost
+                })
+                .ToListAsync();
+            ViewBag.PurchaseReturnLines = purchaseReturnLinesList;
 
             return View(product);   // الملف: Views/Products/Show.cshtml
         }
