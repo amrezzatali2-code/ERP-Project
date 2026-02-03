@@ -550,9 +550,91 @@ private async Task PopulateDropDownsAsync(
             return Json(alts);
         }
 
+        // =========================================================
+        // API: إرجاع المطلوب (طلبات غير محولة) التي تحتوي على الصنف المعطى
+        // للعرض في جدول "المطلوب (طلبات غير محولة)" عند اختيار الصنف
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetProductDemandInfo(int prodId, int currentPRId = 0)
+        {
+            if (prodId <= 0)
+                return Json(new { ok = false, required = Array.Empty<object>(), sales = Array.Empty<object>(), intermediary = Array.Empty<object>() });
 
+            // طلبات غير محولة تحتوي على هذا الصنف (مع استبعاد الطلب الحالي إن وُجد)
+            var lines = await _context.PRLines
+                .AsNoTracking()
+                .Include(l => l.PurchaseRequest)
+                .ThenInclude(pr => pr.Customer)
+                .Where(l => l.ProdId == prodId
+                    && l.PurchaseRequest != null
+                    && !l.PurchaseRequest.IsConverted
+                    && (currentPRId <= 0 || l.PRId != currentPRId))
+                .OrderBy(l => l.PRId)
+                .ThenBy(l => l.LineNo)
+                .ToListAsync();
 
+            // تجميع حسب طلب الشراء: اسم العميل، التاريخ، إجمالي الكمية، متوسط الخصم المرجح %
+            var grouped = lines
+                .GroupBy(l => l.PRId)
+                .Select(g =>
+                {
+                    var first = g.First();
+                    var pr = first.PurchaseRequest;
+                    return new
+                    {
+                        customerName = pr?.Customer?.CustomerName ?? "",
+                        date = pr != null ? pr.PRDate.ToString("yyyy-MM-dd") : "",
+                        qty = g.Sum(l => l.QtyRequested),
+                        weightedDiscount = g.Average(l => l.PurchaseDiscountPct)
+                    };
+                })
+                .OrderByDescending(x => x.date)
+                .ToList();
 
+            return Json(new
+            {
+                ok = true,
+                required = grouped,
+                sales = Array.Empty<object>(),
+                intermediary = Array.Empty<object>()
+            });
+        }
+
+        // =========================================================
+        // API: إجمالي الكمية المبيعة والوسيط للصنف في الفترة (من - إلى)
+        // الوسيط = ترتيب الكميات وأخذ الرقم في الوسط
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetProductSalesInPeriod(int prodId, string fromDate, string toDate)
+        {
+            if (prodId <= 0)
+                return Json(new { ok = false, totalQty = 0, medianQty = 0m });
+
+            DateTime dateFrom = DateTime.Today.AddMonths(-1);
+            DateTime dateTo = DateTime.Today;
+            if (!string.IsNullOrWhiteSpace(fromDate) && DateTime.TryParse(fromDate, out var fd)) dateFrom = fd.Date;
+            if (!string.IsNullOrWhiteSpace(toDate) && DateTime.TryParse(toDate, out var td)) dateTo = td.Date;
+            if (dateFrom > dateTo) { var t = dateFrom; dateFrom = dateTo; dateTo = t; }
+
+            var quantities = await (from l in _context.SalesInvoiceLines.AsNoTracking()
+                                   join si in _context.SalesInvoices on l.SIId equals si.SIId
+                                   where l.ProdId == prodId && si.SIDate >= dateFrom && si.SIDate <= dateTo
+                                   select l.Qty).ToListAsync();
+
+            int totalQty = quantities.Sum();
+            decimal medianQty = 0m;
+            if (quantities.Count > 0)
+            {
+                var sorted = quantities.OrderBy(q => q).ToList();
+                int n = sorted.Count;
+                if (n % 2 == 1)
+                    medianQty = sorted[n / 2];
+                else
+                    medianQty = (sorted[n / 2 - 1] + sorted[n / 2]) / 2m;
+            }
+
+            return Json(new { ok = true, totalQty, medianQty });
+        }
 
 
 

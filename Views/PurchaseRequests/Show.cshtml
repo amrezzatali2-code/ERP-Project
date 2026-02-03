@@ -1,132 +1,136 @@
 @using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.PurchaseRequest
 
-<style>
-    /* =========================================================
-       تحسينات تصميم طلب الشراء حسب الطلب
-       ========================================================= */
-    
-    /* تفتيح أرضية الصفحة */
-    .invoice-page {
-        background-color: #f3f6fb !important; /* لون خفيف مريح للعين */
-        min-height: 100vh;
-    }
-    
-    .invoice-page .container-fluid {
-        background-color: #f3f6fb !important;
-    }
-    
-    /* تصغير الـ inputs داخل كارت بيانات العميل وكارت بيانات الصنف */
-    .invoice-page .invoice-header-card .form-control-sm,
-    .invoice-page .invoice-header-card .form-select-sm,
-    .invoice-page .invoice-product-card .form-control-sm,
-    .invoice-page .invoice-product-card .form-select-sm {
-        font-size: 0.7rem !important;
-        padding: 0.15rem 0.35rem !important;
-        height: calc(1.3em + 0.3rem + 2px) !important;
-    }
-    
-    .invoice-page .invoice-header-card .form-label-sm,
-    .invoice-page .invoice-product-card .form-label-sm {
-        font-size: 0.7rem !important;
-        margin-bottom: 0.15rem !important;
-    }
-    
-    /* تصغير كارت الإجراءات والأزرار */
-    .invoice-page .invoice-side-card {
-        font-size: 0.85rem;
-    }
-    
-    .invoice-page .invoice-side-card .card-header {
-        padding: 0.4rem 0.5rem !important;
-        font-size: 0.8rem !important;
-    }
-    
-    .invoice-page .invoice-actions-bar {
-        gap: 0.35rem !important;
-        padding: 0.5rem !important;
-    }
-    
-    .invoice-page .invoice-side-card .btn-sm,
-    .invoice-page .invoice-side-card .btn-erp-sm {
-        font-size: 0.7rem !important;
-        padding: 0.25rem 0.4rem !important;
-        line-height: 1.2;
-    }
-    
-    .invoice-page .invoice-side-card .form-control-sm {
-        font-size: 0.7rem !important;
-        padding: 0.2rem 0.35rem !important;
-        height: calc(1.3em + 0.4rem + 2px) !important;
-    }
-    
-    .invoice-page .invoice-side-card hr {
-        margin: 0.35rem 0 !important;
-    }
-    
-    /* تصغير الـ inputs في كارت إضافة الصنف */
-    .invoice-page .invoice-Add-card .form-control-sm {
-        font-size: 0.7rem !important;
-        padding: 0.15rem 0.35rem !important;
-        height: calc(1.3em + 0.3rem + 2px) !important;
-    }
-    
-    .invoice-page .invoice-Add-card .form-label-sm {
-        font-size: 0.7rem !important;
-        margin-bottom: 0.15rem !important;
-    }
-    
-    .invoice-page .invoice-Add-card .btn-sm {
-        font-size: 0.7rem !important;
-        padding: 0.2rem 0.4rem !important;
-    }
-    
-    /* تصغير العمود الجانبي */
-    @@media (min-width: 992px) {
-        .invoice-page .col-lg-2 {
-            flex: 0 0 auto;
-            width: 14% !important;
+@section Styles {
+    <style>
+        /* =========================================================
+           تصميم طلب الشراء مثل فاتورة الشراء (نفس التنسيق)
+           ========================================================= */
+        .pi-input[type="number"]::-webkit-outer-spin-button,
+        .pi-input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
         }
-        
-        .invoice-page .col-lg-10 {
-            flex: 0 0 auto;
-            width: 86% !important;
+        .pi-input[type="number"] {
+            -moz-appearance: textfield;
         }
-    }
-    
-    /* جعل كارت بيانات العميل وكارت بيانات الصنف نفس الارتفاع */
-    .invoice-page .row.g-2 {
-        display: flex;
-        align-items: stretch;
-    }
-    
-    .invoice-page .row.g-2 > .col-lg-6 {
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .invoice-page .invoice-header-card,
-    .invoice-page .invoice-product-card {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-height: 100%;
-    }
-    
-    .invoice-page .invoice-header-card .card-body,
-    .invoice-page .invoice-product-card .card-body {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-    }
-    
-    .invoice-page .invoice-header-card #InvoiceHeaderCardCollapse,
-    .invoice-page .invoice-product-card #ProductCardCollapse {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-    }
-</style>
+
+        .invoice-page {
+            background-color: #f3f6fb;
+            min-height: 100vh;
+            padding-bottom: 2rem;
+        }
+
+        .invoice-header-card,
+        .invoice-details-card,
+        .invoice-lines-card,
+        .invoice-totals-card,
+        .invoice-side-card,
+        .invoice-Add-card,
+        .invoice-product-card {
+            border-radius: 1rem;
+            overflow: hidden;
+        }
+
+        .invoice-actions-sticky {
+            position: sticky;
+            top: 58px;
+            z-index: 3000;
+            background: #ffffff;
+            border: 1px solid rgba(13,110,253,.12);
+            padding: 10px 10px;
+            border-radius: 14px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.05);
+        }
+        @@media (max-width: 992px) {
+            .invoice-actions-sticky { top: 56px; }
+        }
+
+        .invoice-header-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.75rem 1.25rem;
+        }
+        .invoice-header-bar h5, .invoice-header-bar h6 {
+            margin-bottom: 0.1rem;
+        }
+
+        .invoice-details-card .card-header,
+        .invoice-Add-card .card-header,
+        .invoice-product-card .card-header,
+        .invoice-lines-card .card-header,
+        .invoice-side-card .card-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.55rem 1rem;
+        }
+
+        .form-label-sm { font-size: 0.85rem; }
+        .invoice-small-input { max-width: 150px; }
+        .customer-summary-line { font-size: 0.82rem; }
+
+        .invoice-side-card .btn-erp {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.6rem;
+        }
+        .invoice-side-card .btn-erp + .btn-erp { margin-top: 0.25rem; }
+
+        .invoice-lines-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #fff;
+        }
+        .invoice-lines-header th { border-color: #0b5ed7 !important; }
+
+        .erp-table-wrapper {
+            max-height: 360px;
+            overflow: auto;
+        }
+
+        .summary-badge {
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* حقل اسم المورد/العميل مميز بحدود دائماً */
+        .customer-name-input {
+            border: 2px solid #0d6efd !important;
+            border-radius: 0.375rem;
+            background-color: #f8fbff !important;
+        }
+        .customer-name-input:focus {
+            border-color: #0a58ca !important;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        }
+
+        /* كارت بيانات العميل: مدمج وصغير */
+        .invoice-header-card .invoice-header-bar {
+            padding: 0.4rem 0.75rem;
+        }
+        .invoice-header-card .card-body {
+            padding: 0.5rem 1rem 0.75rem;
+        }
+        .invoice-header-card .form-label-sm {
+            margin-bottom: 0.2rem;
+            font-size: 0.8rem;
+        }
+        .invoice-header-card .form-control-sm,
+        .invoice-header-card .form-select-sm {
+            width: 100%;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.8rem;
+            min-height: 1.75rem;
+        }
+        .invoice-header-card .row.g-2 { --bs-gutter-y: 0.4rem; --bs-gutter-x: 0.5rem; }
+        .invoice-header-card .row.g-3 { --bs-gutter-y: 0.5rem; --bs-gutter-x: 0.5rem; }
+
+        @@media print {
+            .erp-table-wrapper {
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        }
+    </style>
+}
 
 <div class="invoice-page" dir="rtl">
     <div class="container-fluid pt-3">
@@ -146,9 +150,9 @@
             <div class="col-12 col-lg-2 order-1 order-lg-2" style="max-width: 200px;">
 
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
-                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2" style="background-color: #495057; color: white; padding: 0.5rem 0.75rem; border-radius: 0.375rem 0.375rem 0 0;">
+                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
-                            <h6 class="mb-0" style="color: white; font-weight: 600; text-align: center; width: 100%;">إجراءات طلب  الشراء</h6>
+                            <h6 class="mb-0">إجراءات طلب الشراء</h6>
                         </div>
                     </div>
 
@@ -343,11 +347,11 @@
                     <input type="hidden" id="NavCurrentId" value="@(Model?.PRId ?? 0)" />
 
                     @* ====================================================
-                       1) كارت بيانات العميل + كارت بيانات الصنف (جنب بعض)
+                       1) كارت بيانات العميل ثم كارت بيانات الصنف (تحت بعض مثل فاتورة المشتريات)
                        ==================================================== *@
-                    <div class="row g-2 mb-2">
-                        <div class="col-lg-6 col-md-12">
-                    <div class="card shadow-sm mb-2 invoice-header-card">
+                    <div class="row g-3 mb-2">
+                        <div class="col-12">
+                    <div class="card shadow-sm mb-3 invoice-header-card">
 
                         @{
                             bool isNewInvoice = Model == null || Model.PRId == 0;
@@ -362,10 +366,9 @@
                             : "";
                         }
 
-                        <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2" style="background-color: #495057; color: white; padding: 0.5rem 0.75rem; border-radius: 0.375rem 0.375rem 0 0;">
-
+                        <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
-                                <h6 class="mb-0" style="color: white; font-weight: 600;">بيانات العميل</h6>
+                                <h6 class="mb-0">بيانات العميل</h6>
                             </div>
 
                             <div class="d-flex align-items-center gap-2">
@@ -383,24 +386,22 @@
                         <div id="InvoiceHeaderCardCollapse" class="collapse show" style="display: block !important;">
                             <div class="card-body">
 
-                                <div class="row g-3 align-items-end">
+                                <div class="row g-2 align-items-end">
 
-                                    <div class="col-lg-2 col-md-2">
+                                    <div class="col-auto col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">كود المورد</label>
-
                                         <input id="CustomerCodeDisplay"
-                                               class="form-control form-control-sm text-center invoice-small-input"
+                                               class="form-control form-control-sm text-center"
+                                               style="max-width: 90px;"
                                                type="number" data-lock-posted="1" />
-
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
 
-                                    <div class="col-lg-4 col-md-4">
+                                    <div class="col col-lg-4 col-md-5">
                                         <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
-
                                         <input id="CustomerNameInput"
                                                name="CustomerNameInput"
-                                               class="form-control form-control-sm"
+                                               class="form-control form-control-sm customer-name-input"
                                                placeholder="اكتب اسم المورد ثم اختره من القائمة"
                                                list="customersList"
                                                autocomplete="off"
@@ -426,57 +427,50 @@
                                         </datalist>
                                     </div>
 
-                                    <div class="col-lg-2 col-md-2">
+                                    <div class="col-auto col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">رقم الطلب</label>
-
-                                        <input type="hidden"
-                                               id="InvoiceId"
-                                               value="@(Model?.PRId ?? 0)" />
-
+                                        <input type="hidden" id="InvoiceId" value="@(Model?.PRId ?? 0)" />
                                         <input id="InvoiceNumberDisplay"
                                                class="form-control form-control-sm text-center"
+                                               style="max-width: 80px;"
                                                value="@(Model != null && Model.PRId > 0 ? Model.PRId.ToString() : "")"
                                                readonly />
                                     </div>
 
-                                    <div class="col-lg-2 col-md-6">
-                                        <div class="row g-2">
-                                            <div class="col-6">
-                                                <label class="form-label form-label-sm">تاريخ الطلب</label>
-                                                <input id="InvoiceDateDisplay"
-                                                       class="form-control form-control-sm text-center"
-                                                       value="@invoiceDateText"
-                                                       readonly />
-                                            </div>
-                                                    <div class="col-lg-2 col-md-6">
-                                                <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                                <input id="InvoiceTimeDisplay"
-                                                       class="form-control form-control-sm text-center"
-                                                       value="@invoiceTimeText"
-                                                       readonly />
-                                            </div>
-                                        </div>
+                                    <div class="col-auto col-lg-2 col-md-3">
+                                        <label class="form-label form-label-sm">تاريخ الطلب</label>
+                                        <input id="InvoiceDateDisplay"
+                                               class="form-control form-control-sm text-center"
+                                               style="max-width: 130px;"
+                                               value="@invoiceDateText"
+                                               readonly />
+                                    </div>
+
+                                    <div class="col-auto col-lg-2 col-md-2">
+                                        <label class="form-label form-label-sm">وقت الإنشاء</label>
+                                        <input id="InvoiceTimeDisplay"
+                                               class="form-control form-control-sm text-center"
+                                               style="max-width: 80px;"
+                                               value="@invoiceTimeText"
+                                               readonly />
                                     </div>
 
                                 </div>
 
-                                <br />
-
                                 <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
 
-                                <div class="row g-3">
+                                <div class="row g-2 align-items-end">
 
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                    <div class="col-auto col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">حالة الطلب</label>
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
+                                               style="max-width: 100px;"
                                                value="@(Model.IsConverted ? "محول" : (string.IsNullOrWhiteSpace(Model.Status) ? "Draft" : Model.Status))"
                                                readonly />
                                     </div>
 
-                                    <!-- PurchaseRequest لا يحتوي على RefPRId (هذا موجود في PurchaseInvoice فقط) -->
-
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                    <div class="col col-lg-3 col-md-4">
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
                                         <select asp-for="WarehouseId"
                                                 asp-items="ViewBag.Warehouses"
@@ -486,59 +480,63 @@
                                         </select>
                                     </div>
 
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                    <div class="col-auto col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">كاتب الطلب</label>
                                         <input id="InvoiceCreatedByDisplay"
                                                class="form-control form-control-sm text-center"
+                                               style="max-width: 120px;"
                                                value="@Model.CreatedBy"
                                                readonly />
                                     </div>
 
                                 </div>
 
-                                <div class="row g-4">
-                                    <div class="col-lg-3 col-md-3">
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-auto col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">الهاتف</label>
                                         <input id="CustomerPhone"
                                                class="form-control form-control-sm"
-                                               value="@(
-                                               Model?.Customer?.Phone1
-                                               ?? Model?.Customer?.Phone2
-                                               ?? Model?.Customer?.Whatsapp
-                                               ?? ""
-                                                                                                                                                            )"
+                                               style="max-width: 130px;"
+                                               value="@(Model?.Customer?.Phone1 ?? Model?.Customer?.Phone2 ?? Model?.Customer?.Whatsapp ?? "")"
                                                readonly />
                                     </div>
-
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col-auto col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">المحافظة</label>
                                         <input id="CustomerGovernorate"
                                                class="form-control form-control-sm"
+                                               style="max-width: 120px;"
                                                value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")"
                                                readonly />
                                     </div>
-
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col-auto col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">الحي</label>
                                         <input id="CustomerDistrict"
                                                class="form-control form-control-sm"
+                                               style="max-width: 110px;"
                                                value="@(Model?.Customer?.District?.DistrictName ?? "")"
                                                readonly />
                                     </div>
-
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col-auto col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">المنطقة</label>
                                         <input id="CustomerArea"
                                                class="form-control form-control-sm"
+                                               style="max-width: 110px;"
                                                value="@(Model?.Customer?.Area?.AreaName ?? "")"
                                                readonly />
                                     </div>
-
+                                    <div class="col-auto col-lg-2 col-md-3">
+                                        <label class="form-label form-label-sm">الحد الإتماني</label>
+                                        <input id="CustomerCredit"
+                                               class="form-control form-control-sm text-center"
+                                               style="max-width: 100px;"
+                                               value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))"
+                                               readonly
+                                               data-lock-posted="1" />
+                                    </div>
                                 </div>
 
-                                <div class="row g-3">
-
-                                    <div class="col-lg-8 col-md-6">
+                                <div class="row g-2 align-items-end mt-1">
+                                    <div class="col-12">
                                         <label class="form-label form-label-sm">العنوان</label>
                                         <input id="CustomerAddress"
                                                class="form-control form-control-sm"
@@ -546,29 +544,16 @@
                                                readonly
                                                data-lock-posted="1" />
                                     </div>
-
-                                    <div class="col-lg-4 col-md-2">
-                                        <label class="form-label form-label-sm">الحد الإتماني</label>
-                                        <input id="CustomerCredit"
-                                               class="form-control form-control-sm"
-                                               value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))"
-                                               readonly
-                                               data-lock-posted="1" />
-                                    </div>
-
-
-
                                 </div>
                             </div>
                         </div>
                     </div>
                         </div>
-                        <div class="col-lg-6 col-md-12">
-                        <div class="card shadow-sm mb-2 invoice-product-card">
-                            <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2" style="background-color: #495057; color: white; padding: 0.5rem 0.75rem; border-radius: 0.375rem 0.375rem 0 0;">
-
+                        <div class="col-12">
+                        <div class="card shadow-sm mb-3 invoice-product-card">
+                            <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
-                                <h6 class="mb-0" style="color: white; font-weight: 600;">بيانات الصنف</h6>
+                                <h6 class="mb-0">بيانات الصنف</h6>
                             </div>
 
                             <div class="d-flex align-items-center gap-2">
@@ -639,22 +624,33 @@
                                     </div>
 
                                     @* =====================================================
-                                       جدول المبيعات والوسيط
+                                       جدول المبيعات والوسيط: إجمالي الكمية المبيعة + الوسيط في المدة (من - إلى)
+                                       الجدول يتحدث تلقائياً مع تغيير الصنف أو التاريخ (بدون زر تحديث)
                                        ===================================================== *@
-                                    <div class="row g-2 mb-3">
+                                    <div class="row g-2 mb-2">
+                                        <div class="col-12 d-flex flex-wrap align-items-end gap-2">
+                                            <label class="form-label form-label-sm mb-0">المبيعات والوسيط</label>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <label class="form-label form-label-sm mb-0 small text-muted">من</label>
+                                                <input type="date" id="SalesFromDate" class="form-control form-control-sm" style="max-width: 130px;" />
+                                            </div>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <label class="form-label form-label-sm mb-0 small text-muted">إلى</label>
+                                                <input type="date" id="SalesToDate" class="form-control form-control-sm" style="max-width: 130px;" />
+                                            </div>
+                                        </div>
                                         <div class="col-12">
-                                            <label class="form-label form-label-sm mb-2">المبيعات والوسيط</label>
-                                            <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                                            <div class="table-responsive" style="max-height: 100px; overflow-y: auto;">
                                                 <table class="table table-sm table-bordered table-striped mb-0" id="SalesIntermediaryTable">
                                                     <thead class="table-light sticky-top">
                                                         <tr>
-                                                            <th class="text-center">النوع</th>
-                                                            <th class="text-center">التاريخ</th>
+                                                            <th class="text-center">إجمالي الكمية المبيعة</th>
+                                                            <th class="text-center">الوسيط</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody id="SalesIntermediaryTableBody">
                                                         <tr>
-                                                            <td colspan="2" class="text-center text-muted">لا توجد بيانات</td>
+                                                            <td colspan="2" class="text-center text-muted small">لا توجد بيانات</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -672,10 +668,9 @@
                        4) كارت إدخال الصنف
                        ===================================================== *@
                         <div class="card shadow-sm mb-3 invoice-Add-card">
-                            <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2" style="background-color: #495057; color: white; padding: 0.5rem 0.75rem; border-radius: 0.375rem 0.375rem 0 0;">
-
+                            <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
                             <div>
-                                <h6 class="mb-0" style="color: white; font-weight: 600;">إضافة صنف للفاتورة</h6>
+                                <h6 class="mb-0">إضافة صنف للفاتورة</h6>
                             </div>
 
                             <div class="d-flex align-items-center gap-2">
@@ -779,14 +774,13 @@
                         @* =====================================================
                        5) جدول السطور
                        ===================================================== *@
-                        @* <div class="card shadow-sm mb-3 invoice-lines-card"> *@
-                        @* <div class="card-header py-2 invoice-lines-header">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-semibold">سطور طلب  الشراء</span>
+                        <div class="card shadow-sm mb-3 invoice-lines-card">
+                            <div class="card-header py-2 invoice-lines-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="fw-semibold">سطور طلب الشراء</span>
+                                </div>
                             </div>
-                        </div> *@
-
-                        @* <div class="card-body p-0"> *@
+                            <div class="card-body p-0">
                         <div class="erp-table-wrapper mb-0">
                             <table class="table table-sm table-striped table-hover mb-0 erp-table">
                                 <thead>
@@ -1000,8 +994,8 @@
                                 </tbody>
                             </table>
                         </div>
-                        @*     </div>
-                    </div> *@
+                            </div>
+                        </div>
 
                         @* =====================================================
                        6) ملخص الطلب
@@ -1568,33 +1562,42 @@
                                      prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
                                  }
 
-                                 // تحميل بيانات المطلوب والكمية المباعة والوسيط
+                                 // تحميل بيانات المطلوب
                                  if (id) {
-                                     loadProductDemandInfo(id);
+                                     const currentPRId = parseInt(document.getElementById('InvoiceId')?.value || '0', 10) || 0;
+                                     loadProductDemandInfo(id, currentPRId);
+                                     // تعيين تاريخ افتراضي للمبيعات (آخر شهر) وتحميل جدول المبيعات
+                                     const toEl = document.getElementById('SalesToDate');
+                                     const fromEl = document.getElementById('SalesFromDate');
+                                     if (toEl && fromEl) {
+                                         const today = new Date();
+                                         toEl.value = today.toISOString().slice(0, 10);
+                                         const fromDate = new Date(today);
+                                         fromDate.setMonth(fromDate.getMonth() - 1);
+                                         fromEl.value = fromDate.toISOString().slice(0, 10);
+                                         loadProductSalesInPeriod(id, fromEl.value, toEl.value);
+                                     }
                                  } else {
-                                     // مسح الجدول إذا لم يكن هناك صنف محدد
-                                     clearProductDemandTable();
+                                     clearProductDemandTables();
                                  }
                              }
 
                              // =========================================================
                              // تحميل بيانات المطلوب والكمية المباعة والوسيط
                              // =========================================================
-                             function loadProductDemandInfo(prodId) {
+                             function loadProductDemandInfo(prodId, currentPRId) {
                                  if (!prodId) {
                                      clearProductDemandTables();
                                      return;
                                  }
-
+                                 currentPRId = currentPRId || 0;
                                  const url = '@Url.Action("GetProductDemandInfo", "PurchaseRequests")'
-                                     + '?prodId=' + encodeURIComponent(prodId);
+                                     + '?prodId=' + encodeURIComponent(prodId)
+                                     + '&currentPRId=' + encodeURIComponent(currentPRId);
 
                                  const requiredTableBody = document.getElementById('RequiredTableBody');
-                                 const salesIntermediaryTableBody = document.getElementById('SalesIntermediaryTableBody');
 
-                                 // تعيين رسالة تحميل
                                  if (requiredTableBody) requiredTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">... جاري التحميل</td></tr>';
-                                 if (salesIntermediaryTableBody) salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">... جاري التحميل</td></tr>';
 
                                  fetch(url)
                                      .then(r => r.ok ? r.json() : null)
@@ -1617,34 +1620,11 @@
                                                      requiredTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">لا توجد بيانات</td></tr>';
                                                  }
                                              }
-
-                                             // تحديث جدول المبيعات والوسيط
-                                             if (salesIntermediaryTableBody) {
-                                                 const salesRows = (data.sales || []).map(item => {
-                                                     const date = new Date(item.date);
-                                                     const dateStr = date.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
-                                                     return `<tr>
-                                                         <td class="text-center">مبيعات</td>
-                                                         <td class="text-center">${dateStr}</td>
-                                                     </tr>`;
-                                                 });
-
-                                                 const intermediaryRows = (data.intermediary || []).map(item => {
-                                                     const date = new Date(item.date);
-                                                     const dateStr = date.toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' });
-                                                     return `<tr>
-                                                         <td class="text-center">وسيط</td>
-                                                         <td class="text-center">${dateStr}</td>
-                                                     </tr>`;
-                                                 });
-
-                                                 const allRows = [...salesRows, ...intermediaryRows];
-                                                 if (allRows.length > 0) {
-                                                     salesIntermediaryTableBody.innerHTML = allRows.join('');
-                                                 } else {
-                                                     salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">لا توجد بيانات</td></tr>';
-                                                 }
-                                             }
+                                             // جدول المبيعات يُحمّل من loadProductSalesInPeriod حسب التاريخ من/إلى
+                                             const prodIdForSales = parseInt(document.getElementById('ProdId')?.value || '0', 10);
+                                             const fromD = document.getElementById('SalesFromDate')?.value || '';
+                                             const toD = document.getElementById('SalesToDate')?.value || '';
+                                             if (prodIdForSales) loadProductSalesInPeriod(prodIdForSales, fromD, toD);
                                          } else {
                                              clearProductDemandTables();
                                          }
@@ -1660,8 +1640,50 @@
                                  const salesIntermediaryTableBody = document.getElementById('SalesIntermediaryTableBody');
 
                                  if (requiredTableBody) requiredTableBody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">لا توجد بيانات</td></tr>';
-                                 if (salesIntermediaryTableBody) salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted">لا توجد بيانات</td></tr>';
+                                 if (salesIntermediaryTableBody) salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted small">لا توجد بيانات</td></tr>';
                              }
+
+                             // تحميل إجمالي الكمية المبيعة والوسيط للصنف في الفترة (من - إلى)
+                             function loadProductSalesInPeriod(prodId, fromDate, toDate) {
+                                 const salesIntermediaryTableBody = document.getElementById('SalesIntermediaryTableBody');
+                                 if (!salesIntermediaryTableBody) return;
+                                 if (!prodId) {
+                                     salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted small">لا توجد بيانات</td></tr>';
+                                     return;
+                                 }
+                                 const url = '@Url.Action("GetProductSalesInPeriod", "PurchaseRequests")'
+                                     + '?prodId=' + encodeURIComponent(prodId)
+                                     + '&fromDate=' + encodeURIComponent(fromDate || '')
+                                     + '&toDate=' + encodeURIComponent(toDate || '');
+                                 salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted small">... جاري التحميل</td></tr>';
+                                 fetch(url)
+                                     .then(r => r.ok ? r.json() : null)
+                                     .then(data => {
+                                         if (data && data.ok) {
+                                             const totalQty = data.totalQty || 0;
+                                             const medianQty = Number(data.medianQty || 0).toFixed(1);
+                                             salesIntermediaryTableBody.innerHTML = '<tr><td class="text-center small">' + totalQty + '</td><td class="text-center small">' + medianQty + '</td></tr>';
+                                         } else {
+                                             salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted small">لا توجد بيانات</td></tr>';
+                                         }
+                                     })
+                                     .catch(function () {
+                                         salesIntermediaryTableBody.innerHTML = '<tr><td colspan="2" class="text-center text-muted small">لا توجد بيانات</td></tr>';
+                                     });
+                             }
+
+                             // الجدول يتحدث تلقائياً عند تغيير التاريخ (من/إلى) أو الصنف
+                             (function () {
+                                 const salesFromEl = document.getElementById('SalesFromDate');
+                                 const salesToEl = document.getElementById('SalesToDate');
+                                 function refreshSalesTable() {
+                                     const prodId = parseInt(document.getElementById('ProdId')?.value || '0', 10);
+                                     if (!prodId) return;
+                                     loadProductSalesInPeriod(prodId, salesFromEl?.value || '', salesToEl?.value || '');
+                                 }
+                                 if (salesFromEl) salesFromEl.addEventListener('change', refreshSalesTable);
+                                 if (salesToEl) salesToEl.addEventListener('change', refreshSalesTable);
+                             })();
 
                              // =========================================================
                              // تحميل البدائل من الكنترولر
@@ -1846,6 +1868,8 @@
                                              console.log('🔍 البحث عن صنف قبل الانتقال:', prodNameInput.value);
                                              const found = findProductByName(prodNameInput.value);
                                              fillProductFromOption(found);
+                                             // إخفاء قائمة الـ datalist بعد الاختيار بالضغط Enter
+                                             input.blur();
                                          }
 
                                          // لو المستخدم داخل كود الصنف → نحاول نثبّت الصنف
@@ -1868,17 +1892,25 @@
                                              nextIndex++;
                                          }
 
-                                         if (next && !next.readOnly) {
-                                             console.log('➡️ الانتقال إلى:', next.id || next.className);
-                                             next.focus();
-                                             if (typeof next.select === 'function') {
-                                                 next.select();
+                                         // نقل التركيز للحقل التالي (مع تأخير بسيط لاسم الصنف حتى تختفي قائمة الـ datalist)
+                                         function moveToNext() {
+                                             if (next && !next.readOnly) {
+                                                 console.log('➡️ الانتقال إلى:', next.id || next.className);
+                                                 next.focus();
+                                                 if (typeof next.select === 'function') {
+                                                     next.select();
+                                                 }
+                                             } else if (btnAddLine) {
+                                                 console.log('➡️ الانتقال إلى زر الإضافة');
+                                                 btnAddLine.focus();
+                                             } else {
+                                                 console.warn('⚠️ لا يوجد حقل تالي للانتقال إليه');
                                              }
-                                         } else if (btnAddLine) {
-                                             console.log('➡️ الانتقال إلى زر الإضافة');
-                                             btnAddLine.focus();
+                                         }
+                                         if (input === prodNameInput) {
+                                             setTimeout(moveToNext, 50);
                                          } else {
-                                             console.warn('⚠️ لا يوجد حقل تالي للانتقال إليه');
+                                             moveToNext();
                                          }
                                      } catch (err) {
                                          console.error('❌ خطأ في معالجة Enter:', err);
