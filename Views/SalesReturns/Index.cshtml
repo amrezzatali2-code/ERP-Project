@@ -1,4 +1,4 @@
-﻿@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
+@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesReturn>
@@ -376,10 +376,18 @@
                             <td data-col="posted">@(sr.IsPosted ? "نعم" : "لا")</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                               
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@sr.SRId">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })"
+                                   data-tab-id="sr-show-tab"
+                                   data-tab-title="مرتجع مبيعات"
+                                   data-url="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })">
+                                    عرض
+                                </a>
+                                <a class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })"
+                                   data-tab-id="sr-show-tab"
+                                   data-tab-title="مرتجع مبيعات"
+                                   data-url="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })">
                                     تعديل
                                 </a>
                                 <a class="btn btn-erp btn-erp-danger btn-erp-sm"

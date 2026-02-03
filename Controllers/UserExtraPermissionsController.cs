@@ -1,4 +1,4 @@
-﻿using ERP.Data;                                   // AppDbContext
+using ERP.Data;                                   // AppDbContext
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // الموديلات UserExtraPermissions, User, Permission
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
@@ -206,16 +206,16 @@ namespace ERP.Controllers
                 : "أدوار المستخدم: " + string.Join(" ، ", roleNames);
 
             // 2) الصلاحيات القادمة من الأدوار (RolePermissions)
-            var allowedFromRolesSet = await _context.RolePermissions
+            var allowedFromRolesSet = (await _context.RolePermissions
                 .Where(rp => userRoleIds.Contains(rp.RoleId) && rp.IsAllowed) // لو عندك عمود IsAllowed
                 .Select(rp => rp.PermissionId)       // لازم تكون PermissionId زي اللي في جدول Permissions
-                .ToHashSetAsync();
+                .ToListAsync()).ToHashSet();
 
             // 3) الصلاحيات الإضافية الحالية لهذا المستخدم (UserExtraPermissions)
-            var extraPermsSet = await _context.UserExtraPermissions
+            var extraPermsSet = (await _context.UserExtraPermissions
                 .Where(x => x.UserId == userId)
                 .Select(x => x.PermissionId)
-                .ToHashSetAsync();
+                .ToListAsync()).ToHashSet();
 
             // 4) كل الصلاحيات مع فلتر اختياري بالبحث
             var permsQuery = _context.Permissions.AsQueryable();

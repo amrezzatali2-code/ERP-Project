@@ -531,6 +531,29 @@ namespace ERP.Controllers
                 })
                 .ToListAsync();
 
+            // كميات مرتجعة سابقاً من كل سطر (من جميع مرتجعات الشراء المرتبطة بنفس الفاتورة)
+            var returnedByLine = await _context.PurchaseReturnLines
+                .Where(l => l.RefPIId == invoiceId && l.RefPILineNo != null)
+                .GroupBy(l => l.RefPILineNo)
+                .Select(g => new { LineNo = g.Key, Returned = g.Sum(l => l.Qty) })
+                .ToListAsync();
+            var returnedDict = returnedByLine.Where(x => x.LineNo.HasValue).ToDictionary(x => x.LineNo!.Value, x => x.Returned);
+
+            var items = lines.Select(l => new
+            {
+                l.lineNo,
+                l.prodId,
+                l.prodName,
+                l.qty,
+                alreadyReturned = returnedDict.GetValueOrDefault(l.lineNo, 0),
+                remaining = l.qty - returnedDict.GetValueOrDefault(l.lineNo, 0),
+                l.batchNo,
+                l.expiry,
+                l.priceRetail,
+                l.unitCost,
+                l.purchaseDiscountPct
+            }).ToList();
+
             return Json(new
             {
                 ok = true,
@@ -538,7 +561,7 @@ namespace ERP.Controllers
                 customerId = invoice.CustomerId,
                 warehouseId = invoice.WarehouseId,
                 invoiceDate = invoice.PIDate.ToString("yyyy-MM-dd"),
-                items = lines
+                items = items
             });
         }
 
@@ -578,6 +601,35 @@ namespace ERP.Controllers
                 var productExists = await _context.Products.AnyAsync(p => p.ProdId == dto.ProdId);
                 if (!productExists) { await tx.RollbackAsync(); return Json(new { ok = false, message = "الصنف المحدد غير موجود في قاعدة البيانات (جدول الأصناف). قد يكون الصنف محذوفاً. استبعد سطور الفاتورة المحذوف أصنافها." }); }
 
+                // التحقق من الكمية مقابل الفاتورة والمرتجعات السابقة من نفس السطر
+                int? refPIId = (dto.RefPIId ?? 0) > 0 ? dto.RefPIId : (ret.RefPIId);
+                if (refPIId.HasValue && refPIId.Value > 0 && (dto.RefPILineNo ?? 0) > 0)
+                {
+                    var invoiceLine = await _context.PILines
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(l => l.PIId == refPIId.Value && l.LineNo == dto.RefPILineNo.Value);
+                    if (invoiceLine == null)
+                    {
+                        await tx.RollbackAsync();
+                        return Json(new { ok = false, message = "سطر الفاتورة غير موجود." });
+                    }
+                    int invoiceQty = invoiceLine.Qty;
+                    int alreadyReturned = await _context.PurchaseReturnLines
+                        .Where(l => l.RefPIId == refPIId && l.RefPILineNo == dto.RefPILineNo)
+                        .SumAsync(l => l.Qty);
+                    int remaining = invoiceQty - alreadyReturned;
+                    if (remaining <= 0)
+                    {
+                        await tx.RollbackAsync();
+                        return Json(new { ok = false, message = "تم إرجاع كامل كمية هذا السطر من الفاتورة مسبقاً. لا يمكن إضافة المزيد." });
+                    }
+                    if (dto.Qty > remaining)
+                    {
+                        await tx.RollbackAsync();
+                        return Json(new { ok = false, message = $"الكمية المرتجعة ({dto.Qty}) تتجاوز المتبقي من هذا السطر في الفاتورة ({remaining}). الكمية في الفاتورة: {invoiceQty}، تم إرجاع {alreadyReturned} سابقاً." });
+                    }
+                }
+
                 DateTime? exp = null;
                 if (!string.IsNullOrWhiteSpace(dto.ExpiryText) && DateTime.TryParse(dto.ExpiryText.Trim(), out var pe))
                     exp = pe.Date;
@@ -607,7 +659,9 @@ namespace ERP.Controllers
                     PurchaseDiscountPct = discPct,
                     PriceRetail = Math.Max(0, dto.PriceRetail),
                     BatchNo = batchNo,
-                    Expiry = exp
+                    Expiry = exp,
+                    RefPIId = refPIId,
+                    RefPILineNo = (dto.RefPILineNo ?? 0) > 0 ? dto.RefPILineNo : null
                 };
                 _context.PurchaseReturnLines.Add(line);
                 // الجدول يستخدم ProductProdId كـ FK للصنف؛ تعيينه حتى لا ينتج انتهاك FK

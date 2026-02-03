@@ -601,8 +601,11 @@
                     </div>
                     <div class="card-body d-grid">
 
-                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm"
-                           asp-action="Create">
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab"
+                           href="@Url.Action("Create", "SalesReturns", new { frame = 1 })"
+                           data-tab-id="sr-show-tab"
+                           data-tab-title="مرتجع مبيعات"
+                           data-url="@Url.Action("Create", "SalesReturns", new { frame = 1 })">
                             ➕ مرتجع جديد
                         </a>
 
@@ -751,7 +754,7 @@
             }
 
             // =========================================================
-            // جلب أصناف فاتورة البيع عند إدخال رقم الفاتورة
+            // جلب أصناف فاتورة البيع + بيانات العميل عند إدخال رقم الفاتورة (Enter أو تغيير الحقل)
             // =========================================================
             var invoiceIdInput = document.getElementById('SalesInvoiceIdInput');
             var invoiceIdHidden = document.getElementById('SalesInvoiceId');
@@ -764,10 +767,9 @@
 
             var invoiceItems = []; // متغير: قائمة أصناف الفاتورة
 
-            // عند تغيير رقم الفاتورة
-            invoiceIdInput.addEventListener('change', async function () {
+            async function loadInvoiceByNumber() {
                 var invoiceId = parseInt(invoiceIdInput.value || '0', 10);
-                
+
                 if (invoiceId <= 0) {
                     invoiceIdHidden.value = '';
                     itemSelect.innerHTML = '<option value="">-- اختر صنف من الفاتورة --</option>';
@@ -787,27 +789,34 @@
                     // حفظ رقم الفاتورة
                     invoiceIdHidden.value = invoiceId.toString();
 
-                    // تحديث العميل والمخزن إذا كانا فارغين
-                    if (data.customerId && !document.getElementById('CustomerId').value) {
+                    // تحديث بيانات العميل بالكامل حسب الفاتورة (الاسم، الهاتف، العنوان، إلخ)
+                    if (data.customerId) {
                         document.getElementById('CustomerId').value = data.customerId;
                         document.getElementById('CustomerCodeDisplay').value = data.customerId;
+                        var opt = findOptionById(data.customerId.toString());
+                        if (opt) {
+                            customerInput.value = opt.value;
+                            fillCustomerFromOption(opt);
+                        }
                     }
 
-                    if (data.warehouseId && !document.getElementById('WarehouseId').value) {
+                    if (data.warehouseId) {
                         document.getElementById('WarehouseId').value = data.warehouseId;
                     }
 
                     // تحديث قائمة الأصناف
                     invoiceItems = data.items || [];
                     itemSelect.innerHTML = '<option value="">-- اختر صنف من الفاتورة --</option>';
-                    
+
                     invoiceItems.forEach(function(item, index) {
                         var option = document.createElement('option');
                         option.value = index.toString();
-                        option.textContent = item.prodName + ' - كمية: ' + item.qty + ' - تشغيلة: ' + (item.batchNo || 'بدون');
+                        var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
+                        option.textContent = item.prodName + ' - كمية في الفاتورة: ' + item.qty + ' - متبقي للمرتجع: ' + remaining + ' - تشغيلة: ' + (item.batchNo || 'بدون');
                         option.setAttribute('data-prodId', item.prodId);
                         option.setAttribute('data-lineNo', item.lineNo);
                         option.setAttribute('data-qty', item.qty);
+                        option.setAttribute('data-remaining', remaining);
                         option.setAttribute('data-batchNo', item.batchNo || '');
                         option.setAttribute('data-expiry', item.expiry || '');
                         option.setAttribute('data-priceRetail', item.priceRetail);
@@ -824,12 +833,23 @@
                     console.error('Error loading invoice items:', error);
                     alert('حدث خطأ في جلب بيانات الفاتورة.');
                 }
+            }
+
+            // عند الضغط على Enter في حقل رقم الفاتورة
+            invoiceIdInput.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    loadInvoiceByNumber();
+                }
             });
+
+            // عند تغيير رقم الفاتورة (فقدان التركيز)
+            invoiceIdInput.addEventListener('change', loadInvoiceByNumber);
 
             // عند اختيار صنف من القائمة
             itemSelect.addEventListener('change', function () {
                 var selectedIndex = parseInt(itemSelect.value || '-1', 10);
-                
+
                 if (selectedIndex < 0 || selectedIndex >= invoiceItems.length) {
                     returnQtyInput.value = '';
                     invoiceQtyDisplay.value = '';
@@ -839,11 +859,13 @@
                 }
 
                 var item = invoiceItems[selectedIndex];
+                var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
                 invoiceQtyDisplay.value = item.qty;
                 returnBatchDisplay.value = item.batchNo || '';
                 returnExpiryDisplay.value = item.expiry || '';
-                returnQtyInput.value = item.qty; // افتراضي: نفس كمية الفاتورة
-                returnQtyInput.max = item.qty; // لا يمكن إرجاع أكثر من الكمية في الفاتورة
+                returnQtyInput.max = remaining; // لا يمكن إرجاع أكثر من المتبقي (بعد خصم المرتجعات السابقة)
+                returnQtyInput.value = remaining > 0 ? Math.min(remaining, parseInt(returnQtyInput.value || '0', 10) || remaining) : 0;
+                if (remaining <= 0) returnQtyInput.value = '0';
             });
 
             function refreshReturnLinesAndTotals(data) {
@@ -896,8 +918,13 @@
                     return;
                 }
                 var item = invoiceItems[selectedIndex];
-                if (returnQty > item.qty) {
-                    alert('الكمية المرتجعة لا يمكن أن تكون أكبر من الكمية في الفاتورة (' + item.qty + ').');
+                var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
+                if (remaining <= 0) {
+                    alert('تم إرجاع كامل كمية هذا السطر من الفاتورة مسبقاً. لا يمكن إضافة المزيد.');
+                    return;
+                }
+                if (returnQty > remaining) {
+                    alert('الكمية المرتجعة تتجاوز المتبقي للمرتجع من هذا السطر (' + remaining + '). الكمية في الفاتورة: ' + item.qty + '، تم إرجاع ' + (item.alreadyReturned || 0) + ' سابقاً.');
                     return;
                 }
                 if (returnId <= 0) {
@@ -918,6 +945,10 @@
                         return;
                     }
                     refreshReturnLinesAndTotals(data);
+                    // تحديث المتبقي للمرتجع في الصنف المضاف (للعرض عند إعادة الاختيار)
+                    item.alreadyReturned = (item.alreadyReturned || 0) + returnQty;
+                    item.remaining = item.qty - item.alreadyReturned;
+                    if (item.remaining < 0) item.remaining = 0;
                     returnQtyInput.value = '';
                     itemSelect.value = '';
                     invoiceQtyDisplay.value = '';

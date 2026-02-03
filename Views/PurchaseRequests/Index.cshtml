@@ -375,15 +375,16 @@
 
                             <td class="text-nowrap no-print" data-col="actions">
 
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-tab"
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
                                    href="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })"
                                    data-tab-id="pr-show-tab"
-                                   data-tab-title="طلب شراء">
+                                   data-tab-title="طلب شراء"
+                                   data-url="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })">
                                     عرض
                                 </a>
                                 <a class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab"
                                    href="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })"
-                                   data-tab-id="PurchaseRequests"
+                                   data-tab-id="pr-show-tab"
                                    data-tab-title="طلب شراء"
                                    data-url="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })">
                                     تعديل

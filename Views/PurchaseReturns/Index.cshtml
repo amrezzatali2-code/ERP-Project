@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<PurchaseReturn>
@@ -361,10 +361,18 @@
                                 @(pr.UpdatedAt.HasValue? pr.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")
                             </td>
                             <td class="text-nowrap no-print" data-col="actions">
-
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@pr.PRetId">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Edit", "PurchaseReturns", new { id = pr.PRetId, frame = 1 })"
+                                   data-tab-id="pr-ret-show-tab"
+                                   data-tab-title="مرتجع مشتريات"
+                                   data-url="@Url.Action("Edit", "PurchaseReturns", new { id = pr.PRetId, frame = 1 })">
+                                    عرض
+                                </a>
+                                <a class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Edit", "PurchaseReturns", new { id = pr.PRetId, frame = 1 })"
+                                   data-tab-id="pr-ret-show-tab"
+                                   data-tab-title="مرتجع مشتريات"
+                                   data-url="@Url.Action("Edit", "PurchaseReturns", new { id = pr.PRetId, frame = 1 })">
                                     تعديل
                                 </a>
                                 <a class="btn btn-erp btn-erp-danger btn-erp-sm"

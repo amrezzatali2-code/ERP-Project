@@ -179,14 +179,24 @@ if (window.__ERP_TABS_INITED__) {
 
                     event.preventDefault();
 
-                    // ✅ لو في iframe: نستخدم update-current-tab لتحديث التاب الحالي مباشرة
+                    // ✅ لو في iframe: نرسل للوالد لفتح/تحديث التاب المناسب
                     try {
                         if (window.top && window.top !== window) {
-                            window.top.postMessage({
-                                type: 'erp-update-current-tab',
-                                url: url,
-                                title: tabTitle
-                            }, '*');
+                            // لو الرابط يحدد tabId (مثل si-show-tab): نفتح/نحدّث ذلك التاب وليس التاب الحالي
+                            if (tabId) {
+                                window.top.postMessage({
+                                    type: 'erp-open-tab',
+                                    tabId: tabId,
+                                    url: url,
+                                    title: tabTitle
+                                }, '*');
+                            } else {
+                                window.top.postMessage({
+                                    type: 'erp-update-current-tab',
+                                    url: url,
+                                    title: tabTitle
+                                }, '*');
+                            }
                             return;
                         }
                     } catch (e) {

@@ -682,8 +682,11 @@
                     </div>
                     <div class="card-body d-grid">
 
-                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm"
-                           asp-action="Create">
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab"
+                           href="@Url.Action("Create", "PurchaseReturns", new { frame = 1 })"
+                           data-tab-id="pr-ret-show-tab"
+                           data-tab-title="مرتجع مشتريات"
+                           data-url="@Url.Action("Create", "PurchaseReturns", new { frame = 1 })">
                             ➕ مرتجع جديد
                         </a>
 
@@ -895,7 +898,8 @@
                     invoiceItems.forEach(function(item, index) {
                         var option = document.createElement('option');
                         option.value = index.toString();
-                        option.textContent = item.prodName + ' - كمية: ' + item.qty + ' - تشغيلة: ' + (item.batchNo || 'بدون');
+                        var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
+                        option.textContent = item.prodName + ' - كمية في الفاتورة: ' + item.qty + ' - متبقي للمرتجع: ' + remaining + ' - تشغيلة: ' + (item.batchNo || 'بدون');
                         option.setAttribute('data-prodId', item.prodId);
                         option.setAttribute('data-lineNo', item.lineNo);
                         option.setAttribute('data-qty', item.qty);
@@ -930,11 +934,12 @@
                 }
 
                 var item = invoiceItems[selectedIndex];
+                var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
                 invoiceQtyDisplay.value = item.qty;
                 returnBatchDisplay.value = item.batchNo || '';
                 returnExpiryDisplay.value = item.expiry || '';
-                returnQtyInput.value = item.qty; // افتراضي: نفس كمية الفاتورة
-                returnQtyInput.max = item.qty; // لا يمكن إرجاع أكثر من الكمية في الفاتورة
+                returnQtyInput.value = remaining > 0 ? remaining : '';
+                returnQtyInput.max = remaining; // حد أقصى = المتبقي للمرتجع
             });
 
             function refreshReturnLinesAndTotals(data) {
@@ -987,8 +992,13 @@
                     return;
                 }
                 var item = invoiceItems[selectedIndex];
-                if (returnQty > item.qty) {
-                    alert('الكمية المرتجعة لا يمكن أن تكون أكبر من الكمية في الفاتورة (' + item.qty + ').');
+                var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
+                if (remaining <= 0) {
+                    alert('تم إرجاع كامل كمية هذا السطر من الفاتورة مسبقاً. لا يمكن إضافة المزيد.');
+                    return;
+                }
+                if (returnQty > remaining) {
+                    alert('الكمية المرتجعة لا يمكن أن تتجاوز المتبقي للمرتجع (' + remaining + ').');
                     return;
                 }
                 if (returnId <= 0) {
@@ -1014,6 +1024,10 @@
                         return;
                     }
                     refreshReturnLinesAndTotals(data);
+                    // تحديث المتبقي للمرتجع في الصنف المضاف (للعرض عند إعادة الاختيار)
+                    item.alreadyReturned = (item.alreadyReturned || 0) + returnQty;
+                    item.remaining = item.qty - item.alreadyReturned;
+                    if (item.remaining < 0) item.remaining = 0;
                     returnQtyInput.value = '';
                     itemSelect.value = '';
                     invoiceQtyDisplay.value = '';

@@ -255,8 +255,8 @@
                             <button type="button"
                                     id="btnFirstInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
-                                    data-tab-title="فاتورة المبيعات"
+                                    data-tab-id="si-show-tab"
+                                    data-tab-title="فاتورة مبيعات"
                                     data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navFirst ?? 0), frame = 1 })"
                                     data-id="@(navFirst ?? 0)"
                                     title="أول فاتورة"
@@ -267,8 +267,8 @@
                             <button type="button"
                                     id="btnPrevInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
-                                    data-tab-title="فاتورة المبيعات"
+                                    data-tab-id="si-show-tab"
+                                    data-tab-title="فاتورة مبيعات"
                                     data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (prevEffective ?? 0), frame = 1 })"
                                     data-id="@(prevEffective ?? 0)"
                                     title="الفاتورة السابقة"
@@ -279,8 +279,8 @@
                             <button type="button"
                                     id="btnNextInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
-                                    data-tab-title="فاتورة المبيعات"
+                                    data-tab-id="si-show-tab"
+                                    data-tab-title="فاتورة مبيعات"
                                     data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (nextEffective ?? 0), frame = 1 })"
                                     data-id="@(nextEffective ?? 0)"
                                     title="الفاتورة التالية"
@@ -291,8 +291,8 @@
                             <button type="button"
                                     id="btnLastInvoice"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="pi-show-tab"
-                                    data-tab-title="فاتورة المبيعات"
+                                    data-tab-id="si-show-tab"
+                                    data-tab-title="فاتورة مبيعات"
                                     data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navLast ?? 0), frame = 1 })"
                                     data-id="@(navLast ?? 0)"
                                     title="آخر فاتورة"
@@ -311,8 +311,8 @@
                             <button type="button"
                                     id="btnNavInvoiceSearch"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    data-tab-id="pi-show-tab"
-                                    data-tab-title="فاتورة المبيعات"
+                                    data-tab-id="si-show-tab"
+                                    data-tab-title="فاتورة مبيعات"
                                     data-base-url="@Url.Action("Show", "SalesInvoices", new { frame = 1 })">
                                 بحث
                             </button>
@@ -321,8 +321,8 @@
                         <hr class="my-1" />
 
                         <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
-                           data-tab-id="pi-show-tab"
-                           data-tab-title="فاتورة المبيعات"
+                           data-tab-id="si-show-tab"
+                           data-tab-title="فاتورة مبيعات"
                            data-url="@Url.Action("Create", "SalesInvoices", new { frame = 1 })">
                             ➕ فاتورة جديدة
                         </a>
@@ -915,8 +915,7 @@
                                             if (batchCount == 1)
                                             {
                                                 var line = g.First();
-                                                decimal lineValue =
-                                                line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountEffective / 100m));
+                                                decimal lineValue = line.LineTotalAfterDiscount;
 
                                                 <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                     <td class="text-center">@line.LineNo</td>
@@ -936,7 +935,7 @@
 
                                                     <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
 
-                                                    <td class="text-center">@line.PurchaseDiscountEffective.ToString("0.##")</td>
+                                                    <td class="text-center">@line.Disc1Percent.ToString("0.##")</td>
 
                                                     <td class="text-center">@lineValue.ToString("0.00")</td>
 
@@ -970,8 +969,7 @@
 
                                                 foreach (var line in g.OrderBy(x => x.LineNo))
                                                 {
-                                                    decimal lineValue =
-                                                    line.Qty * line.PriceRetail * (1m - (line.PurchaseDiscountEffective / 100m));
+                                                    decimal lineValue = line.LineTotalAfterDiscount;
 
                                                     <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                         <td class="text-center">@line.LineNo</td>
@@ -982,7 +980,7 @@
                                                         </td>
                                                         <td class="text-center">@line.Qty</td>
                                                         <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
-                                                        <td class="text-center">@line.PurchaseDiscountEffective.ToString("0.##")</td>
+                                                        <td class="text-center">@line.Disc1Percent.ToString("0.##")</td>
                                                         <td class="text-center">@lineValue.ToString("0.00")</td>
                                                         <td class="text-center no-print" ">
                                                             <button type="button"

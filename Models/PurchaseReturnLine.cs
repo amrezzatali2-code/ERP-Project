@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.ComponentModel.DataAnnotations;
 
@@ -7,6 +7,7 @@ namespace ERP.Models
     /// <summary>
     /// سطر مرتجع شراء: يمثل كمية مرتجعة لصنف معيّن من مورد (من رأس المرتجع)،
     /// مع بيانات التكلفة والتشغيلة والصلاحية.
+    /// يمكن ربط السطر بسطر فاتورة الشراء الأصلية (RefPIId + RefPILineNo) للتحقق من الكميات والمرتجعات السابقة.
     /// </summary>
     public class PurchaseReturnLine
     {
@@ -21,6 +22,14 @@ namespace ERP.Models
 
         [Display(Name = "الكمية المرتجعة")]
         public int Qty { get; set; }      // الكمية المرتجعة من هذا الصنف
+
+        /// <summary>رقم فاتورة الشراء المرجعية (لربط سطر المرتجع بسطر الفاتورة).</summary>
+        [Display(Name = "رقم فاتورة الشراء المرجعية")]
+        public int? RefPIId { get; set; }
+
+        /// <summary>رقم سطر الفاتورة المرجعي.</summary>
+        [Display(Name = "رقم سطر الفاتورة")]
+        public int? RefPILineNo { get; set; }
 
         [Display(Name = "تكلفة الوحدة")]
         [Precision(18, 4)]

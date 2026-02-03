@@ -663,6 +663,32 @@ namespace ERP.Controllers
                 })
                 .ToListAsync();
 
+            // كميات مرتجعة سابقاً من كل سطر (من جميع المرتجعات المرتبطة بنفس الفاتورة)
+            var returnedByLine = await context.SalesReturnLines
+                .Where(l => l.SalesInvoiceId == invoiceId)
+                .GroupBy(l => l.SalesInvoiceLineNo)
+                .Select(g => new { LineNo = g.Key, Returned = g.Sum(l => l.Qty) })
+                .ToListAsync();
+            var returnedDict = returnedByLine.Where(x => x.LineNo.HasValue).ToDictionary(x => x.LineNo!.Value, x => x.Returned);
+
+            var items = lines.Select(l => new
+            {
+                l.lineNo,
+                l.prodId,
+                l.prodName,
+                l.qty,
+                alreadyReturned = returnedDict.GetValueOrDefault(l.lineNo, 0),
+                remaining = l.qty - returnedDict.GetValueOrDefault(l.lineNo, 0),
+                l.batchNo,
+                l.expiry,
+                l.priceRetail,
+                l.unitSalePrice,
+                l.disc1Percent,
+                l.disc2Percent,
+                l.disc3Percent,
+                l.lineNetTotal
+            }).ToList();
+
             return Json(new
             {
                 ok = true,
@@ -670,7 +696,7 @@ namespace ERP.Controllers
                 customerId = invoice.CustomerId,
                 warehouseId = invoice.WarehouseId,
                 invoiceDate = invoice.SIDate.ToString("yyyy-MM-dd"),
-                items = lines
+                items = items
             });
         }
 
@@ -713,6 +739,34 @@ namespace ERP.Controllers
                 if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
                 if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "لا يمكن تعديل مرتجع مترحّل." }); }
                 if (ret.WarehouseId <= 0) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "يجب اختيار المخزن." }); }
+
+                // التحقق من الكمية مقابل الفاتورة والمرتجعات السابقة من نفس السطر
+                if (dto.SalesInvoiceId.HasValue && dto.SalesInvoiceId.Value > 0 && dto.SalesInvoiceLineNo.HasValue)
+                {
+                    var invoiceLine = await context.SalesInvoiceLines
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(l => l.SIId == dto.SalesInvoiceId.Value && l.LineNo == dto.SalesInvoiceLineNo.Value);
+                    if (invoiceLine == null)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new { ok = false, message = "سطر الفاتورة غير موجود." });
+                    }
+                    int invoiceQty = invoiceLine.Qty;
+                    int alreadyReturned = await context.SalesReturnLines
+                        .Where(l => l.SalesInvoiceId == dto.SalesInvoiceId && l.SalesInvoiceLineNo == dto.SalesInvoiceLineNo)
+                        .SumAsync(l => l.Qty);
+                    int remaining = invoiceQty - alreadyReturned;
+                    if (remaining <= 0)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new { ok = false, message = "تم إرجاع كامل كمية هذا السطر من الفاتورة مسبقاً. لا يمكن إضافة المزيد." });
+                    }
+                    if (dto.Qty > remaining)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new { ok = false, message = $"الكمية المرتجعة ({dto.Qty}) تتجاوز المتبقي من هذا السطر في الفاتورة ({remaining}). الكمية في الفاتورة: {invoiceQty}، تم إرجاع {alreadyReturned} سابقاً." });
+                    }
+                }
 
                 DateTime? exp = null;
                 if (!string.IsNullOrWhiteSpace(dto.ExpiryText))
