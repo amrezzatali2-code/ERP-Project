@@ -278,7 +278,17 @@
                             </div>
                             <div class="col-lg-3 col-md-4">
                                 <label class="form-label form-label-sm">حالة المرتجع</label>
-                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@Model.Status" readonly />
+                                @{
+                                    int? stage = ViewBag.ReturnStage as int?;
+                                    string statusDisplayValue = Model.Status switch
+                                    {
+                                        "Draft" => "غير مرحلة",
+                                        "Posted" => (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل"),
+                                        "Cancelled" => "ملغى",
+                                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
+                                    };
+                                }
+                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@statusDisplayValue" readonly />
                             </div>
                             <div class="col-lg-2 col-md-4">
                                 <label class="form-label form-label-sm">مرحّل؟</label>
@@ -289,7 +299,7 @@
                                 <label class="form-label form-label-sm">رقم فاتورة الشراء</label>
                                 <input type="number" id="PurchaseInvoiceIdInput" class="form-control form-control-sm text-center"
                                        value="@(Model.RefPIId?.ToString() ?? "")" placeholder="أدخل رقم الفاتورة"
-                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
+                                       data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")" />
                                 <input type="hidden" asp-for="RefPIId" id="RefPIId" />
                             </div>
                         </div>
@@ -430,7 +440,7 @@
                                 <label class="form-label form-label-sm">اختر صنف من فاتورة الشراء</label>
                                 <select id="InvoiceItemSelect"
                                         class="form-select form-select-sm"
-                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                        data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")">
                                     <option value="">-- اختر صنف من الفاتورة --</option>
                                 </select>
                             </div>
@@ -442,7 +452,7 @@
                                        class="form-control form-control-sm text-center"
                                        placeholder="0"
                                        min="1"
-                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
+                                       data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")" />
                             </div>
 
                             <div class="col-lg-2 col-md-3">
@@ -476,7 +486,7 @@
                                     <button type="button"
                                             id="btnAddReturnLine"
                                             class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                            data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")">
                                         إضافة الصنف للمرتجع
                                     </button>
                                 </div>
@@ -527,7 +537,7 @@
                                                 <td class="text-center">
                                                     <button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine"
                                                             data-line-no="@line.LineNo" data-pret-id="@Model.PRetId"
-                                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")" title="مسح السطر">🗑</button>
+                                                            data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")" title="مسح السطر">🗑</button>
                                                 </td>
                                             </tr>
                                         }
@@ -721,9 +731,12 @@
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                id="btnPostReturn">
+                                id="btnPostReturn"
+                                data-lock-posted="1">
                             📤 ترحيل المرتجع
                         </button>
+
+                        <div id="postReturnMsg" class="small mt-2"></div>
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
@@ -1157,33 +1170,66 @@
             }
 
             var btnPost = document.getElementById('btnPostReturn');
+            var postMsg = document.getElementById('postReturnMsg');
+            var statusDisplay = document.getElementById('ReturnStatusDisplay');
             if (btnPost) {
+                var serverIsPosted = @Model.IsPosted.ToString().ToLower();
+                if (serverIsPosted) {
+                    btnPost.disabled = true;
+                    btnPost.innerHTML = "✅ تم ترحيل المرتجع";
+                    if (postMsg) {
+                        postMsg.textContent = "هذا المرتجع مترحّل بالفعل.";
+                        postMsg.className = "small mt-2 text-muted";
+                    }
+                }
                 btnPost.addEventListener('click', async function() {
                     var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
-                    if (pretId <= 0) { alert('يجب حفظ المرتجع أولاً قبل الترحيل.'); return; }
+                    if (pretId <= 0) {
+                        if (postMsg) { postMsg.textContent = "يجب حفظ المرتجع أولاً قبل الترحيل."; postMsg.className = "small mt-2 text-danger"; }
+                        return;
+                    }
                     if (!confirm('هل تريد ترحيل هذا المرتجع؟')) return;
                     btnPost.disabled = true;
+                    var postSuccess = false;
                     try {
                         var res = await fetch('@Url.Action("PostReturn", "PurchaseReturns")?id=' + pretId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                         var txt = await res.text();
                         var data = null;
                         if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
-                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل الترحيل.'); return; }
+                        if (!res.ok || !data || !data.ok) {
+                            if (postMsg) { postMsg.textContent = (data && data.message) ? data.message : 'فشل الترحيل.'; postMsg.className = "small mt-2 text-danger"; }
+                            return;
+                        }
+                        postSuccess = true;
+                        if (statusDisplay)
+                            statusDisplay.value = (data && data.postedLabel) ? data.postedLabel : ('مرحلة ' + (data && data.stage != null ? data.stage : 1));
                         var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
                         if (isPostedEl) isPostedEl.value = 'نعم';
-                        var statusEl = document.getElementById('ReturnStatusDisplay');
-                        if (statusEl) statusEl.value = 'Posted';
-                        alert('تم ترحيل المرتجع بنجاح.');
-                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
-                    finally { btnPost.disabled = false; }
+                        btnPost.innerHTML = "✅ تم ترحيل المرتجع";
+                        btnPost.disabled = true;
+                        var btnOpen = document.getElementById('btnOpenReturn');
+                        if (btnOpen) btnOpen.disabled = false;
+                        if (postMsg) {
+                            postMsg.textContent = (data && data.message) ? data.message : 'تم ترحيل المرتجع بنجاح.';
+                            postMsg.className = "small mt-2 text-success";
+                        }
+                    } catch (e) { console.error(e); if (postMsg) { postMsg.textContent = 'حدث خطأ أثناء الترحيل.'; postMsg.className = "small mt-2 text-danger"; } }
+                    finally { if (!postSuccess) btnPost.disabled = false; }
                 });
             }
 
             var btnOpen = document.getElementById('btnOpenReturn');
             if (btnOpen) {
+                var serverIsPostedPR = @Model.IsPosted.ToString().ToLower();
+                if (!serverIsPostedPR)
+                    btnOpen.disabled = true;
                 btnOpen.addEventListener('click', async function() {
+                    if (btnOpen.disabled) return;
                     var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
-                    if (pretId <= 0) { alert('اختر مرتجعاً أولاً.'); return; }
+                    if (pretId <= 0) {
+                        if (postMsg) { postMsg.textContent = "اختر مرتجعاً أولاً."; postMsg.className = "small mt-2 text-danger"; }
+                        return;
+                    }
                     if (!confirm('هل تريد فتح المرتجع (إلغاء الترحيل)؟')) return;
                     btnOpen.disabled = true;
                     try {
@@ -1191,13 +1237,20 @@
                         var txt = await res.text();
                         var data = null;
                         if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
-                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل فتح المرتجع.'); return; }
+                        if (!res.ok || !data || !data.ok) {
+                            if (postMsg) { postMsg.textContent = (data && data.message) ? data.message : 'فشل فتح المرتجع.'; postMsg.className = "small mt-2 text-danger"; }
+                            return;
+                        }
                         var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
                         if (isPostedEl) isPostedEl.value = 'لا';
-                        var statusEl = document.getElementById('ReturnStatusDisplay');
-                        if (statusEl) statusEl.value = 'Draft';
-                        alert('تم فتح المرتجع للتعديل.');
-                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
+                        if (statusDisplay) statusDisplay.value = (data && data.postedLabel) ? data.postedLabel : 'مفتوحة للتعديل';
+                        var btnPost = document.getElementById('btnPostReturn');
+                        if (btnPost) { btnPost.disabled = false; btnPost.innerHTML = "📤 ترحيل المرتجع"; }
+                        if (postMsg) {
+                            postMsg.textContent = (data && data.message) ? data.message : 'تم فتح المرتجع للتعديل.';
+                            postMsg.className = "small mt-2 text-success";
+                        }
+                    } catch (e) { console.error(e); if (postMsg) { postMsg.textContent = 'حدث خطأ.'; postMsg.className = "small mt-2 text-danger"; } }
                     finally { btnOpen.disabled = false; }
                 });
             }

@@ -1567,10 +1567,10 @@ namespace ERP.Services
 
                 int newStage = lastStage + 1;
 
-                // 5) عكس المرحلة السابقة إن وجدت
+                // 5) عكس المرحلة السابقة إن وجدت (بنفس أسلوب فاتورة المبيعات: 9001، 9002، 9003، 9004 + تحديث رصيد العميل)
                 if (lastStage > 0)
                 {
-                    await ReverseSalesReturnEntriesAsync(salesReturnId, lastStage);
+                    await ReverseSalesReturnEntriesLikeSalesAsync(salesReturn, lastStage, now);
                 }
 
                 // 6) إنشاء قيود المرتجع (عكس المبيعات)
@@ -1728,10 +1728,10 @@ namespace ERP.Services
 
                 int newStage = lastStage + 1;
 
-                // 5) عكس المرحلة السابقة إن وجدت
+                // 5) عكس المرحلة السابقة إن وجدت (بنفس أسلوب مرتجع البيع: 9001، 9002، 9003، 9004 + تحديث رصيد المورد)
                 if (lastStage > 0)
                 {
-                    await ReversePurchaseReturnEntriesAsync(purchaseReturnId, lastStage);
+                    await ReversePurchaseReturnEntriesLikePurchaseAsync(purchaseReturn, lastStage, now);
                 }
 
                 // 6) إنشاء قيود المرتجع (عكس المشتريات)
@@ -1842,60 +1842,224 @@ namespace ERP.Services
             return avgCost > 0m ? avgCost : 0m;
         }
 
-        private async Task ReverseSalesReturnEntriesAsync(int salesReturnId, int stage)
+        /// <summary>
+        /// عكس مرحلة سابقة من مرتجع البيع — بنفس أسلوب فاتورة المبيعات: قيود 9001، 9002، 9003، 9004 + تحديث رصيد العميل.
+        /// </summary>
+        private async Task ReverseSalesReturnEntriesLikeSalesAsync(SalesReturn salesReturn, int lastStage, DateTime now)
         {
-            var entries = await _db.LedgerEntries
-                .Where(e =>
-                    e.SourceType == LedgerSourceType.SalesReturn &&
-                    e.SourceId == salesReturnId &&
-                    e.PostVersion == stage)
-                .ToListAsync();
+            int salesReturnId = salesReturn.SRId;
+            string voucherNo = salesReturn.SRId.ToString();
 
-            foreach (var entry in entries)
+            // (1) و (2): إيرادات مدين، عميل دائن — نعكسهما
+            var lastLine1 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.SalesReturn && e.SourceId == salesReturnId && e.LineNo == 1 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+            var lastLine2 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.SalesReturn && e.SourceId == salesReturnId && e.LineNo == 2 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            if (lastLine1 == null || lastLine2 == null)
+                throw new Exception("تعذر تحديد آخر ترحيل سابق للمرتجع (قيود غير مكتملة).");
+
+            decimal oldReturnAmount = lastLine1.Debit > 0 ? lastLine1.Debit : lastLine2.Credit;
+
+            // 9001: عكس سطر الإيرادات (كان مدين -> يصبح دائن)
+            _db.LedgerEntries.Add(new LedgerEntry
             {
+                EntryDate = salesReturn.SRDate,
+                SourceType = LedgerSourceType.SalesReturn,
+                VoucherNo = voucherNo,
+                SourceId = salesReturnId,
+                LineNo = 9001,
+                PostVersion = lastStage,
+                AccountId = lastLine1.AccountId,
+                CustomerId = null,
+                Debit = 0m,
+                Credit = oldReturnAmount,
+                Description = $"عكس ترحيل مرتجع بيع رقم {salesReturnId} (عكس مرحلة {lastStage})",
+                CreatedAt = now
+            });
+
+            // 9002: عكس سطر العميل (كان دائن -> يصبح مدين)
+            _db.LedgerEntries.Add(new LedgerEntry
+            {
+                EntryDate = salesReturn.SRDate,
+                SourceType = LedgerSourceType.SalesReturn,
+                VoucherNo = voucherNo,
+                SourceId = salesReturnId,
+                LineNo = 9002,
+                PostVersion = lastStage,
+                AccountId = lastLine2.AccountId,
+                CustomerId = lastLine2.CustomerId,
+                Debit = oldReturnAmount,
+                Credit = 0m,
+                Description = $"عكس ترحيل مرتجع بيع رقم {salesReturnId} (عكس مرحلة {lastStage})",
+                CreatedAt = now
+            });
+
+            // إعادة رصيد العميل (عكس المرتجع = زيادة دين العميل مرة أخرى)
+            if (lastLine2.CustomerId.HasValue && lastLine2.CustomerId.Value > 0)
+            {
+                var cust = await _db.Customers.FirstOrDefaultAsync(c => c.CustomerId == lastLine2.CustomerId.Value);
+                if (cust != null)
+                    cust.CurrentBalance += oldReturnAmount;
+            }
+
+            // (3) و (4): مخزون و COGS إن وجدا
+            var lastLine3 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.SalesReturn && e.SourceId == salesReturnId && e.LineNo == 3 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+            var lastLine4 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.SalesReturn && e.SourceId == salesReturnId && e.LineNo == 4 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            if (lastLine3 != null && lastLine4 != null)
+            {
+                decimal oldCostAmount = lastLine3.Debit > 0 ? lastLine3.Debit : lastLine4.Credit;
                 _db.LedgerEntries.Add(new LedgerEntry
                 {
-                    EntryDate = entry.EntryDate,
-                    SourceType = entry.SourceType,
-                    VoucherNo = entry.VoucherNo,
-                    SourceId = entry.SourceId,
-                    LineNo = entry.LineNo,
-                    PostVersion = -stage, // سالب للعكس
-                    AccountId = entry.AccountId,
-                    CustomerId = entry.CustomerId,
-                    Debit = entry.Credit, // عكس
-                    Credit = entry.Debit, // عكس
-                    Description = $"عكس: {entry.Description}",
-                    CreatedAt = DateTime.UtcNow
+                    EntryDate = salesReturn.SRDate,
+                    SourceType = LedgerSourceType.SalesReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = salesReturnId,
+                    LineNo = 9003,
+                    PostVersion = lastStage,
+                    AccountId = lastLine3.AccountId,
+                    CustomerId = null,
+                    Debit = 0m,
+                    Credit = oldCostAmount,
+                    Description = $"عكس تكلفة مرتجع بيع رقم {salesReturnId} (عكس مرحلة {lastStage})",
+                    CreatedAt = now
+                });
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = salesReturn.SRDate,
+                    SourceType = LedgerSourceType.SalesReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = salesReturnId,
+                    LineNo = 9004,
+                    PostVersion = lastStage,
+                    AccountId = lastLine4.AccountId,
+                    CustomerId = null,
+                    Debit = oldCostAmount,
+                    Credit = 0m,
+                    Description = $"عكس تكلفة مرتجع بيع رقم {salesReturnId} (عكس مرحلة {lastStage})",
+                    CreatedAt = now
                 });
             }
         }
 
-        private async Task ReversePurchaseReturnEntriesAsync(int purchaseReturnId, int stage)
+        /// <summary>
+        /// عكس مرحلة سابقة من مرتجع الشراء — بنفس أسلوب مرتجع البيع: قيود 9001، 9002، 9003، 9004 + تحديث رصيد المورد.
+        /// </summary>
+        private async Task ReversePurchaseReturnEntriesLikePurchaseAsync(PurchaseReturn purchaseReturn, int lastStage, DateTime now)
         {
-            var entries = await _db.LedgerEntries
-                .Where(e =>
-                    e.SourceType == LedgerSourceType.PurchaseReturn &&
-                    e.SourceId == purchaseReturnId &&
-                    e.PostVersion == stage)
-                .ToListAsync();
+            int purchaseReturnId = purchaseReturn.PRetId;
+            string voucherNo = purchaseReturn.PRetId.ToString();
 
-            foreach (var entry in entries)
+            // (1) المورد مدين، (2) مشتريات دائن — نعكسهما
+            var lastLine1 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == purchaseReturnId && e.LineNo == 1 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+            var lastLine2 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == purchaseReturnId && e.LineNo == 2 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            if (lastLine1 == null || lastLine2 == null)
+                throw new Exception("تعذر تحديد آخر ترحيل سابق لمرتجع الشراء (قيود غير مكتملة).");
+
+            decimal oldReturnAmount = lastLine1.Debit > 0 ? lastLine1.Debit : lastLine2.Credit;
+
+            // 9001: عكس سطر المورد (كان مدين -> يصبح دائن)
+            _db.LedgerEntries.Add(new LedgerEntry
             {
+                EntryDate = purchaseReturn.PRetDate,
+                SourceType = LedgerSourceType.PurchaseReturn,
+                VoucherNo = voucherNo,
+                SourceId = purchaseReturnId,
+                LineNo = 9001,
+                PostVersion = lastStage,
+                AccountId = lastLine1.AccountId,
+                CustomerId = lastLine1.CustomerId,
+                Debit = 0m,
+                Credit = oldReturnAmount,
+                Description = $"عكس ترحيل مرتجع شراء رقم {purchaseReturnId} (عكس مرحلة {lastStage})",
+                CreatedAt = now
+            });
+
+            // 9002: عكس سطر المشتريات (كان دائن -> يصبح مدين)
+            _db.LedgerEntries.Add(new LedgerEntry
+            {
+                EntryDate = purchaseReturn.PRetDate,
+                SourceType = LedgerSourceType.PurchaseReturn,
+                VoucherNo = voucherNo,
+                SourceId = purchaseReturnId,
+                LineNo = 9002,
+                PostVersion = lastStage,
+                AccountId = lastLine2.AccountId,
+                CustomerId = null,
+                Debit = oldReturnAmount,
+                Credit = 0m,
+                Description = $"عكس ترحيل مرتجع شراء رقم {purchaseReturnId} (عكس مرحلة {lastStage})",
+                CreatedAt = now
+            });
+
+            // إعادة رصيد المورد (عكس المرتجع = نقصان دين المورد مرة أخرى)
+            if (lastLine1.CustomerId.HasValue && lastLine1.CustomerId.Value > 0)
+            {
+                var cust = await _db.Customers.FirstOrDefaultAsync(c => c.CustomerId == lastLine1.CustomerId.Value);
+                if (cust != null)
+                    cust.CurrentBalance -= oldReturnAmount;
+            }
+
+            // (3) و (4): COGS و مخزون إن وجدا
+            var lastLine3 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == purchaseReturnId && e.LineNo == 3 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+            var lastLine4 = await _db.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == purchaseReturnId && e.LineNo == 4 && e.PostVersion == lastStage)
+                .OrderByDescending(e => e.Id)
+                .FirstOrDefaultAsync();
+
+            if (lastLine3 != null && lastLine4 != null)
+            {
+                decimal oldCostAmount = lastLine3.Debit > 0 ? lastLine3.Debit : lastLine4.Credit;
                 _db.LedgerEntries.Add(new LedgerEntry
                 {
-                    EntryDate = entry.EntryDate,
-                    SourceType = entry.SourceType,
-                    VoucherNo = entry.VoucherNo,
-                    SourceId = entry.SourceId,
-                    LineNo = entry.LineNo,
-                    PostVersion = -stage, // سالب للعكس
-                    AccountId = entry.AccountId,
-                    CustomerId = entry.CustomerId,
-                    Debit = entry.Credit, // عكس
-                    Credit = entry.Debit, // عكس
-                    Description = $"عكس: {entry.Description}",
-                    CreatedAt = DateTime.UtcNow
+                    EntryDate = purchaseReturn.PRetDate,
+                    SourceType = LedgerSourceType.PurchaseReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = purchaseReturnId,
+                    LineNo = 9003,
+                    PostVersion = lastStage,
+                    AccountId = lastLine3.AccountId,
+                    CustomerId = null,
+                    Debit = 0m,
+                    Credit = oldCostAmount,
+                    Description = $"عكس تكلفة مرتجع شراء رقم {purchaseReturnId} (عكس مرحلة {lastStage})",
+                    CreatedAt = now
+                });
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = purchaseReturn.PRetDate,
+                    SourceType = LedgerSourceType.PurchaseReturn,
+                    VoucherNo = voucherNo,
+                    SourceId = purchaseReturnId,
+                    LineNo = 9004,
+                    PostVersion = lastStage,
+                    AccountId = lastLine4.AccountId,
+                    CustomerId = null,
+                    Debit = oldCostAmount,
+                    Credit = 0m,
+                    Description = $"عكس تكلفة مرتجع شراء رقم {purchaseReturnId} (عكس مرحلة {lastStage})",
+                    CreatedAt = now
                 });
             }
         }

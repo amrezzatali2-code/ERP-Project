@@ -564,47 +564,41 @@
                             <div id="ProductCardCollapse" class="collapse show" style="display: block !important;">
                                 <div class="card-body">
 
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">الكمية في هذا المخزن</label>
+                                    <div class="row g-2 mb-3 align-items-center flex-wrap">
+                                        <div class="col-auto d-flex align-items-center gap-1">
+                                            <label class="form-label form-label-sm mb-0">الكمية في هذا المخزن</label>
                                             <input type="text" id="ProdQtyCurrentWarehouse"
-                                                   class="form-control form-control-sm text-center" value="0" readonly />
+                                                   class="form-control form-control-sm text-center" value="0" readonly style="max-width: 70px;" />
                                         </div>
-
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
+                                        <div class="col-auto d-flex align-items-center gap-1">
+                                            <label class="form-label form-label-sm mb-0">إجمالي الكمية في كل المخازن</label>
                                             <input type="text" id="ProdQtyAllWarehouses"
-                                                   class="form-control form-control-sm text-center" value="0" readonly />
+                                                   class="form-control form-control-sm text-center" value="0" readonly style="max-width: 70px;" />
                                         </div>
-
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">الصنف عليه كوتة؟</label>
+                                        <div class="col-auto d-flex align-items-center gap-1">
+                                            <label class="form-label form-label-sm mb-0">الصنف عليه كوتة؟</label>
                                             <input type="text" id="ProdQuotaText"
-                                                   class="form-control form-control-sm text-center" value="بدون كوتة" readonly />
+                                                   class="form-control form-control-sm text-center" value="بدون كوتة" readonly style="max-width: 100px;" />
                                         </div>
-
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
+                                        <div class="col-auto d-flex align-items-center gap-1">
+                                            <label class="form-label form-label-sm mb-0">الخصم المرجّح للصنف %</label>
                                             <input type="text" id="ProdWeightedDiscount"
-                                                   class="form-control form-control-sm text-center" value="0" readonly />
+                                                   class="form-control form-control-sm text-center" value="0" readonly style="max-width: 55px;" />
                                         </div>
-                                    </div>
-
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-lg-6 col-md-6">
-                                            <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
-                                            <select id="AlternativeProducts" class="form-select form-select-sm"></select>
+                                        <div class="col-auto d-flex align-items-center gap-1">
+                                            <label class="form-label form-label-sm mb-0">بدائل الصنف (حسب الاسم العلمي)</label>
+                                            <select id="AlternativeProducts" class="form-select form-select-sm" style="min-width: 180px;"></select>
                                         </div>
                                     </div>
 
                                     @* =====================================================
-                                       جدول المطلوب (غير محول)
+                                       جدول المطلوب + جدول المبيعات والوسيط — قصاد بعض بالضبط (نفس الارتفاع والمحاذاة)
                                        ===================================================== *@
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-12">
-                                            <label class="form-label form-label-sm mb-2">المطلوب (طلبات غير محولة)</label>
-                                            <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
-                                                <table class="table table-sm table-bordered table-striped mb-0" id="RequiredTable">
+                                    <div class="row g-2 mb-3 align-items-start">
+                                        <div class="col-md-6 d-flex flex-column">
+                                            <div class="form-label form-label-sm mb-1" style="min-height: 1.75rem;">المطلوب (طلبات غير محولة)</div>
+                                            <div class="table-responsive flex-grow-1" style="height: 130px; overflow-y: auto;">
+                                                <table class="table table-sm table-bordered table-striped mb-0 small" id="RequiredTable">
                                                     <thead class="table-light sticky-top">
                                                         <tr>
                                                             <th class="text-center">اسم العميل</th>
@@ -621,27 +615,16 @@
                                                 </table>
                                             </div>
                                         </div>
-                                    </div>
-
-                                    @* =====================================================
-                                       جدول المبيعات والوسيط: إجمالي الكمية المبيعة + الوسيط في المدة (من - إلى)
-                                       الجدول يتحدث تلقائياً مع تغيير الصنف أو التاريخ (بدون زر تحديث)
-                                       ===================================================== *@
-                                    <div class="row g-2 mb-2">
-                                        <div class="col-12 d-flex flex-wrap align-items-end gap-2">
-                                            <label class="form-label form-label-sm mb-0">المبيعات والوسيط</label>
-                                            <div class="d-flex align-items-center gap-1">
+                                        <div class="col-md-6 d-flex flex-column">
+                                            <div class="d-flex flex-wrap align-items-center gap-1 mb-1" style="min-height: 1.75rem;">
+                                                <label class="form-label form-label-sm mb-0">المبيعات والوسيط</label>
                                                 <label class="form-label form-label-sm mb-0 small text-muted">من</label>
-                                                <input type="date" id="SalesFromDate" class="form-control form-control-sm" style="max-width: 130px;" />
-                                            </div>
-                                            <div class="d-flex align-items-center gap-1">
+                                                <input type="date" id="SalesFromDate" class="form-control form-control-sm" style="max-width: 115px;" />
                                                 <label class="form-label form-label-sm mb-0 small text-muted">إلى</label>
-                                                <input type="date" id="SalesToDate" class="form-control form-control-sm" style="max-width: 130px;" />
+                                                <input type="date" id="SalesToDate" class="form-control form-control-sm" style="max-width: 115px;" />
                                             </div>
-                                        </div>
-                                        <div class="col-12">
-                                            <div class="table-responsive" style="max-height: 100px; overflow-y: auto;">
-                                                <table class="table table-sm table-bordered table-striped mb-0" id="SalesIntermediaryTable">
+                                            <div class="table-responsive flex-grow-1" style="height: 130px; overflow-y: auto;">
+                                                <table class="table table-sm table-bordered table-striped mb-0 small" id="SalesIntermediaryTable">
                                                     <thead class="table-light sticky-top">
                                                         <tr>
                                                             <th class="text-center">إجمالي الكمية المبيعة</th>

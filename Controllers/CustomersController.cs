@@ -601,80 +601,75 @@ namespace ERP.Controllers
             DateTime? toExclusive = toDate?.Date.AddDays(1); // متغير: نهاية المدة (حصري)
 
             // =========================================================
-            // 6) إجمالي المبيعات (من قيود دفتر الأستاذ - مصدر الحقيقة)
-            // ✅ نحسب من LedgerEntries وليس من SalesInvoices مباشرة
-            // ✅ نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001)
-            // ✅ تحسين: استخدام NOT EXISTS في SQL مباشرة بدل Contains (أسرع مع ملايين السطور)
+            // دفتر الأستاذ — قواعد موحّدة لجميع العملاء (عميل 1، 6، وأي عميل):
+            // - فاتورة مبيعات: LineNo 1 = مدين العميل (CustomerId معبّأ)، نأخذ آخر PostVersion فقط لكل SourceId (لتجنب المضاعفة عند فتح الفاتورة وإعادة الترحيل).
+            // - "محذوفة من القائمة" = وجود قيد عكسي 9001 وصفه يحتوي "قائمة الهيدر" فقط (لا نعتبر "عكس ترحيل" حذفاً).
             // =========================================================
-            var salesLedgerQ = _context.LedgerEntries
+
+            // فواتير المبيعات المحذوفة من القائمة فقط (نفس القائمة تُستخدم للإجمالي ولقائمة الفواتير)
+            var deletedSalesInvoiceIds = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.CustomerId == customer.CustomerId &&
+                    e.SourceType == LedgerSourceType.SalesInvoice &&
+                    e.LineNo == 9001 &&
+                    e.Description != null &&
+                    e.Description.Contains("قائمة الهيدر"))
+                .Select(e => e.SourceId)
+                .Distinct()
+                .ToListAsync();
+
+            // إجمالي المبيعات من دفتر الأستاذ: LineNo 1 (مدين العميل)، آخر PostVersion فقط لكل فاتورة
+            var salesLedgerEntries = await _context.LedgerEntries
                 .AsNoTracking()
                 .Where(e =>
                     e.CustomerId == customer.CustomerId &&
                     e.SourceType == LedgerSourceType.SalesInvoice &&
                     e.LineNo == 1 &&
                     e.PostVersion > 0 &&
-                    // ✅ استثناء الفواتير المحذوفة: استخدام NOT EXISTS (أسرع من Contains)
-                    !_context.LedgerEntries.Any(rev =>
-                        rev.CustomerId == customer.CustomerId &&
-                        rev.SourceType == LedgerSourceType.SalesInvoice &&
-                        rev.SourceId == e.SourceId &&
-                        rev.LineNo == 9001)) // قيود عكسية = فاتورة محذوفة
-                .AsQueryable();
-
-            if (from.HasValue) salesLedgerQ = salesLedgerQ.Where(e => e.EntryDate >= from.Value);
-            if (toExclusive.HasValue) salesLedgerQ = salesLedgerQ.Where(e => e.EntryDate < toExclusive.Value);
-
-            decimal totalSales = await salesLedgerQ.SumAsync(e => (decimal?)e.Debit) ?? 0m;
-
-            // =========================================================
-            // 6.1) استعلام منفصل لـ SalesInvoices (لحساب عدد الفواتير وآخر تاريخ)
-            // ✅ مهم: نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001)
-            // =========================================================
-            // أولاً: نجد أرقام الفواتير المحذوفة (التي لها قيود عكسية)
-            var deletedSalesInvoiceIds = await _context.LedgerEntries
-                .AsNoTracking()
-                .Where(e =>
-                    e.CustomerId == customer.CustomerId &&
-                    e.SourceType == LedgerSourceType.SalesInvoice &&
-                    e.LineNo == 9001) // قيود عكسية = فاتورة محذوفة
-                .Select(e => e.SourceId)
-                .Distinct()
+                    e.SourceId.HasValue &&
+                    !deletedSalesInvoiceIds.Contains(e.SourceId.Value))
+                .Where(e => !from.HasValue || e.EntryDate >= from.Value)
+                .Where(e => !toExclusive.HasValue || e.EntryDate < toExclusive.Value)
                 .ToListAsync();
+
+            decimal totalSales = salesLedgerEntries
+                .GroupBy(e => e.SourceId!.Value)
+                .Select(g => g.OrderByDescending(x => x.PostVersion).First())
+                .Sum(e => e.Debit);
 
             var salesQ = _context.SalesInvoices
                 .AsNoTracking()
-                .Where(x => 
-                    x.CustomerId == customer.CustomerId && 
-                    x.IsPosted &&
-                    !deletedSalesInvoiceIds.Contains(x.SIId)); // ✅ استثناء الفواتير المحذوفة
+                .Where(x =>
+                    x.CustomerId == customer.CustomerId &&
+                    !deletedSalesInvoiceIds.Contains(x.SIId)); // مرحلة وغير مرحلة؛ نستثني المحذوفة فقط
 
             if (from.HasValue) salesQ = salesQ.Where(x => x.SIDate >= from.Value);
             if (toExclusive.HasValue) salesQ = salesQ.Where(x => x.SIDate < toExclusive.Value);
 
             // =========================================================
-            // 7) إجمالي المشتريات (من قيود دفتر الأستاذ - مصدر الحقيقة)
-            // ✅ مهم: نحسب من LedgerEntries وليس من PurchaseInvoices مباشرة
-            // لأن القيود هي المصدر الحقيقي بعد الترحيل
-            // ✅ مهم: نحسب من آخر PostVersion لكل فاتورة (SourceId) لضمان عدم حساب القيود القديمة
-            // ✅ مهم: نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001 أو 9002)
-            // ✅ مهم: نستثني أيضاً الفواتير غير الموجودة في جدول PurchaseInvoices (محذوفة قديماً)
+            // دفتر الأستاذ — المشتريات (نفس القواعد لجميع العملاء):
+            // - فاتورة مشتريات: LineNo 2 = دائن المورد (CustomerId معبّأ)، آخر PostVersion فقط لكل SourceId.
+            // - "محذوفة من القائمة" = قيد عكسي 9001 أو 9002 وصفه "قائمة الهيدر" فقط.
             // =========================================================
-            
-            // أولاً: نجد أرقام الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001 أو 9002)
+
+            // فواتير المشتريات المحذوفة من القائمة فقط
             var deletedPurchaseInvoiceIds = await _context.LedgerEntries
                 .AsNoTracking()
                 .Where(e =>
                     e.CustomerId == customer.CustomerId &&
                     e.SourceType == LedgerSourceType.PurchaseInvoice &&
-                    (e.LineNo == 9001 || e.LineNo == 9002)) // قيود عكسية = فاتورة محذوفة
+                    (e.LineNo == 9001 || e.LineNo == 9002) &&
+                    e.Description != null &&
+                    e.Description.Contains("قائمة الهيدر"))
                 .Select(e => e.SourceId)
                 .Distinct()
                 .ToListAsync();
-            
-            // ثانياً: نجد أرقام الفواتير الموجودة فعلياً في جدول PurchaseInvoices
+
+            // ثانياً: أرقام فواتير المشتريات الموجودة في الجدول (مرحلة وغير مرحلة)
             var existingPurchaseInvoiceIds = await _context.PurchaseInvoices
                 .AsNoTracking()
-                .Where(pi => pi.CustomerId == customer.CustomerId && pi.IsPosted)
+                .Where(pi => pi.CustomerId == customer.CustomerId)
                 .Select(pi => pi.PIId)
                 .ToListAsync();
             
@@ -721,16 +716,14 @@ namespace ERP.Controllers
             decimal totalPurchases = purchasesBySource.Sum(g => g.Entries.Sum(e => e.Credit));
 
             // =========================================================
-            // 7.1) استعلام منفصل لـ PurchaseInvoices (لحساب عدد الفواتير وآخر تاريخ)
-            // ✅ مهم: نستثني الفواتير المحذوفة (التي لها قيود عكسية LineNo 9001)
-            // ✅ نستخدم deletedPurchaseInvoiceIds المحدد مسبقاً في السطر 664
+            // 7.1) استعلام منفصل لـ PurchaseInvoices (لحساب عدد الفواتير + قائمة حركة المشتريات)
+            // ✅ نعرض كل الفواتير (مرحلة وغير مرحلة) — نستثني المحذوفة من القائمة فقط
             // =========================================================
             var purchasesQ = _context.PurchaseInvoices
                 .AsNoTracking()
-                .Where(x => 
-                    x.CustomerId == customer.CustomerId && 
-                    x.IsPosted &&
-                    !deletedPurchaseInvoiceIds.Contains(x.PIId)); // ✅ استثناء الفواتير المحذوفة
+                .Where(x =>
+                    x.CustomerId == customer.CustomerId &&
+                    !deletedPurchaseInvoiceIds.Contains(x.PIId));
 
             if (from.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate >= from.Value);
             if (toExclusive.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate < toExclusive.Value);

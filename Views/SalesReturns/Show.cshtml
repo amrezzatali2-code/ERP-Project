@@ -28,6 +28,25 @@
             overflow: hidden;
         }
 
+        /* شريط الأزرار: يفضل ظاهر ومثبت */
+        .invoice-actions-sticky {
+            position: sticky;
+            top: 58px; /* عدّلها حسب ارتفاع الـ Navbar عندك */
+            z-index: 3000; /* أعلى من أي كروت/هيدر */
+
+            background: #ffffff; /* ✅ أفتح لون (بدل الرمادي) */
+            border: 1px solid rgba(13,110,253,.12); /* ✅ بوردر خفيف */
+            padding: 10px 10px;
+            border-radius: 14px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.05); /* ✅ ظل أخف */
+        }
+        /* لو عندك تبويب/هيدر ثابت أعلى من النافبار زوّد top */
+        @@media (max-width: 992px) {
+            .invoice-actions-sticky {
+                top: 56px;
+            }
+        }
+
         /* شريط الهيدر الملون للهيدر الرئيسي للمرتجع */
         .invoice-header-bar {
             background: linear-gradient(90deg, #6f42c1 0%, #0dcaf0 100%);
@@ -69,6 +88,11 @@
 
         .invoice-small-input {
             max-width: 150px;
+        }
+
+        /* حقول سطر المرتجع: صغيرة ومتساوية */
+        .return-line-field {
+            max-width: 5.5rem;
         }
 
         .customer-summary-line {
@@ -200,7 +224,8 @@
                                        class="form-control form-control-sm"
                                        placeholder="اكتب اسم العميل أو جزء منه للبحث..."
                                        list="customersList"
-                                       autocomplete="off" />
+                                       autocomplete="off"
+                                       data-lock-posted="1" />
 
                                 <datalist id="customersList">
                                     @if (ViewBag.Customers != null)
@@ -236,16 +261,6 @@
                                 <input type="hidden" id="SRId" value="@Model.SRId" />
                             </div>
 
-                            @* المخزن *@
-                            <div class="col-lg-3 col-md-3">
-                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
-                                <select asp-for="WarehouseId"
-                                        asp-items="ViewBag.Warehouses"
-                                        class="form-select form-select-sm">
-                                    <option value="">اختر المخزن...</option>
-                                </select>
-                            </div>
-
                             @* التاريخ والوقت *@
                             <div class="col-lg-3 col-md-6">
                                 <div class="row g-2">
@@ -278,57 +293,70 @@
                             </div>
                             <div class="col-lg-3 col-md-4">
                                 <label class="form-label form-label-sm">حالة المرتجع</label>
-                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center"
-                                       value="@Model.Status"
+                                @{
+                                    // عرض الحالة بالعربية (في DB تُخزَّن: Draft, Posted, Cancelled)
+                                    int? stage = ViewBag.ReturnStage as int?;
+                                    string statusDisplayValue = Model.Status switch
+                                    {
+                                        "Draft" => "غير مرحلة",
+                                        "Posted" => (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل"),
+                                        "Cancelled" => "ملغى",
+                                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
+                                    };
+                                }
+                                <input id="ReturnStatusDisplay" 
+                                       class="form-control form-control-sm text-center"
+                                       value="@statusDisplayValue"
                                        readonly />
                             </div>
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">مرحّل؟</label>
-                                <input id="ReturnIsPostedDisplay" class="form-control form-control-sm text-center"
-                                       value="@(Model.IsPosted ? "نعم" : "لا")"
-                                       readonly />
+                            <div class="col-lg-3 col-md-4">
+                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+                                <select asp-for="WarehouseId"
+                                        asp-items="ViewBag.Warehouses"
+                                        data-lock-posted="1"
+                                        class="form-select form-select-sm"
+                                        data-is-posted="@(Model.IsPosted ? "1" : "0")">
+                                    <option value="">اختر المخزن...</option>
+                                </select>
                             </div>
-                            <div class="col-lg-4 col-md-4">
+                            <div class="col-lg-3 col-md-4">
                                 <label class="form-label form-label-sm">رقم فاتورة البيع</label>
                                 <input type="number" 
                                        id="SalesInvoiceIdInput"
                                        class="form-control form-control-sm text-center"
                                        value="@(Model.SalesInvoiceId?.ToString() ?? "")"
                                        placeholder="أدخل رقم الفاتورة"
-                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
+                                       data-lock-posted="1" />
                                 <input type="hidden" asp-for="SalesInvoiceId" id="SalesInvoiceId" />
                             </div>
                         </div>
-                    </div>
-                </div>
 
-                @* ======================================
-                   2) كارت تفاصيل العميل
-                   ====================================== *@
-                <div class="card shadow-sm mb-3 invoice-details-card">
-                    <div class="card-header">
-                        <h6 class="mb-0">تفاصيل العميل</h6>
-                    </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-lg-4 col-md-4">
+                        <br />
+
+                        @* ======================================
+                           تفاصيل العميل (مدمجة داخل نفس الكارت)
+                           ====================================== *@
+                        <div class="row g-4">
+                            <div class="col-lg-3 col-md-3">
                                 <label class="form-label form-label-sm">الهاتف</label>
                                 <input id="CustomerPhone"
                                        class="form-control form-control-sm"
                                        readonly />
                             </div>
 
-                            <div class="col-lg-8 col-md-8">
-                                <label class="form-label form-label-sm">العنوان</label>
-                                <input id="CustomerAddress"
-                                       class="form-control form-control-sm"
-                                       readonly />
-                            </div>
-
-                            <div class="col-lg-4 col-md-4">
+                            <div class="col-lg-3 col-md-3">
                                 <label class="form-label form-label-sm">الحد الائتماني</label>
                                 <input id="CustomerCreditLimit"
                                        class="form-control form-control-sm text-center"
+                                       readonly />
+                            </div>
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-lg-12 col-md-12">
+                                <label class="form-label form-label-sm">العنوان</label>
+                                <input id="CustomerAddress"
+                                       class="form-control form-control-sm"
                                        readonly />
                             </div>
                         </div>
@@ -381,27 +409,11 @@
                             </div>
                         </div>
 
-                        <div class="table-responsive mt-2">
-                            <table class="table table-sm table-striped mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>المخزن</th>
-                                        <th class="text-center">الكمية المتاحة</th>
-                                        <th class="text-center">محجوزة لطلبات</th>
-                                        <th class="text-center">متاح للبيع</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @* هتملا لاحقاً من الداتا *@
-                                </tbody>
-                            </table>
-                        </div>
-
                     </div>
                 </div>
 
                 @* =====================================================
-                   4) كارت إدخال الصنف في المرتجع
+                   4) كارت إدخال الصنف في المرتجع (بنفس تنسيق فاتورة المبيعات)
                    ===================================================== *@
                 <div class="card shadow-sm mb-3 invoice-Add-card">
                     <div class="card-header">
@@ -409,8 +421,8 @@
                     </div>
 
                     <div class="card-body">
-                        <div class="row g-2 align-items-end mb-3">
-                            <div class="col-lg-4 col-md-6">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-lg-5 col-md-4">
                                 <label class="form-label form-label-sm">اختر صنف من فاتورة البيع</label>
                                 <select id="InvoiceItemSelect"
                                         class="form-select form-select-sm"
@@ -419,70 +431,58 @@
                                 </select>
                             </div>
 
-                            <div class="col-lg-2 col-md-3">
+                            <div class="col-auto">
                                 <label class="form-label form-label-sm">الكمية المرتجعة</label>
                                 <input type="number"
                                        id="ReturnQtyInput"
-                                       class="form-control form-control-sm text-center"
+                                       class="form-control form-control-sm text-center return-line-field"
                                        placeholder="0"
                                        min="1"
                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
                             </div>
 
-                            <div class="col-lg-2 col-md-3">
+                            <div class="col-auto">
                                 <label class="form-label form-label-sm">الكمية في الفاتورة</label>
                                 <input type="number"
                                        id="InvoiceQtyDisplay"
-                                       class="form-control form-control-sm text-center"
+                                       class="form-control form-control-sm text-center bg-light return-line-field"
                                        readonly />
                             </div>
 
-                            <div class="col-lg-2 col-md-6">
+                            <div class="col-auto">
                                 <label class="form-label form-label-sm">التشغيلة</label>
                                 <input type="text"
                                        id="ReturnBatchDisplay"
-                                       class="form-control form-control-sm text-center"
+                                       class="form-control form-control-sm text-center bg-light return-line-field"
                                        readonly />
                             </div>
 
-                            <div class="col-lg-2 col-md-6">
+                            <div class="col-auto">
                                 <label class="form-label form-label-sm">تاريخ الصلاحية</label>
                                 <input type="text"
                                        id="ReturnExpiryDisplay"
-                                       class="form-control form-control-sm text-center"
+                                       class="form-control form-control-sm text-center bg-light return-line-field"
                                        readonly />
                             </div>
-                        </div>
 
-                        <div class="row g-2 align-items-end">
-                            <div class="col-lg-12">
-                                <div class="d-grid gap-1 invoice-item-actions">
-                                    <button type="button"
-                                            id="btnAddReturnLine"
-                                            class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")">
-                                        إضافة الصنف للمرتجع
-                                    </button>
-                                </div>
+                            <div class="col-lg-2 col-md-4 d-grid">
+                                <label class="form-label form-label-sm">&nbsp;</label>
+                                <button type="button"
+                                        id="btnAddReturnLine"
+                                        class="btn btn-primary btn-sm w-100"
+                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                    إضافة
+                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
 
                 @* ==========================================
-                   5) جدول سطور المرتجع (عرض مبدئي)
+                   5) جدول سطور المرتجع (بنفس تنسيق فاتورة المبيعات)
                    ========================================== *@
-                <div class="card shadow-sm mb-3 invoice-lines-card">
-                    <div class="card-header py-2 invoice-lines-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <span class="fw-semibold">
-                                سطور مرتجع البيع
-                            </span>
-                        </div>
-                    </div>
-                    <div class="card-body p-0">
-                        <div class="erp-table-wrapper mb-0">
-                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                <div class="erp-table-wrapper mb-0">
+                    <table class="table table-sm table-striped table-hover mb-0 erp-table">
                                 <thead>
                                     <tr>
                                         <th class="text-center">#</th>
@@ -516,7 +516,7 @@
                                                     <button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine"
                                                             data-line-no="@line.LineNo" data-sr-id="@Model.SRId"
                                                             data-lock-posted="@(Model.IsPosted ? "1" : "0")"
-                                                            title="مسح السطر">🗑</button>
+                                                            title="مسح السطر">مسح</button>
                                                 </td>
                                             </tr>
                                         }
@@ -531,36 +531,34 @@
                                     }
                                 </tbody>
                             </table>
-                        </div>
-                    </div>
                 </div>
 
                 @* ====================================
-                   6) ملخص إجماليات المرتجع
+                   6) ملخص إجماليات المرتجع (بنفس تنسيق فاتورة المبيعات)
                    ==================================== *@
                 <div class="card shadow-sm invoice-totals-card">
                     <div class="card-body">
 
-                        <div class="row g-2 align-items-center mb-2">
-                            <div class="col-md-3">
+                        <div class="row g-3 align-items-center mb-2">
+                            <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">إجمالي قبل الخصم</span>
                                     <span id="TotalBeforeDiscountBadge" class="badge bg-light text-dark summary-badge">@Model.TotalBeforeDiscount.ToString("0.00")</span>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">خصم الهيدر (قيمة)</span>
                                     <span class="badge bg-warning text-dark summary-badge">@Model.HeaderDiscountValue.ToString("0.00") <span class="small">(@Model.HeaderDiscountPercent.ToString("0.##") %)</span></span>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي بعد الخصم وقبل الضريبة</span>
+                                    <span class="small text-muted">بعد الخصم وقبل الضريبة</span>
                                     <span id="TotalAfterDiscountBeforeTaxBadge" class="badge bg-light text-dark summary-badge">@Model.TotalAfterDiscountBeforeTax.ToString("0.00")</span>
                                 </div>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-2">
                                 <div class="d-flex flex-column">
                                     <span class="small text-muted">قيمة الضريبة</span>
                                     <span id="TaxAmountBadge" class="badge bg-info text-dark summary-badge">@Model.TaxAmount.ToString("0.00")</span>
@@ -599,10 +597,108 @@
                     <div class="card-header py-2 text-center">
                         <h6 class="mb-0">إجراءات مرتجع البيع</h6>
                     </div>
-                    <div class="card-body d-grid">
 
-                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab"
-                           href="@Url.Action("Create", "SalesReturns", new { frame = 1 })"
+                    <!-- =========================================================
+                    ثابت: رقم المرتجع + علم الترحيل (Flag)
+                    - SRId: رقم المرتجع الحالي (0 لو جديد)
+                    - ReturnIsPostedFlag: 1 لو مترحّل / 0 لو مفتوح
+                    ========================================================= -->
+                    <input type="hidden" id="ReturnId" value="@Model.SRId" />
+                    <input type="hidden" id="ReturnIsPostedFlag" value="@(Model.IsPosted ? "1" : "0")" />
+
+                    <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
+
+                        @{
+                            int? navFirst = ViewBag.NavFirstId == null ? (int?)null : (int)ViewBag.NavFirstId;
+                            int? navLast = ViewBag.NavLastId == null ? (int?)null : (int)ViewBag.NavLastId;
+                            int? navPrev = ViewBag.NavPrevId == null ? (int?)null : (int)ViewBag.NavPrevId;
+                            int? navNext = ViewBag.NavNextId == null ? (int?)null : (int)ViewBag.NavNextId;
+
+                            int currentId = Model?.SRId ?? 0;
+
+                            bool hasAnyReturns =
+                            navFirst.HasValue && navLast.HasValue &&
+                            navFirst.Value > 0 && navLast.Value > 0;
+
+                            int? prevEffective = (currentId == 0) ? navLast : navPrev;
+                            int? nextEffective = (currentId == 0) ? navFirst : navNext;
+
+                            bool canFirst = hasAnyReturns && navFirst.HasValue && navFirst.Value > 0 && navFirst.Value != currentId;
+                            bool canLast = hasAnyReturns && navLast.HasValue && navLast.Value > 0 && navLast.Value != currentId;
+                            bool canPrev = hasAnyReturns && prevEffective.HasValue && prevEffective.Value > 0 && prevEffective.Value != currentId;
+                            bool canNext = hasAnyReturns && nextEffective.HasValue && nextEffective.Value > 0 && nextEffective.Value != currentId;
+                        }
+
+                        <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
+                            <button type="button"
+                                    id="btnFirstReturn"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="sr-show-tab"
+                                    data-tab-title="مرتجع مبيعات"
+                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (navFirst ?? 0) })"
+                                    data-id="@(navFirst ?? 0)"
+                                    title="أول مرتجع"
+                                    @(canFirst ? "" : "disabled")>
+                                ⏮
+                            </button>
+
+                            <button type="button"
+                                    id="btnPrevReturn"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="sr-show-tab"
+                                    data-tab-title="مرتجع مبيعات"
+                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (prevEffective ?? 0) })"
+                                    data-id="@(prevEffective ?? 0)"
+                                    title="المرتجع السابق"
+                                    @(canPrev ? "" : "disabled")>
+                                ◀
+                            </button>
+
+                            <button type="button"
+                                    id="btnNextReturn"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="sr-show-tab"
+                                    data-tab-title="مرتجع مبيعات"
+                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (nextEffective ?? 0) })"
+                                    data-id="@(nextEffective ?? 0)"
+                                    title="المرتجع التالي"
+                                    @(canNext ? "" : "disabled")>
+                                ▶
+                            </button>
+
+                            <button type="button"
+                                    id="btnLastReturn"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="sr-show-tab"
+                                    data-tab-title="مرتجع مبيعات"
+                                    data-base-url="@Url.Action("Edit", "SalesReturns", new { id = (navLast ?? 0) })"
+                                    data-id="@(navLast ?? 0)"
+                                    title="آخر مرتجع"
+                                    @(canLast ? "" : "disabled")>
+                                ⏭
+                            </button>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number"
+                                   id="NavReturnSearchInput"
+                                   class="form-control form-control-sm"
+                                   placeholder="بحث برقم المرتجع" />
+
+
+                            <button type="button"
+                                    id="btnNavReturnSearch"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-tab-id="sr-show-tab"
+                                    data-tab-title="مرتجع مبيعات"
+                                    data-base-url="@Url.Action("Edit", "SalesReturns")">
+                                بحث
+                            </button>
+                        </div>
+
+                        <hr class="my-1" />
+
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
                            data-tab-id="sr-show-tab"
                            data-tab-title="مرتجع مبيعات"
                            data-url="@Url.Action("Create", "SalesReturns", new { frame = 1 })">
@@ -610,52 +706,44 @@
                         </a>
 
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                id="btnSaveReturnHeader">
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
+                                id="btnSaveReturnHeader"
+                                data-lock-posted="1">
                             💾 حفظ المرتجع
                         </button>
 
-                        <button type="button"
-                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm"
-                                id="btnClearReturnLines"
-                                data-return-id="@Model.SRId">
-                            🗑️ مسح كل أصناف المرتجع
+                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnPostReturn" data-lock-posted="1">
+                            📤 ترحيل المرتجع
                         </button>
 
-                        <input type="number" id="NavReturnSearchInput" class="form-control form-control-sm mt-2" placeholder="بحث برقم المرتجع" />
-                        <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" id="btnNavReturnSearch">بحث</button>
+                        <div id="postReturnMsg" class="small mt-2"></div>
 
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
                                 id="btnOpenReturn">
                             ⏪ فتح المرتجع
                         </button>
 
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                           id="btnEditReturn"
-                           asp-action="Edit"
-                           asp-route-id="@Model.SRId">
-                            ✏️ تعديل المرتجع
-                        </a>
 
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                id="btnPostReturn">
-                            📤 ترحيل المرتجع
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
+                                id="btnClearReturnLines"
+                                data-return-id="@(Model?.SRId ?? 0)"
+                                data-lock-posted="1">
+                            🗑️ مسح كل أصناف المرتجع
                         </button>
 
+
+
                         <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                id="btnPrintReturn"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
                                 onclick="window.print()">
                             🖨️ طباعة المرتجع
                         </button>
 
-                        <hr />
 
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                           asp-action="Index">
-                            ⬅️ الرجوع لقائمة مرتجعات البيع
-                        </a>
+
                     </div>
                 </div>
             </div>
@@ -713,6 +801,75 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+
+            // تحويل حالة المرتجع من السيرفر (Draft/Posted/Cancelled) إلى النص المعروض
+            function getReturnStatusDisplay(status) {
+                if (!status) return 'غير مرحلة';
+                switch (String(status)) {
+                    case 'Draft': return 'غير مرحلة';
+                    case 'Posted': return 'مرحّل';
+                    case 'Cancelled': return 'ملغى';
+                    default: return status;
+                }
+            }
+
+            // =========================================================
+            // دوال مساعدة: إدارة حالة الترحيل (مثل فاتورة المبيعات)
+            // =========================================================
+            function isReturnPosted() {
+                const flag = document.getElementById("ReturnIsPostedFlag");
+                return flag && flag.value === "1";
+            }
+
+            function setReturnPosted(posted) {
+                const flag = document.getElementById("ReturnIsPostedFlag");
+                if (flag) flag.value = posted ? "1" : "0";
+            }
+
+            function applyPostedUiLock() {
+                const posted = isReturnPosted();
+                const lockables = document.querySelectorAll('[data-lock-posted="1"]');
+
+                lockables.forEach(el => {
+                    if (!el.dataset.origDisabled) {
+                        el.dataset.origDisabled = el.disabled ? "1" : "0";
+                    }
+                    if (!el.dataset.origReadonly && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT")) {
+                        el.dataset.origReadonly = el.readOnly ? "1" : "0";
+                    }
+                    if (!el.dataset.origTabIndex) {
+                        el.dataset.origTabIndex = el.getAttribute("tabindex") ?? "";
+                    }
+
+                    const tag = (el.tagName || "").toUpperCase();
+
+                    if (tag === "BUTTON") {
+                        el.disabled = posted || el.dataset.origDisabled === "1";
+                    } else if (tag === "SELECT" || tag === "INPUT" || tag === "TEXTAREA") {
+                        const origReadonly = el.dataset.origReadonly === "1";
+                        el.readOnly = posted || origReadonly;
+                        if (posted && !origReadonly) {
+                            el.setAttribute("tabindex", "-1");
+                        } else {
+                            const origTabIndex = el.dataset.origTabIndex;
+                            if (origTabIndex === "") el.removeAttribute("tabindex");
+                            else el.setAttribute("tabindex", origTabIndex);
+                        }
+                    }
+                });
+            }
+
+            // تشغيل القفل مرة عند تحميل الصفحة
+            applyPostedUiLock();
+
+            // تطبيق القفل عند فتح الصفحة
+            (function () {
+                const posted = @Model.IsPosted.ToString().ToLower();
+                if (posted === true && typeof setReturnPosted === "function") {
+                    setReturnPosted(true);
+                    if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                }
+            })();
 
             var customerInput = document.getElementById('CustomerNameInput');
             var dataList = document.getElementById('customersList');
@@ -868,6 +1025,40 @@
                 if (remaining <= 0) returnQtyInput.value = '0';
             });
 
+            // =========================================================
+            // الانتقال بانتر (مثل فاتورة المبيعات): صنف → كمية → إضافة
+            // =========================================================
+            var enterFields = [itemSelect, returnQtyInput];
+            enterFields.forEach(function (el) {
+                if (!el) return;
+                if (el.dataset.enterBound === '1') return;
+                el.dataset.enterBound = '1';
+                el.addEventListener('focus', function () {
+                    if (typeof this.select === 'function') setTimeout(function () { el.select(); }, 0);
+                });
+                el.addEventListener('keydown', function (e) {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    var idx = enterFields.indexOf(el);
+                    var next = enterFields[idx + 1];
+                    if (next) {
+                        next.focus();
+                        if (next.select) next.select();
+                    } else if (btnAddReturnLine) {
+                        btnAddReturnLine.focus();
+                    }
+                });
+            });
+            if (btnAddReturnLine && !btnAddReturnLine.dataset.enterClickBound) {
+                btnAddReturnLine.dataset.enterClickBound = '1';
+                btnAddReturnLine.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        btnAddReturnLine.click();
+                    }
+                });
+            }
+
             function refreshReturnLinesAndTotals(data) {
                 var tbody = document.getElementById('SalesReturnLinesTableBody');
                 var emptyRow = document.getElementById('SalesReturnLinesEmptyRow');
@@ -882,13 +1073,12 @@
                     tbody.appendChild(tr);
                 } else {
                     var srId = parseInt(document.getElementById('SRId').value || '0', 10);
-                    var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
-                    var lockPosted = (isPostedEl && isPostedEl.value === 'نعم') ? '1' : '0';
+                    var lockPosted = (typeof isReturnPosted === "function" && isReturnPosted()) ? '1' : '0';
                     lines.forEach(function(l) {
                         var tr = document.createElement('tr');
                         tr.setAttribute('data-line-no', l.lineNo);
                         tr.setAttribute('data-prodid', l.prodId);
-                        var btn = '<button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine" data-line-no="' + l.lineNo + '" data-sr-id="' + srId + '" data-lock-posted="' + lockPosted + '" title="مسح السطر">\uD83D\uDDD1</button>';
+                        var btn = '<button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine" data-line-no="' + l.lineNo + '" data-sr-id="' + srId + '" data-lock-posted="' + lockPosted + '" title="مسح السطر">مسح</button>';
                         tr.innerHTML = '<td class="text-center">' + l.lineNo + '</td><td>' + (l.prodName || '') + '</td><td class="text-center">' + l.qty + '</td><td class="text-center">' + (l.priceRetail != null ? Number(l.priceRetail).toFixed(2) : '') + '</td><td class="text-center">' + (l.disc1Percent != null ? Number(l.disc1Percent).toFixed(2) : '') + '</td><td class="text-center">0</td><td class="text-center">0</td><td class="text-center">' + (l.lineNetTotal != null ? Number(l.lineNetTotal).toFixed(2) : '') + '</td><td class="text-center">' + btn + '</td>';
                         tbody.appendChild(tr);
                     });
@@ -973,7 +1163,6 @@
             // زر حفظ المرتجع (SaveHeader) — يحفظ الهيدر ويسجّل رقم المرتجع
             // =========================================================
             var btnSaveReturn = document.getElementById('btnSaveReturnHeader');
-            var editBaseUrl = '@Url.Action("Edit", "SalesReturns")';
             if (btnSaveReturn) {
                 btnSaveReturn.addEventListener('click', async function () {
                     var srId = parseInt(document.getElementById('SRId').value || '0', 10);
@@ -1016,12 +1205,15 @@
                         var timeEl = document.getElementById('ReturnTimeDisplay');
                         if (dateEl && data.returnDate) dateEl.value = data.returnDate;
                         if (timeEl && data.returnTime) timeEl.value = data.returnTime;
-                        var editLink = document.getElementById('btnEditReturn');
-                        if (editLink) editLink.href = editBaseUrl + '/' + newId;
                         var clearBtn = document.getElementById('btnClearReturnLines');
                         if (clearBtn) clearBtn.setAttribute('data-return-id', newId.toString());
                         var numDisp = document.getElementById('ReturnNumberDisplay');
                         if (numDisp) numDisp.value = newId.toString();
+                        // تحديث حالة المرتجع (عرض بالعربية)
+                        var statusEl = document.getElementById('ReturnStatusDisplay');
+                        if (statusEl && data.status !== undefined) {
+                            statusEl.value = getReturnStatusDisplay(data.status);
+                        }
                         alert('تم حفظ المرتجع بنجاح. رقم المرتجع: ' + newId);
                         var prodSelect = document.getElementById('InvoiceItemSelect');
                         if (prodSelect) { prodSelect.focus(); prodSelect.click(); }
@@ -1042,9 +1234,11 @@
                 var srId = parseInt(btn.getAttribute('data-sr-id') || '0', 10);
                 var lineNo = parseInt(btn.getAttribute('data-line-no') || '0', 10);
                 if (srId <= 0 || lineNo <= 0) return;
-                var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
-                if (isPostedEl && isPostedEl.value === 'نعم') { alert('المرتجع مترحّل. استخدم "فتح المرتجع" أولاً.'); return; }
-                if (!confirm('هل تريد مسح هذا السطر؟')) return;
+                if (typeof isReturnPosted === "function" && isReturnPosted()) { 
+                    alert('المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً.'); 
+                    return; 
+                }
+                if (!confirm('هل تريد مسح هذا السطر؟ (مسح سطر المرتجع يقلّل المخزون — عكس البيع)')) return;
                 btn.disabled = true;
                 try {
                     var res = await fetch('@Url.Action("RemoveLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ SRId: srId, LineNo: lineNo }) });
@@ -1063,6 +1257,10 @@
                 btnClear.addEventListener('click', async function() {
                     var srId = parseInt(document.getElementById('SRId').value || btnClear.getAttribute('data-return-id') || '0', 10);
                     if (srId <= 0) { alert('يجب حفظ المرتجع أولاً.'); return; }
+                    if (typeof isReturnPosted === "function" && isReturnPosted()) {
+                        alert('المرتجع مترحّل. استخدم "فتح المرتجع" أولاً.');
+                        return;
+                    }
                     if (!confirm('هل تريد مسح كل أصناف المرتجع؟')) return;
                     btnClear.disabled = true;
                     try {
@@ -1072,8 +1270,6 @@
                         if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
                         if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح الأصناف.'); return; }
                         refreshReturnLinesAndTotals(data);
-                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
-                        if (isPostedEl) isPostedEl.value = 'لا';
                     } catch (e) { console.error(e); alert('حدث خطأ.'); }
                     finally { btnClear.disabled = false; }
                 });
@@ -1081,10 +1277,34 @@
 
             // ترحيل المرتجع
             var btnPost = document.getElementById('btnPostReturn');
+            var postMsg = document.getElementById('postReturnMsg');
+            var statusDisplay = document.getElementById('ReturnStatusDisplay');
+            
             if (btnPost) {
+                const serverIsPosted = @Model.IsPosted.ToString().ToLower();
+
+                // لو مترحّل من البداية: اقفل زر الترحيل وطبق القفل
+                if (serverIsPosted) {
+                    btnPost.disabled = true;
+                    btnPost.innerHTML = "✅ تم ترحيل المرتجع";
+                    if (typeof setReturnPosted === "function") setReturnPosted(true);
+                    if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                    if (postMsg) {
+                        postMsg.textContent = "هذا المرتجع مترحّل بالفعل.";
+                        postMsg.className = "small mt-2 text-muted";
+                    }
+                }
+
+                // ربط حدث الترحيل دائماً (حتى بعد فتح المرتجع يعمل الزر)
                 btnPost.addEventListener('click', async function() {
                     var srId = parseInt(document.getElementById('SRId').value || '0', 10);
-                    if (srId <= 0) { alert('يجب حفظ المرتجع أولاً قبل الترحيل.'); return; }
+                    if (srId <= 0) { 
+                        if (postMsg) {
+                            postMsg.textContent = "يجب حفظ المرتجع أولاً قبل الترحيل.";
+                            postMsg.className = "small mt-2 text-danger";
+                        }
+                        return; 
+                    }
                     if (!confirm('هل تريد ترحيل هذا المرتجع؟')) return;
                     btnPost.disabled = true;
                     try {
@@ -1092,53 +1312,200 @@
                         var txt = await res.text();
                         var data = null;
                         if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
-                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل الترحيل.'); return; }
-                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
-                        if (isPostedEl) isPostedEl.value = 'نعم';
-                        var statusEl = document.getElementById('ReturnStatusDisplay');
-                        if (statusEl) statusEl.value = 'Posted';
-                        alert('تم ترحيل المرتجع بنجاح.');
-                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
-                    finally { btnPost.disabled = false; }
+                        if (!res.ok || !data || !data.ok) { 
+                            if (postMsg) {
+                                postMsg.textContent = (data && data.message) ? data.message : 'فشل الترحيل.';
+                                postMsg.className = "small mt-2 text-danger";
+                            }
+                            return; 
+                        }
+                        
+                        // تحديث الحالة (عرض "مرحلة X" مثل المبيعات)
+                        if (statusDisplay) {
+                            var stage = (data && data.stage != null) ? data.stage : 1;
+                            statusDisplay.value = (data && data.postedLabel) ? data.postedLabel : ('مرحلة ' + stage);
+                        }
+
+                        // تحديث الفلاج + تطبيق القفل
+                        if (typeof setReturnPosted === "function") setReturnPosted(true);
+                        if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+
+                        // تحديث زر الترحيل
+                        btnPost.innerHTML = "✅ تم ترحيل المرتجع";
+                        btnPost.disabled = true;
+
+                        // تفعيل زر الفتح
+                        var btnOpen = document.getElementById('btnOpenReturn');
+                        if (btnOpen) {
+                            btnOpen.disabled = false;
+                        }
+
+                        if (postMsg) {
+                            postMsg.textContent = (data && data.message) ? data.message : 'تم ترحيل المرتجع بنجاح.';
+                            postMsg.className = "small mt-2 text-success";
+                        }
+                    } catch (e) { 
+                        console.error(e); 
+                        if (postMsg) {
+                            postMsg.textContent = 'حدث خطأ أثناء الترحيل.';
+                            postMsg.className = "small mt-2 text-danger";
+                        }
+                    }
+                    finally { 
+                        if (!serverIsPosted) btnPost.disabled = false; 
+                    }
                 });
             }
 
-            // فتح المرتجع (إلغاء الترحيل)
+            // فتح المرتجع (إلغاء الترحيل) — بنفس فكرة فاتورة المبيعات
             var btnOpen = document.getElementById('btnOpenReturn');
             if (btnOpen) {
-                btnOpen.addEventListener('click', async function() {
-                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
-                    if (srId <= 0) { alert('اختر مرتجعاً أولاً.'); return; }
-                    if (!confirm('هل تريد فتح المرتجع (إلغاء الترحيل)؟')) return;
+                if (typeof isReturnPosted === "function" && !isReturnPosted()) {
                     btnOpen.disabled = true;
+                }
+                let busy = false;
+                btnOpen.addEventListener('click', async function() {
+                    if (busy) return;
+                    if (btnOpen.disabled) return;
+                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
+                    if (srId <= 0) {
+                        if (postMsg) {
+                            postMsg.textContent = "اختر مرتجعاً أولاً.";
+                            postMsg.className = "small mt-2 text-danger";
+                        }
+                        return;
+                    }
+                    if (!confirm('هل تريد فتح المرتجع (إلغاء الترحيل)؟')) return;
+                    busy = true;
+                    var oldHtml = btnOpen.innerHTML;
+                    btnOpen.disabled = true;
+                    btnOpen.innerHTML = "⏳ جاري الفتح...";
+                    if (postMsg) {
+                        postMsg.textContent = "جاري فتح المرتجع للتعديل...";
+                        postMsg.className = "small mt-2 text-muted";
+                    }
                     try {
-                        var res = await fetch('@Url.Action("OpenReturn", "SalesReturns")?id=' + srId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
-                        var txt = await res.text();
+                        var res = await fetch('@Url.Action("OpenReturn", "SalesReturns")?id=' + srId, {
+                            method: 'POST',
+                            credentials: 'same-origin',
+                            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' }
+                        });
                         var data = null;
-                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
-                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل فتح المرتجع.'); return; }
-                        var isPostedEl = document.getElementById('ReturnIsPostedDisplay');
-                        if (isPostedEl) isPostedEl.value = 'لا';
-                        var statusEl = document.getElementById('ReturnStatusDisplay');
-                        if (statusEl) statusEl.value = 'Draft';
-                        alert('تم فتح المرتجع للتعديل.');
-                    } catch (e) { console.error(e); alert('حدث خطأ.'); }
-                    finally { btnOpen.disabled = false; }
+                        try {
+                            var txt = await res.text();
+                            if (txt) data = JSON.parse(txt);
+                        } catch (e) { }
+                        if (!res.ok || !data || !data.ok) {
+                            if (postMsg) {
+                                postMsg.textContent = (data && data.message) ? data.message : 'فشل فتح المرتجع.';
+                                postMsg.className = "small mt-2 text-danger";
+                            }
+                            btnOpen.disabled = false;
+                            btnOpen.innerHTML = oldHtml;
+                            busy = false;
+                            return;
+                        }
+                        // نجاح: تحديث الفلاج + الواجهة (مثل المبيعات)
+                        if (typeof setReturnPosted === "function") setReturnPosted(false);
+                        if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                        if (statusDisplay) {
+                            statusDisplay.value = "مفتوحة للتعديل";
+                        }
+                        btnOpen.innerHTML = "⏪ فتح المرتجع";
+                        btnOpen.disabled = true;
+                        if (btnPost) {
+                            btnPost.disabled = false;
+                            btnPost.innerHTML = "📤 ترحيل المرتجع";
+                        }
+                        if (postMsg) {
+                            postMsg.textContent = (data && data.message) ? data.message : 'تم فتح المرتجع للتعديل.';
+                            postMsg.className = "small mt-2 text-success";
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        if (postMsg) {
+                            postMsg.textContent = 'حدث خطأ أثناء فتح المرتجع.';
+                            postMsg.className = "small mt-2 text-danger";
+                        }
+                        btnOpen.disabled = false;
+                        btnOpen.innerHTML = oldHtml;
+                    }
+                    finally {
+                        busy = false;
+                    }
                 });
             }
 
-            // بحث برقم المرتجع
-            var navSearchInput = document.getElementById('NavReturnSearchInput');
-            var btnNavSearch = document.getElementById('btnNavReturnSearch');
-            if (navSearchInput && btnNavSearch) {
-                function doNavSearch() {
-                    var v = parseInt((navSearchInput.value || '').trim(), 10);
-                    if (!v || v <= 0) return;
-                    window.location.href = '@Url.Action("Edit", "SalesReturns")/' + v;
+            // =========================================================
+            // سكربت التنقل (داخل نفس التاب)
+            // =========================================================
+
+            // ==============================
+            // (1) Tooltips (Bootstrap) لو موجود
+            // ==============================
+            try {
+                if (window.bootstrap && typeof bootstrap.Tooltip === 'function') {
+                    document.querySelectorAll('[title]').forEach(el => new bootstrap.Tooltip(el));
                 }
-                btnNavSearch.addEventListener('click', doNavSearch);
-                navSearchInput.addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); doNavSearch(); } });
+            } catch (e) { }
+
+            // ==============================
+            // (2) رابط Edit الصحيح
+            // ==============================
+            const editBaseUrl = '@Url.Action("Edit", "SalesReturns")'; // مثال: /SalesReturns/Edit
+
+            function openReturn(id) {
+                id = parseInt(id || '0', 10);
+                if (!id || id <= 0) return;
+
+                // ✅ مهم: Edit عندك بالمسار /Edit/{id}
+                const base = editBaseUrl.replace(/\/$/, '');
+                const url = base + '/' + encodeURIComponent(id);
+                window.location.href = url;
             }
+
+            function bindNavButton(btnId) {
+                const btn = document.getElementById(btnId);
+                if (!btn) return;
+
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    if (btn.disabled) return;
+
+                    const id = btn.getAttribute('data-id');
+                    openReturn(id);
+                });
+            }
+
+            bindNavButton('btnFirstReturn');
+            bindNavButton('btnPrevReturn');
+            bindNavButton('btnNextReturn');
+            bindNavButton('btnLastReturn');
+
+            // ==============================
+            // (3) البحث برقم المرتجع
+            // ==============================
+            const searchInput = document.getElementById('NavReturnSearchInput');
+            const searchBtn   = document.getElementById('btnNavReturnSearch');
+
+            function doSearch() {
+                const v = (searchInput?.value || '').trim();
+                if (!v) return;
+                openReturn(v);
+            }
+
+            searchBtn?.addEventListener('click', (e) => {
+                e.preventDefault();
+                doSearch();
+            });
+
+            searchInput?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    doSearch();
+                }
+            });
+
         });
     </script>
 }

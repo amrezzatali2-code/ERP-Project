@@ -404,7 +404,7 @@
                                         @foreach (var invoice in salesInvoices)
                                         {
                                             <tr>
-                                                <td><a asp-controller="SalesInvoices" asp-action="Show" asp-route-id="@invoice.SIId" target="_blank" class="text-primary">@invoice.SIId</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1" data-tab-id="si-show-tab" data-tab-title="فاتورة مبيعات" data-url="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1">@invoice.SIId</a></td>
                                                 <td>@invoice.SIDate.ToString("yyyy-MM-dd")</td>
                                                 <td>@DateTime.Today.Add(invoice.SITime).ToString("HH:mm:ss")</td>
                                                 <td>@(warehouses.TryGetValue(invoice.WarehouseId, out var warehouseName) ? warehouseName : invoice.WarehouseId.ToString())</td>
@@ -412,7 +412,7 @@
                                                 <td>@invoice.Status</td>
                                                 <td>@(invoice.IsPosted ? "نعم" : "لا")</td>
                                                 <td>
-                                                    <a asp-controller="SalesInvoices" asp-action="Show" asp-route-id="@invoice.SIId" target="_blank" class="btn btn-sm btn-primary">عرض</a>
+                                                    <a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1" data-tab-id="si-show-tab" data-tab-title="فاتورة مبيعات" data-url="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1">عرض</a>
                                                 </td>
                                             </tr>
                                         }
@@ -424,7 +424,7 @@
                                     }
                                     else
                                     {
-                                        <tr><td colspan="8" class="text-center text-muted py-3"><small>لا توجد فواتير مبيعات مرحّلة للعميل المحدد</small></td></tr>
+                                        <tr><td colspan="8" class="text-center text-muted py-3"><small>لا توجد فواتير مبيعات للعميل المحدد@(fromDate.HasValue || toDate.HasValue ? " في الفترة المحددة. لرؤية الكل اترك من تاريخ / إلى تاريخ فارغة واضغط عرض." : "")</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -452,11 +452,11 @@
                                             var qty = r.Lines?.Sum(l => l.Qty) ?? 0;
                                             <tr>
                                                 <td>@r.SRDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a asp-controller="SalesReturns" asp-action="Edit" asp-route-id="@r.SRId" target="_blank" class="text-primary">@r.SRId</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1" data-tab-id="sr-show-tab" data-tab-title="مرتجع مبيعات" data-url="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1">@r.SRId</a></td>
                                                 <td>@(warehouses.TryGetValue(r.WarehouseId, out var wsr) ? wsr : r.WarehouseId.ToString())</td>
                                                 <td class="text-end">@qty</td>
                                                 <td class="text-end">@r.NetTotal.ToString("N2")</td>
-                                                <td><a asp-controller="SalesReturns" asp-action="Edit" asp-route-id="@r.SRId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1" data-tab-id="sr-show-tab" data-tab-title="مرتجع مبيعات" data-url="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
@@ -494,13 +494,13 @@
                                         @foreach (var invoice in purchaseInvoices)
                                         {
                                             <tr>
-                                                <td><a asp-controller="PurchaseInvoices" asp-action="Show" asp-route-id="@invoice.PIId" target="_blank" class="text-primary">@invoice.PIId</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1" data-tab-id="pi-show-tab" data-tab-title="فاتورة مشتريات" data-url="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1">@invoice.PIId</a></td>
                                                 <td>@invoice.PIDate.ToString("yyyy-MM-dd")</td>
                                                 <td>@(warehouses.TryGetValue(invoice.WarehouseId, out var warehouseName) ? warehouseName : invoice.WarehouseId.ToString())</td>
                                                 <td class="text-end">@invoice.NetTotal.ToString("N2")</td>
                                                 <td>@(invoice.IsPosted ? "نعم" : "لا")</td>
                                                 <td>
-                                                    <a asp-controller="PurchaseInvoices" asp-action="Show" asp-route-id="@invoice.PIId" target="_blank" class="btn btn-sm btn-primary">عرض</a>
+                                                    <a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1" data-tab-id="pi-show-tab" data-tab-title="فاتورة مشتريات" data-url="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1">عرض</a>
                                                 </td>
                                             </tr>
                                         }
@@ -540,11 +540,11 @@
                                             var qty = r.Lines?.Sum(l => l.Qty) ?? 0;
                                             <tr>
                                                 <td>@r.PRetDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a asp-controller="PurchaseReturns" asp-action="Edit" asp-route-id="@r.PRetId" target="_blank" class="text-primary">@r.PRetId</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1" data-tab-id="pr-ret-show-tab" data-tab-title="مرتجع مشتريات" data-url="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1">@r.PRetId</a></td>
                                                 <td>@(warehouses.TryGetValue(r.WarehouseId, out var wpr) ? wpr : r.WarehouseId.ToString())</td>
                                                 <td class="text-end">@qty</td>
                                                 <td class="text-end">@r.NetTotal.ToString("N2")</td>
-                                                <td><a asp-controller="PurchaseReturns" asp-action="Edit" asp-route-id="@r.PRetId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1" data-tab-id="pr-ret-show-tab" data-tab-title="مرتجع مشتريات" data-url="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
@@ -602,11 +602,11 @@
                                         {
                                             <tr>
                                                 <td>@r.ReceiptDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a asp-controller="CashReceipts" asp-action="Show" asp-route-id="@r.CashReceiptId" target="_blank" class="text-primary">@(r.ReceiptNumber ?? r.CashReceiptId.ToString())</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1" data-tab-id="cash-receipt-show-tab" data-tab-title="إيصال استلام" data-url="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1">@(r.ReceiptNumber ?? r.CashReceiptId.ToString())</a></td>
                                                 <td>@(r.CashAccount != null ? $"{r.CashAccount.AccountCode} - {r.CashAccount.AccountName}" : "-")</td>
                                                 <td class="text-end">@r.Amount.ToString("N2")</td>
                                                 <td><small class="text-muted">@(r.Description ?? "")</small></td>
-                                                <td><a asp-controller="CashReceipts" asp-action="Show" asp-route-id="@r.CashReceiptId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1" data-tab-id="cash-receipt-show-tab" data-tab-title="إيصال استلام" data-url="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
@@ -644,11 +644,11 @@
                                         {
                                             <tr>
                                                 <td>@p.PaymentDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a asp-controller="CashPayments" asp-action="Details" asp-route-id="@p.CashPaymentId" target="_blank" class="text-primary">@(p.PaymentNumber ?? p.CashPaymentId.ToString())</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1" data-tab-id="cash-payment-details-tab" data-tab-title="إيصال دفع" data-url="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1">@(p.PaymentNumber ?? p.CashPaymentId.ToString())</a></td>
                                                 <td>@(p.CashAccount != null ? $"{p.CashAccount.AccountCode} - {p.CashAccount.AccountName}" : "-")</td>
                                                 <td class="text-end">@p.Amount.ToString("N2")</td>
                                                 <td><small class="text-muted">@(p.Description ?? "")</small></td>
-                                                <td><a asp-controller="CashPayments" asp-action="Details" asp-route-id="@p.CashPaymentId" target="_blank" class="btn btn-sm btn-primary">عرض</a></td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1" data-tab-id="cash-payment-details-tab" data-tab-title="إيصال دفع" data-url="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">

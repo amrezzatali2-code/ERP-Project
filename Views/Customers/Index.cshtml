@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Customer>
@@ -462,12 +462,12 @@
                             
                          
 
-                                @* زر حجم التعامل / التفاصيل يفتح فى تاب مستقل *@
+                                @* زر حجم التعامل / التفاصيل يفتح فى تاب مستقل (نفس المعرف المستخدم في القائمة و Show) *@
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"
                                    asp-controller="Customers"
                                    asp-action="Show"
                                    asp-route-id="@c.CustomerId"
-                                   data-tab-id="customer-engagement" @* نفس المعرف اللى استخدمناه فى المينيو وفى Show.cshtml *@
+                                   data-tab-id="customer-engagement"
                                    data-tab-title="حجم تعامل عميل">
                                     @* عنوان التاب فوق *@
                                     تفاصيل
@@ -624,8 +624,8 @@
                         تطبيق الفلتر
                     </button>
                     <a class="btn btn-erp btn-erp-secondary"
-                       asp-action="@action"
-                       asp-controller="@controller">
+                       asp-action="@(action)"
+                       asp-controller="@(controller)">
                         مسح الفلتر
                     </a>
                 </div>

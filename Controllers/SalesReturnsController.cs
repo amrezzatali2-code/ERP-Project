@@ -104,7 +104,7 @@ namespace ERP.Controllers
                 SRDate = DateTime.Today,
                 SRTime = DateTime.Now.TimeOfDay,
 
-                Status = "Draft",                           // مسودة
+                Status = "Draft",                           // غير مرحلة (يُعرض في الواجهة كـ "غير مرحلة" — القيد في DB: Draft/Posted/Cancelled)
                 IsPosted = false,                           // لسه مش مترحّل
                 CreatedAt = DateTime.UtcNow,                // وقت الإنشاء
                 CreatedBy = User?.Identity?.Name ?? "system"
@@ -129,6 +129,9 @@ namespace ERP.Controllers
 
             // تحميل العملاء والمخازن للواجهة
             await PopulateDropDownsAsync(model.CustomerId, model.WarehouseId);
+
+            // تجهيز نظام الأسهم (نفس نظام فاتورة البيع)
+            await FillSalesReturnNavAsync(model.SRId);
 
             // نعرض نفس شاشة الـ Show (زي ما عملنا في المشتريات / المبيعات)
             return View("Show", model);
@@ -169,6 +172,19 @@ namespace ERP.Controllers
                 .Select(p => new { p.ProdId, p.ProdName })
                 .ToListAsync();
             ViewBag.ProdNames = prodNames.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+
+            // تجهيز نظام الأسهم (نفس نظام فاتورة البيع)
+            await FillSalesReturnNavAsync(model.SRId);
+
+            // رقم المرحلة للعرض "مرحلة X" عند تحميل مرتجع مرحّل (مثل المبيعات)
+            if (model.IsPosted)
+            {
+                int stage = await context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e => e.SourceType == LedgerSourceType.SalesReturn && e.SourceId == id && e.LineNo == 1 && e.PostVersion > 0)
+                    .MaxAsync(e => (int?)e.PostVersion) ?? 1;
+                ViewBag.ReturnStage = stage;
+            }
 
             return View("Show", model);
         }
@@ -265,7 +281,7 @@ namespace ERP.Controllers
                     CustomerId = dto.CustomerId,
                     WarehouseId = dto.WarehouseId,
                     SalesInvoiceId = dto.SalesInvoiceId > 0 ? dto.SalesInvoiceId : null,
-                    Status = "Draft",
+                    Status = "Draft",                       // القيد في DB يسمح فقط: Draft, Posted, Cancelled
                     IsPosted = false,
                     CreatedAt = now,
                     CreatedBy = userName
@@ -455,7 +471,8 @@ namespace ERP.Controllers
 
         // =========================================================
         // POST: /SalesReturns/Delete/{id}
-        // ينفّذ الحذف فعلياً (مع حذف السطور بالكاسكيد)
+        // حذف عميق من القائمة (مثل المبيعات): يُسمح بحذف المرحّل من الإندكس فقط.
+        // 1) عكس المخزون (تقليل QtyOnHand) 2) StockFifoMap 3) StockLedger 4) عكس القيود المحاسبية 5) حذف الهيدر
         // =========================================================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
@@ -463,58 +480,36 @@ namespace ERP.Controllers
         {
             if (id <= 0) return NotFound();
 
-            // التحقق: لا نحذف لو المستند مُرحّل
-            var header = await context.SalesReturns
-                .AsNoTracking()
-                .Where(x => x.SRId == id)
-                .Select(x => new { x.SRId, x.IsPosted })
-                .FirstOrDefaultAsync();
+            var result = await TryDeleteSalesReturnDeepAsync(id);
 
-            if (header == null) return NotFound();
-
-            if (header.IsPosted)
-            {
-                TempData["error"] = "لا يمكن حذف مرتجع مُرحّل.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            // حذف بالـ Key فقط — الكاسكيد فى الـ FK يتكفّل بحذف السطور
-            context.Entry(new SalesReturn { SRId = id }).State = EntityState.Deleted;
-
-            try
-            {
-                await context.SaveChangesAsync();
-                TempData["ok"] = $"تم حذف المرتجع {id} وكافة سطوره.";
-            }
-            catch (DbUpdateException)
-            {
-                TempData["error"] = "تعذّر الحذف بسبب علاقة بيانات أخرى. تأكد من عدم وجود مراجع مرتبطة.";
-            }
+            if (result.Status == DeleteReturnStatus.Deleted)
+                TempData["ok"] = "تم حذف المرتجع بنجاح (مع تحديث المخزون وعكس الأثر المحاسبي).";
+            else
+                TempData["error"] = $"تعذر حذف المرتجع رقم {id}: {result.Message ?? "خطأ غير معروف"}";
 
             return RedirectToAction(nameof(Index));
         }
 
         // =========================================================
         // POST: /SalesReturns/BulkDelete
-        // حذف مجموعة مرتجعات غير مُرحّلة (من الشيك بوكس فى الجدول)
+        // حذف مجموعة مرتجعات (مرحلة أو غير مرحلة) من القائمة — حذف عميق مثل المبيعات
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkDelete(string selectedIds)
         {
-            // selectedIds: نص بالشكل "1,5,7,10"
             if (string.IsNullOrWhiteSpace(selectedIds))
             {
                 TempData["error"] = "من فضلك اختر على الأقل مرتجعاً واحداً للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
-            // تحويل النص إلى قائمة أرقام صحيحة
             var ids = selectedIds
                 .Split(',', StringSplitOptions.RemoveEmptyEntries)
                 .Select(s => int.TryParse(s, out var n) ? (int?)n : null)
                 .Where(n => n.HasValue)
                 .Select(n => n!.Value)
+                .Distinct()
                 .ToList();
 
             if (ids.Count == 0)
@@ -523,48 +518,90 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            // جلب المرتجعات غير المُرحّلة فقط
-            var returns = await context.SalesReturns
-                .Where(sr => ids.Contains(sr.SRId) && !sr.IsPosted)
+            var existingIds = await context.SalesReturns
+                .Where(x => ids.Contains(x.SRId))
+                .Select(x => x.SRId)
                 .ToListAsync();
 
-            if (returns.Count == 0)
+            if (existingIds.Count == 0)
             {
-                TempData["error"] = "لا توجد مرتجعات غير مُرحّلة يمكن حذفها.";
+                TempData["error"] = "لم يتم العثور على المرتجعات المحددة في قاعدة البيانات.";
                 return RedirectToAction(nameof(Index));
             }
 
-            // الحذف (مع حذف السطور بالكاسكيد)
-            context.SalesReturns.RemoveRange(returns);
-            await context.SaveChangesAsync();
+            int deletedCount = 0;
+            int failedCount = 0;
+            var failedIds = new List<int>();
 
-            TempData["ok"] = $"تم حذف {returns.Count} مرتجع (مع السطور التابعة لها).";
+            foreach (var sid in existingIds)
+            {
+                var result = await TryDeleteSalesReturnDeepAsync(sid);
+                if (result.Status == DeleteReturnStatus.Deleted)
+                    deletedCount++;
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(sid);
+                }
+            }
+
+            if (deletedCount > 0)
+            {
+                TempData["ok"] = $"تم حذف {deletedCount} مرتجع (مع تحديث المخزون وعكس الأثر المحاسبي).";
+                if (failedIds.Count > 0)
+                    TempData["error"] = $"فشل حذف المرتجعات: {string.Join(", ", failedIds)}";
+            }
+            else
+                TempData["error"] = failedCount > 0
+                    ? $"لم يتم حذف أي مرتجع. فشل: {string.Join(", ", failedIds)}"
+                    : "لم يتم حذف أي مرتجع.";
+
             return RedirectToAction(nameof(Index));
         }
 
         // =========================================================
         // POST: /SalesReturns/DeleteAll
-        // حذف كل المرتجعات غير المُرحّلة
+        // حذف كل مرتجعات البيع (مرحلة أو غير مرحلة) — حذف عميق مثل المبيعات
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            // نجلب فقط غير المُرحّل
-            var returns = await context.SalesReturns
-                .Where(sr => !sr.IsPosted)
-                .ToListAsync();
+            var allIds = await context.SalesReturns.Select(x => x.SRId).ToListAsync();
 
-            if (returns.Count == 0)
+            if (allIds.Count == 0)
             {
-                TempData["error"] = "لا توجد مرتجعات غير مُرحّلة يمكن حذفها.";
+                TempData["error"] = "لا توجد مرتجعات بيع لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
-            context.SalesReturns.RemoveRange(returns);
-            await context.SaveChangesAsync();
+            int deletedCount = 0;
+            int failedCount = 0;
+            var failedIds = new List<int>();
 
-            TempData["ok"] = $"تم حذف {returns.Count} مرتجع (مع السطور التابعة لها).";
+            foreach (var id in allIds)
+            {
+                var result = await TryDeleteSalesReturnDeepAsync(id);
+                if (result.Status == DeleteReturnStatus.Deleted)
+                    deletedCount++;
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(id);
+                }
+            }
+
+            if (deletedCount > 0)
+            {
+                TempData["ok"] = $"تم حذف {deletedCount} مرتجع (مع تحديث المخزون وعكس الأثر المحاسبي).";
+                if (failedIds.Count > 0)
+                    TempData["error"] = $"فشل حذف المرتجعات: {string.Join(", ", failedIds)}";
+            }
+            else
+                TempData["error"] = failedCount > 0
+                    ? $"لم يتم حذف أي مرتجع. فشل: {string.Join(", ", failedIds)}"
+                    : "لم يتم حذف أي مرتجع.";
+
             return RedirectToAction(nameof(Index));
         }
 
@@ -907,21 +944,25 @@ namespace ERP.Controllers
             {
                 var ret = await context.SalesReturns.FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
                 if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
-                if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "لا يمكن تعديل مرتجع مترحّل." }); }
+                if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً." }); }
 
                 var line = await context.SalesReturnLines.FirstOrDefaultAsync(l => l.SRId == dto.SRId && l.LineNo == dto.LineNo);
                 if (line == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "السطر غير موجود." }); }
 
-                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
-                var exp = line.Expiry?.Date;
-                if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
-                {
-                    var sb = await context.StockBatches.FirstOrDefaultAsync(b =>
-                        b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
-                    if (sb != null) { sb.QtyOnHand -= line.Qty; sb.UpdatedAt = DateTime.UtcNow; sb.Note = $"SR:{dto.SRId} Line:{dto.LineNo} (-{line.Qty})"; }
-                }
+                // عكس المخزون فقط لو السطر كان له حركات (مرتجع كان مُرحّل ثم فُتح): مسح سطر المرتجع = تقليل المخزون (عكس البيع)
                 var ledgers = await context.StockLedger.Where(x => x.SourceType == "SalesReturn" && x.SourceId == dto.SRId && x.SourceLine == dto.LineNo).ToListAsync();
-                context.StockLedger.RemoveRange(ledgers);
+                if (ledgers.Any())
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                    var exp = line.Expiry?.Date;
+                    if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                    {
+                        var sb = await context.StockBatches.FirstOrDefaultAsync(b =>
+                            b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
+                        if (sb != null) { sb.QtyOnHand -= line.Qty; sb.UpdatedAt = DateTime.UtcNow; sb.Note = $"SR:{dto.SRId} Line:{dto.LineNo} (-{line.Qty})"; }
+                    }
+                    context.StockLedger.RemoveRange(ledgers);
+                }
                 context.SalesReturnLines.Remove(line);
                 await context.SaveChangesAsync();
                 await _docTotals.RecalcSalesReturnTotalsAsync(dto.SRId);
@@ -955,20 +996,26 @@ namespace ERP.Controllers
             {
                 var ret = await context.SalesReturns.Include(sr => sr.Lines).FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
                 if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
-                if (ret.IsPosted) { ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; await context.SaveChangesAsync(); }
+                if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً." }); }
+
                 var lines = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).ToListAsync();
                 if (lines.Count == 0) { await tx.CommitAsync(); var header0 = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId); return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = new object[0], totals = new { totalBeforeDiscount = header0.TotalBeforeDiscount, totalAfterDiscountBeforeTax = header0.TotalAfterDiscountBeforeTax, taxAmount = header0.TaxAmount, netTotal = header0.NetTotal } }); }
+
+                // عكس المخزون لكل سطر كان له حركات (مرتجع كان مُرحّل ثم فُتح): مسح أصناف المرتجع = تقليل المخزون (عكس البيع)
                 foreach (var line in lines)
                 {
-                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
-                    var exp = line.Expiry?.Date;
-                    if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
-                    {
-                        var sb = await context.StockBatches.FirstOrDefaultAsync(b => b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
-                        if (sb != null) { sb.QtyOnHand -= line.Qty; sb.UpdatedAt = DateTime.UtcNow; }
-                    }
                     var ledgers = await context.StockLedger.Where(x => x.SourceType == "SalesReturn" && x.SourceId == dto.SRId && x.SourceLine == line.LineNo).ToListAsync();
-                    context.StockLedger.RemoveRange(ledgers);
+                    if (ledgers.Any())
+                    {
+                        var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                        var exp = line.Expiry?.Date;
+                        if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                        {
+                            var sb = await context.StockBatches.FirstOrDefaultAsync(b => b.WarehouseId == ret.WarehouseId && b.ProdId == line.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value);
+                            if (sb != null) { sb.QtyOnHand -= line.Qty; sb.UpdatedAt = DateTime.UtcNow; sb.Note = $"SR:{dto.SRId} ClearAll Line:{line.LineNo} (-{line.Qty})"; }
+                        }
+                        context.StockLedger.RemoveRange(ledgers);
+                    }
                 }
                 context.SalesReturnLines.RemoveRange(lines);
                 await context.SaveChangesAsync();
@@ -987,19 +1034,37 @@ namespace ERP.Controllers
         }
 
         // =========================================================
-        // OpenReturn — فتح المرتجع (إلغاء الترحيل)
+        // OpenReturn — فتح المرتجع (إلغاء الترحيل) — بنفس فكرة فتح فاتورة البيع:
+        // لا عكس للقيود هنا؛ العكس يتم عند إعادة الترحيل (PostReturn).
         // =========================================================
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> OpenReturn(int id)
         {
             if (id <= 0) return BadRequest(new { ok = false, message = "رقم المرتجع غير صحيح." });
+
             var ret = await context.SalesReturns.FirstOrDefaultAsync(sr => sr.SRId == id);
             if (ret == null) return NotFound(new { ok = false, message = "المرتجع غير موجود." });
-            if (!ret.IsPosted) return BadRequest(new { ok = false, message = "المرتجع غير مترحّل." });
-            ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; ret.UpdatedAt = DateTime.UtcNow;
+            if (!ret.IsPosted)
+                return BadRequest(new { ok = false, message = "هذا المرتجع ليس مُرحّلاً، لا يوجد ما يمكن فتحه." });
+
+            // فتح المرتجع للتعديل (بدون عكس القيود — العكس عند إعادة الترحيل)
+            ret.IsPosted = false;
+            ret.Status = "Draft"; // القيد في DB: Draft/Posted/Cancelled فقط
+            ret.PostedAt = null;
+            ret.PostedBy = null;
+            ret.UpdatedAt = DateTime.UtcNow;
+
             await context.SaveChangesAsync();
-            return Json(new { ok = true, message = "تم فتح المرتجع للتعديل.", isPosted = false });
+
+            return Json(new
+            {
+                ok = true,
+                message = "تم فتح المرتجع للتعديل.",
+                isPosted = false,
+                status = "مفتوحة للتعديل",
+                postedLabel = "مفتوحة للتعديل"
+            });
         }
 
         // =========================================================
@@ -1027,12 +1092,191 @@ namespace ERP.Controllers
                 var postedBy = User?.Identity?.Name ?? "SYSTEM";
                 await _ledgerPostingService.PostSalesReturnAsync(id, postedBy);
 
-                return Json(new { ok = true, message = "تم ترحيل المرتجع بنجاح." });
+                // إعادة تحميل المرتجع بعد الترحيل
+                var updated = await context.SalesReturns
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.SRId == id);
+
+                // رقم المرحلة (من دفتر الأستاذ — مثل المبيعات) للعرض "مرحلة 1"، "مرحلة 2"، ...
+                int stage = await context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e => e.SourceType == LedgerSourceType.SalesReturn && e.SourceId == id && e.LineNo == 1 && e.PostVersion > 0)
+                    .MaxAsync(e => (int?)e.PostVersion) ?? 1;
+
+                string postedLabel = $"مرحلة {stage}";
+
+                return Json(new
+                {
+                    ok = true,
+                    message = "تم ترحيل المرتجع بنجاح.",
+                    isPosted = updated?.IsPosted ?? true,
+                    status = postedLabel,
+                    postedLabel = postedLabel,
+                    stage = stage
+                });
             }
             catch (Exception ex)
             {
                 return Json(new { ok = false, message = $"حدث خطأ: {ex.Message}" });
             }
+        }
+
+        /// <summary>
+        /// دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر) لمرتجع البيع.
+        /// </summary>
+        private async Task FillSalesReturnNavAsync(int currentId)
+        {
+            // ==============================
+            // 1) أول وآخر مرتجع (Query واحد)
+            // ==============================
+            var minMax = await context.SalesReturns
+                .AsNoTracking()
+                .GroupBy(_ => 1)
+                .Select(g => new
+                {
+                    FirstId = g.Min(x => x.SRId),
+                    LastId = g.Max(x => x.SRId)
+                })
+                .FirstOrDefaultAsync();
+
+            // ==============================
+            // 2) السابقة/التالية
+            // ملاحظة مهمة:
+            // - لو currentId = 0 (مرتجع جديد) => السابقة = آخر مرتجع / التالية = أول مرتجع
+            // ==============================
+            int? prevId = null; // متغير: رقم المرتجع السابق
+            int? nextId = null; // متغير: رقم المرتجع التالي
+
+            if (currentId > 0)
+            {
+                // السابقة = أكبر رقم أقل من الحالي
+                prevId = await context.SalesReturns
+                    .AsNoTracking()
+                    .Where(x => x.SRId < currentId)
+                    .OrderByDescending(x => x.SRId)
+                    .Select(x => (int?)x.SRId)
+                    .FirstOrDefaultAsync();
+
+                // التالية = أصغر رقم أكبر من الحالي
+                nextId = await context.SalesReturns
+                    .AsNoTracking()
+                    .Where(x => x.SRId > currentId)
+                    .OrderBy(x => x.SRId)
+                    .Select(x => (int?)x.SRId)
+                    .FirstOrDefaultAsync();
+            }
+            else
+            {
+                // ✅ مرتجع جديد: نخلي الأسهم شغالة كبحث سريع
+                prevId = minMax?.LastId;   // السابق يأخذك لآخر مرتجع
+                nextId = minMax?.FirstId;  // التالي يأخذك لأول مرتجع
+            }
+
+            // ==============================
+            // 3) تعبئة ViewBag للـ View (بدون Null)
+            // ==============================
+            int firstId = minMax?.FirstId ?? 0;  // متغير: أول مرتجع
+            int lastId = minMax?.LastId ?? 0;  // متغير: آخر مرتجع
+
+            ViewBag.NavFirstId = firstId;
+            ViewBag.NavLastId = lastId;
+            ViewBag.NavPrevId = prevId ?? 0;
+            ViewBag.NavNextId = nextId ?? 0;
+        }
+
+        // ============================================================================
+        // حذف عميق لمرتجع بيع واحد (من القائمة) — مثل TryDeleteSalesInvoiceDeepAsync
+        // 1) تقليل StockBatches (عكس المرتجع = تقليل المخزون) 2) StockFifoMap 3) StockLedger 4) عكس القيود 5) حذف الهيدر
+        // ============================================================================
+        private async Task<DeleteReturnResult> TryDeleteSalesReturnDeepAsync(int id)
+        {
+            var ret = await context.SalesReturns.FirstOrDefaultAsync(x => x.SRId == id);
+            if (ret == null)
+                return new DeleteReturnResult(DeleteReturnStatus.Failed, "المرتجع غير موجود.");
+
+            var lines = await context.SalesReturnLines
+                .Where(l => l.SRId == id)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            var allLedgers = await context.StockLedger
+                .Where(x => x.SourceType == "SalesReturn" && x.SourceId == id)
+                .ToListAsync();
+
+            await using var tx = await context.Database.BeginTransactionAsync();
+            try
+            {
+                // 1) تقليل StockBatches (عكس المرتجع: المرتجع زاد المخزون، الحذف يقلّله)
+                foreach (var line in lines)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                    var expDate = line.Expiry?.Date;
+
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+                        var sbRow = await context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == ret.WarehouseId &&
+                                x.ProdId == line.ProdId &&
+                                x.BatchNo == batchNo &&
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand -= line.Qty;
+                            sbRow.UpdatedAt = DateTime.UtcNow;
+                            sbRow.Note = $"SR:{id} DeleteFromIndex (Line:{line.LineNo}) (-{line.Qty})";
+                        }
+                    }
+                }
+
+                // 2) حذف StockFifoMap المرتبط بحركات الدخول (مرتجع = QtyIn) — إن وُجدت
+                var ledgerIds = allLedgers.Select(l => l.EntryId).ToList();
+                if (ledgerIds.Count > 0)
+                {
+                    var fifoMaps = await context.Set<StockFifoMap>()
+                        .Where(f => f.InEntryId != 0 && ledgerIds.Contains(f.InEntryId))
+                        .ToListAsync();
+                    if (fifoMaps.Count > 0)
+                        context.Set<StockFifoMap>().RemoveRange(fifoMaps);
+                }
+
+                // 3) حذف StockLedger الخاص بالمرتجع
+                if (allLedgers.Count > 0)
+                    context.StockLedger.RemoveRange(allLedgers);
+
+                // 4) عكس الأثر المحاسبي
+                await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                    LedgerSourceType.SalesReturn,
+                    id,
+                    postedBy: User?.Identity?.Name,
+                    reason: $"حذف مرتجع بيع من قائمة الهيدر SRId={id}"
+                );
+
+                // 5) حذف الهيدر (Cascade يحذف السطور)
+                context.SalesReturns.Remove(ret);
+
+                await context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                return new DeleteReturnResult(DeleteReturnStatus.Deleted, "تم الحذف.");
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return new DeleteReturnResult(DeleteReturnStatus.Failed, ex.Message);
+            }
+        }
+
+        private enum DeleteReturnStatus { Deleted = 1, Failed = 2 }
+
+        private sealed class DeleteReturnResult
+        {
+            public DeleteReturnStatus Status { get; }
+            public string? Message { get; }
+            public DeleteReturnResult(DeleteReturnStatus status, string? message) { Status = status; Message = message; }
         }
     }
 }

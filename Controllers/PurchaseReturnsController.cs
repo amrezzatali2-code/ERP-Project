@@ -101,6 +101,16 @@ namespace ERP.Controllers
                 .ToListAsync();
             ViewBag.ProdNames = prodNames.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
 
+            if (model.IsPosted)
+            {
+                int? maxStage = await _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == id && e.LineNo == 1 && e.PostVersion > 0)
+                    .MaxAsync(e => (int?)e.PostVersion);
+                if (maxStage.HasValue)
+                    ViewBag.ReturnStage = maxStage.Value;
+            }
+
             return View("Show", model);
         }
 
@@ -813,7 +823,14 @@ namespace ERP.Controllers
             if (!ret.IsPosted) return BadRequest(new { ok = false, message = "المرتجع غير مترحّل." });
             ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; ret.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
-            return Json(new { ok = true, message = "تم فتح المرتجع للتعديل.", isPosted = false });
+            return Json(new
+            {
+                ok = true,
+                message = "تم فتح المرتجع للتعديل.",
+                isPosted = false,
+                status = "مفتوحة للتعديل",
+                postedLabel = "مفتوحة للتعديل"
+            });
         }
 
         // =========================================================
@@ -841,7 +858,26 @@ namespace ERP.Controllers
                 var postedBy = User?.Identity?.Name ?? "SYSTEM";
                 await _ledgerPostingService.PostPurchaseReturnAsync(id, postedBy);
 
-                return Json(new { ok = true, message = "تم ترحيل المرتجع بنجاح." });
+                var updated = await _context.PurchaseReturns
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.PRetId == id);
+
+                int stage = await _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == id && e.LineNo == 1 && e.PostVersion > 0)
+                    .MaxAsync(e => (int?)e.PostVersion) ?? 1;
+
+                string postedLabel = $"مرحلة {stage}";
+
+                return Json(new
+                {
+                    ok = true,
+                    message = "تم ترحيل المرتجع بنجاح.",
+                    isPosted = updated?.IsPosted ?? true,
+                    status = postedLabel,
+                    postedLabel = postedLabel,
+                    stage = stage
+                });
             }
             catch (Exception ex)
             {

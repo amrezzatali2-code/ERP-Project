@@ -614,10 +614,9 @@
                                 @* زر حركة الصنف يفتح شاشة Show فى تاب مستقل *@
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"
                                    asp-action="Show"
-                                   asp-route-id="@p.ProdId" @* كود الصنف *@
-                                   data-tab-id="product-movement" @* نفس المعرف المستخدم فى اللينك العام *@
-                                   data-tab-title="حركة صنف - @p.ProductName">
-                                    @* عنوان التاب *@
+                                   asp-route-id="@p.ProdId"
+                                   data-tab-id="product-movement"
+                                   data-tab-title="حركة صنف - @p.ProdName">
                                     حركة الصنف
                                 </a>
                                 <a class="btn btn-erp btn-erp-primary btn-erp-sm"

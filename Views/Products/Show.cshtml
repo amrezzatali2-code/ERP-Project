@@ -388,6 +388,7 @@
                                         <th class="text-end">سعر الوحدة</th>
                                         <th class="text-end">الخصم %</th>
                                         <th class="text-end">صافى القيمة</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -397,18 +398,19 @@
                                         {
                                             <tr>
                                                 <td>@s.Date.ToString("yyyy/MM/dd")</td>
-                                                <td>@s.InvoiceNo</td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "SalesInvoices", new { id = s.InvoiceNo }))?frame=1" data-tab-id="si-show-tab" data-tab-title="فاتورة مبيعات" data-url="@(Url.Action("Show", "SalesInvoices", new { id = s.InvoiceNo }))?frame=1">@s.InvoiceNo</a></td>
                                                 <td>@s.Customer</td>
                                                 <td class="text-end">@s.Qty</td>
                                                 <td class="text-end">@(((decimal)s.UnitPrice).ToString("0.00"))</td>
                                                 <td class="text-end">@(((decimal)s.DiscountPercent).ToString("0.00"))</td>
                                                 <td class="text-end">@(((decimal)s.NetAmount).ToString("0.00"))</td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "SalesInvoices", new { id = s.InvoiceNo }))?frame=1" data-tab-id="si-show-tab" data-tab-title="فاتورة مبيعات" data-url="@(Url.Action("Show", "SalesInvoices", new { id = s.InvoiceNo }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                     }
                                     else
                                     {
-                                        <tr><td colspan="7" class="text-center text-muted py-3"><small>لم يتم تحميل تفاصيل فواتير المبيعات بعد.</small></td></tr>
+                                        <tr><td colspan="8" class="text-center text-muted py-3"><small>لم يتم تحميل تفاصيل فواتير المبيعات بعد.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -427,6 +429,7 @@
                                         <th class="text-end">الكمية</th>
                                         <th class="text-end">سعر الوحدة</th>
                                         <th class="text-end">قيمة المرتجع</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -436,17 +439,18 @@
                                         {
                                             <tr>
                                                 <td>@s.Date.ToString("yyyy/MM/dd")</td>
-                                                <td>@s.DocNo</td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Edit", "SalesReturns", new { id = s.DocNo }))?frame=1" data-tab-id="sr-show-tab" data-tab-title="مرتجع مبيعات" data-url="@(Url.Action("Edit", "SalesReturns", new { id = s.DocNo }))?frame=1">@s.DocNo</a></td>
                                                 <td>@s.Customer</td>
                                                 <td class="text-end">@s.Qty</td>
                                                 <td class="text-end">@(((decimal)s.UnitPrice).ToString("0.00"))</td>
                                                 <td class="text-end">@(((decimal)s.Amount).ToString("0.00"))</td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Edit", "SalesReturns", new { id = s.DocNo }))?frame=1" data-tab-id="sr-show-tab" data-tab-title="مرتجع مبيعات" data-url="@(Url.Action("Edit", "SalesReturns", new { id = s.DocNo }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مبيعات محمّلة حتى الآن.</small></td></tr>
+                                        <tr><td colspan="7" class="text-center text-muted py-2"><small>لا توجد مرتجعات مبيعات محمّلة حتى الآن.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -465,6 +469,7 @@
                                         <th class="text-end">الكمية</th>
                                         <th class="text-end">سعر الشراء</th>
                                         <th class="text-end">قيمة الفاتورة</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -474,17 +479,18 @@
                                         {
                                             <tr>
                                                 <td>@p.Date.ToString("yyyy/MM/dd")</td>
-                                                <td>@p.InvoiceNo</td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "PurchaseInvoices", new { id = p.InvoiceNo }))?frame=1" data-tab-id="pi-show-tab" data-tab-title="فاتورة مشتريات" data-url="@(Url.Action("Show", "PurchaseInvoices", new { id = p.InvoiceNo }))?frame=1">@p.InvoiceNo</a></td>
                                                 <td>@p.Supplier</td>
                                                 <td class="text-end">@p.Qty</td>
                                                 <td class="text-end">@(((decimal)p.UnitCost).ToString("0.00"))</td>
                                                 <td class="text-end">@(((decimal)p.Amount).ToString("0.00"))</td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "PurchaseInvoices", new { id = p.InvoiceNo }))?frame=1" data-tab-id="pi-show-tab" data-tab-title="فاتورة مشتريات" data-url="@(Url.Action("Show", "PurchaseInvoices", new { id = p.InvoiceNo }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-3"><small>لم يتم تحميل تفاصيل فواتير المشتريات بعد.</small></td></tr>
+                                        <tr><td colspan="7" class="text-center text-muted py-3"><small>لم يتم تحميل تفاصيل فواتير المشتريات بعد.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -503,6 +509,7 @@
                                         <th class="text-end">الكمية</th>
                                         <th class="text-end">سعر الشراء</th>
                                         <th class="text-end">قيمة المرتجع</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -512,17 +519,18 @@
                                         {
                                             <tr>
                                                 <td>@p.Date.ToString("yyyy/MM/dd")</td>
-                                                <td>@p.DocNo</td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Edit", "PurchaseReturns", new { id = p.DocNo }))?frame=1" data-tab-id="pr-ret-show-tab" data-tab-title="مرتجع مشتريات" data-url="@(Url.Action("Edit", "PurchaseReturns", new { id = p.DocNo }))?frame=1">@p.DocNo</a></td>
                                                 <td>@p.Supplier</td>
                                                 <td class="text-end">@p.Qty</td>
                                                 <td class="text-end">@(((decimal)p.UnitCost).ToString("0.00"))</td>
                                                 <td class="text-end">@(((decimal)p.Amount).ToString("0.00"))</td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Edit", "PurchaseReturns", new { id = p.DocNo }))?frame=1" data-tab-id="pr-ret-show-tab" data-tab-title="مرتجع مشتريات" data-url="@(Url.Action("Edit", "PurchaseReturns", new { id = p.DocNo }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مشتريات محمّلة حتى الآن.</small></td></tr>
+                                        <tr><td colspan="7" class="text-center text-muted py-2"><small>لا توجد مرتجعات مشتريات محمّلة حتى الآن.</small></td></tr>
                                     }
                                 </tbody>
                             </table>

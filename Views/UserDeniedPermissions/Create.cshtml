@@ -1,4 +1,4 @@
-﻿@model ERP.Models.UserDeniedPermission   
+@model ERP.Models.UserDeniedPermission   
                                             @* نفس الموديل القديم *@
 
 @{
@@ -21,10 +21,11 @@
             @* اختيار المستخدم *@
             <div class="mb-3">
                 <label asp-for="UserId" class="form-label fw-semibold">المستخدم</label>
+                @* لو استخدمت Bootstrap-Select هتلاقي البحث شغال *@
                 <select asp-for="UserId"
                         asp-items="ViewBag.UserId"
                         class="form-select selectpicker"
-                        data-live-search="true"    @* لو استخدمت Bootstrap-Select هتلاقي البحث شغال *@
+                        data-live-search="true"
                         id="UserId">
                     <option value="">-- اختر مستخدم --</option>
                 </select>

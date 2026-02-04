@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<UserActivityLog>
@@ -451,10 +451,10 @@
                 class="form-select form-select-sm"
                 onchange="document.getElementById('PageInput').value = 1; this.form.submit();">
 
-            <option value="25" @@(ps == 25 ? "selected" : null)>25</option>
-            <option value="50" @@(ps == 50 ? "selected" : null)>50</option>
-            <option value="100" @@(ps == 100 ? "selected" : null)>100</option>
-            <option value="200" @@(ps == 200 ? "selected" : null)>200</option>
+            <option value="25" selected='@(ps == 25 ? "selected" : null)'>25</option>
+            <option value="50" selected='@(ps == 50 ? "selected" : null)'>50</option>
+            <option value="100" selected='@(ps == 100 ? "selected" : null)'>100</option>
+            <option value="200" selected='@(ps == 200 ? "selected" : null)'>200</option>
 
         </select>
     </form>
@@ -466,60 +466,19 @@
     </small>
 </div>
 
-@* =========================================================
-   دالة بناء الروابط Link
-   - دي أهم نقطة: لازم الروابط تبعت pageSize + كل الفلاتر
-   - وإلا عند الترتيب/الترقيم هتروح قيم وتطلع صفحة فاضية
-   ========================================================= *@
-@functions {
-    // ملاحظة: بنرجّع string رابط كامل لنفس الأكشن/الكنترولر مع الحفاظ على الحالة
-    string Link(
-        string action,
-        string controller,
-        int page,
-        int pageSize,
-        string? search,
-        string? searchBy,
-        string? sort,
-        string? dir,
-        string? dateField,
-        bool useDateRange,
-        DateTime? fromDate,
-        DateTime? toDate,
-        int? fromCode,
-        int? toCode)
-    {
-        return Url.Action(action, controller, new
-        {
-            search,
-            searchBy,
-            sort,
-            dir,
-            page,
-            pageSize, // ✅ مهم جدًا
-            dateField,
-            useDateRange,
-            fromDate = fromDate?.ToString("o"),
-            toDate = toDate?.ToString("o"),
-            fromCode,
-            toCode
-        }) ?? "#";
-    }
-}
-
-@* الترقيم *@
+@* الترقيم: استخدام Link(int p) المعرّفة أعلى الصفحة لبناء الرابط مع الحفاظ على الفلاتر *@
 <nav aria-label="pagination" class="mt-3 no-print">
     <ul class="pagination justify-content-center">
         <li class="page-item @(page == first ? "disabled" : "")">
             <a class="page-link"
-               href="@@Link(action, controller, first, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+               href="@(Link(first))">
                 الأول
             </a>
         </li>
 
         <li class="page-item @(Model.HasPrevious ? "" : "disabled")">
             <a class="page-link"
-               href="@@Link(action, controller, prev, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+               href="@(Link(prev))">
                 السابق
             </a>
         </li>
@@ -532,14 +491,14 @@
 
         <li class="page-item @(Model.HasNext ? "" : "disabled")">
             <a class="page-link"
-               href="@@Link(action, controller, next, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+               href="@(Link(next))">
                 التالي
             </a>
         </li>
 
         <li class="page-item @(page == last ? "disabled" : "")">
             <a class="page-link"
-               href="@@Link(action, controller, last, ps, search, searchBy, sort, dir, dateField, useDateRange, fromDate, toDate, fromCode, toCode)">
+               href="@(Link(last))">
                 الأخير
             </a>
         </li>
