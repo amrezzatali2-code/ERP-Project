@@ -38,6 +38,8 @@
     var purchaseReturns = ViewBag.PurchaseReturnsList as IEnumerable<ERP.Models.PurchaseReturn> ?? Enumerable.Empty<ERP.Models.PurchaseReturn>();
     var cashReceipts = ViewBag.CashReceiptsList as IEnumerable<ERP.Models.CashReceipt> ?? Enumerable.Empty<ERP.Models.CashReceipt>();
     var cashPayments = ViewBag.CashPaymentsList as IEnumerable<ERP.Models.CashPayment> ?? Enumerable.Empty<ERP.Models.CashPayment>();
+    var debitNotes = ViewBag.DebitNotesList as IEnumerable<ERP.Models.DebitNote> ?? Enumerable.Empty<ERP.Models.DebitNote>();
+    var creditNotes = ViewBag.CreditNotesList as IEnumerable<ERP.Models.CreditNote> ?? Enumerable.Empty<ERP.Models.CreditNote>();
     var warehouses = ViewBag.Warehouses as Dictionary<int, string> ?? new Dictionary<int, string>();
 }
 
@@ -675,10 +677,33 @@
                                         <th>رقم الإشعار</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>السبب</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="4" class="text-center text-muted py-2"><small>لم يتم ربط إشعارات الخصم بعد.</small></td></tr>
+                                    @if (debitNotes != null && debitNotes.Any())
+                                    {
+                                        @foreach (var d in debitNotes)
+                                        {
+                                            var debitNoteUrl = Url.Action("Edit", "DebitNotes", new { id = d.DebitNoteId }) + "?frame=1";
+                                            <tr>
+                                                <td>@d.NoteDate.ToString("yyyy-MM-dd")</td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@debitNoteUrl" data-tab-id="debit-note-form-tab" data-tab-title="إشعار خصم" data-url="@debitNoteUrl">@d.DebitNoteId</a></td>
+                                                <td class="text-end">@d.Amount.ToString("N2")</td>
+                                                <td><small class="text-muted">@(d.Reason ?? "")</small></td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@debitNoteUrl" data-tab-id="debit-note-form-tab" data-tab-title="إشعار خصم" data-url="@debitNoteUrl">عرض</a></td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="2" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@debitNotes.Sum(d => d.Amount).ToString("N2")</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد إشعارات خصم للعميل في الفترة.</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>
@@ -693,10 +718,33 @@
                                         <th>رقم الإشعار</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>السبب</th>
+                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr><td colspan="4" class="text-center text-muted py-2"><small>لم يتم ربط إشعارات الإضافة بعد.</small></td></tr>
+                                    @if (creditNotes != null && creditNotes.Any())
+                                    {
+                                        @foreach (var c in creditNotes)
+                                        {
+                                            var creditNoteUrl = Url.Action("Edit", "CreditNotes", new { id = c.CreditNoteId }) + "?frame=1";
+                                            <tr>
+                                                <td>@c.NoteDate.ToString("yyyy-MM-dd")</td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@creditNoteUrl" data-tab-id="credit-note-form-tab" data-tab-title="إشعار إضافة" data-url="@creditNoteUrl">@c.CreditNoteId</a></td>
+                                                <td class="text-end">@c.Amount.ToString("N2")</td>
+                                                <td><small class="text-muted">@(c.Reason ?? "")</small></td>
+                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@creditNoteUrl" data-tab-id="credit-note-form-tab" data-tab-title="إشعار إضافة" data-url="@creditNoteUrl">عرض</a></td>
+                                            </tr>
+                                        }
+                                        <tr class="table-info">
+                                            <td colspan="2" class="text-end fw-bold">الإجمالي:</td>
+                                            <td class="text-end fw-bold">@creditNotes.Sum(c => c.Amount).ToString("N2")</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد إشعارات إضافة للعميل في الفترة.</small></td></tr>
+                                    }
                                 </tbody>
                             </table>
                         </div>

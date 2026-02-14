@@ -490,7 +490,20 @@ namespace ERP.Controllers
                         $"إضافة إذن استلام رقم {cashReceipt.ReceiptNumber} بمبلغ {cashReceipt.Amount} من عميل {cashReceipt.CustomerId}"
                     );
 
-                    TempData["Success"] = "تم حفظ وترحيل إذن الاستلام بنجاح.";
+                    TempData["CashReceiptSuccess"] = "تم حفظ وترحيل إذن الاستلام بنجاح.";
+                    // البقاء داخل الإذن مع عرض الرسالة فقط (مثل إذن الدفع)
+                    var saved = await _context.CashReceipts
+                        .Include(r => r.Customer)
+                        .ThenInclude(c => c.Account)
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(r => r.CashReceiptId == cashReceipt.CashReceiptId);
+                    if (saved != null)
+                    {
+                        await PopulateDropdownsAsync(saved.CustomerId, saved.CashAccountId, saved.CounterAccountId);
+                        if (saved.CustomerId.HasValue)
+                            ViewBag.LockCustomer = true;
+                        return View(saved);
+                    }
                     return RedirectToAction(nameof(Index));
                 }
                 catch (Exception ex)
@@ -502,7 +515,7 @@ namespace ERP.Controllers
                         errorMessage += $" | التفاصيل: {ex.InnerException.Message}";
                     }
                     
-                    TempData["Error"] = $"حدث خطأ أثناء حفظ إذن الاستلام: {errorMessage}";
+                    TempData["CashReceiptError"] = $"حدث خطأ أثناء حفظ إذن الاستلام: {errorMessage}";
                     
                     // ✅ محاولة حذف الإذن من قاعدة البيانات إذا تم حفظه جزئياً
                     if (cashReceipt.CashReceiptId > 0)
@@ -651,12 +664,16 @@ namespace ERP.Controllers
                     })
                 );
 
-                TempData["Success"] = "تم تعديل وترحيل إذن الاستلام بنجاح.";
-                return RedirectToAction(nameof(Index));
+                TempData["CashReceiptSuccess"] = "تم تعديل وترحيل إذن الاستلام بنجاح.";
+                // البقاء داخل الإذن مع عرض الرسالة فقط (مثل إذن الدفع)
+                PopulateDropdowns(existing.CustomerId, existing.CashAccountId, existing.CounterAccountId);
+                if (existing.CustomerId.HasValue)
+                    ViewBag.LockCustomer = true;
+                return View(existing);
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                TempData["CashReceiptError"] = $"حدث خطأ: {ex.Message}";
                 PopulateDropdowns(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
                 if (cashReceipt.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
@@ -678,7 +695,7 @@ namespace ERP.Controllers
 
                 if (receipt == null)
                 {
-                    TempData["Error"] = "الإذن غير موجود.";
+                    TempData["CashReceiptError"] = "الإذن غير موجود.";
                     return RedirectToAction(nameof(Index));
                 }
 
@@ -687,7 +704,7 @@ namespace ERP.Controllers
                 // ================================
                 if (!receipt.IsPosted)
                 {
-                    TempData["Error"] = "هذا الإذن غير مُرحّل، لا يوجد ما يمكن فتحه.";
+                    TempData["CashReceiptError"] = "هذا الإذن غير مُرحّل، لا يوجد ما يمكن فتحه.";
                     return RedirectToAction(nameof(Details), new { id });
                 }
 
@@ -712,12 +729,12 @@ namespace ERP.Controllers
                     description: $"فتح إذن استلام رقم {receipt.ReceiptNumber} للتعديل"
                 );
 
-                TempData["Success"] = "تم فتح الإذن للتعديل بنجاح.";
+                TempData["CashReceiptSuccess"] = "تم فتح الإذن للتعديل بنجاح.";
                 return RedirectToAction(nameof(Edit), new { id });
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                TempData["CashReceiptError"] = $"حدث خطأ: {ex.Message}";
                 return RedirectToAction(nameof(Index));
             }
         }
@@ -757,7 +774,7 @@ namespace ERP.Controllers
 
                 if (cashReceipt == null)
                 {
-                    TempData["Error"] = "الإذن غير موجود.";
+                    TempData["CashReceiptError"] = "الإذن غير موجود.";
                     return RedirectToAction(nameof(Index));
                 }
 
@@ -804,11 +821,11 @@ namespace ERP.Controllers
                     oldValues: oldValues
                 );
 
-                TempData["Success"] = "تم حذف إذن الاستلام بنجاح.";
+                TempData["CashReceiptSuccess"] = "تم حذف إذن الاستلام بنجاح.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
+                TempData["CashReceiptError"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -889,7 +906,7 @@ namespace ERP.Controllers
         {
             if (ids == null || ids.Length == 0)
             {
-                TempData["Error"] = "لم يتم اختيار أى إذن للحذف.";
+                TempData["CashReceiptError"] = "لم يتم اختيار أى إذن للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -900,7 +917,7 @@ namespace ERP.Controllers
 
             if (receipts.Count == 0)
             {
-                TempData["Error"] = "لم يتم العثور على الإذون المحددة.";
+                TempData["CashReceiptError"] = "لم يتم العثور على الإذون المحددة.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -933,11 +950,11 @@ namespace ERP.Controllers
                 _context.CashReceipts.RemoveRange(receipts);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = $"تم حذف {receipts.Count} من إذون الاستلام المحددة.";
+                TempData["CashReceiptSuccess"] = $"تم حذف {receipts.Count} من إذون الاستلام المحددة.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
+                TempData["CashReceiptError"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -956,7 +973,7 @@ namespace ERP.Controllers
 
             if (all.Count == 0)
             {
-                TempData["Error"] = "لا توجد إذون لحذفها.";
+                TempData["CashReceiptError"] = "لا توجد إذون لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -981,11 +998,11 @@ namespace ERP.Controllers
                 _context.CashReceipts.RemoveRange(all);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = $"تم حذف جميع إذون الاستلام ({all.Count}).";
+                TempData["CashReceiptSuccess"] = $"تم حذف جميع إذون الاستلام ({all.Count}).";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
+                TempData["CashReceiptError"] = $"حدث خطأ أثناء الحذف: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));

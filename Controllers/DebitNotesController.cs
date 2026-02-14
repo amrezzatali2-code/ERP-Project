@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -6,26 +6,45 @@ using System.Linq.Expressions;                    // Expression<Func<...>>
 using System.Text;                                // StringBuilder للتصدير
 using System.Threading.Tasks;                     // async / await
 using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
+using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // DebitNote + Customer + Account
+using ERP.Models;                                 // DebitNote + Customer + Account + LedgerSourceType
+using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
 {
     /// <summary>
     /// كنترولر إشعارات الخصم (DebitNotes)
     /// - CRUD (إنشاء/تعديل/تفاصيل/حذف).
-    /// - شاشة قائمة موحّدة (بحث + فلترة بالكود + فلترة بالتاريخ + تصدير + حذف جماعي + حذف الكل).
+    /// - زر حفظ وترحيل = حفظ + ترحيل محاسبي (LedgerEntries + تحديث حساب العميل + الأرباح).
     /// </summary>
     public class DebitNotesController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _context;   // السياق الأساسي للتعامل مع الـ DB
+        private readonly AppDbContext _context;
+        private readonly ILedgerPostingService _ledgerPostingService;
 
-        public DebitNotesController(AppDbContext context)
+        public DebitNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService)
         {
             _context = context;
+            _ledgerPostingService = ledgerPostingService;
+        }
+
+        // =========================================================
+        // دالة مساعدة: تحميل القوائم المنسدلة (الطرف + الحسابات)
+        // =========================================================
+        private void PopulateLookups(int? customerId = null, int? accountId = null, int? offsetAccountId = null)
+        {
+            ViewData["CustomerId"] = new SelectList(
+                _context.Customers.AsNoTracking().OrderBy(c => c.CustomerName),
+                "CustomerId", "CustomerName", customerId);
+            ViewData["AccountId"] = new SelectList(
+                _context.Accounts.AsNoTracking().OrderBy(a => a.AccountName),
+                "AccountId", "AccountName", accountId);
+            ViewData["OffsetAccountId"] = new SelectList(
+                _context.Accounts.AsNoTracking().OrderBy(a => a.AccountName),
+                "AccountId", "AccountName", offsetAccountId);
         }
 
         // =========================================================
@@ -72,7 +91,6 @@ namespace ERP.Controllers
             var stringFields =
                 new Dictionary<string, Expression<Func<DebitNote, string?>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["number"] = d => d.NoteNumber,                                    // رقم المستند
                     ["reason"] = d => d.Reason ?? "",                                  // سبب الإشعار
                     ["desc"] = d => d.Description ?? "",                             // البيان
                     ["customer"] = d => d.Customer != null ? d.Customer.CustomerName : "", // اسم العميل/الطرف
@@ -91,8 +109,7 @@ namespace ERP.Controllers
             var orderFields =
                 new Dictionary<string, Expression<Func<DebitNote, object>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["DebitNoteId"] = d => d.DebitNoteId,                                         // رقم الإشعار
-                    ["NoteNumber"] = d => d.NoteNumber,                                          // رقم المستند
+                    ["DebitNoteId"] = d => d.DebitNoteId,                                         // رقم الإشعار / رقم المستند
                     ["NoteDate"] = d => d.NoteDate,                                            // تاريخ الإشعار
                     ["Amount"] = d => d.Amount,                                              // المبلغ
                     ["CustomerName"] = d => d.Customer != null ? d.Customer.CustomerName : "",     // اسم العميل/الطرف
@@ -229,7 +246,7 @@ namespace ERP.Controllers
             var sb = new StringBuilder();
 
             // عناوين الأعمدة في ملف CSV
-            sb.AppendLine("DebitNoteId,NoteNumber,NoteDate,CustomerId,CustomerName,AccountId,AccountName,OffsetAccountId,OffsetAccountName,Amount,Reason,Description,IsPosted,CreatedAt,UpdatedAt,CreatedBy,PostedAt,PostedBy");
+            sb.AppendLine("DebitNoteId,NoteDate,CustomerId,CustomerName,AccountId,AccountName,OffsetAccountId,OffsetAccountName,Amount,Reason,Description,IsPosted,CreatedAt,UpdatedAt,CreatedBy,PostedAt,PostedBy");
 
             // كل إشعار في سطر CSV
             foreach (var d in list)
@@ -240,7 +257,6 @@ namespace ERP.Controllers
 
                 string line = string.Join(",",
                     d.DebitNoteId,
-                    (d.NoteNumber ?? "").Replace(",", " "),
                     d.NoteDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     d.CustomerId?.ToString() ?? "",
                     customerName.Replace(",", " "),
@@ -300,14 +316,19 @@ namespace ERP.Controllers
 
             try
             {
+                string? postedBy = User?.Identity?.Name ?? "System";
+                foreach (var note in notes.Where(n => n.IsPosted))
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(LedgerSourceType.DebitNote, note.DebitNoteId, postedBy, "حذف جماعي إشعار خصم");
+                }
                 _context.DebitNotes.RemoveRange(notes);
                 await _context.SaveChangesAsync();
 
                 TempData["Success"] = $"تم حذف {notes.Count} من إشعارات الخصم المحددة.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["Error"] = "لا يمكن حذف بعض الإشعارات بسبب ارتباطها بقيود محاسبية أو جداول أخرى.";
+                TempData["Error"] = $"لا يمكن حذف بعض الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -331,17 +352,41 @@ namespace ERP.Controllers
 
             try
             {
+                string? postedBy = User?.Identity?.Name ?? "System";
+                foreach (var note in all.Where(n => n.IsPosted))
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(LedgerSourceType.DebitNote, note.DebitNoteId, postedBy, "حذف جميع إشعارات الخصم");
+                }
                 _context.DebitNotes.RemoveRange(all);
                 await _context.SaveChangesAsync();
 
                 TempData["Success"] = "تم حذف جميع إشعارات الخصم.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["Error"] = "لا يمكن حذف جميع الإشعارات بسبب وجود ارتباطات محاسبية أخرى.";
+                TempData["Error"] = $"لا يمكن حذف جميع الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // جلب حساب الطرف تلقائياً عند اختيار العميل (للواجهة)
+        // =========================================================
+        public async Task<IActionResult> GetCustomerAccount(int customerId)
+        {
+            var customer = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == customerId)
+                .Select(c => new { c.AccountId })
+                .FirstOrDefaultAsync();
+
+            if (customer == null || !customer.AccountId.HasValue)
+            {
+                return Json(new { success = false, message = "العميل غير موجود أو غير مربوط بحساب محاسبي." });
+            }
+
+            return Json(new { success = true, accountId = customer.AccountId.Value });
         }
 
         // =========================================================
@@ -368,8 +413,13 @@ namespace ERP.Controllers
         // GET: DebitNotes/Create
         public IActionResult Create()
         {
-            // ممكن هنا لاحقاً نجهز DropDowns للـ Customer / Account / OffsetAccount
-            return View();
+            PopulateLookups();
+            var model = new DebitNote
+            {
+                NoteDate = DateTime.Now,
+                IsPosted = false
+            };
+            return View(model);
         }
 
         // POST: DebitNotes/Create
@@ -377,23 +427,66 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(DebitNote debitNote)
         {
+            // إن لم يُرسل حساب الطرف وتم اختيار عميل، نملأه من حساب العميل (نفس نمط إذن الاستلام)
+            if (debitNote.AccountId <= 0 && debitNote.CustomerId.HasValue)
+            {
+                var cust = await _context.Customers
+                    .AsNoTracking()
+                    .Where(c => c.CustomerId == debitNote.CustomerId.Value)
+                    .Select(c => new { c.AccountId })
+                    .FirstOrDefaultAsync();
+                if (cust?.AccountId != null)
+                {
+                    debitNote.AccountId = cust.AccountId.Value;
+                    ModelState.Remove("AccountId");
+                }
+            }
+
+            if (debitNote.AccountId <= 0)
+                ModelState.AddModelError(nameof(DebitNote.AccountId), "حساب الطرف مطلوب.");
+
             if (ModelState.IsValid)
             {
                 debitNote.CreatedAt = DateTime.Now;
                 debitNote.UpdatedAt = null;
                 debitNote.IsPosted = false;
                 debitNote.PostedAt = null;
-
+                debitNote.IsLocked = true; // غلق الإشعار بعد الحفظ
                 if (string.IsNullOrEmpty(debitNote.CreatedBy))
                     debitNote.CreatedBy = User?.Identity?.Name ?? "System";
 
                 _context.Add(debitNote);
                 await _context.SaveChangesAsync();
-                TempData["Success"] = "تم إنشاء إشعار الخصم بنجاح.";
-                return RedirectToAction(nameof(Index));
+
+                try
+                {
+                    await _ledgerPostingService.PostDebitNoteAsync(debitNote.DebitNoteId, User?.Identity?.Name ?? "System");
+                    TempData["Success"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
+                }
+                catch (Exception ex)
+                {
+                    TempData["Error"] = TempData["ErrorMessage"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
+                }
+                return RedirectToAction(nameof(Edit), new { id = debitNote.DebitNoteId });
             }
 
+            PopulateLookups(debitNote.CustomerId, debitNote.AccountId, debitNote.OffsetAccountId);
             return View(debitNote);
+        }
+
+        // GET: DebitNotes/Unlock/5 — فتح الإشعار للتعديل (سيُضاف التحقق من الصلاحية لاحقاً)
+        public async Task<IActionResult> Unlock(int? id)
+        {
+            if (id == null)
+                return NotFound();
+
+            var debitNote = await _context.DebitNotes.FindAsync(id);
+            if (debitNote == null)
+                return NotFound();
+
+            debitNote.IsLocked = false;
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Edit), new { id });
         }
 
         // GET: DebitNotes/Edit/5
@@ -406,37 +499,76 @@ namespace ERP.Controllers
             if (debitNote == null)
                 return NotFound();
 
+            PopulateLookups(debitNote.CustomerId, debitNote.AccountId, debitNote.OffsetAccountId);
             return View(debitNote);
         }
 
         // POST: DebitNotes/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int id, DebitNote debitNote)
+        public async Task<IActionResult> Edit(int id, DebitNote input)
         {
-            if (id != debitNote.DebitNoteId)
+            if (id != input.DebitNoteId)
                 return NotFound();
 
-            if (ModelState.IsValid)
+            if (input.AccountId <= 0 && input.CustomerId.HasValue)
             {
-                try
+                var cust = await _context.Customers
+                    .AsNoTracking()
+                    .Where(c => c.CustomerId == input.CustomerId.Value)
+                    .Select(c => new { c.AccountId })
+                    .FirstOrDefaultAsync();
+                if (cust?.AccountId != null)
                 {
-                    debitNote.UpdatedAt = DateTime.Now;
-                    _context.Update(debitNote);
-                    await _context.SaveChangesAsync();
-                    TempData["Success"] = "تم تعديل إشعار الخصم بنجاح.";
+                    input.AccountId = cust.AccountId.Value;
+                    ModelState.Remove("AccountId");
                 }
-                catch (DbUpdateConcurrencyException)
-                {
-                    if (!DebitNoteExists(debitNote.DebitNoteId))
-                        return NotFound();
-                    else
-                        throw;
-                }
-                return RedirectToAction(nameof(Index));
+            }
+            if (input.AccountId <= 0)
+                ModelState.AddModelError(nameof(DebitNote.AccountId), "حساب الطرف مطلوب.");
+
+            if (!ModelState.IsValid)
+            {
+                PopulateLookups(input.CustomerId, input.AccountId, null);
+                return View(input);
             }
 
-            return View(debitNote);
+            var existing = await _context.DebitNotes.FindAsync(id);
+            if (existing == null)
+                return NotFound();
+
+            existing.NoteDate = input.NoteDate;
+            existing.CustomerId = input.CustomerId;
+            existing.AccountId = input.AccountId;
+            existing.Amount = input.Amount;
+            existing.Reason = input.Reason;
+            existing.Description = input.Description;
+            existing.UpdatedAt = DateTime.Now;
+            existing.IsLocked = true;
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                if (!existing.IsPosted)
+                {
+                    try
+                    {
+                        await _ledgerPostingService.PostDebitNoteAsync(id, User?.Identity?.Name ?? "System");
+                    }
+                    catch (Exception ex)
+                    {
+                        TempData["Error"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
+                    }
+                }
+                TempData["Success"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
+                return RedirectToAction(nameof(Edit), new { id });
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                if (!DebitNoteExists(id))
+                    return NotFound();
+                throw;
+            }
         }
 
         // GET: DebitNotes/Delete/5
@@ -462,11 +594,21 @@ namespace ERP.Controllers
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var debitNote = await _context.DebitNotes.FindAsync(id);
-            if (debitNote != null)
+            if (debitNote == null)
+                return RedirectToAction(nameof(Index));
+
+            try
             {
+                if (debitNote.IsPosted)
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(Models.LedgerSourceType.DebitNote, id, User?.Identity?.Name ?? "System", "حذف إشعار خصم");
+
                 _context.DebitNotes.Remove(debitNote);
                 await _context.SaveChangesAsync();
                 TempData["Success"] = "تم حذف إشعار الخصم.";
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = TempData["ErrorMessage"] = $"لا يمكن حذف الإشعار: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));

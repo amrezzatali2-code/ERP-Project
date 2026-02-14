@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.PILine>
 
@@ -104,23 +104,23 @@
                             <select name="searchBy"
                                     class="form-select form-select-sm">
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     البحث في الكل
                                 </option>
                                 <option value="piid"
-                                        selected="@(searchBy == "piid" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "piid" ? " selected" : "")>
                                     رقم الفاتورة
                                 </option>
                                 <option value="prod"
-                                        selected="@(searchBy == "prod" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "prod" ? " selected" : "")>
                                     كود الصنف
                                 </option>
                                 <option value="batch"
-                                        selected="@(searchBy == "batch" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "batch" ? " selected" : "")>
                                     التشغيلة
                                 </option>
                                 <option value="expiry"
-                                        selected="@(searchBy == "expiry" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "expiry" ? " selected" : "")>
                                     الصلاحية
                                 </option>
                             </select>
@@ -480,10 +480,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

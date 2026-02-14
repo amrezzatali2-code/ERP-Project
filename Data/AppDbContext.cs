@@ -633,10 +633,6 @@ namespace ERP.Data
 
                 entity.HasKey(e => e.DebitNoteId);
 
-                entity.Property(e => e.NoteNumber)
-                      .IsRequired()
-                      .HasMaxLength(50);
-
                 entity.Property(e => e.Reason)
                       .HasMaxLength(100);
 
@@ -668,10 +664,6 @@ namespace ERP.Data
                 entity.ToTable("CreditNotes");
 
                 entity.HasKey(e => e.CreditNoteId);
-
-                entity.Property(e => e.NoteNumber)
-                      .IsRequired()
-                      .HasMaxLength(50);
 
                 entity.Property(e => e.Reason)
                       .HasMaxLength(100);

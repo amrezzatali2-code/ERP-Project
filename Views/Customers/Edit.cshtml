@@ -50,14 +50,15 @@
 
 
 
-        @* ===== الربط الجغرافي: المحافظة / الحي / المنطقة ===== *@
+        @* ===== الربط الجغرافي: المحافظة / الحي / المنطقة (متسلسلة) ===== *@
         <div class="row">
             <div class="col-md-4 mb-3">
                 <label asp-for="GovernorateId" class="form-label"></label>
                 <select asp-for="GovernorateId"
                         class="form-select"
-                        asp-items="ViewBag.GovernorateId">
-                    @* <option value="">-- اختر المحافظة --</option> *@
+                        asp-items="ViewBag.GovernorateId"
+                        id="GovernorateId">
+                    <option value="">-- اختر المحافظة --</option>
                 </select>
                 <span asp-validation-for="GovernorateId" class="text-danger"></span>
             </div>
@@ -66,8 +67,9 @@
                 <label asp-for="DistrictId" class="form-label"></label>
                 <select asp-for="DistrictId"
                         class="form-select"
-                        asp-items="ViewBag.DistrictId">
-                    @* <option value="">-- اختر الحي / المركز --</option> *@
+                        asp-items="ViewBag.DistrictId"
+                        id="DistrictId">
+                    <option value="">-- اختر الحي / المركز --</option>
                 </select>
                 <span asp-validation-for="DistrictId" class="text-danger"></span>
             </div>
@@ -76,8 +78,9 @@
                 <label asp-for="AreaId" class="form-label"></label>
                 <select asp-for="AreaId"
                         class="form-select"
-                        asp-items="ViewBag.AreaId">
-                    @* <option value="">-- اختر المنطقة --</option> *@
+                        asp-items="ViewBag.AreaId"
+                        id="AreaId">
+                    <option value="">-- اختر المنطقة --</option>
                 </select>
                 <span asp-validation-for="AreaId" class="text-danger"></span>
             </div>
@@ -218,39 +221,73 @@
     }
 
     <script>
-        // سكربت ربط نوع الطرف بالحساب المحاسبي الافتراضي في شاشة التعديل
         document.addEventListener('DOMContentLoaded', function () {
+            const partySelect = document.getElementById('PartyCategorySelect');
+            const accountSelect = document.getElementById('AccountIdSelect');
+            const governorateSelect = document.getElementById('GovernorateId');
+            const districtSelect = document.getElementById('DistrictId');
+            const areaSelect = document.getElementById('AreaId');
 
-            const partySelect = document.getElementById('PartyCategorySelect'); // نوع الطرف
-            const accountSelect = document.getElementById('AccountIdSelect');   // الحساب المحاسبي
-
-            if (!partySelect || !accountSelect) return;
-
-            function setDefaultAccount(forceChange) {
-                const party = partySelect.value;    // نوع الطرف الحالي
-                if (!party) return;
-
-                // في حالة التحميل الأول: لو مش عايزين نغير اختيار المستخدم الحالي
-                if (!forceChange && accountSelect.value) return;
-
-                fetch(`/Customers/GetDefaultAccountForParty?partyCategory=${encodeURIComponent(party)}`)
-                    .then(response => response.ok ? response.json() : null)
-                    .then(data => {
-                        if (data && data.accountId) {
-                            accountSelect.value = data.accountId;
-                        }
-                    })
-                    .catch(error => console.error('خطأ في تحميل الحساب الافتراضي:', error));
+            // ——— ربط نوع الطرف بالحساب المحاسبي الافتراضي ———
+            if (partySelect && accountSelect) {
+                function setDefaultAccount(forceChange) {
+                    const party = partySelect.value;
+                    if (!party) return;
+                    if (!forceChange && accountSelect.value) return;
+                    fetch('@Url.Action("GetDefaultAccountForParty", "Customers")?partyCategory=' + encodeURIComponent(party))
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => { if (data && data.accountId) accountSelect.value = data.accountId; })
+                        .catch(err => console.error('خطأ في تحميل الحساب الافتراضي:', err));
+                }
+                partySelect.addEventListener('change', function () { setDefaultAccount(true); });
+                setDefaultAccount(false);
             }
 
-            // عند تغيير نوع الطرف نجبر تغيير الحساب
-            partySelect.addEventListener('change', function () {
-                setDefaultAccount(true);
-            });
+            // ——— تعبئة متسلسلة: المحافظة → الحي → المنطقة ———
+            if (governorateSelect && districtSelect && areaSelect) {
+                const districtPlaceholder = '-- اختر الحي / المركز --';
+                const areaPlaceholder = '-- اختر المنطقة --';
 
-            // عند فتح شاشة التعديل:
-            // لو العميل قديم وكان بدون حساب محاسبي لكن له نوع طرف → نضبط له حساب افتراضي
-            setDefaultAccount(false);
+                function fillDistrictOptions(govId) {
+                    districtSelect.innerHTML = '<option value="">' + districtPlaceholder + '</option>';
+                    areaSelect.innerHTML = '<option value="">' + areaPlaceholder + '</option>';
+                    if (!govId) return;
+                    fetch('@Url.Action("GetDistrictsByGovernorate", "Customers")?governorateId=' + encodeURIComponent(govId))
+                        .then(r => r.ok ? r.json() : [])
+                        .then(arr => {
+                            (arr || []).forEach(function (d) {
+                                const opt = document.createElement('option');
+                                opt.value = d.id;
+                                opt.textContent = d.name;
+                                districtSelect.appendChild(opt);
+                            });
+                        })
+                        .catch(err => console.error('Error loading districts:', err));
+                }
+
+                function fillAreaOptions(distId) {
+                    areaSelect.innerHTML = '<option value="">' + areaPlaceholder + '</option>';
+                    if (!distId) return;
+                    fetch('@Url.Action("GetAreasByDistrict", "Customers")?districtId=' + encodeURIComponent(distId))
+                        .then(r => r.ok ? r.json() : [])
+                        .then(arr => {
+                            (arr || []).forEach(function (a) {
+                                const opt = document.createElement('option');
+                                opt.value = a.id;
+                                opt.textContent = a.name;
+                                areaSelect.appendChild(opt);
+                            });
+                        })
+                        .catch(err => console.error('Error loading areas:', err));
+                }
+
+                governorateSelect.addEventListener('change', function () {
+                    fillDistrictOptions(this.value || null);
+                });
+                districtSelect.addEventListener('change', function () {
+                    fillAreaOptions(this.value || null);
+                });
+            }
         });
     </script>
 }

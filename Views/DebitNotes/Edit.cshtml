@@ -1,93 +1,150 @@
-﻿@model ERP.Models.DebitNote
+@model ERP.Models.DebitNote
 
 @{
-    ViewData["Title"] = "تعديل إشعار خصم";
+    ViewData["Title"] = "إشعار خصم";
+    var isLocked = Model.IsLocked;
 }
 
-<h2 class="mb-3 text-center" dir="rtl">تعديل إشعار خصم</h2>
+<div class="container" dir="rtl">
+    <h2 class="mb-3">إشعار خصم</h2>
 
-<div class="row justify-content-center" dir="rtl">
-    <div class="col-md-8">
-        <div class="card shadow-sm">
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Success"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["Error"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (!ViewData.ModelState.IsValid && !isLocked)
+    {
+        <div class="alert alert-danger">
+            <strong>يرجى تصحيح الأخطاء التالية:</strong>
+            <ul class="mb-0">
+                @foreach (var error in ViewData.ModelState.Values.SelectMany(v => v.Errors))
+                {
+                    <li>@error.ErrorMessage</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <form asp-action="Edit" method="post">
+        <input type="hidden" asp-for="DebitNoteId" />
+        <div class="card">
             <div class="card-body">
-
-                @* نموذج تعديل إشعار الخصم *@
-                <form asp-action="Edit" method="post">
-                    <input type="hidden" asp-for="DebitNoteId" />
-
-                    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-
-                    <div class="row g-3">
-
-                        <div class="col-md-4">
-                            <label asp-for="NoteNumber" class="form-label"></label>
-                            <input asp-for="NoteNumber" class="form-control" />
-                            <span asp-validation-for="NoteNumber" class="text-danger"></span>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label asp-for="NoteDate" class="form-label"></label>
-                            <input asp-for="NoteDate" type="date" class="form-control" />
-                            <span asp-validation-for="NoteDate" class="text-danger"></span>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label asp-for="CustomerId" class="form-label"></label>
-                            <select asp-for="CustomerId" class="form-select" asp-items="ViewBag.CustomerId">
-                                <option value="">-- بدون تحديد --</option>
-                            </select>
-                            <span asp-validation-for="CustomerId" class="text-danger"></span>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label asp-for="AccountId" class="form-label"></label>
-                            <select asp-for="AccountId" class="form-select" asp-items="ViewBag.AccountId">
-                                <option value="">-- اختر حساب الطرف --</option>
-                            </select>
-                            <span asp-validation-for="AccountId" class="text-danger"></span>
-                        </div>
-
-                        <div class="col-md-6">
-                            <label asp-for="OffsetAccountId" class="form-label"></label>
-                            <select asp-for="OffsetAccountId" class="form-select" asp-items="ViewBag.OffsetAccountId">
-                                <option value="">-- بدون حساب مقابل --</option>
-                            </select>
-                            <span asp-validation-for="OffsetAccountId" class="text-danger"></span>
-                        </div>
-
-                        <div class="col-md-4">
-                            <label asp-for="Amount" class="form-label"></label>
-                            <input asp-for="Amount" class="form-control" />
-                            <span asp-validation-for="Amount" class="text-danger"></span>
-                        </div>
-
-                        <div class="col-md-8">
-                            <label asp-for="Reason" class="form-label"></label>
-                            <input asp-for="Reason" class="form-control" />
-                            <span asp-validation-for="Reason" class="text-danger"></span>
-                        </div>
-
-                        <div class="col-12">
-                            <label asp-for="Description" class="form-label"></label>
-                            <textarea asp-for="Description" class="form-control" rows="3"></textarea>
-                            <span asp-validation-for="Description" class="text-danger"></span>
-                        </div>
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">رقم المستند</label>
+                        <input type="text" class="form-control" value="@Model.DebitNoteId" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="NoteDate" class="form-label"></label>
+                        <input asp-for="NoteDate" type="date" class="form-control" @Html.Raw(isLocked ? "disabled" : "") />
+                        <span asp-validation-for="NoteDate" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">الحالة</label>
+                        <input type="text" class="form-control" value="@(isLocked ? (Model.IsPosted ? "مرحّل" : "غير مرحلة") : "مفتوحة للتعديل")" readonly />
                     </div>
 
-                    <hr />
-                    <div class="d-flex justify-content-between">
-                        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
-                        <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
+                    <div class="col-md-4">
+                        <label asp-for="CustomerId" class="form-label"></label>
+                        <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect" @(isLocked ? "disabled" : "")>
+                            <option value="">-- اختر الطرف --</option>
+                        </select>
+                        <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
-                </form>
+                    <div class="col-md-4">
+                        <label asp-for="AccountId" class="form-label"></label>
+                        <select asp-for="AccountId" asp-items="ViewBag.AccountId" class="form-select" id="accountIdSelect" @(isLocked ? "disabled" : "")>
+                            <option value="">-- سيتم تعبئته تلقائياً --</option>
+                        </select>
+                        <span asp-validation-for="AccountId" class="text-danger"></span>
+                    </div>
 
+                    <div class="col-md-4">
+                        <label asp-for="Amount" class="form-label"></label>
+                        <input asp-for="Amount" class="form-control" type="number" step="0.01" @(isLocked ? "disabled" : "") />
+                        <span asp-validation-for="Amount" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-8">
+                        <label asp-for="Reason" class="form-label"></label>
+                        <input asp-for="Reason" class="form-control" @(isLocked ? "disabled" : "") />
+                    </div>
+                    <div class="col-12">
+                        <label asp-for="Description" class="form-label"></label>
+                        <textarea asp-for="Description" class="form-control" rows="2" @(isLocked ? "disabled" : "")></textarea>
+                    </div>
+                </div>
+                <hr />
+                <div class="d-flex justify-content-between flex-wrap gap-2">
+                    <div class="d-flex gap-2">
+                        <a asp-action="Index" class="btn btn-secondary">عودة للقائمة</a>
+                        <a asp-action="Create" class="btn btn-outline-primary">إشعار جديد</a>
+                    </div>
+                    <div>
+                        @if (isLocked)
+                        {
+                            <a asp-action="Unlock" asp-route-id="@Model.DebitNoteId" class="btn btn-primary">تعديل</a>
+                        }
+                        else
+                        {
+                            <button type="submit" class="btn btn-primary">حفظ وترحيل</button>
+                        }
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
+    </form>
 </div>
 
 @section Scripts {
-    @{
-        await Html.RenderPartialAsync("_ValidationScriptsPartial");
+    @{ await Html.RenderPartialAsync("_ValidationScriptsPartial"); }
+    <script>
+        (function() {
+            if (window.top !== window) {
+                try {
+                    window.top.postMessage({ type: 'erp-set-tab-title', title: 'إشعار خصم' }, '*');
+                } catch (e) { /* تجاهل */ }
+            }
+        })();
+    </script>
+    @if (!isLocked)
+    {
+        <script>
+            $(document).ready(function() {
+                @if (Model.AccountId > 0)
+                {
+                    <text>$('#accountIdSelect').val('@Model.AccountId');</text>
+                }
+                $('#customerSelect').on('change', function() {
+                    var customerId = $(this).val();
+                    var accountSelect = $('#accountIdSelect');
+                    if (!customerId || customerId === '') { accountSelect.val(''); return; }
+                    $.ajax({
+                        url: '@Url.Action("GetCustomerAccount", "DebitNotes")',
+                        type: 'GET',
+                        data: { customerId: customerId },
+                        success: function(response) {
+                            if (response && response.success && response.accountId) {
+                                accountSelect.val(response.accountId);
+                            } else {
+                                accountSelect.val('');
+                                if (response && response.message) alert(response.message);
+                                else alert('هذا العميل غير مربوط بحساب محاسبي.');
+                            }
+                        },
+                        error: function() { accountSelect.val(''); alert('حدث خطأ أثناء جلب بيانات العميل.'); }
+                    });
+                });
+            });
+        </script>
     }
 }

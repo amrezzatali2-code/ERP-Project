@@ -179,7 +179,31 @@ namespace ERP.Controllers
             });
         }
 
+        /// <summary>جلب الأحياء/المراكز حسب المحافظة المختارة (للتعبئة المتسلسلة)</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetDistrictsByGovernorate(int governorateId)
+        {
+            var list = await _context.Districts
+                .AsNoTracking()
+                .Where(d => d.GovernorateId == governorateId)
+                .OrderBy(d => d.DistrictName)
+                .Select(d => new { id = d.DistrictId, name = d.DistrictName })
+                .ToListAsync();
+            return Json(list);
+        }
 
+        /// <summary>جلب المناطق حسب الحي/المركز المختار (للتعبئة المتسلسلة)</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetAreasByDistrict(int districtId)
+        {
+            var list = await _context.Areas
+                .AsNoTracking()
+                .Where(a => a.DistrictId == districtId)
+                .OrderBy(a => a.AreaName)
+                .Select(a => new { id = a.AreaId, name = a.AreaName })
+                .ToListAsync();
+            return Json(list);
+        }
 
 
 
@@ -287,13 +311,13 @@ namespace ERP.Controllers
 
 
 
-        // دالة مساعدة: تجهيز قوائم المحافظة / الحي / المنطقة
+        // دالة مساعدة: تجهيز قوائم المحافظة / الحي / المنطقة (متسلسلة: حي حسب المحافظة، منطقة حسب الحي)
         private async Task FillGeoDropDownsAsync(
             int? selectedGovernorateId = null,
             int? selectedDistrictId = null,
             int? selectedAreaId = null)
         {
-            // قائمة المحافظات
+            // قائمة المحافظات (دائماً كاملة)
             var govs = await _context.Governorates
                 .AsNoTracking()
                 .OrderBy(g => g.GovernorateName)
@@ -301,36 +325,40 @@ namespace ERP.Controllers
 
             ViewBag.GovernorateId = new SelectList(
                 govs,
-                "GovernorateId",      // اسم عمود الكود في جدول المحافظات
-                "GovernorateName",    // اسم عمود الاسم
-                selectedGovernorateId // القيمة المختارة (لو Edit)
+                "GovernorateId",
+                "GovernorateName",
+                selectedGovernorateId
             );
 
-            // قائمة الأحياء / المراكز
-            var dists = await _context.Districts
-                .AsNoTracking()
-                .OrderBy(d => d.DistrictName)
-                .ToListAsync();
+            // قائمة الأحياء: فقط عند وجود محافظة محددة (أو للعرض في Edit)
+            if (selectedGovernorateId.HasValue)
+            {
+                var dists = await _context.Districts
+                    .AsNoTracking()
+                    .Where(d => d.GovernorateId == selectedGovernorateId.Value)
+                    .OrderBy(d => d.DistrictName)
+                    .ToListAsync();
+                ViewBag.DistrictId = new SelectList(dists, "DistrictId", "DistrictName", selectedDistrictId);
+            }
+            else
+            {
+                ViewBag.DistrictId = new SelectList(Enumerable.Empty<SelectListItem>(), "Value", "Text", selectedDistrictId);
+            }
 
-            ViewBag.DistrictId = new SelectList(
-                dists,
-                "DistrictId",
-                "DistrictName",
-                selectedDistrictId
-            );
-
-            // قائمة المناطق
-            var areas = await _context.Areas
-                .AsNoTracking()
-                .OrderBy(a => a.AreaName)
-                .ToListAsync();
-
-            ViewBag.AreaId = new SelectList(
-                areas,
-                "AreaId",
-                "AreaName",
-                selectedAreaId
-            );
+            // قائمة المناطق: فقط عند وجود حي محدد (أو للعرض في Edit)
+            if (selectedDistrictId.HasValue)
+            {
+                var areas = await _context.Areas
+                    .AsNoTracking()
+                    .Where(a => a.DistrictId == selectedDistrictId.Value)
+                    .OrderBy(a => a.AreaName)
+                    .ToListAsync();
+                ViewBag.AreaId = new SelectList(areas, "AreaId", "AreaName", selectedAreaId);
+            }
+            else
+            {
+                ViewBag.AreaId = new SelectList(Enumerable.Empty<SelectListItem>(), "Value", "Text", selectedAreaId);
+            }
         }
 
 
@@ -774,7 +802,18 @@ namespace ERP.Controllers
                 .Select(pr => (DateTime?)pr.PRetDate)
                 .FirstOrDefaultAsync();
 
-            var lastDates = new[] { lastSalesDate, lastPurchaseDate, lastSalesReturnDate, lastPurchaseReturnDate }
+            var lastDebitNoteDate = await _context.DebitNotes
+                .Where(d => d.CustomerId == customer.CustomerId)
+                .OrderByDescending(d => d.NoteDate)
+                .Select(d => (DateTime?)d.NoteDate)
+                .FirstOrDefaultAsync();
+            var lastCreditNoteDate = await _context.CreditNotes
+                .Where(c => c.CustomerId == customer.CustomerId)
+                .OrderByDescending(c => c.NoteDate)
+                .Select(c => (DateTime?)c.NoteDate)
+                .FirstOrDefaultAsync();
+
+            var lastDates = new[] { lastSalesDate, lastPurchaseDate, lastSalesReturnDate, lastPurchaseReturnDate, lastDebitNoteDate, lastCreditNoteDate }
                 .Where(d => d.HasValue).Select(d => d!.Value).ToList();
             DateTime? lastTransactionDate = lastDates.Count > 0 ? lastDates.Max() : null;
 
@@ -848,6 +887,29 @@ namespace ERP.Controllers
                 .ToListAsync();
 
             // =========================================================
+            // إشعارات الخصم والإضافة (مثل فواتير المبيعات والمشتريات)
+            // =========================================================
+            var debitNotesList = await _context.DebitNotes
+                .AsNoTracking()
+                .Include(d => d.Customer)
+                .Where(d => d.CustomerId == customer.CustomerId)
+                .Where(d => !from.HasValue || d.NoteDate >= from.Value)
+                .Where(d => !toExclusive.HasValue || d.NoteDate < toExclusive.Value)
+                .OrderByDescending(d => d.NoteDate)
+                .ThenByDescending(d => d.DebitNoteId)
+                .ToListAsync();
+
+            var creditNotesList = await _context.CreditNotes
+                .AsNoTracking()
+                .Include(c => c.Customer)
+                .Where(c => c.CustomerId == customer.CustomerId)
+                .Where(c => !from.HasValue || c.NoteDate >= from.Value)
+                .Where(c => !toExclusive.HasValue || c.NoteDate < toExclusive.Value)
+                .OrderByDescending(c => c.NoteDate)
+                .ThenByDescending(c => c.CreditNoteId)
+                .ToListAsync();
+
+            // =========================================================
             // 11.1) تحميل أسماء المخازن (فواتير + مرتجعات)
             // =========================================================
             var warehouseIds = salesInvoicesList.Select(s => s.WarehouseId)
@@ -878,6 +940,8 @@ namespace ERP.Controllers
             ViewBag.PurchaseReturnsList = purchaseReturnsList;
             ViewBag.CashReceiptsList = cashReceiptsList;
             ViewBag.CashPaymentsList = cashPaymentsList;
+            ViewBag.DebitNotesList = debitNotesList;
+            ViewBag.CreditNotesList = creditNotesList;
             ViewBag.Warehouses = warehouses;
 
             return View(customer);

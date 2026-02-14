@@ -117,25 +117,25 @@
                                     class="form-select form-select-sm">
                                 @* البحث بالاسم *@
                                 <option value="name"
-                                        selected="@(searchBy == "name" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "name" ? " selected" : "")>
                                     الاسم
                                 </option>
 
                                 @* البحث بكود الحي / المركز *@
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     كود الحي / المركز
                                 </option>
 
                                 @* البحث بتاريخ الإنشاء (كنص) *@
                                 <option value="created"
-                                        selected="@(searchBy == "created" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "created" ? " selected" : "")>
                                     تاريخ الإنشاء
                                 </option>
 
                                 @* البحث بآخر تعديل (كنص) *@
                                 <option value="updated"
-                                        selected="@(searchBy == "updated" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "updated" ? " selected" : "")>
                                     آخر تعديل
                                 </option>
                             </select>
@@ -425,10 +425,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

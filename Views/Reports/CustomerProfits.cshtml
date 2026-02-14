@@ -178,9 +178,9 @@
                             </div>
                             <div class="card-body py-2">
                                 <select name="profitMethod" class="form-select">
-                                    <option value="both" selected="@(profitMethod == "both")">الكل</option>
-                                    <option value="sales" selected="@(profitMethod == "sales")">من البيع</option>
-                                    <option value="ledger" selected="@(profitMethod == "ledger")">من الميزانية</option>
+                                    <option value="both"@Html.Raw(profitMethod == "both" ? " selected" : "")>الكل</option>
+                                    <option value="sales"@Html.Raw(profitMethod == "sales" ? " selected" : "")>من البيع</option>
+                                    <option value="ledger"@Html.Raw(profitMethod == "ledger" ? " selected" : "")>من الميزانية</option>
                                 </select>
                             </div>
                         </div>
@@ -203,11 +203,11 @@
                                         class="form-select form-select-sm" 
                                         style="width: auto;"
                                         onchange="this.form.submit()">
-                                    <option value="200" selected="@(pageSize == 200)">200</option>
-                                    <option value="500" selected="@(pageSize == 500)">500</option>
-                                    <option value="1000" selected="@(pageSize == 1000)">1000</option>
-                                    <option value="5000" selected="@(pageSize == 5000)">5000</option>
-                                    <option value="0" selected="@(pageSize == 0 || pageSize >= totalCount)">الكل</option>
+                                    <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
+                                    <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
+                                    <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
+                                    <option value="5000"@Html.Raw(pageSize == 5000 ? " selected" : "")>5000</option>
+                                    <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
                                 </select>
                             </div>
                         }

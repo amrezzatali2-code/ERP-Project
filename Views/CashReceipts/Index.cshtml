@@ -91,6 +91,21 @@
 
 <div dir="rtl" class="container-fluid">
 
+    @if (TempData["CashReceiptSuccess"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["CashReceiptSuccess"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+    @if (TempData["CashReceiptError"] != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            @TempData["CashReceiptError"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    }
+
     @* ===== الكارت العلوي: بحث + فلتر كود من/إلى + أزرار التحكم ===== *@
     <div class="card mb-3 d-print-none mt-2">
         <div class="card-body">
@@ -118,42 +133,42 @@
                             <select name="searchBy"
                                     class="form-select form-select-sm">
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     البحث في الكل
                                 </option>
 
                                 <option value="receiptNumber"
-                                        selected="@(searchBy == "receiptNumber" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "receiptNumber" ? " selected" : "")>
                                     رقم المستند
                                 </option>
 
                                 <option value="customer"
-                                        selected="@(searchBy == "customer" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "customer" ? " selected" : "")>
                                     اسم الطرف
                                 </option>
 
                                 <option value="cashAccount"
-                                        selected="@(searchBy == "cashAccount" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "cashAccount" ? " selected" : "")>
                                     حساب الصندوق / البنك
                                 </option>
 
                                 <option value="counterAccount"
-                                        selected="@(searchBy == "counterAccount" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "counterAccount" ? " selected" : "")>
                                     حساب الطرف
                                 </option>
 
                                 <option value="description"
-                                        selected="@(searchBy == "description" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "description" ? " selected" : "")>
                                     البيان
                                 </option>
 
                                 <option value="status"
-                                        selected="@(searchBy == "status" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "status" ? " selected" : "")>
                                     حالة الترحيل
                                 </option>
 
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     رقم الإذن
                                 </option>
                             </select>
@@ -484,10 +499,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

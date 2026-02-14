@@ -35,6 +35,8 @@ namespace ERP.Services
         Task ReverseStockAdjustmentAsync(int stockAdjustmentId, string? postedBy);
         Task PostStockTransferAsync(int stockTransferId, string? postedBy);
         Task ReverseStockTransferAsync(int stockTransferId, string? postedBy);
+        Task PostDebitNoteAsync(int debitNoteId, string? postedBy);
+        Task PostCreditNoteAsync(int creditNoteId, string? postedBy);
         Task RecalcAllCustomerBalancesAsync();
 
 
@@ -1460,6 +1462,144 @@ namespace ERP.Services
         }
 
         // =========================================================
+        // ترحيل إشعار الخصم إلى LedgerEntries + تحديث رصيد العميل
+        // قيد إشعار الخصم: مدين حساب العميل (نقلل ديون العميل)، دائن حساب مقابل (خصم مسموح/مصروف)
+        // =========================================================
+        public async Task PostDebitNoteAsync(int debitNoteId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var note = await _db.DebitNotes
+                    .Include(d => d.Customer)
+                    .FirstOrDefaultAsync(d => d.DebitNoteId == debitNoteId);
+                if (note == null) throw new Exception("إشعار الخصم غير موجود.");
+                if (note.IsPosted) throw new Exception("هذا الإشعار مترحّل بالفعل.");
+                if (note.AccountId <= 0) throw new Exception("حساب الطرف غير محدد.");
+
+                int offsetAccountId = note.OffsetAccountId ?? await ResolveAccountIdByCodeAsync("5200");
+                if (offsetAccountId <= 0) throw new Exception("حساب مقابل غير محدد. يرجى اختيار حساب مقابل أو إضافة حساب بكود 5200 (خصم مسموح به).");
+
+                var now = DateTime.UtcNow;
+                decimal amount = note.Amount;
+                string voucherNo = note.DebitNoteId.ToString();
+
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = note.NoteDate,
+                    SourceType = LedgerSourceType.DebitNote,
+                    VoucherNo = voucherNo,
+                    SourceId = debitNoteId,
+                    LineNo = 1,
+                    PostVersion = 1,
+                    AccountId = note.AccountId,
+                    CustomerId = note.CustomerId,
+                    Debit = amount,
+                    Credit = 0m,
+                    Description = $"ترحيل إشعار خصم رقم {debitNoteId}",
+                    CreatedAt = now
+                });
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = note.NoteDate,
+                    SourceType = LedgerSourceType.DebitNote,
+                    VoucherNo = voucherNo,
+                    SourceId = debitNoteId,
+                    LineNo = 2,
+                    PostVersion = 1,
+                    AccountId = offsetAccountId,
+                    CustomerId = null,
+                    Debit = 0m,
+                    Credit = amount,
+                    Description = $"ترحيل إشعار خصم رقم {debitNoteId}",
+                    CreatedAt = now
+                });
+
+                note.IsPosted = true;
+                note.PostedAt = now;
+                note.PostedBy = string.IsNullOrWhiteSpace(postedBy) ? "SYSTEM" : postedBy;
+                await _db.SaveChangesAsync();
+
+                if (note.CustomerId.HasValue && note.CustomerId.Value > 0)
+                {
+                    await RecalcCustomerCurrentBalanceAsync(note.CustomerId.Value);
+                    await _db.SaveChangesAsync();
+                }
+                await tx.CommitAsync();
+            }
+            catch { await tx.RollbackAsync(); throw; }
+        }
+
+        // =========================================================
+        // ترحيل إشعار الإضافة إلى LedgerEntries + تحديث رصيد العميل
+        // قيد إشعار الإضافة: مدين حساب مقابل (إيراد)، دائن حساب العميل (نزيد ما له)
+        // =========================================================
+        public async Task PostCreditNoteAsync(int creditNoteId, string? postedBy)
+        {
+            await using var tx = await _db.Database.BeginTransactionAsync();
+            try
+            {
+                var note = await _db.CreditNotes
+                    .Include(c => c.Customer)
+                    .FirstOrDefaultAsync(c => c.CreditNoteId == creditNoteId);
+                if (note == null) throw new Exception("إشعار الإضافة غير موجود.");
+                if (note.IsPosted) throw new Exception("هذا الإشعار مترحّل بالفعل.");
+                if (note.AccountId <= 0) throw new Exception("حساب الطرف غير محدد.");
+
+                int offsetAccountId = note.OffsetAccountId ?? await ResolveAccountIdByCodeAsync("4100");
+                if (offsetAccountId <= 0) throw new Exception("حساب مقابل غير محدد. يرجى اختيار حساب مقابل أو إضافة حساب بكود 4100 (إيرادات).");
+
+                var now = DateTime.UtcNow;
+                decimal amount = note.Amount;
+                string voucherNo = note.CreditNoteId.ToString();
+
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = note.NoteDate,
+                    SourceType = LedgerSourceType.CreditNote,
+                    VoucherNo = voucherNo,
+                    SourceId = creditNoteId,
+                    LineNo = 1,
+                    PostVersion = 1,
+                    AccountId = offsetAccountId,
+                    CustomerId = null,
+                    Debit = amount,
+                    Credit = 0m,
+                    Description = $"ترحيل إشعار إضافة رقم {creditNoteId}",
+                    CreatedAt = now
+                });
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = note.NoteDate,
+                    SourceType = LedgerSourceType.CreditNote,
+                    VoucherNo = voucherNo,
+                    SourceId = creditNoteId,
+                    LineNo = 2,
+                    PostVersion = 1,
+                    AccountId = note.AccountId,
+                    CustomerId = note.CustomerId,
+                    Debit = 0m,
+                    Credit = amount,
+                    Description = $"ترحيل إشعار إضافة رقم {creditNoteId}",
+                    CreatedAt = now
+                });
+
+                note.IsPosted = true;
+                note.PostedAt = now;
+                note.PostedBy = string.IsNullOrWhiteSpace(postedBy) ? "SYSTEM" : postedBy;
+                await _db.SaveChangesAsync();
+
+                if (note.CustomerId.HasValue && note.CustomerId.Value > 0)
+                {
+                    await RecalcCustomerCurrentBalanceAsync(note.CustomerId.Value);
+                    await _db.SaveChangesAsync();
+                }
+                await tx.CommitAsync();
+            }
+            catch { await tx.RollbackAsync(); throw; }
+        }
+
+        // =========================================================
         // دالة: إعادة حساب جميع أرصدة العملاء/الموردين من القيود LedgerEntries
         // ✅ مهم: تستخدم CustomerId وليس AccountId لضمان الدقة
         // - تحسب الرصيد لكل عميل من قيوده في LedgerEntries
@@ -1672,11 +1812,9 @@ namespace ERP.Services
         // =========================================================
         // ترحيل مرتجع الشراء إلى LedgerEntries + StockLedger + StockBatch + تحديث رصيد المورد
         // ✅ مرتجع الشراء يقلل المخزون (QtyOut في StockLedger)
-        // ✅ قيد المرتجع:
-        // (1) المورد      مدين   = صافي المرتجع (زيادة دين المورد)
-        // (2) مشتريات     دائن   = صافي المرتجع (عكس المشتريات)
-        // (3) COGS        مدين   = تكلفة المرتجع (عكس تكلفة الشراء)
-        // (4) مخزون       دائن   = تكلفة المرتجع (نقصان المخزون)
+        // ✅ قيد المرتجع = عكس قيد فاتورة المشتريات (بنفس منطقها):
+        // فاتورة المشتريات: (1) مدين مخزون (2) دائن مورد
+        // مرتجع المشتريات:  (1) مدين مورد  (2) دائن مخزون
         // =========================================================
         public async Task PostPurchaseReturnAsync(int purchaseReturnId, string? postedBy)
         {
@@ -1684,10 +1822,10 @@ namespace ERP.Services
 
             try
             {
-                // 1) تحميل المرتجع + المورد + السطور
+                // 1) تحميل المرتجع + المورد + فاتورة الشراء المرجعية
                 var purchaseReturn = await _db.PurchaseReturns
                     .Include(pr => pr.Customer)
-                    .Include(pr => pr.Lines)
+                    .Include(pr => pr.RefPurchaseInvoice)
                     .FirstOrDefaultAsync(pr => pr.PRetId == purchaseReturnId);
 
                 if (purchaseReturn == null)
@@ -1696,31 +1834,33 @@ namespace ERP.Services
                 if (purchaseReturn.IsPosted)
                     throw new Exception("هذا المرتجع مترحّل بالفعل.");
 
+                // لو المرتجع مرتبط بفاتورة شراء، لازم الفاتورة تكون مرحّلة أولاً
+                if (purchaseReturn.RefPIId.HasValue && purchaseReturn.RefPIId.Value > 0)
+                {
+                    var refInvoice = purchaseReturn.RefPurchaseInvoice
+                        ?? await _db.PurchaseInvoices.FirstOrDefaultAsync(pi => pi.PIId == purchaseReturn.RefPIId.Value);
+                    if (refInvoice == null)
+                        throw new Exception($"فاتورة الشراء رقم {purchaseReturn.RefPIId} غير موجودة.");
+                    if (!refInvoice.IsPosted)
+                        throw new Exception($"لا يمكن ترحيل المرتجع — فاتورة الشراء رقم {purchaseReturn.RefPIId} غير مرحّلة. يرجى ترحيل الفاتورة أولاً.");
+                }
+
                 if (purchaseReturn.Customer == null || purchaseReturn.Customer.AccountId == null || purchaseReturn.Customer.AccountId <= 0)
                     throw new Exception("المورد غير مرتبط بحساب محاسبي.");
 
-                // 2) حل AccountId من الأكواد
-                int purchaseAccountId = await ResolveAccountIdByCodeAsync("5000"); // حساب المشتريات
+                // 2) حساب المخزون (1105) — نفس فاتورة المشتريات
                 int inventoryAccountId = await ResolveAccountIdByCodeAsync(InventoryAccountCode);
-                int cogsAccountId = await ResolveAccountIdByCodeAsync(CogsAccountCode);
 
                 var now = DateTime.UtcNow;
                 decimal returnAmount = purchaseReturn.NetTotal;
                 string voucherNo = purchaseReturn.PRetId.ToString();
 
-                // 3) حساب تكلفة المرتجع
-                decimal costTotal = 0m;
-                foreach (var line in purchaseReturn.Lines)
-                {
-                    costTotal += line.Qty * line.UnitCost;
-                }
-
-                // 4) تحديد آخر مرحلة
+                // 3) تحديد آخر مرحلة
                 int lastStage = await _db.LedgerEntries
                     .Where(e =>
                         e.SourceType == LedgerSourceType.PurchaseReturn &&
                         e.SourceId == purchaseReturnId &&
-                        (e.LineNo == 1 || e.LineNo == 2 || e.LineNo == 3 || e.LineNo == 4) &&
+                        (e.LineNo == 1 || e.LineNo == 2) &&
                         e.PostVersion > 0)
                     .OrderByDescending(e => e.PostVersion)
                     .Select(e => e.PostVersion)
@@ -1728,13 +1868,13 @@ namespace ERP.Services
 
                 int newStage = lastStage + 1;
 
-                // 5) عكس المرحلة السابقة إن وجدت (بنفس أسلوب مرتجع البيع: 9001، 9002، 9003، 9004 + تحديث رصيد المورد)
+                // 4) عكس المرحلة السابقة إن وجدت (9001، 9002 + تحديث رصيد المورد)
                 if (lastStage > 0)
                 {
                     await ReversePurchaseReturnEntriesLikePurchaseAsync(purchaseReturn, lastStage, now);
                 }
 
-                // 6) إنشاء قيود المرتجع (عكس المشتريات)
+                // 5) إنشاء قيود المرتجع (عكس فاتورة المشتريات)
                 // (1) مدين: المورد (زيادة دين المورد)
                 _db.LedgerEntries.Add(new LedgerEntry
                 {
@@ -1752,7 +1892,7 @@ namespace ERP.Services
                     CreatedAt = now
                 });
 
-                // (2) دائن: مشتريات (عكس المشتريات)
+                // (2) دائن: المخزون (نقصان المخزون — عكس فاتورة المشتريات)
                 _db.LedgerEntries.Add(new LedgerEntry
                 {
                     EntryDate = purchaseReturn.PRetDate,
@@ -1761,7 +1901,7 @@ namespace ERP.Services
                     SourceId = purchaseReturnId,
                     LineNo = 2,
                     PostVersion = newStage,
-                    AccountId = purchaseAccountId,
+                    AccountId = inventoryAccountId,
                     CustomerId = null,
                     Debit = 0m,
                     Credit = returnAmount,
@@ -1769,43 +1909,7 @@ namespace ERP.Services
                     CreatedAt = now
                 });
 
-                // (3) مدين: COGS + (4) دائن: مخزون (لو التكلفة > 0)
-                if (costTotal > 0m)
-                {
-                    _db.LedgerEntries.Add(new LedgerEntry
-                    {
-                        EntryDate = purchaseReturn.PRetDate,
-                        SourceType = LedgerSourceType.PurchaseReturn,
-                        VoucherNo = voucherNo,
-                        SourceId = purchaseReturnId,
-                        LineNo = 3,
-                        PostVersion = newStage,
-                        AccountId = cogsAccountId,
-                        CustomerId = null,
-                        Debit = costTotal,
-                        Credit = 0m,
-                        Description = $"عكس تكلفة شراء مرتجع شراء رقم {purchaseReturnId} (مرحلة {newStage})",
-                        CreatedAt = now
-                    });
-
-                    _db.LedgerEntries.Add(new LedgerEntry
-                    {
-                        EntryDate = purchaseReturn.PRetDate,
-                        SourceType = LedgerSourceType.PurchaseReturn,
-                        VoucherNo = voucherNo,
-                        SourceId = purchaseReturnId,
-                        LineNo = 4,
-                        PostVersion = newStage,
-                        AccountId = inventoryAccountId,
-                        CustomerId = null,
-                        Debit = 0m,
-                        Credit = costTotal,
-                        Description = $"نقصان مخزون مرتجع شراء رقم {purchaseReturnId} (مرحلة {newStage})",
-                        CreatedAt = now
-                    });
-                }
-
-                // 8) StockLedger + StockBatch يُسجّلان عند إضافة السطر (AddLineJson)، لا عند الترحيل.
+                // StockLedger + StockBatch يُسجّلان عند إضافة السطر (AddLineJson)، لا عند الترحيل.
 
                 // 9) تحديث حالة المرتجع
                 purchaseReturn.IsPosted = true;
@@ -1954,14 +2058,14 @@ namespace ERP.Services
         }
 
         /// <summary>
-        /// عكس مرحلة سابقة من مرتجع الشراء — بنفس أسلوب مرتجع البيع: قيود 9001، 9002، 9003، 9004 + تحديث رصيد المورد.
+        /// عكس مرحلة سابقة من مرتجع الشراء — بنفس منطق فاتورة المشتريات: قيدان فقط (9001، 9002) + تحديث رصيد المورد.
         /// </summary>
         private async Task ReversePurchaseReturnEntriesLikePurchaseAsync(PurchaseReturn purchaseReturn, int lastStage, DateTime now)
         {
             int purchaseReturnId = purchaseReturn.PRetId;
             string voucherNo = purchaseReturn.PRetId.ToString();
 
-            // (1) المورد مدين، (2) مشتريات دائن — نعكسهما
+            // (1) المورد مدين، (2) المخزون دائن — نعكسهما
             var lastLine1 = await _db.LedgerEntries
                 .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == purchaseReturnId && e.LineNo == 1 && e.PostVersion == lastStage)
                 .OrderByDescending(e => e.Id)
@@ -1993,7 +2097,7 @@ namespace ERP.Services
                 CreatedAt = now
             });
 
-            // 9002: عكس سطر المشتريات (كان دائن -> يصبح مدين)
+            // 9002: عكس سطر المخزون (كان دائن -> يصبح مدين)
             _db.LedgerEntries.Add(new LedgerEntry
             {
                 EntryDate = purchaseReturn.PRetDate,
@@ -2016,51 +2120,6 @@ namespace ERP.Services
                 var cust = await _db.Customers.FirstOrDefaultAsync(c => c.CustomerId == lastLine1.CustomerId.Value);
                 if (cust != null)
                     cust.CurrentBalance -= oldReturnAmount;
-            }
-
-            // (3) و (4): COGS و مخزون إن وجدا
-            var lastLine3 = await _db.LedgerEntries
-                .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == purchaseReturnId && e.LineNo == 3 && e.PostVersion == lastStage)
-                .OrderByDescending(e => e.Id)
-                .FirstOrDefaultAsync();
-            var lastLine4 = await _db.LedgerEntries
-                .Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId == purchaseReturnId && e.LineNo == 4 && e.PostVersion == lastStage)
-                .OrderByDescending(e => e.Id)
-                .FirstOrDefaultAsync();
-
-            if (lastLine3 != null && lastLine4 != null)
-            {
-                decimal oldCostAmount = lastLine3.Debit > 0 ? lastLine3.Debit : lastLine4.Credit;
-                _db.LedgerEntries.Add(new LedgerEntry
-                {
-                    EntryDate = purchaseReturn.PRetDate,
-                    SourceType = LedgerSourceType.PurchaseReturn,
-                    VoucherNo = voucherNo,
-                    SourceId = purchaseReturnId,
-                    LineNo = 9003,
-                    PostVersion = lastStage,
-                    AccountId = lastLine3.AccountId,
-                    CustomerId = null,
-                    Debit = 0m,
-                    Credit = oldCostAmount,
-                    Description = $"عكس تكلفة مرتجع شراء رقم {purchaseReturnId} (عكس مرحلة {lastStage})",
-                    CreatedAt = now
-                });
-                _db.LedgerEntries.Add(new LedgerEntry
-                {
-                    EntryDate = purchaseReturn.PRetDate,
-                    SourceType = LedgerSourceType.PurchaseReturn,
-                    VoucherNo = voucherNo,
-                    SourceId = purchaseReturnId,
-                    LineNo = 9004,
-                    PostVersion = lastStage,
-                    AccountId = lastLine4.AccountId,
-                    CustomerId = null,
-                    Debit = oldCostAmount,
-                    Credit = 0m,
-                    Description = $"عكس تكلفة مرتجع شراء رقم {purchaseReturnId} (عكس مرحلة {lastStage})",
-                    CreatedAt = now
-                });
             }
         }
 

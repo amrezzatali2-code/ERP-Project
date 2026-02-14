@@ -471,6 +471,8 @@ namespace ERP.Controllers
                 ViewBag.IncludeZeroBalance = true;
                 ViewBag.ReportData = new List<CustomerBalanceReportDto>();
                 ViewBag.TotalBalance = 0m;
+                ViewBag.TotalDebit = 0m;
+                ViewBag.TotalCredit = 0m;
                 ViewBag.TotalSales = 0m;
                 ViewBag.TotalPurchases = 0m;
                 ViewBag.TotalReturns = 0m;
@@ -773,6 +775,8 @@ namespace ERP.Controllers
             // 8) حساب المجاميع الإجمالية (من كل البيانات - قبل Pagination)
             // =========================================================
             decimal totalBalance = reportData.Sum(r => r.CurrentBalance);
+            decimal totalDebitSum = reportData.Sum(r => r.CurrentBalance > 0 ? r.CurrentBalance : 0m);
+            decimal totalCreditSum = reportData.Sum(r => r.CurrentBalance < 0 ? Math.Abs(r.CurrentBalance) : 0m);
             decimal totalSalesSum = reportData.Sum(r => r.TotalSales);
             decimal totalPurchasesSum = reportData.Sum(r => r.TotalPurchases);
             decimal totalReturnsSum = reportData.Sum(r => r.TotalReturns);
@@ -808,6 +812,8 @@ namespace ERP.Controllers
 
             ViewBag.ReportData = reportData;
             ViewBag.TotalBalance = totalBalance;
+            ViewBag.TotalDebit = totalDebitSum;
+            ViewBag.TotalCredit = totalCreditSum;
             ViewBag.TotalSales = totalSalesSum;
             ViewBag.TotalPurchases = totalPurchasesSum;
             ViewBag.TotalReturns = totalReturnsSum;
@@ -1087,29 +1093,33 @@ namespace ERP.Controllers
             worksheet.Cell(row, 2).Value = "اسم العميل";
             worksheet.Cell(row, 3).Value = "فئة العميل";
             worksheet.Cell(row, 4).Value = "الهاتف";
-            worksheet.Cell(row, 5).Value = "الرصيد الحالي";
-            worksheet.Cell(row, 6).Value = "الحد الائتماني";
-            worksheet.Cell(row, 7).Value = "المبيعات";
-            worksheet.Cell(row, 8).Value = "المشتريات";
-            worksheet.Cell(row, 9).Value = "المرتجعات";
-            worksheet.Cell(row, 10).Value = "الائتمان المتاح";
+            worksheet.Cell(row, 5).Value = "مدين";
+            worksheet.Cell(row, 6).Value = "دائن";
+            worksheet.Cell(row, 7).Value = "الحد الائتماني";
+            worksheet.Cell(row, 8).Value = "المبيعات";
+            worksheet.Cell(row, 9).Value = "المشتريات";
+            worksheet.Cell(row, 10).Value = "المرتجعات";
+            worksheet.Cell(row, 11).Value = "الائتمان المتاح";
 
-            worksheet.Range(row, 1, row, 10).Style.Font.Bold = true;
+            worksheet.Range(row, 1, row, 11).Style.Font.Bold = true;
 
             // البيانات
             row = 2;
             foreach (var item in reportData)
             {
+                decimal debitVal = item.CurrentBalance > 0 ? item.CurrentBalance : 0m;
+                decimal creditVal = item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance) : 0m;
                 worksheet.Cell(row, 1).Value = item.CustomerCode;
                 worksheet.Cell(row, 2).Value = item.CustomerName;
                 worksheet.Cell(row, 3).Value = item.PartyCategory;
                 worksheet.Cell(row, 4).Value = item.Phone1;
-                worksheet.Cell(row, 5).Value = item.CurrentBalance;
-                worksheet.Cell(row, 6).Value = item.CreditLimit;
-                worksheet.Cell(row, 7).Value = item.TotalSales;
-                worksheet.Cell(row, 8).Value = item.TotalPurchases;
-                worksheet.Cell(row, 9).Value = item.TotalReturns;
-                worksheet.Cell(row, 10).Value = item.AvailableCredit;
+                worksheet.Cell(row, 5).Value = debitVal;
+                worksheet.Cell(row, 6).Value = creditVal;
+                worksheet.Cell(row, 7).Value = item.CreditLimit;
+                worksheet.Cell(row, 8).Value = item.TotalSales;
+                worksheet.Cell(row, 9).Value = item.TotalPurchases;
+                worksheet.Cell(row, 10).Value = item.TotalReturns;
+                worksheet.Cell(row, 11).Value = item.AvailableCredit;
                 row++;
             }
 
@@ -1394,8 +1404,8 @@ namespace ERP.Controllers
         // =========================================================
         // تقرير: أرباح الأصناف
         // يحسب الربح بطريقتين:
-        // 1) من البيع (SalesInvoiceLines): Revenue - Cost
-        // 2) من الميزانية (LedgerEntries): Revenue Account - COGS Account
+        // 1) ربح البيع: من فواتير المبيعات (Revenue - Cost)
+        // 2) ربح الميزانية: مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن - مجموع العملاء الدائنين
         // =========================================================
         [HttpGet]
         public async Task<IActionResult> ProductProfits(
@@ -1409,7 +1419,7 @@ namespace ERP.Controllers
             string? sortDir = "asc",
             bool loadReport = false,
             int page = 1,
-            int pageSize = 200)
+            int pageSize = 20)
         {
             // =========================================================
             // 1) تجهيز القوائم المنسدلة
@@ -1458,9 +1468,7 @@ namespace ERP.Controllers
                 ViewBag.TotalSalesRevenue = 0m;
                 ViewBag.TotalSalesCost = 0m;
                 ViewBag.TotalSalesProfit = 0m;
-                ViewBag.TotalLedgerRevenue = 0m;
-                ViewBag.TotalLedgerCost = 0m;
-                ViewBag.TotalLedgerProfit = 0m;
+                ViewBag.BalanceSheetData = null;
                 return View();
             }
 
@@ -1575,182 +1583,94 @@ namespace ERP.Controllers
             }
 
             // =========================================================
-            // 6) حساب الربح من الميزانية (LedgerEntries)
+            // 6) حساب ربح الميزانية (طريقة جديدة):
+            // الربح = مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن - مجموع العملاء الدائنين
             // =========================================================
-            // نحتاج إلى حساب الإيرادات والتكلفة من LedgerEntries
-            // الإيرادات: Credit من حساب 4100 (SourceType = SalesInvoice, LineNo = 2)
-            // COGS: Debit من حساب 5100 (SourceType = SalesInvoice, LineNo = 3)
+            decimal customersDebitSum = 0m;   // مجموع العملاء المدينين (رصيد مدين)
+            decimal customersCreditSum = 0m;   // مجموع العملاء الدائنين (رصيد دائن)
+            decimal treasuryBalance = 0m;     // رصيد الخزنة
+            decimal inventoryCostTotal = 0m;  // تكلفة البضاعة في المخزن
 
-            // أولاً: حل AccountId من الأكواد
-            var salesRevenueAccount = await _context.Accounts
+            // 6.1) مجموع العملاء المدينين والدائنين (نفس مصدر تقرير أرصدة العملاء: Customer.CurrentBalance)
+            var customerBalancesData = await _context.Customers
                 .AsNoTracking()
-                .FirstOrDefaultAsync(a => a.AccountCode == "4100");
+                .Where(c => c.IsActive == true)
+                .Select(c => new { c.CustomerId, c.CurrentBalance })
+                .ToListAsync();
 
-            var cogsAccount = await _context.Accounts
-                .AsNoTracking()
-                .FirstOrDefaultAsync(a => a.AccountCode == "5100");
-
-            Dictionary<int, decimal> ledgerRevenueData = new Dictionary<int, decimal>();
-            Dictionary<int, decimal> ledgerCostData = new Dictionary<int, decimal>();
-
-            if (salesRevenueAccount != null && cogsAccount != null)
+            foreach (var c in customerBalancesData)
             {
-                // الحصول على فواتير المبيعات المرتبطة بالأصناف المحددة
-                var salesInvoiceIds = await salesProfitQuery
-                    .Select(sil => sil.SalesInvoice.SIId)
-                    .Distinct()
-                    .ToListAsync();
-
-                if (salesInvoiceIds.Any())
-                {
-                    // الإيرادات من الميزانية
-                    var revenueEntries = await _context.LedgerEntries
-                        .AsNoTracking()
-                        .Where(e =>
-                            e.AccountId == salesRevenueAccount.AccountId &&
-                            e.SourceType == LedgerSourceType.SalesInvoice &&
-                            e.LineNo == 2 &&
-                            e.PostVersion > 0 &&
-                            salesInvoiceIds.Contains(e.SourceId!.Value) &&
-                            !_context.LedgerEntries.Any(rev =>
-                                rev.SourceType == LedgerSourceType.SalesInvoice &&
-                                rev.SourceId == e.SourceId &&
-                                rev.LineNo == 9001))
-                        .ToListAsync();
-
-                    // ربط الإيرادات بالأصناف عبر SalesInvoiceLines
-                    foreach (var entry in revenueEntries)
-                    {
-                        if (!entry.SourceId.HasValue) continue;
-
-                        var invoiceLines = await _context.SalesInvoiceLines
-                            .AsNoTracking()
-                            .Where(sil =>
-                                sil.SIId == entry.SourceId.Value &&
-                                productIds.Contains(sil.ProdId))
-                            .ToListAsync();
-
-                        if (invoiceLines.Any())
-                        {
-                            decimal totalInvoiceNet = invoiceLines.Sum(sil => sil.LineNetTotal);
-                            if (totalInvoiceNet > 0)
-                            {
-                                foreach (var line in invoiceLines)
-                                {
-                                    decimal proportion = line.LineNetTotal / totalInvoiceNet;
-                                    decimal revenueShare = entry.Credit * proportion;
-
-                                    if (ledgerRevenueData.ContainsKey(line.ProdId))
-                                        ledgerRevenueData[line.ProdId] += revenueShare;
-                                    else
-                                        ledgerRevenueData[line.ProdId] = revenueShare;
-                                }
-                            }
-                        }
-                    }
-
-                    // COGS من الميزانية
-                    var cogsEntries = await _context.LedgerEntries
-                        .AsNoTracking()
-                        .Where(e =>
-                            e.AccountId == cogsAccount.AccountId &&
-                            e.SourceType == LedgerSourceType.SalesInvoice &&
-                            e.LineNo == 3 &&
-                            e.PostVersion > 0 &&
-                            salesInvoiceIds.Contains(e.SourceId!.Value) &&
-                            !_context.LedgerEntries.Any(rev =>
-                                rev.SourceType == LedgerSourceType.SalesInvoice &&
-                                rev.SourceId == e.SourceId &&
-                                rev.LineNo == 9001))
-                        .ToListAsync();
-
-                    // ربط COGS بالأصناف عبر SalesInvoiceLines
-                    foreach (var entry in cogsEntries)
-                    {
-                        if (!entry.SourceId.HasValue) continue;
-
-                        var invoiceLines = await _context.SalesInvoiceLines
-                            .AsNoTracking()
-                            .Where(sil =>
-                                sil.SIId == entry.SourceId.Value &&
-                                productIds.Contains(sil.ProdId))
-                            .ToListAsync();
-
-                        if (invoiceLines.Any())
-                        {
-                            decimal totalInvoiceCost = invoiceLines.Sum(sil => sil.CostTotal);
-                            if (totalInvoiceCost > 0)
-                            {
-                                foreach (var line in invoiceLines)
-                                {
-                                    decimal proportion = line.CostTotal / totalInvoiceCost;
-                                    decimal costShare = entry.Debit * proportion;
-
-                                    if (ledgerCostData.ContainsKey(line.ProdId))
-                                        ledgerCostData[line.ProdId] += costShare;
-                                    else
-                                        ledgerCostData[line.ProdId] = costShare;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // خصم مرتجعات البيع من Ledger (4100 إيرادات: LineNo 1 Debit، 5100 COGS: LineNo 4 Credit)
-                if (srIdsInRange.Any())
-                {
-                    var srRevenueEntries = await _context.LedgerEntries
-                        .AsNoTracking()
-                        .Where(e =>
-                            e.AccountId == salesRevenueAccount!.AccountId &&
-                            e.SourceType == LedgerSourceType.SalesReturn &&
-                            e.LineNo == 1 &&
-                            e.PostVersion > 0 &&
-                            srIdsInRange.Contains(e.SourceId!.Value))
-                        .ToListAsync();
-                    foreach (var entry in srRevenueEntries)
-                    {
-                        if (!entry.SourceId.HasValue) continue;
-                        var lines = await _context.SalesReturnLines
-                            .AsNoTracking()
-                            .Where(srl => srl.SRId == entry.SourceId.Value && productIds.Contains(srl.ProdId))
-                            .ToListAsync();
-                        decimal totalNet = lines.Sum(srl => srl.LineNetTotal);
-                        if (totalNet <= 0) continue;
-                        foreach (var line in lines)
-                        {
-                            decimal share = entry.Debit * (line.LineNetTotal / totalNet);
-                            if (ledgerRevenueData.ContainsKey(line.ProdId))
-                                ledgerRevenueData[line.ProdId] = Math.Max(0m, ledgerRevenueData[line.ProdId] - share);
-                        }
-                    }
-                    var srCogsEntries = await _context.LedgerEntries
-                        .AsNoTracking()
-                        .Where(e =>
-                            e.AccountId == cogsAccount!.AccountId &&
-                            e.SourceType == LedgerSourceType.SalesReturn &&
-                            e.LineNo == 4 &&
-                            e.PostVersion > 0 &&
-                            srIdsInRange.Contains(e.SourceId!.Value))
-                        .ToListAsync();
-                    foreach (var entry in srCogsEntries)
-                    {
-                        if (!entry.SourceId.HasValue) continue;
-                        var lines = await _context.SalesReturnLines
-                            .AsNoTracking()
-                            .Where(srl => srl.SRId == entry.SourceId.Value && productIds.Contains(srl.ProdId))
-                            .ToListAsync();
-                        decimal totalNet = lines.Sum(srl => srl.LineNetTotal);
-                        if (totalNet <= 0) continue;
-                        foreach (var line in lines)
-                        {
-                            decimal share = entry.Credit * (line.LineNetTotal / totalNet);
-                            if (ledgerCostData.ContainsKey(line.ProdId))
-                                ledgerCostData[line.ProdId] = Math.Max(0m, ledgerCostData[line.ProdId] - share);
-                        }
-                    }
-                }
+                if (c.CurrentBalance > 0)
+                    customersDebitSum += c.CurrentBalance;
+                else if (c.CurrentBalance < 0)
+                    customersCreditSum += Math.Abs(c.CurrentBalance);
             }
+
+            // 6.2) رصيد الخزنة (حسابات الخزينة والبنوك)
+            var cashAccountIds = await _context.Accounts
+                .AsNoTracking()
+                .Where(a => a.AccountType == AccountType.Asset &&
+                    (a.AccountName.Contains("خزينة") || a.AccountName.Contains("بنك") ||
+                     a.AccountName.Contains("صندوق") || a.AccountCode.StartsWith("1101") ||
+                     a.AccountCode.StartsWith("1102")))
+                .Select(a => a.AccountId)
+                .ToListAsync();
+
+            if (cashAccountIds.Any())
+            {
+                var treasuryQuery = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e => cashAccountIds.Contains(e.AccountId) && e.PostVersion > 0);
+
+                if (fromDate.HasValue)
+                    treasuryQuery = treasuryQuery.Where(e => e.EntryDate >= fromDate.Value.Date);
+                if (toDate.HasValue)
+                    treasuryQuery = treasuryQuery.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+
+                treasuryBalance = await treasuryQuery
+                    .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
+            }
+
+            // 6.3) تكلفة البضاعة في المخزن (نفس منطق تقرير أرصدة الأصناف)
+            // = StockBatches.QtyOnHand × متوسط التكلفة المرجح من StockLedger (Purchase) لكل صنف
+            var inventoryCostStockBatches = _context.StockBatches.AsNoTracking();
+            var inventoryCostStockLedger = _context.StockLedger.AsNoTracking()
+                .Where(sl => (sl.RemainingQty ?? 0) > 0 && sl.SourceType == "Purchase");
+
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                inventoryCostStockBatches = inventoryCostStockBatches.Where(sb => sb.WarehouseId == warehouseId.Value);
+                inventoryCostStockLedger = inventoryCostStockLedger.Where(sl => sl.WarehouseId == warehouseId.Value);
+            }
+
+            // متوسط التكلفة المرجح لكل صنف: Sum(RemainingQty*UnitCost) / Sum(RemainingQty)
+            var weightedCostByProd = await inventoryCostStockLedger
+                .GroupBy(sl => sl.ProdId)
+                .Select(g => new
+                {
+                    ProdId = g.Key,
+                    TotalRemaining = g.Sum(sl => (decimal)(sl.RemainingQty ?? 0)),
+                    WeightedCost = g.Sum(sl => (decimal)(sl.RemainingQty ?? 0) * sl.UnitCost)
+                })
+                .ToDictionaryAsync(x => x.ProdId);
+
+            // الكمية الحالية لكل صنف من StockBatches
+            var qtyByProd = await inventoryCostStockBatches
+                .GroupBy(sb => sb.ProdId)
+                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sb => sb.QtyOnHand) })
+                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+
+            foreach (var kvp in qtyByProd)
+            {
+                int prodId = kvp.Key;
+                int currentQty = kvp.Value;
+                decimal unitCost = 0m;
+                if (weightedCostByProd.TryGetValue(prodId, out var costData) && costData.TotalRemaining > 0)
+                    unitCost = costData.WeightedCost / costData.TotalRemaining;
+                inventoryCostTotal += currentQty * unitCost;
+            }
+
+            decimal balanceSheetProfit = customersDebitSum + treasuryBalance + inventoryCostTotal - customersCreditSum;
 
             // =========================================================
             // 7) بناء reportData
@@ -1784,13 +1704,11 @@ namespace ERP.Controllers
                 decimal salesProfit = salesRevenue - salesCost;
                 decimal salesProfitPercent = salesRevenue > 0 ? (salesProfit / salesRevenue) * 100m : 0m;
 
-                // الربح من الميزانية (مرتجعات البيع مُخصّمة لاحقاً في الـ Ledger)
-                decimal ledgerRevenue = ledgerRevenueData.TryGetValue(prodId, out var rev) ? rev : 0m;
-                decimal ledgerCost = ledgerCostData.TryGetValue(prodId, out var cost) ? cost : 0m;
-                decimal ledgerProfit = ledgerRevenue - ledgerCost;
-                decimal ledgerProfitPercent = ledgerRevenue > 0 ? (ledgerProfit / ledgerRevenue) * 100m : 0m;
-
-                // الربح من أرصدة الحسابات (Account Balance) - سيتم حسابه لاحقاً لكل الصنف
+                // ربح الميزانية: رقم إجمالي على مستوى الشركة (لا يوزع على الأصناف)
+                decimal ledgerRevenue = 0m;
+                decimal ledgerCost = 0m;
+                decimal ledgerProfit = 0m;
+                decimal ledgerProfitPercent = 0m;
                 decimal accountBalanceRevenue = 0m;
                 decimal accountBalanceCost = 0m;
                 decimal accountBalanceProfit = 0m;
@@ -1822,82 +1740,6 @@ namespace ERP.Controllers
                     AvgUnitPrice = avgUnitPrice,
                     AvgUnitCost = avgUnitCost
                 });
-            }
-
-            // =========================================================
-            // 7.1) حساب الربح من أرصدة الحسابات (Account Balance) للأصناف
-            // =========================================================
-            if (salesRevenueAccount != null && cogsAccount != null)
-            {
-                // حساب رصيد حساب الإيرادات (4100) = Credit - Debit
-                var revenueBalanceQuery = _context.LedgerEntries
-                    .AsNoTracking()
-                    .Where(e =>
-                        e.AccountId == salesRevenueAccount.AccountId &&
-                        e.PostVersion > 0 &&
-                        !_context.LedgerEntries.Any(rev =>
-                            rev.SourceType == LedgerSourceType.SalesInvoice &&
-                            rev.SourceId == e.SourceId &&
-                            rev.LineNo == 9001));
-
-                if (fromDate.HasValue)
-                {
-                    var from = fromDate.Value.Date;
-                    revenueBalanceQuery = revenueBalanceQuery.Where(e => e.EntryDate >= from);
-                }
-
-                if (toDate.HasValue)
-                {
-                    var to = toDate.Value.Date.AddDays(1);
-                    revenueBalanceQuery = revenueBalanceQuery.Where(e => e.EntryDate < to);
-                }
-
-                var totalRevenueCredit = await revenueBalanceQuery.SumAsync(e => (decimal?)e.Credit) ?? 0m;
-                var totalRevenueDebit = await revenueBalanceQuery.SumAsync(e => (decimal?)e.Debit) ?? 0m;
-                var revenueAccountBalance = totalRevenueCredit - totalRevenueDebit; // رصيد الإيرادات (دائن - مدين)
-
-                // حساب رصيد حساب COGS (5100) = Debit - Credit
-                var cogsBalanceQuery = _context.LedgerEntries
-                    .AsNoTracking()
-                    .Where(e =>
-                        e.AccountId == cogsAccount.AccountId &&
-                        e.PostVersion > 0 &&
-                        !_context.LedgerEntries.Any(rev =>
-                            rev.SourceType == LedgerSourceType.SalesInvoice &&
-                            rev.SourceId == e.SourceId &&
-                            rev.LineNo == 9001));
-
-                if (fromDate.HasValue)
-                {
-                    var from = fromDate.Value.Date;
-                    cogsBalanceQuery = cogsBalanceQuery.Where(e => e.EntryDate >= from);
-                }
-
-                if (toDate.HasValue)
-                {
-                    var to = toDate.Value.Date.AddDays(1);
-                    cogsBalanceQuery = cogsBalanceQuery.Where(e => e.EntryDate < to);
-                }
-
-                var totalCogsDebit = await cogsBalanceQuery.SumAsync(e => (decimal?)e.Debit) ?? 0m;
-                var totalCogsCredit = await cogsBalanceQuery.SumAsync(e => (decimal?)e.Credit) ?? 0m;
-                var cogsAccountBalance = totalCogsDebit - totalCogsCredit; // رصيد COGS (مدين - دائن)
-
-                // توزيع الأرصدة على الأصناف حسب نسبة المبيعات
-                decimal totalSalesRevenueForBalance = reportData.Sum(r => r.SalesRevenue);
-                if (totalSalesRevenueForBalance > 0)
-                {
-                    foreach (var item in reportData)
-                    {
-                        decimal proportion = item.SalesRevenue / totalSalesRevenueForBalance;
-                        item.AccountBalanceRevenue = revenueAccountBalance * proportion;
-                        item.AccountBalanceCost = cogsAccountBalance * proportion;
-                        item.AccountBalanceProfit = item.AccountBalanceRevenue - item.AccountBalanceCost;
-                        item.AccountBalanceProfitPercent = item.AccountBalanceRevenue > 0 
-                            ? (item.AccountBalanceProfit / item.AccountBalanceRevenue) * 100m 
-                            : 0m;
-                    }
-                }
             }
 
             // =========================================================
@@ -1939,14 +1781,6 @@ namespace ERP.Controllers
             decimal totalSalesRevenue = reportData.Sum(r => r.SalesRevenue);
             decimal totalSalesCost = reportData.Sum(r => r.SalesCost);
             decimal totalSalesProfit = totalSalesRevenue - totalSalesCost;
-            decimal totalLedgerRevenue = reportData.Sum(r => r.LedgerRevenue);
-            decimal totalLedgerCost = reportData.Sum(r => r.LedgerCost);
-            decimal totalLedgerProfit = totalLedgerRevenue - totalLedgerCost;
-            
-            // حساب المجاميع للطريقة الثالثة (من الأرصدة)
-            decimal totalAccountBalanceRevenue = reportData.Sum(r => r.AccountBalanceRevenue);
-            decimal totalAccountBalanceCost = reportData.Sum(r => r.AccountBalanceCost);
-            decimal totalAccountBalanceProfit = totalAccountBalanceRevenue - totalAccountBalanceCost;
 
             int totalCount = reportData.Count;
 
@@ -1979,95 +1813,19 @@ namespace ERP.Controllers
             ViewBag.TotalSalesRevenue = totalSalesRevenue;
             ViewBag.TotalSalesCost = totalSalesCost;
             ViewBag.TotalSalesProfit = totalSalesProfit;
-            ViewBag.TotalLedgerRevenue = totalLedgerRevenue;
-            ViewBag.TotalLedgerCost = totalLedgerCost;
-            ViewBag.TotalLedgerProfit = totalLedgerProfit;
-            ViewBag.TotalAccountBalanceRevenue = totalAccountBalanceRevenue;
-            ViewBag.TotalAccountBalanceCost = totalAccountBalanceCost;
-            ViewBag.TotalAccountBalanceProfit = totalAccountBalanceProfit;
 
             // =========================================================
-            // 11) بيانات الميزانية (للعرض تحت الجدول) - ProductProfits
+            // 11) بيانات ربح الميزانية (للعرض تحت الجدول) - ProductProfits
+            // الربح = مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة - مجموع العملاء الدائنين
             // =========================================================
-            if (salesRevenueAccount != null && cogsAccount != null)
+            ViewBag.BalanceSheetData = new
             {
-                // حساب إجمالي الإيرادات من LedgerEntries (حساب 4100) مع فلاتر التاريخ
-                var revenueQuery = _context.LedgerEntries
-                    .AsNoTracking()
-                    .Where(e =>
-                        e.AccountId == salesRevenueAccount.AccountId &&
-                        e.SourceType == LedgerSourceType.SalesInvoice &&
-                        e.LineNo == 2 &&
-                        e.PostVersion > 0 &&
-                        !_context.LedgerEntries.Any(rev =>
-                            rev.SourceType == LedgerSourceType.SalesInvoice &&
-                            rev.SourceId == e.SourceId &&
-                            rev.LineNo == 9001));
-
-                if (fromDate.HasValue)
-                {
-                    var from = fromDate.Value.Date;
-                    revenueQuery = revenueQuery.Where(e => e.EntryDate >= from);
-                }
-
-                if (toDate.HasValue)
-                {
-                    var to = toDate.Value.Date.AddDays(1);
-                    revenueQuery = revenueQuery.Where(e => e.EntryDate < to);
-                }
-
-                var totalRevenueFromLedger = await revenueQuery.SumAsync(e => (decimal?)e.Credit) ?? 0m;
-
-                // حساب إجمالي COGS من LedgerEntries (حساب 5100) مع فلاتر التاريخ
-                var cogsQuery = _context.LedgerEntries
-                    .AsNoTracking()
-                    .Where(e =>
-                        e.AccountId == cogsAccount.AccountId &&
-                        e.SourceType == LedgerSourceType.SalesInvoice &&
-                        e.LineNo == 3 &&
-                        e.PostVersion > 0 &&
-                        !_context.LedgerEntries.Any(rev =>
-                            rev.SourceType == LedgerSourceType.SalesInvoice &&
-                            rev.SourceId == e.SourceId &&
-                            rev.LineNo == 9001));
-
-                if (fromDate.HasValue)
-                {
-                    var from = fromDate.Value.Date;
-                    cogsQuery = cogsQuery.Where(e => e.EntryDate >= from);
-                }
-
-                if (toDate.HasValue)
-                {
-                    var to = toDate.Value.Date.AddDays(1);
-                    cogsQuery = cogsQuery.Where(e => e.EntryDate < to);
-                }
-
-                var totalCogsFromLedger = await cogsQuery.SumAsync(e => (decimal?)e.Debit) ?? 0m;
-
-                ViewBag.BalanceSheetData = new
-                {
-                    RevenueAccount = new
-                    {
-                        AccountId = salesRevenueAccount.AccountId,
-                        AccountCode = salesRevenueAccount.AccountCode,
-                        AccountName = salesRevenueAccount.AccountName,
-                        TotalCredit = totalRevenueFromLedger
-                    },
-                    CogsAccount = new
-                    {
-                        AccountId = cogsAccount.AccountId,
-                        AccountCode = cogsAccount.AccountCode,
-                        AccountName = cogsAccount.AccountName,
-                        TotalDebit = totalCogsFromLedger
-                    },
-                    TotalProfit = totalRevenueFromLedger - totalCogsFromLedger
-                };
-            }
-            else
-            {
-                ViewBag.BalanceSheetData = null;
-            }
+                CustomersDebitSum = customersDebitSum,
+                CustomersCreditSum = customersCreditSum,
+                TreasuryBalance = treasuryBalance,
+                InventoryCostTotal = inventoryCostTotal,
+                BalanceSheetProfit = balanceSheetProfit
+            };
 
             return View();
         }

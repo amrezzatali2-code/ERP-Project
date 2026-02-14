@@ -478,7 +478,7 @@ namespace ERP.Controllers
                     $"إضافة وإغلاق إذن دفع رقم {payment.PaymentNumber} بمبلغ {payment.Amount}"
                 );
 
-                TempData["Success"] = "تم حفظ وترحيل وإغلاق إذن الدفع بنجاح.";
+                TempData["CashPaymentSuccess"] = "تم حفظ وترحيل وإغلاق إذن الدفع بنجاح.";
                 
                 // ✅ إعادة تحميل الصفحة بنفس الإذن (بدون توجيه للقائمة)
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
@@ -488,7 +488,7 @@ namespace ERP.Controllers
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ أثناء حفظ إذن الدفع: {ex.Message}";
+                TempData["CashPaymentError"] = $"حدث خطأ أثناء حفظ إذن الدفع: {ex.Message}";
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
                 if (payment.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
@@ -510,7 +510,7 @@ namespace ERP.Controllers
 
                 if (payment == null)
                 {
-                    TempData["Error"] = "الإذن غير موجود.";
+                    TempData["CashPaymentError"] = "الإذن غير موجود.";
                     return RedirectToAction(nameof(Index));
                 }
 
@@ -519,7 +519,7 @@ namespace ERP.Controllers
                 // ================================
                 if (payment.Status != "مغلق")
                 {
-                    TempData["Error"] = "هذا الإذن غير مغلق، لا يوجد ما يمكن فتحه.";
+                    TempData["CashPaymentError"] = "هذا الإذن غير مغلق، لا يوجد ما يمكن فتحه.";
                     return RedirectToAction(nameof(Create), new { id });
                 }
 
@@ -544,12 +544,12 @@ namespace ERP.Controllers
                     description: $"فتح إذن دفع رقم {payment.PaymentNumber} للتعديل"
                 );
 
-                TempData["Success"] = "تم فتح الإذن للتعديل بنجاح.";
+                TempData["CashPaymentSuccess"] = "تم فتح الإذن للتعديل بنجاح.";
                 return RedirectToAction(nameof(Create), new { id });
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                TempData["CashPaymentError"] = $"حدث خطأ: {ex.Message}";
                 return RedirectToAction(nameof(Index));
             }
         }
@@ -680,7 +680,7 @@ namespace ERP.Controllers
                     })
                 );
 
-                TempData["Success"] = "تم تعديل وإغلاق إذن الدفع بنجاح.";
+                TempData["CashPaymentSuccess"] = "تم تعديل وإغلاق إذن الدفع بنجاح.";
                 
                 // ✅ إعادة تحميل الصفحة بنفس الإذن
                 await PopulateDropdownsAsync(existing.CustomerId, existing.CashAccountId, existing.CounterAccountId);
@@ -690,7 +690,7 @@ namespace ERP.Controllers
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"حدث خطأ: {ex.Message}";
+                TempData["CashPaymentError"] = $"حدث خطأ: {ex.Message}";
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
                 if (payment.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
@@ -728,14 +728,14 @@ namespace ERP.Controllers
             var payment = await _context.CashPayments.FindAsync(id);
             if (payment == null)
             {
-                TempData["Error"] = "إذن الدفع غير موجود.";
+                TempData["CashPaymentError"] = "إذن الدفع غير موجود.";
                 return RedirectToAction(nameof(Index));
             }
 
             _context.CashPayments.Remove(payment);
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = "تم حذف إذن الدفع.";
+            TempData["CashPaymentSuccess"] = "تم حذف إذن الدفع.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -819,7 +819,7 @@ namespace ERP.Controllers
             // لو المستخدم لم يحدد أى إذن
             if (ids == null || ids.Length == 0)
             {
-                TempData["Error"] = "لم يتم اختيار أى إذن للحذف.";
+                TempData["CashPaymentError"] = "لم يتم اختيار أى إذن للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -830,7 +830,7 @@ namespace ERP.Controllers
 
             if (payments.Count == 0)
             {
-                TempData["Error"] = "لم يتم العثور على الإذون المحددة.";
+                TempData["CashPaymentError"] = "لم يتم العثور على الإذون المحددة.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -839,11 +839,11 @@ namespace ERP.Controllers
                 _context.CashPayments.RemoveRange(payments);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = $"تم حذف {payments.Count} من إذون الدفع المحددة.";
+                TempData["CashPaymentSuccess"] = $"تم حذف {payments.Count} من إذون الدفع المحددة.";
             }
             catch (DbUpdateException)
             {
-                TempData["Error"] = "لا يمكن حذف بعض الإذون بسبب ارتباطها بحركات محاسبية أخرى.";
+                TempData["CashPaymentError"] = "لا يمكن حذف بعض الإذون بسبب ارتباطها بحركات محاسبية أخرى.";
             }
 
             return RedirectToAction(nameof(Index));
@@ -861,7 +861,7 @@ namespace ERP.Controllers
 
             if (all.Count == 0)
             {
-                TempData["Error"] = "لا توجد إذون دفع لحذفها.";
+                TempData["CashPaymentError"] = "لا توجد إذون دفع لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -870,11 +870,11 @@ namespace ERP.Controllers
                 _context.CashPayments.RemoveRange(all);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = "تم حذف جميع إذون الدفع.";
+                TempData["CashPaymentSuccess"] = "تم حذف جميع إذون الدفع.";
             }
             catch (DbUpdateException)
             {
-                TempData["Error"] = "لا يمكن حذف جميع إذون الدفع بسبب وجود ارتباطات محاسبية.";
+                TempData["CashPaymentError"] = "لا يمكن حذف جميع إذون الدفع بسبب وجود ارتباطات محاسبية.";
             }
 
             return RedirectToAction(nameof(Index));

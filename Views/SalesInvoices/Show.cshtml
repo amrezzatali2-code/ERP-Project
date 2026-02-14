@@ -2360,6 +2360,7 @@
                         setText('TotalAfterDiscountAndTaxValue', fmt2(totalAfterDiscountAndTax));
                         setText('NetTotalValue', fmt2(netTotal));
                     }
+                    window.updateSummaryBadges = updateSummaryBadges;
 
 
 
@@ -3239,19 +3240,22 @@
                                         throw new Error((data && data.message) ? data.message : "تعذر مسح الأصناف.");
                                     }
 
-                                    // ✅ إعادة رسم السطور (بنفس فلسفة RemoveLineJson)
-                                    if (typeof renderGroupedLines === "function") {
-                                        renderGroupedLines(data.lines || []);
+                                    // ✅ إعادة رسم السطور (جدول فاضي)
+                                    const lines = Array.isArray(data.lines) ? data.lines : [];
+                                    window.__piLinesCache = lines;
+                                    const fnRender = window.renderGroupedLines;
+                                    if (typeof fnRender === "function") {
+                                        fnRender(lines);
                                     } else {
-                                        // لو مفيش ريندر موجود عندك: Reload كحل مضمون
                                         location.reload();
                                         return;
                                     }
 
-                                    // ✅ تحديث الإجماليات لو عندك دالة (اختياري)
-                                    // لو عندك نفس دالة تحديث totals المستخدمة بعد حذف سطر واحد، نادِيها هنا
-                                    // مثال:
-                                    // if (typeof applyTotals === "function" && data.totals) applyTotals(data.totals);
+                                    // ✅ تحديث الإجماليات (أصفار) بعد مسح كل الأصناف
+                                    if (data.totals) {
+                                        const fnTotals = window.updateSummaryBadges;
+                                        if (typeof fnTotals === "function") fnTotals(data.totals);
+                                    }
 
                                     if (msg) {
                                         msg.textContent = data.message || "تم مسح جميع الأصناف.";
@@ -3419,28 +3423,17 @@
 
                             // ✅ لو مترحلة من البداية: اقفل زر الترحيل وطبق القفل
                             if (serverIsPosted) {
-
                                 btnPost.disabled = true;
                                 btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
-
-                                // ✅ تحديث علم الترحيل + تطبيق القفل
                                 if (typeof setInvoicePosted === "function") setInvoicePosted(true);
                                 if (typeof applyPostedUiLock === "function") applyPostedUiLock();
-
                                 if (msg) {
                                     msg.textContent = "هذه الفاتورة مترحّلة بالفعل.";
                                     msg.className = "small mt-2 text-muted";
                                 }
-
-                                // ⚠️ مهم: ما تستخدمش data هنا لأنها مش موجودة في فتح الصفحة
-                                // لو عايز تعرض "مرحلة ..." عند فتح الصفحة:
-                                // الأفضل تجيبها من السيرفر مباشرة (مثلاً ViewBag.PostedLabel)
-                                // مثال:
-                                // if (isPostedBox) isPostedBox.value = "@(ViewBag.PostedLabel ?? "نعم")";
-
-                                return;
                             }
 
+                            // ✅ نربط حدث الضغط دائماً (حتى لو الفاتورة مرحلة) — بعد "فتح الفاتورة" يُفعّل الزر فيحتاج المعالج
                             btnPost.addEventListener("click", async function () {
 
                                 // =========================
@@ -4162,15 +4155,25 @@
                                     return;
                                 }
 
-                                // ✅ بعد المسح: Reload جزئي للفاتورة (frag=body)
-                                const baseUrl =
-                                    document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
-                                    || '@Url.Action("Show", "SalesInvoices", new { frame = 1 })';
+                                // ✅ بعد المسح: تحديث الجدول والإجماليات من الردّ (دون إعادة تحميل الـ body)
+                                const lines = Array.isArray(data.lines) ? data.lines : [];
+                                window.__piLinesCache = lines;
+                                const fnRender = window.renderGroupedLines;
+                                if (typeof fnRender === 'function') {
+                                    fnRender(lines);
+                                } else {
+                                    await loadInvoiceBody(setOrReplaceParam(
+                                        document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url') || '@Url.Action("Show", "SalesInvoices", new { frame = 1 })',
+                                        'id', siId
+                                    ));
+                                }
+                                if (data.totals) {
+                                    const fnTotals = window.updateSummaryBadges;
+                                    if (typeof fnTotals === 'function') fnTotals(data.totals);
+                                }
 
-                                const url = setOrReplaceParam(baseUrl, 'id', siId);
-
-                                // ✅ مهم: ننتظر التحميل قبل إعادة تفعيل الزر
-                                await loadInvoiceBody(url);
+                                const prodInput = document.getElementById('ProdNameInput');
+                                if (prodInput) { prodInput.focus(); prodInput.select && prodInput.select(); }
 
                             } catch (e) {
                                 console.error(e);

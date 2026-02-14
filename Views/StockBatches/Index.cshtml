@@ -126,14 +126,14 @@
                         <div class="col-sm-5">
                             <select name="searchBy"
                                     class="form-select form-select-sm">
-                                <option value="batchno" selected="@(searchBy == "batchno" ? "selected" : null)">رقم التشغيلة</option>
-                                <option value="id" selected="@(searchBy == "id" ? "selected" : null)">كود السجل</option>
-                                <option value="prod" selected="@(searchBy == "prod" ? "selected" : null)">كود الصنف</option>
-                                <option value="wh" selected="@(searchBy == "wh" ? "selected" : null)">كود المخزن</option>
-                                <option value="expiry" selected="@(searchBy == "expiry" ? "selected" : null)">الصلاحية</option>
-                                <option value="qty" selected="@(searchBy == "qty" ? "selected" : null)">الكمية</option>
-                                <option value="note" selected="@(searchBy == "note" ? "selected" : null)">ملاحظة</option>
-                                <option value="all" selected="@(searchBy == "all" ? "selected" : null)">الكل</option>
+                                <option value="batchno"@Html.Raw(searchBy == "batchno" ? " selected" : "")>رقم التشغيلة</option>
+                                <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود السجل</option>
+                                <option value="prod"@Html.Raw(searchBy == "prod" ? " selected" : "")>كود الصنف</option>
+                                <option value="wh"@Html.Raw(searchBy == "wh" ? " selected" : "")>كود المخزن</option>
+                                <option value="expiry"@Html.Raw(searchBy == "expiry" ? " selected" : "")>الصلاحية</option>
+                                <option value="qty"@Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
+                                <option value="note"@Html.Raw(searchBy == "note" ? " selected" : "")>ملاحظة</option>
+                                <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
                             </select>
                         </div>
 
@@ -350,10 +350,10 @@
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

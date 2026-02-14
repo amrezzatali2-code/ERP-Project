@@ -48,7 +48,7 @@
                 <select name="searchBy" class="form-select">
                     @foreach (var opt in searchOptions)
                     {
-                        <option value="@opt.Value" selected="@(opt.Selected ? "selected" : null)">
+                        <option value="@opt.Value"@Html.Raw(opt.Selected ? " selected" : "")>
                             @opt.Text
                         </option>
                     }
@@ -68,7 +68,7 @@
                 <select name="sort" class="form-select">
                     @foreach (var opt in sortOptions)
                     {
-                        <option value="@opt.Value" selected="@(opt.Selected ? "selected" : null)">
+                        <option value="@opt.Value"@Html.Raw(opt.Selected ? " selected" : "")>
                             @opt.Text
                         </option>
                     }
@@ -77,7 +77,7 @@
                 <select name="dir" class="form-select">
                     @foreach (var opt in dirOptions)
                     {
-                        <option value="@opt.Value" selected="@(opt.Selected ? "selected" : null)">
+                        <option value="@opt.Value"@Html.Raw(opt.Selected ? " selected" : "")>
                             @opt.Text
                         </option>
                     }

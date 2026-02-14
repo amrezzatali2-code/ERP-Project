@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<DebitNote>
@@ -116,42 +116,42 @@
                                     class="form-select form-select-sm">
 
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     البحث في الكل
                                 </option>
 
                                 <option value="number"
-                                        selected="@(searchBy == "number" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "number" ? " selected" : "")>
                                     رقم المستند
                                 </option>
 
                                 <option value="customer"
-                                        selected="@(searchBy == "customer" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "customer" ? " selected" : "")>
                                     اسم الطرف
                                 </option>
 
                                 <option value="account"
-                                        selected="@(searchBy == "account" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "account" ? " selected" : "")>
                                     حساب الطرف
                                 </option>
 
                                 <option value="offset"
-                                        selected="@(searchBy == "offset" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "offset" ? " selected" : "")>
                                     الحساب المقابل
                                 </option>
 
                                 <option value="reason"
-                                        selected="@(searchBy == "reason" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "reason" ? " selected" : "")>
                                     سبب الإشعار
                                 </option>
 
                                 <option value="desc"
-                                        selected="@(searchBy == "desc" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "desc" ? " selected" : "")>
                                     البيان
                                 </option>
 
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     رقم الإشعار
                                 </option>
                             </select>
@@ -230,6 +230,12 @@
                 @* العمود الثالث: أزرار الحذف / الفلاتر / الطباعة / التصدير *@
                 <div class="col-lg-4">
                     <div class="erp-toolbar justify-content-lg-end">
+
+                        @* زر إضافة إشعار خصم جديد *@
+                        <a class="btn btn-erp btn-erp-primary btn-erp-sm"
+                           asp-action="Create">
+                            + إشعار خصم جديد
+                        </a>
 
                         @* حذف الإشعارات المحددة (BulkDelete) *@
                         <form id="formBulkDelete"
@@ -344,7 +350,7 @@
                     </th>
 
                     <th data-col="id">@sortLink("DebitNoteId", "رقم الإشعار")</th>
-                    <th data-col="number">@sortLink("NoteNumber", "رقم المستند")</th>
+                    <th data-col="number">@sortLink("DebitNoteId", "رقم المستند")</th>
                     <th data-col="date">@sortLink("NoteDate", "تاريخ الإشعار")</th>
                     <th data-col="customer">@sortLink("CustomerName", "الطرف")</th>
                     <th data-col="account">@sortLink("AccountName", "حساب الطرف")</th>
@@ -388,10 +394,16 @@
                                    asp-route-id="@d.DebitNoteId">
                                     عرض
                                 </a>
+                                @* زر تعديل *@
+                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm ms-1"
+                                   asp-action="Edit"
+                                   asp-route-id="@d.DebitNoteId">
+                                    تعديل
+                                </a>
                             </td>
 
                             <td data-col="id">@d.DebitNoteId</td>
-                            <td data-col="number">@d.NoteNumber</td>
+                            <td data-col="number">@d.DebitNoteId</td>
                             <td data-col="date">
                                 @d.NoteDate.ToString("yyyy-MM-dd")
                             </td>
@@ -466,10 +478,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

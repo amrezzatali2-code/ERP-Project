@@ -114,37 +114,37 @@
                                     class="form-select form-select-sm">
                                 @* البحث برقم أمر البيع *@
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     رقم أمر البيع
                                 </option>
 
                                 @* البحث بالعميل *@
                                 <option value="customer"
-                                        selected="@(searchBy == "customer" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "customer" ? " selected" : "")>
                                     العميل / الكود
                                 </option>
 
                                 @* البحث بالمخزن *@
                                 <option value="warehouse"
-                                        selected="@(searchBy == "warehouse" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "warehouse" ? " selected" : "")>
                                     المخزن
                                 </option>
 
                                 @* البحث بتاريخ الأمر *@
                                 <option value="date"
-                                        selected="@(searchBy == "date" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "date" ? " selected" : "")>
                                     تاريخ الأمر
                                 </option>
 
                                 @* البحث بحالة الأمر *@
                                 <option value="status"
-                                        selected="@(searchBy == "status" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "status" ? " selected" : "")>
                                     حالة الأمر
                                 </option>
 
                                 @* البحث بمن أنشأ الأمر *@
                                 <option value="createdBy"
-                                        selected="@(searchBy == "createdBy" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "createdBy" ? " selected" : "")>
                                     أنشأه
                                 </option>
                             </select>
@@ -431,10 +431,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

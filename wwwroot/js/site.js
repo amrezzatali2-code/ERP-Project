@@ -448,6 +448,19 @@ if (window.__ERP_TABS_INITED__) {
             var data = event.data;
             if (!data) return;
 
+            // ✅ تحديث عنوان التاب الحالي فقط (بدون تغيير الـ URL)
+            if (data.type === 'erp-set-tab-title') {
+                var title = (data.title || '').trim();
+                if (title) {
+                    var activeTab = tabsBar.querySelector('.app-tab.active');
+                    if (activeTab) {
+                        var titleEl = activeTab.querySelector('.app-tab-title');
+                        if (titleEl) titleEl.textContent = title;
+                    }
+                }
+                return;
+            }
+
             // ✅ تحديث URL التاب الحالي (بدون فتح تاب جديد)
             if (data.type === 'erp-update-current-tab') {
                 var url = normalizeUrl(data.url);

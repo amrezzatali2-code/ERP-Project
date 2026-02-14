@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;              // القوائم List
 using System.Threading.Tasks;                  // async / Task
 using Microsoft.EntityFrameworkCore;           // أوامر EF Core
@@ -411,6 +411,19 @@ namespace ERP.Seeders
 
             // ====================== المصروفات ======================
 
+            var purchaseRoot = new Account
+            {
+                AccountCode = "5000",
+                AccountName = "المشتريات",
+                AccountType = AccountType.Expense,
+                ParentAccount = rootExpenses,
+                Level = 2,
+                IsLeaf = false,
+                IsActive = true,
+                Notes = "حساب المشتريات - يُستخدم في ترحيل مرتجعات الشراء",
+                CreatedAt = created
+            };
+
             var cogsRoot = new Account
             {
                 AccountCode = "5100",
@@ -544,6 +557,7 @@ namespace ERP.Seeders
                 otherRevenueRoot, supplierDiscounts,
 
                 // المصروفات
+                purchaseRoot,
                 cogsRoot, cogsDrugs,
                 operatingExpRoot, salaries, rent, utilities,
                 shippingExp, otherGAndA,

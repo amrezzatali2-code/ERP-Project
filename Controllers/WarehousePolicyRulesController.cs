@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Infrastructure;                  // كلاس PagedResult لتقسيم الصفحات + الفلاتر
 using ERP.Models;                          // الموديل WarehousePolicyRule
@@ -132,27 +132,47 @@ namespace ERP.Controllers
 
         // =========================
         // دالة مساعدة لتحميل قوائم المخازن والسياسات
+        // forCreate: عند الإضافة نعرض فقط السياسات التي لم يُحدد ربح لها لهذا المخزن
         // =========================
-        private async Task LoadLookupsAsync(int? warehouseId = null, int? policyId = null)
+        private async Task LoadLookupsAsync(int? warehouseId = null, int? policyId = null, bool forCreate = false)
         {
-            // جلب المخازن بالاسم
             var warehouses = await _context.Warehouses
                 .AsNoTracking()
-                .OrderBy(w => w.WarehouseName)      // ✅ اسم عمود المخزن
+                .OrderBy(w => w.WarehouseName)
                 .ToListAsync();
 
             ViewBag.WarehouseList = new SelectList(
                 warehouses,
-                "WarehouseId",                      // ✅ كود المخزن
-                "WarehouseName",                   // ✅ اسم المخزن الظاهر
+                "WarehouseId",
+                "WarehouseName",
                 warehouseId
             );
 
-            // جلب السياسات بالاسم
-            var policies = await _context.Policies
-                .AsNoTracking()
-                .OrderBy(p => p.Name)
-                .ToListAsync();
+            List<Policy> policies;
+            if (forCreate && warehouseId.HasValue)
+            {
+                var usedPolicyIds = await _context.WarehousePolicyRules
+                    .AsNoTracking()
+                    .Where(r => r.WarehouseId == warehouseId.Value)
+                    .Select(r => r.PolicyId)
+                    .ToListAsync();
+                policies = await _context.Policies
+                    .AsNoTracking()
+                    .Where(p => !usedPolicyIds.Contains(p.PolicyId))
+                    .OrderBy(p => p.Name)
+                    .ToListAsync();
+            }
+            else if (forCreate)
+            {
+                policies = new List<Policy>();
+            }
+            else
+            {
+                policies = await _context.Policies
+                    .AsNoTracking()
+                    .OrderBy(p => p.Name)
+                    .ToListAsync();
+            }
 
             ViewBag.PolicyList = new SelectList(
                 policies,
@@ -160,6 +180,26 @@ namespace ERP.Controllers
                 "Name",
                 policyId
             );
+        }
+
+        /// <summary>جلب السياسات التي لم يُحدد لها ربح لهذا المخزن (للتعبئة في الإضافة)</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetPoliciesNotUsedForWarehouse(int warehouseId)
+        {
+            var usedPolicyIds = await _context.WarehousePolicyRules
+                .AsNoTracking()
+                .Where(r => r.WarehouseId == warehouseId)
+                .Select(r => r.PolicyId)
+                .ToListAsync();
+
+            var list = await _context.Policies
+                .AsNoTracking()
+                .Where(p => !usedPolicyIds.Contains(p.PolicyId))
+                .OrderBy(p => p.Name)
+                .Select(p => new { id = p.PolicyId, name = p.Name })
+                .ToListAsync();
+
+            return Json(list);
         }
 
 
@@ -409,10 +449,8 @@ namespace ERP.Controllers
         // =========================
         public async Task<IActionResult> Create()
         {
-            // تحميل القوائم قبل عرض الشاشة
-            await LoadLookupsAsync();
+            await LoadLookupsAsync(null, null, forCreate: true);
 
-            // نموذج افتراضي: القاعدة مفعّلة افتراضيًا
             var model = new WarehousePolicyRule
             {
                 IsActive = true
@@ -437,10 +475,17 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(WarehousePolicyRule model)
         {
+            // منع تكرار (نفس السياسة + نفس المخزن)
+            bool duplicate = await _context.WarehousePolicyRules
+                .AnyAsync(r => r.WarehouseId == model.WarehouseId && r.PolicyId == model.PolicyId);
+            if (duplicate)
+            {
+                ModelState.AddModelError(string.Empty, "هذه السياسة تم عمل ربح لها بالفعل لهذا المخزن. اختر سياسة أخرى أو مخزنًا آخر.");
+            }
+
             if (!ModelState.IsValid)
             {
-                // إعادة تحميل القوائم علشان الـ ViewBag ما يكونش null
-                await LoadLookupsAsync(model.WarehouseId, model.PolicyId);
+                await LoadLookupsAsync(model.WarehouseId, model.PolicyId, forCreate: true);
                 return View(model);
             }
 

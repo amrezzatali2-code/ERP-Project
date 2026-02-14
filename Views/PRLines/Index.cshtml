@@ -1,4 +1,4 @@
-@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
+﻿@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
 @using Microsoft.AspNetCore.Html          @* لاستخدام HtmlString *@
 @using ERP.Infrastructure                 @* لاستخدام PagedResult *@
 @using ERP.Models                         @* لاستخدام الموديل PRLine *@
@@ -104,27 +104,27 @@
                             <select name="searchBy"
                                     class="form-select form-select-sm">
                                 <option value="all"
-                                        selected="@(searchBy == "" || searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "" || searchBy == "all" ? " selected" : "")>
                                     الكل
                                 </option>
 
                                 <option value="pr"
-                                        selected="@(searchBy == "pr" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "pr" ? " selected" : "")>
                                     رقم طلب الشراء
                                 </option>
 
                                 <option value="line"
-                                        selected="@(searchBy == "line" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "line" ? " selected" : "")>
                                     رقم السطر
                                 </option>
 
                                 <option value="prod"
-                                        selected="@(searchBy == "prod" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "prod" ? " selected" : "")>
                                     كود الصنف
                                 </option>
 
                                 <option value="qty"
-                                        selected="@(searchBy == "qty" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "qty" ? " selected" : "")>
                                     الكمية المطلوبة
                                 </option>
                             </select>
@@ -389,10 +389,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

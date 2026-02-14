@@ -4,6 +4,8 @@
 
     var reportData = ViewBag.ReportData as List<CustomerBalanceReportDto> ?? new List<CustomerBalanceReportDto>();
     var totalBalance = ViewBag.TotalBalance as decimal? ?? 0m;
+    var totalDebit = ViewBag.TotalDebit as decimal? ?? 0m;
+    var totalCredit = ViewBag.TotalCredit as decimal? ?? 0m;
     var totalSales = ViewBag.TotalSales as decimal? ?? 0m;
     var totalPurchases = ViewBag.TotalPurchases as decimal? ?? 0m;
     var totalReturns = ViewBag.TotalReturns as decimal? ?? 0m;
@@ -140,7 +142,7 @@
                                     <option value="">الكل</option>
                                     @foreach (var gov in governorates)
                                     {
-                                        <option value="@gov.Value" selected="@(governorateId?.ToString() == gov.Value ? "selected" : null)">@gov.Text</option>
+                                        <option value="@gov.Value" @(governorateId?.ToString() == gov.Value ? "selected" : null)>@gov.Text</option>
                                     }
                                 </select>
                             </div>
@@ -306,11 +308,12 @@
                                 </th>
                                 <th>فئة العميل</th>
                                 <th>الهاتف</th>
-                                <th class="text-end" style="min-width: 130px;">
+                                <th class="text-end" style="min-width: 120px;">
                                     <a href="@sortUrl("balance", sortBy == "balance" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الرصيد الحالي @if (sortBy == "balance") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
+                                        مدين @if (sortBy == "balance") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
                                     </a>
                                 </th>
+                                <th class="text-end" style="min-width: 120px;">دائن</th>
                                 <th class="text-end" style="min-width: 120px;">الحد الائتماني</th>
                                 <th class="text-end" style="min-width: 120px;">
                                     <a href="@sortUrl("sales", sortBy == "sales" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
@@ -338,7 +341,8 @@
                                     <td>@item.CustomerName</td>
                                     <td><small class="text-muted">@item.PartyCategory</small></td>
                                     <td><small>@item.Phone1</small></td>
-                                    <td class="text-end"><strong>@item.CurrentBalance.ToString("N2")</strong></td>
+                                    <td class="text-end">@(item.CurrentBalance > 0 ? item.CurrentBalance.ToString("N2") : "—")</td>
+                                    <td class="text-end">@(item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance).ToString("N2") : "—")</td>
                                     <td class="text-end">@item.CreditLimit.ToString("N2")</td>
                                     <td class="text-end">@item.TotalSales.ToString("N2")</td>
                                     <td class="text-end">@item.TotalPurchases.ToString("N2")</td>
@@ -350,7 +354,8 @@
                         <tfoot class="table-secondary fw-bold">
                             <tr>
                                 <td colspan="4" class="text-end"><strong>المجموع الإجمالي:</strong></td>
-                                <td class="text-end"><strong>@totalBalance.ToString("N2")</strong></td>
+                                <td class="text-end"><strong>@totalDebit.ToString("N2")</strong></td>
+                                <td class="text-end"><strong>@totalCredit.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalCreditLimit.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalSales.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalPurchases.ToString("N2")</strong></td>

@@ -1,4 +1,4 @@
-@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
+﻿@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesReturn>
@@ -114,37 +114,37 @@
                                     class="form-select form-select-sm">
                                 @* البحث برقم المرتجع *@
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     رقم المرتجع
                                 </option>
 
                                 @* البحث بالعميل *@
                                 <option value="customer"
-                                        selected="@(searchBy == "customer" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "customer" ? " selected" : "")>
                                     العميل
                                 </option>
 
                                 @* البحث بالمخزن *@
                                 <option value="warehouse"
-                                        selected="@(searchBy == "warehouse" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "warehouse" ? " selected" : "")>
                                     المخزن
                                 </option>
 
                                 @* البحث بمرجع الفاتورة *@
                                 <option value="ref"
-                                        selected="@(searchBy == "ref" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "ref" ? " selected" : "")>
                                     مرجع فاتورة البيع
                                 </option>
 
                                 @* البحث بتاريخ المرتجع *@
                                 <option value="date"
-                                        selected="@(searchBy == "date" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "date" ? " selected" : "")>
                                     تاريخ المرتجع
                                 </option>
 
                                 @* البحث بالحالة *@
                                 <option value="status"
-                                        selected="@(searchBy == "status" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "status" ? " selected" : "")>
                                     حالة المرتجع
                                 </option>
                             </select>
@@ -440,10 +440,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

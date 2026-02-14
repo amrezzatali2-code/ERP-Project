@@ -14,26 +14,28 @@
             <form asp-action="Create" method="post">
                 @Html.AntiForgeryToken()
 
-                @* اختيار المخزن بالاسم *@
+                @* اختيار المخزن أولاً، ثم تظهر فقط السياسات التي لم يُحدد ربح لها لهذا المخزن *@
                 <div class="mb-3">
                     <label asp-for="WarehouseId" class="form-label">المخزن</label>
                     <select asp-for="WarehouseId"
                             class="form-select"
-                            asp-items="@(ViewBag.WarehouseList as SelectList)">
+                            asp-items="@(ViewBag.WarehouseList as SelectList)"
+                            id="WarehouseId">
                         <option value="">-- اختر المخزن --</option>
                     </select>
                     <span asp-validation-for="WarehouseId" class="text-danger"></span>
                 </div>
 
-                @* اختيار السياسة بالاسم *@
                 <div class="mb-3">
                     <label asp-for="PolicyId" class="form-label">السياسة</label>
                     <select asp-for="PolicyId"
                             class="form-select"
-                            asp-items="@(ViewBag.PolicyList as SelectList)">
+                            asp-items="@(ViewBag.PolicyList as SelectList)"
+                            id="PolicyId">
                         <option value="">-- اختر السياسة --</option>
                     </select>
                     <span asp-validation-for="PolicyId" class="text-danger"></span>
+                    <small class="form-text text-muted">تظهر فقط السياسات التي لم يُحدد لها ربح لهذا المخزن بعد.</small>
                 </div>
 
                 @* نسبة الربح % *@
@@ -77,4 +79,46 @@
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var warehouseSelect = document.getElementById('WarehouseId');
+            var policySelect = document.getElementById('PolicyId');
+            if (!warehouseSelect || !policySelect) return;
+
+            var placeholder = '-- اختر السياسة --';
+            var urlPolicies = '@Url.Action("GetPoliciesNotUsedForWarehouse", "WarehousePolicyRules")';
+
+            function fillPolicyOptions(warehouseId) {
+                policySelect.innerHTML = '<option value="">' + placeholder + '</option>';
+                policySelect.value = '';
+                if (!warehouseId) return;
+                fetch(urlPolicies + '?warehouseId=' + encodeURIComponent(warehouseId))
+                    .then(function (r) { return r.ok ? r.json() : []; })
+                    .then(function (arr) {
+                        (arr || []).forEach(function (p) {
+                            var opt = document.createElement('option');
+                            opt.value = p.id;
+                            opt.textContent = p.name;
+                            policySelect.appendChild(opt);
+                        });
+                    })
+                    .catch(function (err) { console.error('Error loading policies:', err); });
+            }
+
+            warehouseSelect.addEventListener('change', function () {
+                fillPolicyOptions(this.value || null);
+            });
+
+            // عند تحميل الصفحة إذا كان المخزن معبّأ (بعد خطأ فاليديشن) نملأ السياسات ونحافظ على المختار
+            var initialPolicyId = '@(Model?.PolicyId.ToString() ?? "")';
+            if (warehouseSelect.value) {
+                fillPolicyOptions(warehouseSelect.value);
+                setTimeout(function () {
+                    if (initialPolicyId && policySelect.querySelector('option[value="' + initialPolicyId + '"]')) {
+                        policySelect.value = initialPolicyId;
+                    }
+                }, 100);
+            }
+        });
+    </script>
 }

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
     @* ===== الأساسيات ===== *@
@@ -745,43 +745,70 @@
                                     </a>
                                 </li>
 
-                                <li><hr class="dropdown-divider" /></li>
-
-                              
-                          
-
-                                <li><hr class="dropdown-divider" /></li>
+                             
 
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="CashReceipts" asp-action="Index"
                                        data-tab-id="cash-receipts"
-                                       data-tab-title="أذون استلام نقدية">
-                                        أذون استلام نقدية
+                                       data-tab-title="قائمة أذون استلام نقدية">
+                                        قائمة أذون استلام نقدية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CashReceipts" asp-action="Create"
+                                       data-tab-id="cash-receipt-create"
+                                       data-tab-title="أذن استلام">
+                                        أذن استلام (شاشة)
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="CashPayments" asp-action="Index"
                                        data-tab-id="cash-payments"
-                                       data-tab-title="أذون دفع نقدية">
-                                        أذون دفع نقدية
+                                       data-tab-title="قائمة أذون دفع نقدية">
+                                        قائمة أذون دفع نقدية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CashPayments" asp-action="Create"
+                                       data-tab-id="cash-payment-create"
+                                       data-tab-title="أذن دفع">
+                                        أذن دفع (شاشة)
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="DebitNotes" asp-action="Index"
                                        data-tab-id="debit-notes"
-                                       data-tab-title="إشعارات الخصم">
-                                        إشعارات الخصم
+                                       data-tab-title="قائمة إشعارات الخصم">
+                                        قائمة إشعارات الخصم
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="DebitNotes" asp-action="Create"
+                                       data-tab-id="debit-note-create"
+                                       data-tab-title="إشعار خصم">
+                                        إشعار خصم (شاشة)
                                     </a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="CreditNotes" asp-action="Index"
                                        data-tab-id="credit-notes"
-                                       data-tab-title="إشعارات الإضافة">
-                                        إشعارات الإضافة
+                                       data-tab-title="قائمة إشعارات الإضافة">
+                                        قائمة إشعارات الإضافة
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CreditNotes" asp-action="Create"
+                                       data-tab-id="credit-note-create"
+                                       data-tab-title="إشعار إضافة">
+                                        إشعار إضافة (شاشة)
                                     </a>
                                 </li>
                             </ul>
@@ -826,8 +853,9 @@
                         <li class="nav-item">
                             <button id="btnRefreshActiveTab"
                                     type="button"
-                                    class="btn btn-sm btn-light">
-                                تحديث 
+                                    class="btn btn-sm btn-light"
+                                    title="تحديث محتوى التاب النشط فقط">
+                                تحديث
                             </button>
                         </li>
 
@@ -961,92 +989,35 @@
             }
 
             // =========================
-            // (C) Refresh حقيقي للـ iframe
+            // (C) تحديث التاب النشط فقط (بدون إغلاق التابات أو تأثر الصفحة الرئيسية)
             // =========================
             function refreshIframe(iframe) {
                 if (!iframe) return;
 
+                const src = (iframe.getAttribute && iframe.getAttribute('src')) || iframe.src || '';
+                if (!src) return;
+
                 try {
                     const frameWindow = iframe.contentWindow;
-                    const frameDocument = iframe.contentDocument;
-
-                    // ✅ محاولة 1: استدعاء دالة __ERP_REFRESH__ إذا كانت موجودة
+                    // محاولة تحديث ناعم إن وُجدت دالة داخل الصفحة
                     if (frameWindow && typeof frameWindow.__ERP_REFRESH__ === 'function') {
                         try {
                             frameWindow.__ERP_REFRESH__();
-                            console.log('Refresh: تم استدعاء __ERP_REFRESH__ داخل الصفحة');
-                            return; // نجح، لا حاجة لإعادة تحميل
-                        } catch (e) {
-                            console.warn('Refresh: خطأ في استدعاء __ERP_REFRESH__:', e);
-                        }
+                            return;
+                        } catch (e) { /* نكمل لإعادة التحميل */ }
                     }
+                } catch (e) { /* cross-origin أو خطأ → نعيد التحميل */ }
 
-                    // ✅ محاولة 2: البحث عن زر refresh داخل الصفحة
-                    if (frameDocument) {
-                        const refreshBtn = frameDocument.querySelector('[data-refresh], .btn-refresh, button[onclick*="refresh"], button[onclick*="Refresh"]');
-                        if (refreshBtn) {
-                            try {
-                                refreshBtn.click();
-                                console.log('Refresh: تم الضغط على زر refresh داخل الصفحة');
-                                return; // نجح، لا حاجة لإعادة تحميل
-                            } catch (e) {
-                                console.warn('Refresh: خطأ في الضغط على زر refresh:', e);
-                            }
-                        }
-                    }
-
-                    // ✅ محاولة 3: البحث عن form داخل الصفحة وإعادة submit
-                    if (frameDocument) {
-                        // البحث عن form (مثل customerSearchForm في حجم التعامل)
-                        const forms = frameDocument.querySelectorAll('form[method="get"], form[method="post"]');
-                        if (forms.length > 0) {
-                            // نبحث عن form يحتوي على بيانات أو form رئيسي
-                            for (let form of forms) {
-                                // نفضل forms التي لها id أو name
-                                const isMainForm = form.id || form.name || form.className.includes('search') || form.className.includes('filter');
-                                
-                                // التحقق من وجود بيانات
-                                const hasData = form.querySelector('input[type="hidden"][value]') || 
-                                               form.querySelector('input[type="text"][value]') ||
-                                               form.querySelector('input[type="number"][value]') ||
-                                               form.querySelector('select[value]') ||
-                                               form.querySelector('input[type="date"][value]');
-                                
-                                if (isMainForm || hasData) {
-                                    try {
-                                        form.submit();
-                                        console.log('Refresh: تم submit للـ form:', form.id || form.name || 'unnamed');
-                                        return; // نجح، لا حاجة لإعادة تحميل
-                                    } catch (e) {
-                                        console.warn('Refresh: خطأ في submit الـ form:', e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // ✅ محاولة 4: إعادة تحميل الـ iframe (fallback)
-                    const src = iframe.getAttribute('src') || '';
-                    if (!src) return;
-
-                    // الطريقة الأضمن: تغيير src بإضافة ts (يكسر الكاش ويجبر تحميل جديد)
-                    iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));
-                    console.log('Refresh: تم إعادة تحميل الـ iframe');
-
-                } catch (e) {
-                    // في حالة Cross-origin أو أي خطأ آخر، نعيد تحميل الـ iframe
-                    console.warn('Refresh: خطأ في الوصول للـ iframe، سيتم إعادة التحميل:', e);
-                    const src = iframe.getAttribute('src') || '';
-                    if (src) {
-                        iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));
-                    }
-                }
+                // الطريقة المضمونة: إعادة تحميل محتوى التاب النشط فقط (ts يكسر الكاش)
+                iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));
             }
 
             function refreshActiveTab() {
                 const iframe = getActiveTabIframe();
                 if (!iframe) {
                     console.warn('Refresh: لم يتم العثور على iframe للتاب النشط.');
+                    const hasTabs = document.querySelector('#appTabsBar .app-tab');
+                    if (hasTabs && typeof alert === 'function') alert('لم يتم العثور على تاب نشط. انقر على التاب الذي تريد تحديثه ثم اضغط «تحديث» مرة أخرى.');
                     return false;
                 }
                 refreshIframe(iframe);

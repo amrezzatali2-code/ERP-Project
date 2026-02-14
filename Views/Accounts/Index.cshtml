@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Account>
@@ -116,43 +116,43 @@
                                     class="form-select form-select-sm">
                                 @* البحث في الكل *@
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     البحث في الكل
                                 </option>
 
                                 @* البحث باسم الحساب *@
                                 <option value="name"
-                                        selected="@(searchBy == "name" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "name" ? " selected" : "")>
                                     اسم الحساب
                                 </option>
 
                                 @* البحث بكود الحساب *@
                                 <option value="code"
-                                        selected="@(searchBy == "code" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "code" ? " selected" : "")>
                                     كود الحساب
                                 </option>
 
                                 @* البحث برقم الحساب (AccountId) *@
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     رقم الحساب
                                 </option>
 
                                 @* البحث بنوع الحساب (Asset/Liability/...) *@
                                 <option value="type"
-                                        selected="@(searchBy == "type" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "type" ? " selected" : "")>
                                     نوع الحساب
                                 </option>
 
                                 @* البحث بالملاحظات *@
                                 <option value="notes"
-                                        selected="@(searchBy == "notes" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "notes" ? " selected" : "")>
                                     الملاحظات
                                 </option>
 
                                 @* البحث بمستوى الحساب *@
                                 <option value="level"
-                                        selected="@(searchBy == "level" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "level" ? " selected" : "")>
                                     مستوى الحساب
                                 </option>
                             </select>
@@ -508,10 +508,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

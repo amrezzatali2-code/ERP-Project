@@ -155,59 +155,59 @@
                                     class="form-select form-select-sm">
                                 @* الكل *@
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     الكل
                                 </option>
 
                                 @* البحث برقم الفاتورة *@
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     رقم الفاتورة
                                 </option>
                                 <option value="si"
-                                        selected="@(searchBy == "si" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "si" ? " selected" : "")>
                                     رقم الفاتورة
                                 </option>
 
                                 @* البحث برقم السطر *@
                                 <option value="line"
-                                        selected="@(searchBy == "line" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "line" ? " selected" : "")>
                                     رقم السطر
                                 </option>
 
                                 @* البحث بكود الصنف *@
                                 <option value="prod"
-                                        selected="@(searchBy == "prod" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "prod" ? " selected" : "")>
                                     كود الصنف
                                 </option>
 
                                 @* البحث باسم الصنف *@
                                 <option value="prodname"
-                                        selected="@(searchBy == "prodname" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "prodname" ? " selected" : "")>
                                     اسم الصنف
                                 </option>
 
                                 @* البحث باسم العميل *@
                                 <option value="customername"
-                                        selected="@(searchBy == "customername" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "customername" ? " selected" : "")>
                                     اسم العميل
                                 </option>
 
                                 @* البحث بالكمية *@
                                 <option value="qty"
-                                        selected="@(searchBy == "qty" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "qty" ? " selected" : "")>
                                     الكمية
                                 </option>
 
                                 @* البحث بالتشغيلة *@
                                 <option value="batch"
-                                        selected="@(searchBy == "batch" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "batch" ? " selected" : "")>
                                     التشغيلة
                                 </option>
 
                                 @* البحث بالملاحظات *@
                                 <option value="notes"
-                                        selected="@(searchBy == "notes" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "notes" ? " selected" : "")>
                                     الملاحظات
                                 </option>
                             </select>
@@ -373,12 +373,6 @@
         <table id="silTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light">
                 <tr>
-                    @* زر العرض - تم نقله إلى اليسار *@
-                    <th class="text-nowrap no-print"
-                        data-col="actions"
-                        data-col-fixed="true"
-                        style="width:100px;">عرض</th>
-
                     <th data-col="siId">@sortLink("SIId", "رقم الفاتورة")</th>
                     <th data-col="lineNo">@sortLink("LineNo", "رقم السطر")</th>
                     <th data-col="prodId">@sortLink("ProdId", "كود الصنف")</th>
@@ -394,6 +388,11 @@
                     <th data-col="net">@sortLink("Net", "الصافي بعد الضريبة")</th>
                     <th data-col="batch">@sortLink("Batch", "التشغيلة")</th>
                     <th data-col="expiry">@sortLink("Expiry", "الصلاحية")</th>
+                    @* زر عرض الفاتورة — على الشمال *@
+                    <th class="text-nowrap no-print"
+                        data-col="actions"
+                        data-col-fixed="true"
+                        style="width:80px;">عرض</th>
                 </tr>
             </thead>
             <tbody>
@@ -410,16 +409,6 @@
                     foreach (var x in Model.Items)
                     {
                         <tr>
-                            @* زر عرض السطر - تم نقله إلى اليسار وتغيير اسمه *@
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Details"
-                                   asp-route-siId="@x.SIId"
-                                   asp-route-lineNo="@x.LineNo">
-                                    عرض
-                                </a>
-                            </td>
-
                             <td data-col="siId">@x.SIId</td>
                             <td data-col="lineNo">@x.LineNo</td>
                             <td data-col="prodId">@x.ProdId</td>
@@ -440,16 +429,21 @@
                             <td data-col="expiry">
                                 @(x.Expiry.HasValue ? x.Expiry.Value.ToString("yyyy-MM") : "-")
                             </td>
+                            <td class="text-nowrap no-print" data-col="actions">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@(Url.Action("Show", "SalesInvoices", new { id = x.SIId }))?frame=1"
+                                   data-tab-id="si-show-tab"
+                                   data-tab-title="فاتورة مبيعات"
+                                   data-url="@(Url.Action("Show", "SalesInvoices", new { id = x.SIId }))?frame=1">
+                                    عرض
+                                </a>
+                            </td>
                         </tr>
                     }
                 }
             </tbody>
             <tfoot class="table-light">
                 <tr class="fw-bold">
-                    @* الأكشن *@
-                    <td class="text-nowrap no-print" data-col="actions"></td>
-
-                    @* رقم الفاتورة *@
                     <td data-col="siId" class="text-muted">إجمالي</td>
 
                     @* رقم السطر *@
@@ -493,6 +487,9 @@
 
                     @* الصلاحية *@
                     <td data-col="expiry"></td>
+
+                    @* الأكشن *@
+                    <td class="text-nowrap no-print" data-col="actions"></td>
                 </tr>
             </tfoot>
         </table>
@@ -536,10 +533,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

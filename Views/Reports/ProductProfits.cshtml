@@ -6,13 +6,10 @@
     var totalSalesRevenue = ViewBag.TotalSalesRevenue as decimal? ?? 0m;
     var totalSalesCost = ViewBag.TotalSalesCost as decimal? ?? 0m;
     var totalSalesProfit = ViewBag.TotalSalesProfit as decimal? ?? 0m;
-    var totalLedgerRevenue = ViewBag.TotalLedgerRevenue as decimal? ?? 0m;
-    var totalLedgerCost = ViewBag.TotalLedgerCost as decimal? ?? 0m;
-    var totalLedgerProfit = ViewBag.TotalLedgerProfit as decimal? ?? 0m;
 
     // Pagination
     var page = ViewBag.Page as int? ?? 1;
-    var pageSize = ViewBag.PageSize as int? ?? 200;
+    var pageSize = ViewBag.PageSize as int? ?? 20;
     var totalPages = ViewBag.TotalPages as int? ?? 1;
     var totalCount = ViewBag.TotalCount as int? ?? 0;
 
@@ -188,9 +185,9 @@
                             </div>
                             <div class="card-body py-2">
                                 <select name="profitMethod" class="form-select">
-                                    <option value="both" selected="@(profitMethod == "both")">الكل</option>
-                                    <option value="sales" selected="@(profitMethod == "sales")">من البيع</option>
-                                    <option value="ledger" selected="@(profitMethod == "ledger")">من الميزانية</option>
+                                    <option value="both"@Html.Raw(profitMethod == "both" ? " selected" : "")>الكل</option>
+                                    <option value="sales"@Html.Raw(profitMethod == "sales" ? " selected" : "")>ربح البيع</option>
+                                    <option value="balancesheet"@Html.Raw(profitMethod == "balancesheet" ? " selected" : "")>ربح الميزانية</option>
                                 </select>
                             </div>
                         </div>
@@ -205,7 +202,7 @@
                         <a href="@Url.Action("ProductProfits", "Reports")" class="btn btn-secondary btn-sm">
                             <span>🔄</span> إعادة تعيين
                         </a>
-                        @if (reportData.Any() && totalPages > 1)
+                        @if (reportData.Any())
                         {
                             <div class="d-flex align-items-center gap-2">
                                 <label class="form-label mb-0 small">حجم الصفحة:</label>
@@ -213,11 +210,12 @@
                                         class="form-select form-select-sm" 
                                         style="width: auto;"
                                         onchange="this.form.submit()">
-                                    <option value="200" selected="@(pageSize == 200)">200</option>
-                                    <option value="500" selected="@(pageSize == 500)">500</option>
-                                    <option value="1000" selected="@(pageSize == 1000)">1000</option>
-                                    <option value="5000" selected="@(pageSize == 5000)">5000</option>
-                                    <option value="0" selected="@(pageSize == 0 || pageSize >= totalCount)">الكل</option>
+                                    <option value="20"@Html.Raw(pageSize == 20 ? " selected" : "")>20</option>
+                                    <option value="50"@Html.Raw(pageSize == 50 ? " selected" : "")>50</option>
+                                    <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
+                                    <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
+                                    <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
+                                    <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
                                 </select>
                             </div>
                         }
@@ -245,9 +243,9 @@
     {
         <div class="card shadow-sm">
             <div class="card-body p-0">
-                <div class="table-responsive">
+                <div class="table-responsive product-profits-table-scroll" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
                     <table class="table table-sm table-striped table-hover mb-0">
-                        <thead class="table-light sticky-top">
+                        <thead class="table-light product-profits-sticky-header">
                             <tr>
                                 <th style="min-width: 80px;">
                                     <a href="@sortUrl("code", sortBy == "code" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
@@ -261,7 +259,7 @@
                                 </th>
                                 <th>الفئة</th>
                                 
-                                @* الربح من البيع *@
+                                @* ربح البيع *@
                                 <th class="text-end" style="min-width: 120px;">الإيرادات (بيع)</th>
                                 <th class="text-end" style="min-width: 120px;">التكلفة (بيع)</th>
                                 <th class="text-end" style="min-width: 120px;">
@@ -270,22 +268,6 @@
                                     </a>
                                 </th>
                                 <th class="text-end" style="min-width: 100px;">نسبة الربح (بيع) %</th>
-                                
-                                @* الربح من الميزانية *@
-                                <th class="text-end" style="min-width: 120px;">الإيرادات (ميزانية)</th>
-                                <th class="text-end" style="min-width: 120px;">التكلفة (ميزانية)</th>
-                                <th class="text-end" style="min-width: 120px;">
-                                    <a href="@sortUrl("ledgerprofit", sortBy == "ledgerprofit" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الربح (ميزانية) @if (sortBy == "ledgerprofit") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th class="text-end" style="min-width: 100px;">نسبة الربح (ميزانية) %</th>
-                                
-                                @* الربح من أرصدة الحسابات *@
-                                <th class="text-end" style="min-width: 120px;">رصيد الإيرادات</th>
-                                <th class="text-end" style="min-width: 120px;">رصيد التكلفة</th>
-                                <th class="text-end" style="min-width: 120px;">الربح (من الأرصدة)</th>
-                                <th class="text-end" style="min-width: 100px;">نسبة الربح (أرصدة) %</th>
                                 
                                 @* إحصائيات *@
                                 <th class="text-end" style="min-width: 100px;">الكمية</th>
@@ -301,7 +283,7 @@
                                     <td>@item.ProdName</td>
                                     <td><small class="text-muted">@item.CategoryName</small></td>
                                     
-                                    @* الربح من البيع *@
+                                    @* ربح البيع *@
                                     <td class="text-end">@item.SalesRevenue.ToString("N2")</td>
                                     <td class="text-end">@item.SalesCost.ToString("N2")</td>
                                     <td class="text-end">
@@ -312,34 +294,6 @@
                                     <td class="text-end">
                                         <span class="@(item.SalesProfitPercent >= 0 ? "text-success" : "text-danger")">
                                             @item.SalesProfitPercent.ToString("N2")%
-                                        </span>
-                                    </td>
-                                    
-                                    @* الربح من الميزانية *@
-                                    <td class="text-end">@item.LedgerRevenue.ToString("N2")</td>
-                                    <td class="text-end">@item.LedgerCost.ToString("N2")</td>
-                                    <td class="text-end">
-                                        <strong class="@(item.LedgerProfit >= 0 ? "text-success" : "text-danger")">
-                                            @item.LedgerProfit.ToString("N2")
-                                        </strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="@(item.LedgerProfitPercent >= 0 ? "text-success" : "text-danger")">
-                                            @item.LedgerProfitPercent.ToString("N2")%
-                                        </span>
-                                    </td>
-                                    
-                                    @* الربح من أرصدة الحسابات *@
-                                    <td class="text-end">@item.AccountBalanceRevenue.ToString("N2")</td>
-                                    <td class="text-end">@item.AccountBalanceCost.ToString("N2")</td>
-                                    <td class="text-end">
-                                        <strong class="@(item.AccountBalanceProfit >= 0 ? "text-success" : "text-danger")">
-                                            @item.AccountBalanceProfit.ToString("N2")
-                                        </strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="@(item.AccountBalanceProfitPercent >= 0 ? "text-success" : "text-danger")">
-                                            @item.AccountBalanceProfitPercent.ToString("N2")%
                                         </span>
                                     </td>
                                     
@@ -354,7 +308,7 @@
                             <tr>
                                 <td colspan="3" class="text-end"><strong>المجموع الإجمالي:</strong></td>
                                 
-                                @* الربح من البيع *@
+                                @* ربح البيع *@
                                 <td class="text-end"><strong>@totalSalesRevenue.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalSalesCost.ToString("N2")</strong></td>
                                 <td class="text-end">
@@ -365,39 +319,6 @@
                                 <td class="text-end">
                                     <strong>
                                         @((totalSalesRevenue > 0 ? (totalSalesProfit / totalSalesRevenue * 100) : 0).ToString("N2"))%
-                                    </strong>
-                                </td>
-                                
-                                @* الربح من الميزانية *@
-                                <td class="text-end"><strong>@totalLedgerRevenue.ToString("N2")</strong></td>
-                                <td class="text-end"><strong>@totalLedgerCost.ToString("N2")</strong></td>
-                                <td class="text-end">
-                                    <strong class="text-primary" style="font-size: 1.1rem;">
-                                        @totalLedgerProfit.ToString("N2")
-                                    </strong>
-                                </td>
-                                <td class="text-end">
-                                    <strong>
-                                        @((totalLedgerRevenue > 0 ? (totalLedgerProfit / totalLedgerRevenue * 100) : 0).ToString("N2"))%
-                                    </strong>
-                                </td>
-                                
-                                @* الربح من أرصدة الحسابات *@
-                                @{
-                                    var totalAccountBalanceRevenue = ViewBag.TotalAccountBalanceRevenue as decimal? ?? 0m;
-                                    var totalAccountBalanceCost = ViewBag.TotalAccountBalanceCost as decimal? ?? 0m;
-                                    var totalAccountBalanceProfit = ViewBag.TotalAccountBalanceProfit as decimal? ?? 0m;
-                                }
-                                <td class="text-end"><strong>@totalAccountBalanceRevenue.ToString("N2")</strong></td>
-                                <td class="text-end"><strong>@totalAccountBalanceCost.ToString("N2")</strong></td>
-                                <td class="text-end">
-                                    <strong class="text-primary" style="font-size: 1.1rem;">
-                                        @totalAccountBalanceProfit.ToString("N2")
-                                    </strong>
-                                </td>
-                                <td class="text-end">
-                                    <strong>
-                                        @((totalAccountBalanceRevenue > 0 ? (totalAccountBalanceProfit / totalAccountBalanceRevenue * 100) : 0).ToString("N2"))%
                                     </strong>
                                 </td>
                                 
@@ -434,64 +355,48 @@
             </nav>
         }
 
-        @* ===== ميزانية الربح من الميزانية ===== *@
+        @* ===== ربح الميزانية ===== *@
         @if (ViewBag.BalanceSheetData != null)
         {
-            var balanceSheet = ViewBag.BalanceSheetData;
+            var bs = ViewBag.BalanceSheetData;
             <div class="card shadow-sm mt-4">
                 <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">📊 ميزانية الربح من الميزانية</h5>
-                    <small>توضيح طريقة حساب الربح من دفتر الأستاذ العام</small>
+                    <h5 class="mb-0">📊 ربح الميزانية</h5>
+                    <small>مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن − مجموع العملاء الدائنين</small>
                 </div>
                 <div class="card-body">
                     <div class="row">
                         <div class="col-md-6">
-                            <h6 class="text-muted mb-3">الإيرادات (Revenue)</h6>
+                            <h6 class="text-muted mb-3">الإيرادات (أصول)</h6>
                             <table class="table table-sm table-bordered">
                                 <tr>
-                                    <th style="width: 40%;">كود الحساب</th>
-                                    <td><strong>@balanceSheet.RevenueAccount.AccountCode</strong></td>
+                                    <th style="width: 50%;">مجموع العملاء المدينين</th>
+                                    <td class="text-end"><strong class="text-success">@bs.CustomersDebitSum.ToString("N2")</strong></td>
                                 </tr>
                                 <tr>
-                                    <th>اسم الحساب</th>
-                                    <td>@balanceSheet.RevenueAccount.AccountName</td>
+                                    <th>رصيد الخزنة</th>
+                                    <td class="text-end"><strong class="text-success">@bs.TreasuryBalance.ToString("N2")</strong></td>
                                 </tr>
                                 <tr>
-                                    <th>نوع القيد</th>
-                                    <td>دائن (Credit)</td>
-                                </tr>
-                                <tr>
-                                    <th>المصدر</th>
-                                    <td>فواتير المبيعات (LineNo = 2)</td>
+                                    <th>تكلفة البضاعة في المخزن</th>
+                                    <td class="text-end"><strong class="text-success">@bs.InventoryCostTotal.ToString("N2")</strong></td>
                                 </tr>
                                 <tr class="table-success">
-                                    <th><strong>إجمالي الإيرادات</strong></th>
-                                    <td><strong>@balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</strong></td>
+                                    <th><strong>إجمالي الأصول</strong></th>
+                                    <td class="text-end"><strong>@((bs.CustomersDebitSum + bs.TreasuryBalance + bs.InventoryCostTotal).ToString("N2"))</strong></td>
                                 </tr>
                             </table>
                         </div>
                         <div class="col-md-6">
-                            <h6 class="text-muted mb-3">تكلفة البضاعة المباعة (COGS)</h6>
+                            <h6 class="text-muted mb-3">الالتزامات</h6>
                             <table class="table table-sm table-bordered">
                                 <tr>
-                                    <th style="width: 40%;">كود الحساب</th>
-                                    <td><strong>@balanceSheet.CogsAccount.AccountCode</strong></td>
-                                </tr>
-                                <tr>
-                                    <th>اسم الحساب</th>
-                                    <td>@balanceSheet.CogsAccount.AccountName</td>
-                                </tr>
-                                <tr>
-                                    <th>نوع القيد</th>
-                                    <td>مدين (Debit)</td>
-                                </tr>
-                                <tr>
-                                    <th>المصدر</th>
-                                    <td>فواتير المبيعات (LineNo = 3)</td>
+                                    <th style="width: 50%;">مجموع العملاء الدائنين</th>
+                                    <td class="text-end"><strong class="text-danger">@bs.CustomersCreditSum.ToString("N2")</strong></td>
                                 </tr>
                                 <tr class="table-danger">
-                                    <th><strong>إجمالي التكلفة</strong></th>
-                                    <td><strong>@balanceSheet.CogsAccount.TotalDebit.ToString("N2")</strong></td>
+                                    <th><strong>إجمالي الالتزامات</strong></th>
+                                    <td class="text-end"><strong>@bs.CustomersCreditSum.ToString("N2")</strong></td>
                                 </tr>
                             </table>
                         </div>
@@ -501,55 +406,20 @@
                         <div class="col-12">
                             <div class="card bg-light">
                                 <div class="card-body">
-                                    <h5 class="card-title">حساب الربح:</h5>
-                                    <div class="d-flex justify-content-between align-items-center">
+                                    <h5 class="card-title">حساب الربح من الميزانية:</h5>
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                         <div>
-                                            <p class="mb-1"><strong>إجمالي الإيرادات:</strong> @balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</p>
-                                            <p class="mb-1"><strong>إجمالي التكلفة:</strong> <span class="text-danger">- @balanceSheet.CogsAccount.TotalDebit.ToString("N2")</span></p>
+                                            <p class="mb-1"><strong>العملاء المدينون:</strong> @bs.CustomersDebitSum.ToString("N2")</p>
+                                            <p class="mb-1"><strong>+ رصيد الخزنة:</strong> @bs.TreasuryBalance.ToString("N2")</p>
+                                            <p class="mb-1"><strong>+ تكلفة المخزون:</strong> @bs.InventoryCostTotal.ToString("N2")</p>
+                                            <p class="mb-1"><strong>− العملاء الدائنون:</strong> <span class="text-danger">@bs.CustomersCreditSum.ToString("N2")</span></p>
                                             <hr class="my-2" />
-                                            <p class="mb-0"><strong>الربح الإجمالي من الميزانية:</strong></p>
+                                            <p class="mb-0"><strong>الربح من الميزانية:</strong></p>
                                         </div>
                                         <div class="text-end">
-                                            <h3 class="mb-0 @(balanceSheet.TotalProfit >= 0 ? "text-success" : "text-danger")">
-                                                @balanceSheet.TotalProfit.ToString("N2")
+                                            <h3 class="mb-0 @(bs.BalanceSheetProfit >= 0 ? "text-success" : "text-danger")">
+                                                @bs.BalanceSheetProfit.ToString("N2")
                                             </h3>
-                                            <small class="text-muted">
-                                                (@((balanceSheet.RevenueAccount.TotalCredit > 0 ? (balanceSheet.TotalProfit / balanceSheet.RevenueAccount.TotalCredit * 100) : 0).ToString("N2"))%)
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row mt-3">
-                        <div class="col-12">
-                            <h6 class="text-muted mb-2">الطريقة الثالثة: الربح من أرصدة الحسابات (Account Balance)</h6>
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <p class="mb-2"><strong>حساب رصيد حساب الإيرادات (4100):</strong></p>
-                                    <p class="mb-1 ms-3">رصيد الإيرادات = مجموع الدائن (Credit) - مجموع المدين (Debit)</p>
-                                    <p class="mb-3 ms-3"><strong>النتيجة:</strong> @balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</p>
-                                    
-                                    <p class="mb-2"><strong>حساب رصيد حساب COGS (5100):</strong></p>
-                                    <p class="mb-1 ms-3">رصيد COGS = مجموع المدين (Debit) - مجموع الدائن (Credit)</p>
-                                    <p class="mb-3 ms-3"><strong>النتيجة:</strong> @balanceSheet.CogsAccount.TotalDebit.ToString("N2")</p>
-                                    
-                                    <hr />
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <p class="mb-1"><strong>رصيد الإيرادات:</strong> @balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</p>
-                                            <p class="mb-1"><strong>رصيد COGS:</strong> <span class="text-danger">- @balanceSheet.CogsAccount.TotalDebit.ToString("N2")</span></p>
-                                            <hr class="my-2" />
-                                            <p class="mb-0"><strong>الربح من الأرصدة:</strong></p>
-                                        </div>
-                                        <div class="text-end">
-                                            @{
-                                                var accountBalanceProfit = balanceSheet.RevenueAccount.TotalCredit - balanceSheet.CogsAccount.TotalDebit;
-                                            }
-                                            <h4 class="mb-0 @(accountBalanceProfit >= 0 ? "text-success" : "text-danger")">
-                                                @accountBalanceProfit.ToString("N2")
-                                            </h4>
                                         </div>
                                     </div>
                                 </div>
@@ -558,11 +428,10 @@
                     </div>
                     <div class="alert alert-info mt-3 mb-0">
                         <small>
-                            <strong>ملاحظة:</strong> 
+                            <strong>طريقتا حساب الربح:</strong> 
                             <ul class="mb-0">
-                                <li><strong>الطريقة الأولى (من البيع):</strong> يتم حساب الربح مباشرة من فواتير المبيعات (SalesInvoiceLines)</li>
-                                <li><strong>الطريقة الثانية (من الميزانية):</strong> يتم حساب الربح عن طريق جمع جميع القيود المحاسبية من حساب الإيرادات (4100) مطروحاً منها جميع القيود من حساب تكلفة البضاعة المباعة (5100) من دفتر الأستاذ العام.</li>
-                                <li><strong>الطريقة الثالثة (من الأرصدة):</strong> يتم حساب الربح من أرصدة الحسابات المحاسبية (رصيد حساب الإيرادات - رصيد حساب COGS) حيث رصيد الحساب = المدين - الدائن (أو العكس حسب نوع الحساب).</li>
+                                <li><strong>ربح البيع:</strong> إيرادات المبيعات − تكلفة البضاعة المباعة (من فواتير المبيعات)</li>
+                                <li><strong>ربح الميزانية:</strong> مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن − مجموع العملاء الدائنين</li>
                             </ul>
                             @if (fromDate.HasValue || toDate.HasValue)
                             {
@@ -592,18 +461,29 @@
 
 @section Styles {
     <style>
-        .table thead th {
+        .product-profits-table-scroll {
+            position: relative;
+        }
+        .product-profits-sticky-header th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #f8f9fa !important;
             border-bottom: 2px solid #dee2e6;
             font-weight: 600;
-            background-color: #f8f9fa !important;
+            box-shadow: 0 2px 2px -1px rgba(0,0,0,0.1);
         }
-        .table tfoot {
+        .product-profits-table-scroll .table thead th {
+            border-bottom: 2px solid #dee2e6;
+            font-weight: 600;
+        }
+        .product-profits-table-scroll .table tfoot {
             background-color: #e9ecef !important;
         }
         .card-header {
             font-size: 0.9rem;
         }
-        .table tbody tr:hover {
+        .product-profits-table-scroll .table tbody tr:hover {
             background-color: #f5f5f5;
         }
         a.text-decoration-none:hover {

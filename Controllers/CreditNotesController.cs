@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -11,11 +11,13 @@ using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToLi
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
 using ERP.Models;                                 // CreditNote + Account + Customer
+using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
 {
     /// <summary>
     /// كنترولر إشعارات الإضافة (CreditNotes)
+    /// - زر حفظ = حفظ + ترحيل محاسبي (LedgerEntries + تحديث حساب العميل + الأرباح).
     /// بالنظام الثابت:
     /// - Index: بحث + ترتيب + فلترة بالتاريخ والكود + اختيار أعمدة + طباعة + تصدير + حذف جماعي/حذف الكل.
     /// - Show: عرض إشعار واحد.
@@ -26,12 +28,13 @@ namespace ERP.Controllers
     /// </summary>
     public class CreditNotesController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _context;   // متغير: السياق الأساسي للتعامل مع الـ DB
+        private readonly AppDbContext _context;
+        private readonly ILedgerPostingService _ledgerPostingService;
 
-        public CreditNotesController(AppDbContext context)
+        public CreditNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService)
         {
             _context = context;
+            _ledgerPostingService = ledgerPostingService;
         }
 
         // =========================================================
@@ -114,7 +117,6 @@ namespace ERP.Controllers
             var stringFields =
                 new Dictionary<string, Expression<Func<CreditNote, string?>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["noteNumber"] = c => c.NoteNumber,                                     // رقم المستند
                     ["reason"] = c => c.Reason ?? "",                                   // سبب الإشعار
                     ["desc"] = c => c.Description ?? "",                              // البيان
                     ["customer"] = c => c.Customer != null ? c.Customer.CustomerName : "",// اسم الطرف
@@ -124,19 +126,19 @@ namespace ERP.Controllers
                     ["postedBy"] = c => c.PostedBy ?? ""                                  // رحّله بواسطة
                 };
 
-            // الحقول الرقمية (int) التى يمكن البحث فيها
+            // الحقول الرقمية (int) التى يمكن البحث فيها (نفس إشعارات الخصم)
             var intFields =
                 new Dictionary<string, Expression<Func<CreditNote, int>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["id"] = c => c.CreditNoteId        // البحث برقم الإشعار
+                    ["id"] = c => c.CreditNoteId,       // البحث برقم الإشعار
+                    ["number"] = c => c.CreditNoteId   // رقم المستند
                 };
 
             // الحقول المسموح الترتيب عليها
             var orderFields =
                 new Dictionary<string, Expression<Func<CreditNote, object>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["CreditNoteId"] = c => c.CreditNoteId,                               // رقم الإشعار
-                    ["NoteNumber"] = c => c.NoteNumber,                                 // رقم المستند
+                    ["CreditNoteId"] = c => c.CreditNoteId,                               // رقم الإشعار / رقم المستند
                     ["NoteDate"] = c => c.NoteDate,                                   // تاريخ الإشعار
                     ["Amount"] = c => c.Amount,                                     // المبلغ
                     ["CustomerName"] = c => c.Customer != null ? c.Customer.CustomerName : "",
@@ -273,8 +275,8 @@ namespace ERP.Controllers
 
             var sb = new StringBuilder();
 
-            // عناوين الأعمدة في ملف CSV
-            sb.AppendLine("CreditNoteId,NoteNumber,NoteDate,CustomerName,AccountName,OffsetAccountName,Amount,Reason,Description,IsPosted,CreatedAt,CreatedBy,PostedAt,PostedBy");
+            // عناوين الأعمدة في ملف CSV (نفس إشعارات الخصم)
+            sb.AppendLine("CreditNoteId,NoteDate,CustomerId,CustomerName,AccountId,AccountName,OffsetAccountId,OffsetAccountName,Amount,Reason,Description,IsPosted,CreatedAt,UpdatedAt,CreatedBy,PostedAt,PostedBy");
 
             // كل صف إشعار في سطر CSV
             foreach (var c in list)
@@ -285,16 +287,21 @@ namespace ERP.Controllers
 
                 string line = string.Join(",",
                     c.CreditNoteId,
-                    (c.NoteNumber ?? "").Replace(",", " "),
                     c.NoteDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+                    c.CustomerId?.ToString() ?? "",
                     customerName.Replace(",", " "),
+                    c.AccountId,
                     accountName.Replace(",", " "),
+                    c.OffsetAccountId?.ToString() ?? "",
                     offsetName.Replace(",", " "),
                     c.Amount.ToString("0.00", CultureInfo.InvariantCulture),
                     (c.Reason ?? "").Replace(",", " "),
                     (c.Description ?? "").Replace(",", " "),
                     c.IsPosted ? "1" : "0",
                     c.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
+                    c.UpdatedAt.HasValue
+                        ? c.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                        : "",
                     (c.CreatedBy ?? "").Replace(",", " "),
                     c.PostedAt.HasValue
                         ? c.PostedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
@@ -340,14 +347,19 @@ namespace ERP.Controllers
 
             try
             {
+                string? postedBy = User?.Identity?.Name ?? "System";
+                foreach (var note in notes.Where(n => n.IsPosted))
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(Models.LedgerSourceType.CreditNote, note.CreditNoteId, postedBy, "حذف جماعي إشعار إضافة");
+                }
                 _context.CreditNotes.RemoveRange(notes);
                 await _context.SaveChangesAsync();
 
                 TempData["Success"] = $"تم حذف {notes.Count} من إشعارات الإضافة المحددة.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["Error"] = "لا يمكن حذف بعض الإشعارات بسبب ارتباطها بحركات محاسبية أخرى.";
+                TempData["Error"] = $"لا يمكن حذف بعض الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -371,17 +383,41 @@ namespace ERP.Controllers
 
             try
             {
+                string? postedBy = User?.Identity?.Name ?? "System";
+                foreach (var note in all.Where(n => n.IsPosted))
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(Models.LedgerSourceType.CreditNote, note.CreditNoteId, postedBy, "حذف جميع إشعارات الإضافة");
+                }
                 _context.CreditNotes.RemoveRange(all);
                 await _context.SaveChangesAsync();
 
                 TempData["Success"] = "تم حذف جميع إشعارات الإضافة.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["Error"] = "لا يمكن حذف جميع الإشعارات بسبب وجود ارتباطات محاسبية أخرى.";
+                TempData["Error"] = $"لا يمكن حذف جميع الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
+        }
+
+        // =========================================================
+        // جلب حساب الطرف تلقائياً عند اختيار العميل (نفس نمط إشعار الخصم)
+        // =========================================================
+        public async Task<IActionResult> GetCustomerAccount(int customerId)
+        {
+            var customer = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.CustomerId == customerId)
+                .Select(c => new { c.AccountId })
+                .FirstOrDefaultAsync();
+
+            if (customer == null || !customer.AccountId.HasValue)
+            {
+                return Json(new { success = false, message = "العميل غير موجود أو غير مربوط بحساب محاسبي." });
+            }
+
+            return Json(new { success = true, accountId = customer.AccountId.Value });
         }
 
         // =========================================================
@@ -424,6 +460,24 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(CreditNote creditNote)
         {
+            // إن لم يُرسل حساب الطرف وتم اختيار عميل، نملأه من حساب العميل (نفس نمط إذن الاستلام)
+            if (creditNote.AccountId <= 0 && creditNote.CustomerId.HasValue)
+            {
+                var cust = await _context.Customers
+                    .AsNoTracking()
+                    .Where(c => c.CustomerId == creditNote.CustomerId.Value)
+                    .Select(c => new { c.AccountId })
+                    .FirstOrDefaultAsync();
+                if (cust?.AccountId != null)
+                {
+                    creditNote.AccountId = cust.AccountId.Value;
+                    ModelState.Remove("AccountId");
+                }
+            }
+
+            if (creditNote.AccountId <= 0)
+                ModelState.AddModelError(nameof(CreditNote.AccountId), "حساب الطرف مطلوب.");
+
             if (ModelState.IsValid)
             {
                 // تعبئة بيانات التتبع
@@ -433,14 +487,40 @@ namespace ERP.Controllers
                 creditNote.IsPosted = false;
                 creditNote.PostedAt = null;
                 creditNote.PostedBy = null;
+                creditNote.IsLocked = true; // غلق الإشعار بعد الحفظ
 
                 _context.Add(creditNote);
                 await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+
+                try
+                {
+                    await _ledgerPostingService.PostCreditNoteAsync(creditNote.CreditNoteId, User?.Identity?.Name ?? "System");
+                    TempData["Success"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
+                }
+                catch (Exception ex)
+                {
+                    TempData["Error"] = TempData["ErrorMessage"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
+                }
+                return RedirectToAction(nameof(Edit), new { id = creditNote.CreditNoteId });
             }
 
             PopulateLookups(creditNote.CustomerId, creditNote.AccountId, creditNote.OffsetAccountId);
             return View(creditNote);
+        }
+
+        // GET: CreditNotes/Unlock/5 — فتح الإشعار للتعديل (سيُضاف التحقق من الصلاحية لاحقاً)
+        public async Task<IActionResult> Unlock(int? id)
+        {
+            if (id == null)
+                return NotFound();
+
+            var creditNote = await _context.CreditNotes.FindAsync(id);
+            if (creditNote == null)
+                return NotFound();
+
+            creditNote.IsLocked = false;
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Edit), new { id });
         }
 
         // GET: CreditNotes/Edit/5
@@ -465,9 +545,26 @@ namespace ERP.Controllers
             if (id != input.CreditNoteId)
                 return NotFound();
 
+            // ملء حساب الطرف من العميل إن كان فارغاً (نفس نمط Create)
+            if (input.AccountId <= 0 && input.CustomerId.HasValue)
+            {
+                var cust = await _context.Customers
+                    .AsNoTracking()
+                    .Where(c => c.CustomerId == input.CustomerId.Value)
+                    .Select(c => new { c.AccountId })
+                    .FirstOrDefaultAsync();
+                if (cust?.AccountId != null)
+                {
+                    input.AccountId = cust.AccountId.Value;
+                    ModelState.Remove("AccountId");
+                }
+            }
+            if (input.AccountId <= 0)
+                ModelState.AddModelError(nameof(CreditNote.AccountId), "حساب الطرف مطلوب.");
+
             if (!ModelState.IsValid)
             {
-                PopulateLookups(input.CustomerId, input.AccountId, input.OffsetAccountId);
+                PopulateLookups(input.CustomerId, input.AccountId, null);
                 return View(input);
             }
 
@@ -475,23 +572,31 @@ namespace ERP.Controllers
             if (existing == null)
                 return NotFound();
 
-            // تحديث الحقول القابلة للتعديل من الشاشة
-            existing.NoteNumber = input.NoteNumber;
             existing.NoteDate = input.NoteDate;
             existing.CustomerId = input.CustomerId;
             existing.AccountId = input.AccountId;
-            existing.OffsetAccountId = input.OffsetAccountId;
             existing.Amount = input.Amount;
             existing.Reason = input.Reason;
             existing.Description = input.Description;
-
-            // تحديث بيانات التتبع
             existing.UpdatedAt = DateTime.Now;
+            existing.IsLocked = true;
 
             try
             {
                 await _context.SaveChangesAsync();
-                return RedirectToAction(nameof(Index));
+                if (!existing.IsPosted)
+                {
+                    try
+                    {
+                        await _ledgerPostingService.PostCreditNoteAsync(id, User?.Identity?.Name ?? "System");
+                    }
+                    catch (Exception ex)
+                    {
+                        TempData["Error"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
+                    }
+                }
+                TempData["Success"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
+                return RedirectToAction(nameof(Edit), new { id });
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -531,13 +636,16 @@ namespace ERP.Controllers
 
             try
             {
+                if (creditNote.IsPosted)
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(Models.LedgerSourceType.CreditNote, id, User?.Identity?.Name ?? "System", "حذف إشعار إضافة");
+
                 _context.CreditNotes.Remove(creditNote);
                 await _context.SaveChangesAsync();
                 TempData["Success"] = "تم حذف إشعار الإضافة بنجاح.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["Error"] = "لا يمكن حذف الإشعار بسبب ارتباطه بحركات أخرى.";
+                TempData["Error"] = TempData["ErrorMessage"] = $"لا يمكن حذف الإشعار: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));

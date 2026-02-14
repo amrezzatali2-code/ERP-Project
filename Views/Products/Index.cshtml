@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Product>
@@ -126,24 +126,24 @@
                                     <select id="searchBy1"
                                             class="form-select border-0 bg-transparent"
                                             style="font-size: 0.85rem; max-width: 130px; border-left: 1px solid #e1e5e9 !important; padding: 0.4rem 0.5rem;">
-                                        <option value="all" selected="@(searchBy == "all" ? "selected" : null)">الكل</option>
-                                        <option value="name" selected="@(searchBy == "name" ? "selected" : null)">اسم الصنف</option>
-                                        <option value="id" selected="@(searchBy == "id" ? "selected" : null)">كود الصنف</option>
-                                        <option value="barcode" selected="@(searchBy == "barcode" ? "selected" : null)">الباركود</option>
-                                        <option value="generic" selected="@(searchBy == "generic" ? "selected" : null)">الاسم العلمي</option>
-                                        <option value="company" selected="@(searchBy == "company" ? "selected" : null)">الشركة</option>
-                                        <option value="category" selected="@(searchBy == "category" ? "selected" : null)">الفئة</option>
-                                        <option value="productGroup" selected="@(searchBy == "productGroup" ? "selected" : null)">مجموعة الصنف</option>
-                                        <option value="bonusGroup" selected="@(searchBy == "bonusGroup" ? "selected" : null)">مجموعة البونص</option>
-                                        <option value="price" selected="@(searchBy == "price" ? "selected" : null)">سعر الجمهور</option>
-                                        <option value="imported" selected="@(searchBy == "imported" ? "selected" : null)">محلي/مستورد</option>
-                                        <option value="active" selected="@(searchBy == "active" ? "selected" : null)">الحالة</option>
-                                        <option value="created" selected="@(searchBy == "created" ? "selected" : null)">تاريخ الإنشاء</option>
-                                        <option value="modified" selected="@(searchBy == "modified" ? "selected" : null)">آخر تعديل</option>
-                                        <option value="lastprice" selected="@(searchBy == "lastprice" ? "selected" : null)">آخر تغيير سعر</option>
-                                        <option value="hasQuota" selected="@(searchBy == "hasQuota" ? "selected" : null)">له كوتة؟</option>
-                                        <option value="quotaQuantity" selected="@(searchBy == "quotaQuantity" ? "selected" : null)">كمية الكوتة</option>
-                                        <option value="descShort" selected="@(searchBy == "descShort" ? "selected" : null)">الوصف المختصر</option>
+                                        <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
+                                        <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم الصنف</option>
+                                        <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود الصنف</option>
+                                        <option value="barcode"@Html.Raw(searchBy == "barcode" ? " selected" : "")>الباركود</option>
+                                        <option value="generic"@Html.Raw(searchBy == "generic" ? " selected" : "")>الاسم العلمي</option>
+                                        <option value="company"@Html.Raw(searchBy == "company" ? " selected" : "")>الشركة</option>
+                                        <option value="category"@Html.Raw(searchBy == "category" ? " selected" : "")>الفئة</option>
+                                        <option value="productGroup"@Html.Raw(searchBy == "productGroup" ? " selected" : "")>مجموعة الصنف</option>
+                                        <option value="bonusGroup"@Html.Raw(searchBy == "bonusGroup" ? " selected" : "")>مجموعة البونص</option>
+                                        <option value="price"@Html.Raw(searchBy == "price" ? " selected" : "")>سعر الجمهور</option>
+                                        <option value="imported"@Html.Raw(searchBy == "imported" ? " selected" : "")>محلي/مستورد</option>
+                                        <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>الحالة</option>
+                                        <option value="created"@Html.Raw(searchBy == "created" ? " selected" : "")>تاريخ الإنشاء</option>
+                                        <option value="modified"@Html.Raw(searchBy == "modified" ? " selected" : "")>آخر تعديل</option>
+                                        <option value="lastprice"@Html.Raw(searchBy == "lastprice" ? " selected" : "")>آخر تغيير سعر</option>
+                                        <option value="hasQuota"@Html.Raw(searchBy == "hasQuota" ? " selected" : "")>له كوتة؟</option>
+                                        <option value="quotaQuantity"@Html.Raw(searchBy == "quotaQuantity" ? " selected" : "")>كمية الكوتة</option>
+                                        <option value="descShort"@Html.Raw(searchBy == "descShort" ? " selected" : "")>الوصف المختصر</option>
                                     </select>
                                 </div>
                             </div>
@@ -264,7 +264,7 @@
                                     {
                                         @foreach (var pg in (SelectList)ViewBag.ProductGroups)
                                         {
-                                            <option value="@pg.Value" selected="@(pg.Selected ? "selected" : null)">@pg.Text</option>
+                                            <option value="@pg.Value"@Html.Raw(pg.Selected ? " selected" : "")>@pg.Text</option>
                                         }
                                     }
                                 </select>
@@ -298,8 +298,8 @@
                                         class="form-select border rounded"
                                         style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;">
                                     <option value="">-- الكل --</option>
-                                    <option value="محلي" selected="@(filterImported == "محلي" ? "selected" : null)">محلي</option>
-                                    <option value="مستورد" selected="@(filterImported == "مستورد" ? "selected" : null)">مستورد</option>
+                                    <option value="محلي"@Html.Raw(filterImported == "محلي" ? " selected" : "")>محلي</option>
+                                    <option value="مستورد"@Html.Raw(filterImported == "مستورد" ? " selected" : "")>مستورد</option>
                                 </select>
                             </div>
                             
@@ -678,10 +678,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

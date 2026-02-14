@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;                    // القوائم List / Dictionary
 using System.Globalization;                          // CultureInfo لتنسيق الأرقام فى التصدير
 using System.Linq;                                   // أوامر LINQ مثل Where / OrderBy
@@ -115,6 +115,7 @@ namespace ERP.Controllers
                     StringComparer.OrdinalIgnoreCase)
                 {
                     ["SRId"] = x => x.SRId,
+                    ["SalesInvoiceId"] = x => x.SalesInvoiceId ?? 0,
                     ["LineNo"] = x => x.LineNo,
                     ["ProdId"] = x => x.ProdId,
                     ["Qty"] = x => x.Qty,
@@ -436,7 +437,7 @@ namespace ERP.Controllers
                 // ====== تصدير CSV بسيط ======
                 var lines = new List<string>
                 {
-                    "SRId,LineNo,ProdId,Qty,PriceRetail,UnitSalePrice,LineNetTotal,BatchNo,Expiry,Status"
+                    "SRId,SalesInvoiceId,LineNo,ProdId,Qty,PriceRetail,UnitSalePrice,LineNetTotal,BatchNo,Expiry,Status"
                 };
 
                 foreach (var l in data)
@@ -448,6 +449,7 @@ namespace ERP.Controllers
 
                     lines.Add(string.Join(",",
                         l.SRId,
+                        l.SalesInvoiceId.HasValue ? l.SalesInvoiceId.Value.ToString() : "",
                         l.LineNo,
                         l.ProdId,
                         l.Qty,
@@ -475,17 +477,18 @@ namespace ERP.Controllers
 
                 // عناوين الأعمدة
                 ws.Cell(row, 1).Value = "SRId";
-                ws.Cell(row, 2).Value = "LineNo";
-                ws.Cell(row, 3).Value = "ProdId";
-                ws.Cell(row, 4).Value = "Qty";
-                ws.Cell(row, 5).Value = "PriceRetail";
-                ws.Cell(row, 6).Value = "UnitSalePrice";
-                ws.Cell(row, 7).Value = "LineNetTotal";
-                ws.Cell(row, 8).Value = "BatchNo";
-                ws.Cell(row, 9).Value = "Expiry";
-                ws.Cell(row, 10).Value = "Status";
+                ws.Cell(row, 2).Value = "SalesInvoiceId";
+                ws.Cell(row, 3).Value = "LineNo";
+                ws.Cell(row, 4).Value = "ProdId";
+                ws.Cell(row, 5).Value = "Qty";
+                ws.Cell(row, 6).Value = "PriceRetail";
+                ws.Cell(row, 7).Value = "UnitSalePrice";
+                ws.Cell(row, 8).Value = "LineNetTotal";
+                ws.Cell(row, 9).Value = "BatchNo";
+                ws.Cell(row, 10).Value = "Expiry";
+                ws.Cell(row, 11).Value = "Status";
 
-                ws.Range(row, 1, row, 10).Style.Font.Bold = true;
+                ws.Range(row, 1, row, 11).Style.Font.Bold = true;
 
                 // البيانات
                 foreach (var l in data)
@@ -493,15 +496,16 @@ namespace ERP.Controllers
                     row++;
 
                     ws.Cell(row, 1).Value = l.SRId;
-                    ws.Cell(row, 2).Value = l.LineNo;
-                    ws.Cell(row, 3).Value = l.ProdId;
-                    ws.Cell(row, 4).Value = l.Qty;
-                    ws.Cell(row, 5).Value = l.PriceRetail;
-                    ws.Cell(row, 6).Value = l.UnitSalePrice;
-                    ws.Cell(row, 7).Value = l.LineNetTotal;
-                    ws.Cell(row, 8).Value = l.BatchNo ?? "";
-                    ws.Cell(row, 9).Value = l.Expiry?.ToString("yyyy-MM-dd") ?? "";
-                    ws.Cell(row, 10).Value = l.SalesReturn?.Status ?? "";
+                    ws.Cell(row, 2).Value = l.SalesInvoiceId.HasValue ? l.SalesInvoiceId.Value.ToString() : "";
+                    ws.Cell(row, 3).Value = l.LineNo;
+                    ws.Cell(row, 4).Value = l.ProdId;
+                    ws.Cell(row, 5).Value = l.Qty;
+                    ws.Cell(row, 6).Value = l.PriceRetail;
+                    ws.Cell(row, 7).Value = l.UnitSalePrice;
+                    ws.Cell(row, 8).Value = l.LineNetTotal;
+                    ws.Cell(row, 9).Value = l.BatchNo ?? "";
+                    ws.Cell(row, 10).Value = l.Expiry?.ToString("yyyy-MM-dd") ?? "";
+                    ws.Cell(row, 11).Value = l.SalesReturn?.Status ?? "";
                 }
 
                 ws.Columns().AdjustToContents();

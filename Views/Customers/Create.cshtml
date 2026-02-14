@@ -46,21 +46,15 @@
             <span asp-validation-for="Address" class="text-danger"></span>
         </div>
 
-        @* ===== الربط الجغرافي: المحافظة / الحي / المنطقة ===== *@
+        @* ===== الربط الجغرافي: المحافظة / الحي / المنطقة (متسلسلة: حي حسب المحافظة، منطقة حسب الحي) ===== *@
         <div class="row">
             <div class="col-md-4 mb-3">
                 <label asp-for="GovernorateId" class="form-label"></label>
                 <select asp-for="GovernorateId"
-                        asp-items="ViewBag.Governorates"
-                        class="form-select form-select-sm">
-                    @if (Model?.GovernorateId == null)
-                    {
-                        <option value="" selected>-- اختر المحافظة --</option>
-                    }
-                    else
-                    {
-                        <option value="">-- اختر المحافظة --</option>
-                    }
+                        asp-items="ViewBag.GovernorateId"
+                        class="form-select form-select-sm"
+                        id="GovernorateId">
+                    <option value="">-- اختر المحافظة --</option>
                 </select>
                 <span asp-validation-for="GovernorateId" class="text-danger"></span>
             </div>
@@ -68,16 +62,10 @@
             <div class="col-md-4 mb-3">
                 <label asp-for="DistrictId" class="form-label"></label>
                 <select asp-for="DistrictId"
-                        asp-items="ViewBag.Districts"
-                        class="form-select form-select-sm">
-                    @if (Model?.DistrictId == null)
-                    {
-                        <option value="" selected>-- اختر الحي / المركز --</option>
-                    }
-                    else
-                    {
-                        <option value="">-- اختر الحي / المركز --</option>
-                    }
+                        asp-items="ViewBag.DistrictId"
+                        class="form-select form-select-sm"
+                        id="DistrictId">
+                    <option value="">-- اختر الحي / المركز --</option>
                 </select>
                 <span asp-validation-for="DistrictId" class="text-danger"></span>
             </div>
@@ -85,16 +73,10 @@
             <div class="col-md-4 mb-3">
                 <label asp-for="AreaId" class="form-label"></label>
                 <select asp-for="AreaId"
-                        asp-items="ViewBag.Areas"
-                        class="form-select form-select-sm">
-                    @if (Model?.AreaId == null)
-                    {
-                        <option value="" selected>-- اختر المنطقة --</option>
-                    }
-                    else
-                    {
-                        <option value="">-- اختر المنطقة --</option>
-                    }
+                        asp-items="ViewBag.AreaId"
+                        class="form-select form-select-sm"
+                        id="AreaId">
+                    <option value="">-- اختر المنطقة --</option>
                 </select>
                 <span asp-validation-for="AreaId" class="text-danger"></span>
             </div>
@@ -228,59 +210,81 @@
     }
 
     <script>
-        // دالة ربط نوع الطرف بالحساب المحاسبي الافتراضي
         document.addEventListener('DOMContentLoaded', function () {
-
-            // متغير: كومبو نوع الطرف (لاحظ نفس الـ id الموجود في الـ select فوق)
             const partySelect = document.getElementById('PartyCategorySelect');
+            const accountSelect = document.getElementById('AccountId');
+            const governorateSelect = document.getElementById('GovernorateId');
+            const districtSelect = document.getElementById('DistrictId');
+            const areaSelect = document.getElementById('AreaId');
 
-            // متغير: كومبو الحساب المحاسبي للعميل
-            const accountSelect = document.getElementById('AccountId'); // asp-for="AccountId" يولّد id = AccountId تلقائياً
-
-            // لو واحد من الكومبوهات مش موجود نخرج من غير ما نعمل حاجة
-            if (!partySelect || !accountSelect) {
-                return;
+            // ——— ربط نوع الطرف بالحساب المحاسبي الافتراضي ———
+            if (partySelect && accountSelect) {
+                partySelect.addEventListener('change', function () {
+                    const partyCategory = this.value;
+                    if (!partyCategory) {
+                        accountSelect.value = "";
+                        return;
+                    }
+                    const url = '@Url.Action("GetDefaultAccountForParty", "Customers")'
+                        + '?partyCategory=' + encodeURIComponent(partyCategory);
+                    fetch(url)
+                        .then(response => response.ok ? response.json() : null)
+                        .then(data => {
+                            if (!data || !data.success) return;
+                            const accountId = data.accountId;
+                            accountSelect.value = accountId ? accountId.toString() : "";
+                        })
+                        .catch(err => console.error('Error loading default account:', err));
+                });
             }
 
-            // حدث: عند تغيير نوع الطرف
-            partySelect.addEventListener('change', function () {
+            // ——— تعبئة متسلسلة: المحافظة → الحي → المنطقة ———
+            if (governorateSelect && districtSelect && areaSelect) {
+                const districtPlaceholder = '-- اختر الحي / المركز --';
+                const areaPlaceholder = '-- اختر المنطقة --';
 
-                // متغير: قيمة نوع الطرف المختار (Customer / Supplier / ...)
-                const partyCategory = this.value;
-
-                // لو الاختيار فاضي نرجّع الحساب المحاسبي لحالة "بدون ربط"
-                if (!partyCategory) {
-                    accountSelect.value = "";
-                    return;
+                function fillDistrictOptions(govId) {
+                    districtSelect.innerHTML = '<option value="">' + districtPlaceholder + '</option>';
+                    areaSelect.innerHTML = '<option value="">' + areaPlaceholder + '</option>';
+                    if (!govId) return;
+                    const url = '@Url.Action("GetDistrictsByGovernorate", "Customers")' + '?governorateId=' + encodeURIComponent(govId);
+                    fetch(url)
+                        .then(r => r.ok ? r.json() : [])
+                        .then(arr => {
+                            (arr || []).forEach(function (d) {
+                                const opt = document.createElement('option');
+                                opt.value = d.id;
+                                opt.textContent = d.name;
+                                districtSelect.appendChild(opt);
+                            });
+                        })
+                        .catch(err => console.error('Error loading districts:', err));
                 }
 
-                // نكوّن رابط استدعاء الأكشن GetDefaultAccountForParty في CustomersController
-                const url = '@Url.Action("GetDefaultAccountForParty", "Customers")'
-                    + '?partyCategory=' + encodeURIComponent(partyCategory);
+                function fillAreaOptions(distId) {
+                    areaSelect.innerHTML = '<option value="">' + areaPlaceholder + '</option>';
+                    if (!distId) return;
+                    const url = '@Url.Action("GetAreasByDistrict", "Customers")' + '?districtId=' + encodeURIComponent(distId);
+                    fetch(url)
+                        .then(r => r.ok ? r.json() : [])
+                        .then(arr => {
+                            (arr || []).forEach(function (a) {
+                                const opt = document.createElement('option');
+                                opt.value = a.id;
+                                opt.textContent = a.name;
+                                areaSelect.appendChild(opt);
+                            });
+                        })
+                        .catch(err => console.error('Error loading areas:', err));
+                }
 
-                // استدعاء السيرفر للحصول على رقم الحساب الافتراضي
-                fetch(url)
-                    .then(response => response.ok ? response.json() : null)
-                    .then(data => {
-                        // لو حصل خطأ أو الاستجابة غير صحيحة نخرج بهدوء
-                        if (!data || !data.success) {
-                            return;
-                        }
-
-                        // متغير: رقم الحساب الافتراضي الراجع من السيرفر
-                        const accountId = data.accountId;
-
-                        // لو مفيش حساب افتراضي لنوع الطرف ده نخلي الكومبو فاضي
-                        if (!accountId) {
-                            accountSelect.value = "";
-                            return;
-                        }
-
-                        // تعيين قيمة الحساب في الكومبو (كود الحساب من جدول Accounts)
-                        accountSelect.value = accountId.toString();
-                    })
-                    .catch(error => console.error('Error loading default account:', error));
-            });
+                governorateSelect.addEventListener('change', function () {
+                    fillDistrictOptions(this.value || null);
+                });
+                districtSelect.addEventListener('change', function () {
+                    fillAreaOptions(this.value || null);
+                });
+            }
         });
     </script>
 }

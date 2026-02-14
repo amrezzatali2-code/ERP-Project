@@ -60,7 +60,7 @@
                             <option value="">-- اختر طريقة الدفع --</option>
                             @foreach (var pm in paymentMethods)
                             {
-                                <option value="@pm" selected="@(Model.PaymentMethod == pm ? "selected" : null)">
+                                <option value="@pm"@Html.Raw(Model.PaymentMethod == pm ? " selected" : "")>
                                     @pm
                                 </option>
                             }

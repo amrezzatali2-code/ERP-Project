@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<UserActivityLog>
@@ -107,24 +107,12 @@
                         <div class="col-sm-5">
                             <select name="searchBy"
                                     class="form-select form-select-sm">
-                                <option value="all" selected="@(searchBy == "all" ? "selected" : null)">
-                                    البحث في الكل
-                                </option>
-                                <option value="user" selected="@(searchBy == "user" ? "selected" : null)">
-                                    المستخدم
-                                </option>
-                                <option value="action" selected="@(searchBy == "action" ? "selected" : null)">
-                                    نوع العملية
-                                </option>
-                                <option value="entity" selected="@(searchBy == "entity" ? "selected" : null)">
-                                    اسم الكيان
-                                </option>
-                                <option value="description" selected="@(searchBy == "description" ? "selected" : null)">
-                                    الوصف
-                                </option>
-                                <option value="id" selected="@(searchBy == "id" ? "selected" : null)">
-                                    رقم السجل
-                                </option>
+                                <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
+                                <option value="user"@Html.Raw(searchBy == "user" ? " selected" : "")>المستخدم</option>
+                                <option value="action"@Html.Raw(searchBy == "action" ? " selected" : "")>نوع العملية</option>
+                                <option value="entity"@Html.Raw(searchBy == "entity" ? " selected" : "")>اسم الكيان</option>
+                                <option value="description"@Html.Raw(searchBy == "description" ? " selected" : "")>الوصف</option>
+                                <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>رقم السجل</option>
                             </select>
                         </div>
 
@@ -451,10 +439,10 @@
                 class="form-select form-select-sm"
                 onchange="document.getElementById('PageInput').value = 1; this.form.submit();">
 
-            <option value="25" selected='@(ps == 25 ? "selected" : null)'>25</option>
-            <option value="50" selected='@(ps == 50 ? "selected" : null)'>50</option>
-            <option value="100" selected='@(ps == 100 ? "selected" : null)'>100</option>
-            <option value="200" selected='@(ps == 200 ? "selected" : null)'>200</option>
+            <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+            <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+            <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+            <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
 
         </select>
     </form>
@@ -505,8 +493,7 @@
     </ul>
 </nav>
 
-
-
+</div> @* نهاية container-fluid *@
 
 @* Modal فلترة التاريخ/الوقت *@
 <div class="modal fade no-print"

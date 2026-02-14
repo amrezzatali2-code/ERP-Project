@@ -1,64 +1,69 @@
-﻿@model ERP.Models.DebitNote
+@model ERP.Models.DebitNote
 
 @{
     ViewData["Title"] = "إشعار خصم";
 }
 
-<h2 class="mb-3" dir="rtl">
-    إشعار خصم — @Model.NoteNumber
-</h2>
-
-<div class="alert alert-info" dir="rtl">
-    هذه صفحة مؤقتة لعرض رأس إشعار الخصم فقط.
-    لاحقًا يمكن إضافة تفاصيل أخرى مثل حركة القيود المحاسبية المرتبطة بالإشعار.
-</div>
-
-<div class="row" dir="rtl">
-    <div class="col-md-8">
-
-        <table class="table table-bordered">
-            <tr>
-                <th>رقم الإشعار (داخلي)</th>
-                <td>@Model.DebitNoteId</td>
-            </tr>
-            <tr>
-                <th>رقم المستند</th>
-                <td>@Model.NoteNumber</td>
-            </tr>
-            <tr>
-                <th>تاريخ الإشعار</th>
-                <td>@Model.NoteDate.ToString("yyyy-MM-dd")</td>
-            </tr>
-            <tr>
-                <th>الطرف</th>
-                <td>@Model.Customer?.CustomerName</td>
-            </tr>
-            <tr>
-                <th>حساب الطرف</th>
-                <td>@Model.Account?.AccountName</td>
-            </tr>
-            <tr>
-                <th>الحساب المقابل</th>
-                <td>@Model.OffsetAccount?.AccountName</td>
-            </tr>
-            <tr>
-                <th>المبلغ</th>
-                <td>@Model.Amount.ToString("N2")</td>
-            </tr>
-            <tr>
-                <th>السبب</th>
-                <td>@Model.Reason</td>
-            </tr>
-            <tr>
-                <th>البيان</th>
-                <td>@Model.Description</td>
-            </tr>
-        </table>
-
-        <div class="d-flex justify-content-between mt-3">
-            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
-            <a asp-action="Edit" asp-route-id="@Model.DebitNoteId" class="btn btn-primary">تعديل الإشعار</a>
+<div class="container mt-3" dir="rtl">
+    <div class="card" style="max-width: 700px; margin:auto;">
+        <div class="card-header text-center">
+            <h4 class="mb-0">إشعار خصم — @Model.DebitNoteId</h4>
         </div>
+        <div class="card-body">
+            <div class="d-flex justify-content-between mb-3">
+                <div>
+                    <strong>رقم الإشعار:</strong> @Model.DebitNoteId<br />
+                    <strong>التاريخ:</strong> @Model.NoteDate.ToString("yyyy-MM-dd")
+                </div>
+                <div class="text-end">
+                    <strong>الطرف:</strong> @Model.Customer?.CustomerName<br />
+                    <strong>المبلغ:</strong> @Model.Amount.ToString("N2")
+                </div>
+            </div>
 
+            <hr />
+
+            <p><strong>إشعار خصم بقيمة:</strong> @Model.Amount.ToString("N2")</p>
+            <p><strong>على الطرف:</strong> @Model.Customer?.CustomerName</p>
+            <p><strong>حساب الطرف:</strong> @(Model.Account != null ? $"{Model.Account.AccountCode} - {Model.Account.AccountName}" : "-")</p>
+            @if (Model.OffsetAccount != null)
+            {
+                <p><strong>الحساب المقابل:</strong> @($"{Model.OffsetAccount.AccountCode} - {Model.OffsetAccount.AccountName}")</p>
+            }
+            @if (!string.IsNullOrEmpty(Model.Reason))
+            {
+                <p><strong>السبب:</strong> @Model.Reason</p>
+            }
+            @if (!string.IsNullOrEmpty(Model.Description))
+            {
+                <p><strong>البيان:</strong> @Model.Description</p>
+            }
+
+            <p class="mt-2">
+                <span class="badge @(Model.IsPosted ? "bg-success" : "bg-secondary")">
+                    @(Model.IsPosted ? "مرحّل" : "مسودة")
+                </span>
+            </p>
+
+            <hr />
+
+            <div class="row mt-4">
+                <div class="col text-center">
+                    <strong>المستلم</strong>
+                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
+                </div>
+                <div class="col text-center">
+                    <strong>المراجع</strong>
+                    <div style="height:60px;border-bottom:1px dashed #999;"></div>
+                </div>
+            </div>
+        </div>
+        <div class="card-footer d-flex justify-content-between">
+            <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
+            <div>
+                <a asp-action="Edit" asp-route-id="@Model.DebitNoteId" class="btn btn-primary btn-sm">تعديل</a>
+                <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();">طباعة</button>
+            </div>
+        </div>
     </div>
 </div>

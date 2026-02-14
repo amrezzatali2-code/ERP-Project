@@ -129,37 +129,37 @@
                                     class="form-select form-select-sm">
                                 @* الكل *@
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     الكل
                                 </option>
 
                                 @* البحث برقم المرتجع *@
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     رقم المرتجع
                                 </option>
 
                                 @* البحث برقم السطر *@
                                 <option value="line"
-                                        selected="@(searchBy == "line" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "line" ? " selected" : "")>
                                     رقم السطر
                                 </option>
 
                                 @* البحث بكود الصنف *@
                                 <option value="prod"
-                                        selected="@(searchBy == "prod" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "prod" ? " selected" : "")>
                                     كود الصنف
                                 </option>
 
                                 @* البحث بالتشغيلة *@
                                 <option value="batch"
-                                        selected="@(searchBy == "batch" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "batch" ? " selected" : "")>
                                     التشغيلة
                                 </option>
 
                                 @* البحث بالكمية *@
                                 <option value="qty"
-                                        selected="@(searchBy == "qty" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "qty" ? " selected" : "")>
                                     الكمية
                                 </option>
                             </select>
@@ -446,10 +446,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

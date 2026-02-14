@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<StockLedger>
@@ -122,107 +122,107 @@
                             <select name="searchBy"
                                     class="form-select form-select-sm">
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     الكل
                                 </option>
 
                                 <option value="entry"
-                                        selected="@(searchBy == "entry" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "entry" ? " selected" : "")>
                                     رقم القيد
                                 </option>
 
                                 <option value="trandate"
-                                        selected="@(searchBy == "trandate" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "trandate" ? " selected" : "")>
                                     تاريخ الحركة
                                 </option>
 
                                 <option value="warehouse"
-                                        selected="@(searchBy == "warehouse" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "warehouse" ? " selected" : "")>
                                     كود المخزن
                                 </option>
 
                                 <option value="product"
-                                        selected="@(searchBy == "product" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "product" ? " selected" : "")>
                                     كود الصنف
                                 </option>
 
                                 <option value="batch"
-                                        selected="@(searchBy == "batch" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "batch" ? " selected" : "")>
                                     رقم التشغيلة
                                 </option>
 
                                 <option value="expiry"
-                                        selected="@(searchBy == "expiry" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "expiry" ? " selected" : "")>
                                     تاريخ الصلاحية
                                 </option>
 
                                 <option value="qtyin"
-                                        selected="@(searchBy == "qtyin" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "qtyin" ? " selected" : "")>
                                     كمية داخلة
                                 </option>
 
                                 <option value="qtyout"
-                                        selected="@(searchBy == "qtyout" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "qtyout" ? " selected" : "")>
                                     كمية خارجة
                                 </option>
 
                                 <option value="unitcost"
-                                        selected="@(searchBy == "unitcost" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "unitcost" ? " selected" : "")>
                                     تكلفة الوحدة
                                 </option>
 
                                 <option value="rem"
-                                        selected="@(searchBy == "rem" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "rem" ? " selected" : "")>
                                     الكمية المتبقية من الدخلة
                                 </option>
 
                                 <option value="source"
-                                        selected="@(searchBy == "source" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "source" ? " selected" : "")>
                                     نوع الحركة
                                 </option>
 
                                 <option value="sourceid"
-                                        selected="@(searchBy == "sourceid" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "sourceid" ? " selected" : "")>
                                     رقم المستند
                                 </option>
 
                                 <option value="sourceline"
-                                        selected="@(searchBy == "sourceline" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "sourceline" ? " selected" : "")>
                                     رقم سطر المستند
                                 </option>
 
                                 <option value="movementgroup"
-                                        selected="@(searchBy == "movementgroup" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "movementgroup" ? " selected" : "")>
                                     رقم مجموعة الحركة
                                 </option>
 
                                 <option value="counterwh"
-                                        selected="@(searchBy == "counterwh" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "counterwh" ? " selected" : "")>
                                     المخزن المقابل
                                 </option>
 
                                 <option value="reason"
-                                        selected="@(searchBy == "reason" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "reason" ? " selected" : "")>
                                     سبب التسوية
                                 </option>
 
                                 <option value="note"
-                                        selected="@(searchBy == "note" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "note" ? " selected" : "")>
                                     ملاحظات
                                 </option>
 
                                 <option value="user"
-                                        selected="@(searchBy == "user" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "user" ? " selected" : "")>
                                     المستخدم
                                 </option>
 
                                 <option value="created"
-                                        selected="@(searchBy == "created" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "created" ? " selected" : "")>
                                     تاريخ الإنشاء
                                 </option>
 
                                 <option value="updated"
-                                        selected="@(searchBy == "updated" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "updated" ? " selected" : "")>
                                     تاريخ آخر تعديل
                                 </option>
                             </select>
@@ -557,10 +557,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

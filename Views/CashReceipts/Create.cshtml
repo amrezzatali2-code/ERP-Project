@@ -1,4 +1,4 @@
-@model ERP.Models.CashReceipt
+﻿@model ERP.Models.CashReceipt
 
 @{
     ViewData["Title"] = "إضافة إذن استلام نقدية";
@@ -9,18 +9,18 @@
     <h2 class="mb-3">إضافة إذن استلام نقدية</h2>
 
     @* عرض رسائل النجاح/الخطأ *@
-    @if (TempData["Success"] != null)
+    @if (TempData["CashReceiptSuccess"] != null)
     {
         <div class="alert alert-success alert-dismissible fade show" role="alert">
-            @TempData["Success"]
+            @TempData["CashReceiptSuccess"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
     
-    @if (TempData["Error"] != null)
+    @if (TempData["CashReceiptError"] != null)
     {
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            @TempData["Error"]
+            @TempData["CashReceiptError"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }

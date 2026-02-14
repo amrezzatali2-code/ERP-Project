@@ -111,6 +111,8 @@ namespace ERP.Controllers
                     ViewBag.ReturnStage = maxStage.Value;
             }
 
+            await FillPurchaseReturnNavAsync(id);
+
             return View("Show", model);
         }
 
@@ -387,11 +389,43 @@ namespace ERP.Controllers
             // تجهيز القوائم المنسدلة (الموردين + المخازن)
             await PopulateDropDownsAsync(model.CustomerId, model.WarehouseId);
 
-            // نستخدم نفس الـ View بتاع عرض المرتجع (مثلاً Show.cshtml)
-            // تأكد إن اسم الملف عندك "Show.cshtml" داخل Views/PurchaseReturns
+            await FillPurchaseReturnNavAsync(model.PRetId);
+
             return View("Show", model);
         }
 
+        /// <summary>
+        /// دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر) لمرتجع المشتريات.
+        /// </summary>
+        private async Task FillPurchaseReturnNavAsync(int currentId)
+        {
+            var minMax = await _context.PurchaseReturns
+                .AsNoTracking()
+                .GroupBy(_ => 1)
+                .Select(g => new { FirstId = g.Min(x => x.PRetId), LastId = g.Max(x => x.PRetId) })
+                .FirstOrDefaultAsync();
+
+            int? prevId = null, nextId = null;
+            if (currentId > 0)
+            {
+                prevId = await _context.PurchaseReturns.AsNoTracking()
+                    .Where(x => x.PRetId < currentId).OrderByDescending(x => x.PRetId)
+                    .Select(x => (int?)x.PRetId).FirstOrDefaultAsync();
+                nextId = await _context.PurchaseReturns.AsNoTracking()
+                    .Where(x => x.PRetId > currentId).OrderBy(x => x.PRetId)
+                    .Select(x => (int?)x.PRetId).FirstOrDefaultAsync();
+            }
+            else
+            {
+                prevId = minMax?.LastId;
+                nextId = minMax?.FirstId;
+            }
+
+            ViewBag.NavFirstId = minMax?.FirstId ?? 0;
+            ViewBag.NavLastId = minMax?.LastId ?? 0;
+            ViewBag.NavPrevId = prevId ?? 0;
+            ViewBag.NavNextId = nextId ?? 0;
+        }
 
         // =========================================================
         // Export — تصدير مرتجعات الشراء (CSV بسيط يفتح في Excel)
@@ -450,58 +484,197 @@ namespace ERP.Controllers
         }
 
         // =========================================================
-        // BulkDelete — حذف المرتجعات المحددة
-        // يستقبل مصفوفة من أرقام المرتجعات (PRetId)
+        // BulkDelete — حذف المرتجعات المحددة (حذف عميق مثل مرتجع البيع)
+        // عكس المخزون + StockFifoMap + عكس القيود + حذف الهيدر
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkDelete(int[] ids)
         {
-            // لو مفيش أى ID مبعوت
             if (ids == null || ids.Length == 0)
             {
                 TempData["Error"] = "لم يتم اختيار أى مرتجع للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
-            // جلب المرتجعات المطلوبة
-            var items = await _context.PurchaseReturns
-                                      .Where(pr => ids.Contains(pr.PRetId))
-                                      .ToListAsync();
+            var existingIds = await _context.PurchaseReturns
+                .Where(pr => ids.Contains(pr.PRetId))
+                .Select(pr => pr.PRetId)
+                .ToListAsync();
 
-            if (items.Count == 0)
+            if (existingIds.Count == 0)
             {
                 TempData["Error"] = "لم يتم العثور على المرتجعات المحددة.";
                 return RedirectToAction(nameof(Index));
             }
 
-            _context.PurchaseReturns.RemoveRange(items);
-            await _context.SaveChangesAsync();
+            int deletedCount = 0;
+            int failedCount = 0;
+            var failedIds = new List<int>();
 
-            TempData["Success"] = $"تم حذف {items.Count} من مرتجعات الشراء المحددة.";
+            foreach (var pretId in existingIds)
+            {
+                var result = await TryDeletePurchaseReturnDeepAsync(pretId);
+                if (result.Status == DeletePurchaseReturnStatus.Deleted)
+                    deletedCount++;
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(pretId);
+                }
+            }
+
+            if (deletedCount > 0)
+            {
+                TempData["Success"] = $"تم حذف {deletedCount} مرتجع شراء (مع تحديث المخزون وعكس الأثر المحاسبي).";
+                if (failedIds.Count > 0)
+                    TempData["Error"] = $"فشل حذف المرتجعات: {string.Join(", ", failedIds)}";
+            }
+            else
+                TempData["Error"] = failedIds.Count > 0
+                    ? $"تعذر حذف المرتجعات المحددة: {string.Join(", ", failedIds)}"
+                    : "لم يتم حذف أى مرتجع.";
+
             return RedirectToAction(nameof(Index));
         }
 
         // =========================================================
-        // DeleteAll — حذف جميع مرتجعات الشراء
+        // DeleteAll — حذف جميع مرتجعات الشراء (حذف عميق)
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            var all = await _context.PurchaseReturns.ToListAsync();
+            var allIds = await _context.PurchaseReturns.Select(pr => pr.PRetId).ToListAsync();
 
-            if (all.Count == 0)
+            if (allIds.Count == 0)
             {
                 TempData["Error"] = "لا توجد مرتجعات لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
-            _context.PurchaseReturns.RemoveRange(all);
-            await _context.SaveChangesAsync();
+            int deletedCount = 0;
+            int failedCount = 0;
+            var failedIds = new List<int>();
 
-            TempData["Success"] = "تم حذف جميع مرتجعات الشراء.";
+            foreach (var pretId in allIds)
+            {
+                var result = await TryDeletePurchaseReturnDeepAsync(pretId);
+                if (result.Status == DeletePurchaseReturnStatus.Deleted)
+                    deletedCount++;
+                else
+                {
+                    failedCount++;
+                    failedIds.Add(pretId);
+                }
+            }
+
+            if (deletedCount > 0)
+            {
+                TempData["Success"] = $"تم حذف {deletedCount} مرتجع شراء (مع تحديث المخزون وعكس الأثر المحاسبي).";
+                if (failedIds.Count > 0)
+                    TempData["Error"] = $"فشل حذف بعض المرتجعات: {string.Join(", ", failedIds)}";
+            }
+            else
+                TempData["Error"] = "لم يتم حذف أى مرتجع.";
+
             return RedirectToAction(nameof(Index));
+        }
+
+        // ============================================================================
+        // حذف عميق لمرتجع شراء واحد — مثل TryDeleteSalesReturnDeepAsync
+        // 1) إرجاع StockBatches (مرتجع الشراء = QtyOut، الحذف يزيد المخزون)
+        // 2) StockFifoMap 3) StockLedger 4) عكس القيود 5) حذف الهيدر
+        // ============================================================================
+        private async Task<DeletePurchaseReturnResult> TryDeletePurchaseReturnDeepAsync(int id)
+        {
+            var ret = await _context.PurchaseReturns.FirstOrDefaultAsync(x => x.PRetId == id);
+            if (ret == null)
+                return new DeletePurchaseReturnResult(DeletePurchaseReturnStatus.Failed, "المرتجع غير موجود.");
+
+            var lines = await _context.PurchaseReturnLines
+                .Where(l => l.PRetId == id)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            var allLedgers = await _context.StockLedger
+                .Where(x => x.SourceType == "PurchaseReturn" && x.SourceId == id)
+                .ToListAsync();
+
+            await using var tx = await _context.Database.BeginTransactionAsync();
+            try
+            {
+                // 1) إرجاع StockBatches (مرتجع الشراء كان QtyOut، الحذف يعيد الكمية)
+                foreach (var line in lines)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                    var expDate = line.Expiry?.Date;
+
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                    {
+                        var exp = expDate.Value.Date;
+                        var sbRow = await _context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == ret.WarehouseId &&
+                                x.ProdId == line.ProdId &&
+                                x.BatchNo == batchNo &&
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand += line.Qty;
+                            sbRow.UpdatedAt = DateTime.UtcNow;
+                            sbRow.Note = $"PR:{id} DeleteFromIndex (Line:{line.LineNo}) (+{line.Qty})";
+                        }
+                    }
+                }
+
+                // 2) حذف StockFifoMap المرتبط بحركات الخروج (مرتجع شراء = QtyOut)
+                var ledgerIds = allLedgers.Select(l => l.EntryId).ToList();
+                if (ledgerIds.Count > 0)
+                {
+                    var fifoMaps = await _context.Set<StockFifoMap>()
+                        .Where(f => ledgerIds.Contains(f.OutEntryId))
+                        .ToListAsync();
+                    if (fifoMaps.Count > 0)
+                        _context.Set<StockFifoMap>().RemoveRange(fifoMaps);
+                }
+
+                // 3) حذف StockLedger الخاص بالمرتجع
+                if (allLedgers.Count > 0)
+                    _context.StockLedger.RemoveRange(allLedgers);
+
+                // 4) عكس الأثر المحاسبي
+                await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                    LedgerSourceType.PurchaseReturn,
+                    id,
+                    postedBy: User?.Identity?.Name,
+                    reason: $"حذف مرتجع شراء من قائمة الهيدر PRetId={id}"
+                );
+
+                // 5) حذف الهيدر (Cascade يحذف السطور)
+                _context.PurchaseReturns.Remove(ret);
+
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                return new DeletePurchaseReturnResult(DeletePurchaseReturnStatus.Deleted, "تم الحذف.");
+            }
+            catch (Exception ex)
+            {
+                await tx.RollbackAsync();
+                return new DeletePurchaseReturnResult(DeletePurchaseReturnStatus.Failed, ex.Message);
+            }
+        }
+
+        private enum DeletePurchaseReturnStatus { Deleted = 1, Failed = 2 }
+
+        private sealed class DeletePurchaseReturnResult
+        {
+            public DeletePurchaseReturnStatus Status { get; }
+            public string? Message { get; }
+            public DeletePurchaseReturnResult(DeletePurchaseReturnStatus status, string? message) { Status = status; Message = message; }
         }
 
         // =========================================================
@@ -674,8 +847,9 @@ namespace ERP.Controllers
                     RefPILineNo = (dto.RefPILineNo ?? 0) > 0 ? dto.RefPILineNo : null
                 };
                 _context.PurchaseReturnLines.Add(line);
-                // الجدول يستخدم ProductProdId كـ FK للصنف؛ تعيينه حتى لا ينتج انتهاك FK
+                // تعيين الـ FK الظاهرة للعلاقات (ProductProdId + PurchaseReturnPRetId)
                 _context.Entry(line).Property("ProductProdId").CurrentValue = dto.ProdId;
+                _context.Entry(line).Property("PurchaseReturnPRetId").CurrentValue = dto.PRetId;
                 await _context.SaveChangesAsync();
 
                 var now = DateTime.UtcNow;
@@ -782,7 +956,7 @@ namespace ERP.Controllers
             {
                 var ret = await _context.PurchaseReturns.Include(pr => pr.Lines).FirstOrDefaultAsync(pr => pr.PRetId == dto.PRetId);
                 if (ret == null) { await tx.RollbackAsync(); return NotFound(new { ok = false, message = "المرتجع غير موجود." }); }
-                if (ret.IsPosted) { ret.IsPosted = false; ret.Status = "Draft"; ret.PostedAt = null; ret.PostedBy = null; await _context.SaveChangesAsync(); }
+                if (ret.IsPosted) { await tx.RollbackAsync(); return BadRequest(new { ok = false, message = "المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً." }); }
                 var lines = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).ToListAsync();
                 if (lines.Count == 0) { await tx.CommitAsync(); var header0 = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId); return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = new object[0], totals = new { itemsTotal = header0.ItemsTotal, discountTotal = header0.DiscountTotal, taxTotal = header0.TaxTotal, netTotal = header0.NetTotal } }); }
                 foreach (var line in lines)

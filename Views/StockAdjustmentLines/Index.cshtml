@@ -120,31 +120,31 @@
                                     class="form-select form-select-sm">
                                 @* البحث برقم السطر *@
                                 <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
                                     كود السطر
                                 </option>
 
                                 @* البحث برقم التسوية *@
                                 <option value="stock"
-                                        selected="@(searchBy == "stock" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "stock" ? " selected" : "")>
                                     رقم التسوية
                                 </option>
 
                                 @* البحث بكود الصنف *@
                                 <option value="product"
-                                        selected="@(searchBy == "product" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "product" ? " selected" : "")>
                                     كود الصنف
                                 </option>
 
                                 @* البحث بكود الباتش *@
                                 <option value="batch"
-                                        selected="@(searchBy == "batch" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "batch" ? " selected" : "")>
                                     كود التشغيلة
                                 </option>
 
                                 @* البحث بالملاحظات *@
                                 <option value="note"
-                                        selected="@(searchBy == "note" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "note" ? " selected" : "")>
                                     الملاحظات
                                 </option>
                             </select>
@@ -469,10 +469,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

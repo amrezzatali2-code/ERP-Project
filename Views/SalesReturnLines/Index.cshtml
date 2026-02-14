@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<SalesReturnLine>
@@ -137,37 +137,37 @@
                                     class="form-select form-select-sm">
                                 @* البحث في كل الأعمدة *@
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     الكل
                                 </option>
 
                                 @* رقم المرتجع *@
                                 <option value="srid"
-                                        selected="@(searchBy == "srid" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "srid" ? " selected" : "")>
                                     رقم المرتجع
                                 </option>
 
                                 @* رقم السطر *@
                                 <option value="lineno"
-                                        selected="@(searchBy == "lineno" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "lineno" ? " selected" : "")>
                                     رقم السطر
                                 </option>
 
                                 @* كود الصنف *@
                                 <option value="prod"
-                                        selected="@(searchBy == "prod" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "prod" ? " selected" : "")>
                                     كود الصنف
                                 </option>
 
                                 @* رقم التشغيلة *@
                                 <option value="batch"
-                                        selected="@(searchBy == "batch" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "batch" ? " selected" : "")>
                                     رقم التشغيلة
                                 </option>
 
                                 @* تاريخ الصلاحية *@
                                 <option value="expiry"
-                                        selected="@(searchBy == "expiry" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "expiry" ? " selected" : "")>
                                     تاريخ الصلاحية
                                 </option>
                             </select>
@@ -344,6 +344,7 @@
                     </th>
 
                     <th data-col="srid">@sortLink("SRId", "رقم المرتجع")</th>
+                    <th data-col="siid">@sortLink("SalesInvoiceId", "رقم فاتورة الصنف")</th>
                     <th data-col="lineno">@sortLink("LineNo", "رقم السطر")</th>
                     <th data-col="prod">@sortLink("ProdId", "كود الصنف")</th>
                     <th data-col="qty">@sortLink("Qty", "الكمية")</th>
@@ -357,14 +358,14 @@
                     <th class="text-nowrap no-print"
                         data-col="actions"
                         data-col-fixed="true"
-                        style="width:180px;"></th>
+                        style="width:80px;">عرض</th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">
+                        <td colspan="12" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -396,6 +397,7 @@
                             </td>
 
                             <td data-col="srid">@line.SRId</td>
+                            <td data-col="siid">@(line.SalesInvoiceId?.ToString() ?? "-")</td>
                             <td data-col="lineno">@line.LineNo</td>
                             <td data-col="prod">@line.ProdId</td>
                             <td data-col="qty">@line.Qty</td>
@@ -407,31 +409,13 @@
                             <td data-col="status">@status</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                                @* حذف سطر واحد — مسموح فقط لو الحالة Draft *@
-                                @if (canDelete)
-                                {
-                                    <form method="post"
-                                          asp-action="Delete"
-                                          asp-route-srId="@line.SRId"
-                                          asp-route-lineNo="@line.LineNo"
-                                          onsubmit="return confirm('حذف هذا السطر من مرتجع البيع؟');"
-                                          class="d-inline">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit"
-                                                class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                            حذف
-                                        </button>
-                                    </form>
-                                }
-                                else
-                                {
-                                    <button type="button"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                            disabled
-                                            title="لا يمكن حذف سطر من مرتجع حالته ليست Draft">
-                                        حذف
-                                    </button>
-                                }
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@(Url.Action("Edit", "SalesReturns", new { id = line.SRId }))?frame=1"
+                                   data-tab-id="sr-show-tab"
+                                   data-tab-title="مرتجع مبيعات"
+                                   data-url="@(Url.Action("Edit", "SalesReturns", new { id = line.SRId }))?frame=1">
+                                    عرض
+                                </a>
                             </td>
                         </tr>
                     }
@@ -481,10 +465,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>

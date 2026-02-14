@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Mvc.Rendering
+﻿@using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.SalesReturn
 
 @{
@@ -1144,6 +1144,9 @@
                     invoiceQtyDisplay.value = '';
                     returnBatchDisplay.value = '';
                     returnExpiryDisplay.value = '';
+                    // مثل المبيعات: فوكس على حقل اسم/اختيار الصنف بعد الإضافة
+                    itemSelect.focus();
+                    itemSelect.click();
                 } catch (e) {
                     console.error(e);
                     alert('حدث خطأ أثناء إضافة السطر.');
@@ -1214,9 +1217,12 @@
                         if (statusEl && data.status !== undefined) {
                             statusEl.value = getReturnStatusDisplay(data.status);
                         }
-                        alert('تم حفظ المرتجع بنجاح. رقم المرتجع: ' + newId);
+                        // مثل فاتورة المبيعات: بدون رسالة تنبيه، فوكس على حقل الصنف مباشرة
                         var prodSelect = document.getElementById('InvoiceItemSelect');
-                        if (prodSelect) { prodSelect.focus(); prodSelect.click(); }
+                        if (prodSelect) {
+                            prodSelect.focus();
+                            prodSelect.click();
+                        }
                     } catch (err) {
                         console.error(err);
                         alert('تعذر الاتصال بالخادم لحفظ المرتجع.');

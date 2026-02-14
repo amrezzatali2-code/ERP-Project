@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<CreditNote>
@@ -115,36 +115,36 @@
                             <select name="searchBy"
                                     class="form-select form-select-sm">
                                 <option value="all"
-                                        selected="@(searchBy == "all" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
                                     البحث في الكل
                                 </option>
-                                <option value="noteNumber"
-                                        selected="@(searchBy == "noteNumber" ? "selected" : null)">
+                                <option value="number"
+                                       @Html.Raw(searchBy == "number" ? " selected" : "")>
                                     رقم المستند
                                 </option>
+                                <option value="id"
+                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
+                                    رقم الإشعار
+                                </option>
                                 <option value="customer"
-                                        selected="@(searchBy == "customer" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "customer" ? " selected" : "")>
                                     اسم الطرف
                                 </option>
                                 <option value="account"
-                                        selected="@(searchBy == "account" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "account" ? " selected" : "")>
                                     حساب الطرف
                                 </option>
                                 <option value="offset"
-                                        selected="@(searchBy == "offset" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "offset" ? " selected" : "")>
                                     الحساب المقابل
                                 </option>
                                 <option value="reason"
-                                        selected="@(searchBy == "reason" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "reason" ? " selected" : "")>
                                     سبب الإشعار
                                 </option>
                                 <option value="desc"
-                                        selected="@(searchBy == "desc" ? "selected" : null)">
+                                       @Html.Raw(searchBy == "desc" ? " selected" : "")>
                                     البيان
-                                </option>
-                                <option value="id"
-                                        selected="@(searchBy == "id" ? "selected" : null)">
-                                    رقم الإشعار
                                 </option>
                             </select>
                         </div>
@@ -342,7 +342,7 @@
                     </th>
 
                     <th data-col="id">@sortLink("CreditNoteId", "رقم الإشعار")</th>
-                    <th data-col="number">@sortLink("NoteNumber", "رقم المستند")</th>
+                    <th data-col="number">@sortLink("CreditNoteId", "رقم المستند")</th>
                     <th data-col="date">@sortLink("NoteDate", "تاريخ الإشعار")</th>
                     <th data-col="customer">@sortLink("CustomerName", "الطرف")</th>
                     <th data-col="account">@sortLink("AccountName", "حساب الطرف")</th>
@@ -395,7 +395,7 @@
                             </td>
 
                             <td data-col="id">@c.CreditNoteId</td>
-                            <td data-col="number">@c.NoteNumber</td>
+                            <td data-col="number">@c.CreditNoteId</td>
                             <td data-col="date">@c.NoteDate.ToString("yyyy-MM-dd")</td>
                             <td data-col="customer">@c.Customer?.CustomerName</td>
                             <td data-col="account">@c.Account?.AccountName</td>
@@ -458,10 +458,10 @@
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
-                <option value="25" selected="@(ps == 25 ? "selected" : null)">25</option>
-                <option value="50" selected="@(ps == 50 ? "selected" : null)">50</option>
-                <option value="100" selected="@(ps == 100 ? "selected" : null)">100</option>
-                <option value="200" selected="@(ps == 200 ? "selected" : null)">200</option>
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
     </div>
