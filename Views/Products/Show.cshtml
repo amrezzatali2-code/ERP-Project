@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Product?
+@model ERP.Models.Product?
 
 @using Microsoft.AspNetCore.Mvc.Rendering
 @using System.Text.Json
@@ -153,8 +153,8 @@
     }
     
     .stat-card {
-        flex: 1 1 calc(14.28% - 0.5rem); /* 7 كروت في الصف - 14.28% لكل واحد */
-        min-width: 100px;
+        flex: 1 1 calc(12.5% - 0.5rem); /* 8 كروت في الصف */
+        min-width: 90px;
     }
     
     @@media (max-width: 1200px) {
@@ -329,8 +329,18 @@
             <div class="stat-card">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">المرتجعات</div>
-                        <div class="compact-stat text-danger" style="font-size: 0.95rem;">@(totalQtyReturned + totalQtyPurchaseReturned)</div>
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات البيع</div>
+                        <div class="compact-stat text-success" style="font-size: 0.95rem;">@totalQtyReturned</div>
+                        <div class="compact-label text-muted" style="font-size: 0.6rem;">@(((decimal)totalAmountReturned).ToString("N2"))</div>
+                    </div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات الشراء</div>
+                        <div class="compact-stat text-primary" style="font-size: 0.95rem;">@totalQtyPurchaseReturned</div>
+                        <div class="compact-label text-muted" style="font-size: 0.6rem;">@(((decimal)totalAmountPurchaseReturned).ToString("N2"))</div>
                     </div>
                 </div>
             </div>
@@ -862,23 +872,26 @@
                     new Chart(ctx2, {
                         type: 'bar',
                         data: {
-                            labels: ['المبيعات', 'المشتريات', 'المرتجعات'],
+                            labels: ['المبيعات', 'المشتريات', 'مرتجعات البيع', 'مرتجعات الشراء'],
                             datasets: [{
                                 label: 'المبلغ',
                                 data: [
                                     @((decimal)totalAmountSold),
                                     @((decimal)totalAmountPurchased),
-                                    @((decimal)(totalAmountReturned + totalAmountPurchaseReturned))
+                                    @((decimal)totalAmountReturned),
+                                    @((decimal)totalAmountPurchaseReturned)
                                 ],
                                 backgroundColor: [
                                     'rgba(40, 167, 69, 0.7)',
                                     'rgba(0, 123, 255, 0.7)',
-                                    'rgba(220, 53, 69, 0.7)'
+                                    'rgba(40, 167, 69, 0.5)',
+                                    'rgba(0, 123, 255, 0.5)'
                                 ],
                                 borderColor: [
                                     'rgb(40, 167, 69)',
                                     'rgb(0, 123, 255)',
-                                    'rgb(220, 53, 69)'
+                                    'rgb(40, 167, 69)',
+                                    'rgb(0, 123, 255)'
                                 ],
                                 borderWidth: 1
                             }]

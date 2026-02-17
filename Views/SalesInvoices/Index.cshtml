@@ -1,4 +1,4 @@
-﻿@* Views/SalesInvoices/Index.cshtml — قائمة فواتير المبيعات بنفس نموذج المحافظات *@
+@* Views/SalesInvoices/Index.cshtml — قائمة فواتير المبيعات بنفس نموذج المحافظات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesInvoice>
@@ -376,11 +376,17 @@
                                 </a>
 
 
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@si.SIId">
-                                    حذف
-                                </a>
+                                <form asp-action="Delete"
+                                      asp-controller="SalesInvoices"
+                                      asp-route-id="@si.SIId"
+                                      method="post"
+                                      class="d-inline"
+                                      onsubmit="return confirm('تأكيد حذف فاتورة المبيعات رقم @si.SIId ؟');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">
+                                        حذف
+                                    </button>
+                                </form>
                             </td>
 
 

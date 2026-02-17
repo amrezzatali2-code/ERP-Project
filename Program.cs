@@ -68,6 +68,7 @@ namespace ERP
 
             builder.Services.AddScoped<ILedgerPostingService, LedgerPostingService>();
             builder.Services.AddScoped<ERP.Services.StockAnalysisService>();
+            builder.Services.AddScoped<IFullReturnService, FullReturnService>();
 
 
             // متغير: نظام الصلاحيات (حالياً الأساس فقط، بدون Policies خاصة)

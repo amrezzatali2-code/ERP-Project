@@ -757,8 +757,67 @@ namespace ERP.Controllers
             if (toExclusive.HasValue) purchasesQ = purchasesQ.Where(x => x.PIDate < toExclusive.Value);
 
             // =========================================================
-            // 8) إجمالي المرتجعات (مرتجعات البيع + مرتجعات الشراء) للعميل/المورد
+            // 8) إجمالي المرتجعات (مرتجعات البيع + مرتجعات الشراء) من LedgerEntries
+            // - مرتجع البيع: LineNo 2 = دائن العميل (يزيد رصيده / يقلل دينه)
+            // - مرتجع الشراء: LineNo 1 = مدين العميل (يقلل رصيده / يقلل ديوننا له)
+            // ✅ استثناء المرتجعات المعكوسة (التي لها قيود 9001/9002)
             // =========================================================
+            var reversedSalesReturnIds = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.SourceType == LedgerSourceType.SalesReturn &&
+                    e.LineNo >= 9000 &&
+                    e.SourceId.HasValue)
+                .Select(e => e.SourceId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var reversedPurchaseReturnIds = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.SourceType == LedgerSourceType.PurchaseReturn &&
+                    e.LineNo >= 9000 &&
+                    e.SourceId.HasValue)
+                .Select(e => e.SourceId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var salesReturnsLedgerEntries = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.CustomerId == customer.CustomerId &&
+                    e.SourceType == LedgerSourceType.SalesReturn &&
+                    e.LineNo == 2 &&
+                    e.PostVersion > 0 &&
+                    e.SourceId.HasValue &&
+                    !reversedSalesReturnIds.Contains(e.SourceId.Value))
+                .Where(e => !from.HasValue || e.EntryDate >= from.Value)
+                .Where(e => !toExclusive.HasValue || e.EntryDate < toExclusive.Value)
+                .ToListAsync();
+
+            decimal totalSalesReturns = salesReturnsLedgerEntries
+                .GroupBy(e => e.SourceId!.Value)
+                .Select(g => g.OrderByDescending(x => x.PostVersion).First())
+                .Sum(e => e.Credit);
+
+            var purchaseReturnsLedgerEntries = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e =>
+                    e.CustomerId == customer.CustomerId &&
+                    e.SourceType == LedgerSourceType.PurchaseReturn &&
+                    e.LineNo == 1 &&
+                    e.PostVersion > 0 &&
+                    e.SourceId.HasValue &&
+                    !reversedPurchaseReturnIds.Contains(e.SourceId.Value))
+                .Where(e => !from.HasValue || e.EntryDate >= from.Value)
+                .Where(e => !toExclusive.HasValue || e.EntryDate < toExclusive.Value)
+                .ToListAsync();
+
+            decimal totalPurchaseReturns = purchaseReturnsLedgerEntries
+                .GroupBy(e => e.SourceId!.Value)
+                .Select(g => g.OrderByDescending(x => x.PostVersion).First())
+                .Sum(e => e.Debit);
+
             var salesReturnsQ = _context.SalesReturns
                 .AsNoTracking()
                 .Where(sr => sr.CustomerId == customer.CustomerId);
@@ -770,10 +829,6 @@ namespace ERP.Controllers
                 .Where(pr => pr.CustomerId == customer.CustomerId);
             if (from.HasValue) purchaseReturnsQ = purchaseReturnsQ.Where(pr => pr.PRetDate >= from.Value);
             if (toExclusive.HasValue) purchaseReturnsQ = purchaseReturnsQ.Where(pr => pr.PRetDate < toExclusive.Value);
-
-            decimal totalSalesReturns = await salesReturnsQ.SumAsync(sr => (decimal?)sr.NetTotal) ?? 0m;
-            decimal totalPurchaseReturns = await purchaseReturnsQ.SumAsync(pr => (decimal?)pr.NetTotal) ?? 0m;
-            decimal totalReturns = totalSalesReturns + totalPurchaseReturns;
 
             // =========================================================
             // 9) عدد الفواتير + آخر تاريخ حركة (داخل نفس فترة البحث)
@@ -931,7 +986,8 @@ namespace ERP.Controllers
             // =========================================================
             ViewBag.TotalSales = totalSales;
             ViewBag.TotalPurchases = totalPurchases;
-            ViewBag.TotalReturns = totalReturns;
+            ViewBag.TotalSalesReturns = totalSalesReturns;
+            ViewBag.TotalPurchaseReturns = totalPurchaseReturns;
             ViewBag.InvoiceCount = invoiceCount;
             ViewBag.LastTransactionDate = lastTransactionDate;
             ViewBag.SalesInvoicesList = salesInvoicesList;

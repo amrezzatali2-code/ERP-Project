@@ -1,6 +1,6 @@
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Infrastructure;                  // كلاس PagedResult + ApplySearchSort
-using ERP.Models;                          // الموديل StockAdjustment
+using ERP.Models;                          // الموديل StockAdjustment, Batch
 using ERP.Services;                        // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;  // SelectList
@@ -123,7 +123,7 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null)
         {
-            // بناء الاستعلام طبقاً للفلاتر
+            // بناء الاستعلام طبقاً للفلاتر + تضمين السطور لعرض معلومات التسوية
             var q = BuildAdjustmentsQuery(
                 search,
                 searchBy,
@@ -133,7 +133,9 @@ namespace ERP.Controllers
                 toCode,
                 useDateRange,
                 fromDate,
-                toDate);
+                toDate)
+                .Include(a => a.Lines)
+                .ThenInclude(l => l.Product);
 
             // تقسيم الصفحات
             var model = await PagedResult<StockAdjustment>.CreateAsync(q, page, pageSize);
@@ -660,6 +662,90 @@ namespace ERP.Controllers
         }
 
         // =========================
+        // GetStockAdjustmentProductInfo — جلب بيانات الصنف للتسوية (مثل فاتورة البيع)
+        // - الكمية قبل من StockBatch (حسب الصنف + المخزن + التشغيلة + الصلاحية)
+        // - التكلفة من متوسط StockLedger أو من Batch
+        // - التشغيلات المتاحة للمخزن
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> GetStockAdjustmentProductInfo(int prodId, int warehouseId, string? batchNo, string? expiry)
+        {
+            if (prodId <= 0 || warehouseId <= 0)
+                return Json(new { ok = false, message = "بيانات غير صحيحة." });
+
+            var product = await _context.Products
+                .AsNoTracking()
+                .Where(p => p.ProdId == prodId)
+                .Select(p => new { p.ProdId, p.ProdName, p.PriceRetail })
+                .FirstOrDefaultAsync();
+
+            if (product == null)
+                return Json(new { ok = false, message = "الصنف غير موجود." });
+
+            int qtyBefore = 0;
+            decimal costPerUnit = 0m;
+            string? firstBatchNo = null;
+            string? firstExpiry = null;
+
+            var stockQuery = _context.StockBatches
+                .AsNoTracking()
+                .Where(sb => sb.ProdId == prodId && sb.WarehouseId == warehouseId && sb.QtyOnHand > 0);
+
+            if (!string.IsNullOrWhiteSpace(batchNo) && !string.IsNullOrWhiteSpace(expiry) && DateTime.TryParse(expiry, out var expiryDate))
+            {
+                var sb = await stockQuery
+                    .Where(sb => sb.BatchNo.Trim() == batchNo.Trim() && sb.Expiry.HasValue && sb.Expiry.Value.Date == expiryDate.Date)
+                    .FirstOrDefaultAsync();
+                if (sb != null)
+                {
+                    qtyBefore = sb.QtyOnHand;
+                    firstBatchNo = sb.BatchNo;
+                    firstExpiry = sb.Expiry?.ToString("yyyy-MM-dd");
+                }
+                costPerUnit = await _context.StockLedger
+                    .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0)
+                    .AverageAsync(sl => (decimal?)sl.UnitCost) ?? 0m;
+            }
+            else
+            {
+                qtyBefore = await stockQuery.SumAsync(sb => sb.QtyOnHand);
+                var firstStock = await stockQuery
+                    .OrderBy(sb => sb.Expiry)
+                    .ThenBy(sb => sb.BatchNo)
+                    .Select(sb => new { sb.BatchNo, sb.Expiry })
+                    .FirstOrDefaultAsync();
+                if (firstStock != null)
+                {
+                    firstBatchNo = firstStock.BatchNo;
+                    firstExpiry = firstStock.Expiry?.ToString("yyyy-MM-dd");
+                }
+                costPerUnit = await _context.StockLedger
+                    .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0)
+                    .AverageAsync(sl => (decimal?)sl.UnitCost) ?? 0m;
+            }
+
+            var batches = await (
+                from sb in _context.StockBatches.AsNoTracking()
+                where sb.ProdId == prodId && sb.WarehouseId == warehouseId && sb.QtyOnHand > 0
+                orderby sb.Expiry, sb.BatchNo
+                select new { batchNo = sb.BatchNo, expiry = sb.Expiry, expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("yyyy-MM-dd") : "", qty = sb.QtyOnHand }
+            ).ToListAsync();
+
+            return Json(new
+            {
+                ok = true,
+                prodId = product.ProdId,
+                prodName = product.ProdName,
+                priceRetail = product.PriceRetail,
+                qtyBefore,
+                costPerUnit,
+                firstBatchNo = firstBatchNo ?? "",
+                firstExpiry = firstExpiry ?? "",
+                batches
+            });
+        }
+
+        // =========================
         // AddLineJson — إضافة سطر للتسوية (JSON API)
         // =========================
         [HttpPost]
@@ -697,35 +783,101 @@ namespace ERP.Controllers
                 costDiff = qtyDiff * dto.CostPerUnit.Value;
             }
 
-            // البحث عن Batch إذا كان موجوداً
+            // البحث عن أو إنشاء Batch (ProdId + BatchNo + Expiry)
             int? batchId = dto.BatchId;
             if (!batchId.HasValue && !string.IsNullOrWhiteSpace(dto.BatchNo))
             {
-                var batch = await _context.Batches
-                    .FirstOrDefaultAsync(b => b.BatchNo.Trim() == dto.BatchNo.Trim() && b.ProdId == dto.ProductId);
+                DateTime? expiryDate = null;
+                if (!string.IsNullOrWhiteSpace(dto.Expiry) && DateTime.TryParse(dto.Expiry, out var ed))
+                    expiryDate = ed.Date;
+
+                var batch = expiryDate.HasValue
+                    ? await _context.Batches.FirstOrDefaultAsync(b =>
+                        b.BatchNo.Trim() == dto.BatchNo.Trim() &&
+                        b.ProdId == dto.ProductId &&
+                        b.Expiry.Date == expiryDate.Value.Date)
+                    : await _context.Batches
+                        .Where(b => b.BatchNo.Trim() == dto.BatchNo.Trim() && b.ProdId == dto.ProductId)
+                        .OrderBy(b => b.Expiry)
+                        .FirstOrDefaultAsync();
                 if (batch != null)
                 {
                     batchId = batch.BatchId;
                 }
+                else if (expiryDate.HasValue)
+                {
+                    var newBatch = new Batch
+                    {
+                        ProdId = dto.ProductId,
+                        BatchNo = dto.BatchNo.Trim(),
+                        Expiry = expiryDate.Value,
+                        UnitCostDefault = dto.CostPerUnit,
+                        PriceRetailBatch = dto.PriceRetail,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.Batches.Add(newBatch);
+                    await _context.SaveChangesAsync();
+                    batchId = newBatch.BatchId;
+                }
             }
 
-            var line = new StockAdjustmentLine
+            // البحث عن سطر موجود لنفس الصنف والتشغيلة (تحديث بدل إضافة مكررة)
+            var existingLine = await _context.StockAdjustmentLines
+                .Include(l => l.Product)
+                .Include(l => l.Batch)
+                .FirstOrDefaultAsync(l =>
+                    l.StockAdjustmentId == dto.StockAdjustmentId &&
+                    l.ProductId == dto.ProductId &&
+                    (l.BatchId == batchId || (l.BatchId == null && batchId == null)));
+
+            bool isUpdate = existingLine != null;
+            StockAdjustmentLine line;
+
+            if (existingLine != null)
             {
-                StockAdjustmentId = dto.StockAdjustmentId,
-                ProductId = dto.ProductId,
-                BatchId = batchId,
-                QtyBefore = dto.QtyBefore,
-                QtyAfter = dto.QtyAfter,
-                QtyDiff = qtyDiff,
-                CostPerUnit = dto.CostPerUnit,
-                CostDiff = costDiff,
-                Note = dto.Note
-            };
+                existingLine.QtyBefore = dto.QtyBefore;
+                existingLine.QtyAfter = dto.QtyAfter;
+                existingLine.QtyDiff = qtyDiff;
+                existingLine.CostPerUnit = dto.CostPerUnit;
+                existingLine.CostDiff = costDiff;
+                existingLine.Note = dto.Note;
+                line = existingLine;
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                line = new StockAdjustmentLine
+                {
+                    StockAdjustmentId = dto.StockAdjustmentId,
+                    ProductId = dto.ProductId,
+                    BatchId = batchId,
+                    QtyBefore = dto.QtyBefore,
+                    QtyAfter = dto.QtyAfter,
+                    QtyDiff = qtyDiff,
+                    CostPerUnit = dto.CostPerUnit,
+                    CostDiff = costDiff,
+                    Note = dto.Note
+                };
+                _context.StockAdjustmentLines.Add(line);
+                await _context.SaveChangesAsync();
+            }
 
-            _context.StockAdjustmentLines.Add(line);
-            await _context.SaveChangesAsync();
-
-            return Json(new { ok = true, lineId = line.Id });
+            var product = await _context.Products.FindAsync(dto.ProductId);
+            var batchEntity = batchId.HasValue ? await _context.Batches.FindAsync(batchId.Value) : null;
+            return Json(new
+            {
+                ok = true,
+                lineId = line.Id,
+                isUpdate,
+                productName = product?.ProdName ?? $"صنف #{dto.ProductId}",
+                batchNo = batchEntity?.BatchNo ?? "-",
+                expiryDisplay = batchEntity?.Expiry.ToString("yyyy-MM-dd") ?? "-",
+                qtyBefore = line.QtyBefore,
+                qtyAfter = line.QtyAfter,
+                qtyDiff = line.QtyDiff,
+                costPerUnit = line.CostPerUnit,
+                costDiff = line.CostDiff
+            });
         }
 
         // =========================
@@ -855,6 +1007,8 @@ namespace ERP.Controllers
         public int StockAdjustmentId { get; set; }
         public int ProductId { get; set; }
         public string? BatchNo { get; set; }
+        public string? Expiry { get; set; }  // yyyy-MM-dd
+        public decimal? PriceRetail { get; set; }
         public int? BatchId { get; set; }
         public int QtyBefore { get; set; }
         public int QtyAfter { get; set; }

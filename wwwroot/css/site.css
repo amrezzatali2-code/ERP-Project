@@ -367,12 +367,20 @@ body {
         margin-bottom: 0;
     }
 
-/* تثبيت رأس الجدول */
+/* تثبيت رأس الجدول — يطبق على كل الجداول (حجم التعامل، حركة الصنف، وجميع القوائم) */
+.table-responsive thead th,
+.erp-table-wrapper thead th,
 .erp-table thead th {
-    position: sticky; /* الرأس يبقى ثابت */
-    top: 0; /* ملتصق بأعلى الـ wrapper */
-    z-index: 2; /* فوق الصفوف */
-    background-color: #f8f9fa; /* لون ثابت للهيدر */
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 2;
+    background-color: #f8f9fa !important;
+    box-shadow: 0 1px 0 0 #dee2e6;
+}
+
+/* توافق مع table-light في Bootstrap */
+.table-light th {
+    background-color: #f8f9fa !important;
 }
 
 /* تحسين شكل جدول ERP الموحّد */

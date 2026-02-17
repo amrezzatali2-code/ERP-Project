@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<PurchaseReturnLine>
@@ -350,14 +350,16 @@
                                id="selectAll"
                                class="form-check-input" />
                     </th>
-
                     <th data-col="pretId">@sortLink("PRetId", "رقم المرتجع")</th>
                     <th data-col="lineNo">@sortLink("LineNo", "رقم السطر")</th>
                     <th data-col="prodId">@sortLink("ProdId", "كود الصنف")</th>
+                    <th data-col="prodName">اسم الصنف</th>
+                    <th data-col="customerName">اسم العميل</th>
                     <th data-col="qty">@sortLink("Qty", "الكمية المرتجعة")</th>
                     <th data-col="priceRetail">@sortLink("PriceRetail", "سعر الجمهور")</th>
                     <th data-col="discount">@sortLink("PurchaseDiscountPct", "خصم الشراء %")</th>
                     <th data-col="unitCost">@sortLink("UnitCost", "تكلفة الوحدة")</th>
+                    <th data-col="lineTotal">إجمالي السطر</th>
                     <th data-col="batch">@sortLink("BatchNo", "التشغيلة")</th>
                     <th data-col="expiry">@sortLink("Expiry", "الصلاحية")</th>
                 </tr>
@@ -366,7 +368,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="10" class="text-center text-muted py-4">
+                        <td colspan="13" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -374,29 +376,30 @@
                 else
                 {
                     foreach (var l in Model.Items)
-                    {
-                        <tr>
+                {
+                    <tr>
                             <td class="text-nowrap no-print" data-col="actions">
-                                @* الشيك بوكس يحمل مفتاح مركب "PRetId:LineNo" *@
                                 <input type="checkbox"
-                                       class="form-check-input ms-2 row-select"
+                                       class="form-check-input row-select"
                                        value="@($"{l.PRetId}:{l.LineNo}")" />
-
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm ms-1"
-                                   asp-action="Show"
-                                   asp-route-pretId="@l.PRetId"
-                                   asp-route-lineNo="@l.LineNo">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm me-1 open-same-tab"
+                                   href="@(Url.Action("Edit", "PurchaseReturns", new { id = l.PRetId }))?frame=1"
+                                   data-tab-id="pr-show-tab"
+                                   data-tab-title="مرتجع مشتريات"
+                                   data-url="@(Url.Action("Edit", "PurchaseReturns", new { id = l.PRetId }))?frame=1">
                                     عرض
                                 </a>
                             </td>
-
                             <td data-col="pretId">@l.PRetId</td>
                             <td data-col="lineNo">@l.LineNo</td>
                             <td data-col="prodId">@l.ProdId</td>
+                            <td data-col="prodName">@(l.Product?.ProdName ?? "-")</td>
+                            <td data-col="customerName">@(l.PurchaseReturn?.Customer?.CustomerName ?? "-")</td>
                             <td data-col="qty">@l.Qty</td>
                             <td data-col="priceRetail">@l.PriceRetail.ToString("0.00")</td>
                             <td data-col="discount">@l.PurchaseDiscountPct.ToString("0.##")</td>
                             <td data-col="unitCost">@l.UnitCost.ToString("0.####")</td>
+                            <td data-col="lineTotal">@((l.Qty * l.UnitCost).ToString("0.00"))</td>
                             <td data-col="batch">@l.BatchNo</td>
                             <td data-col="expiry">
                                 @(l.Expiry.HasValue? l.Expiry.Value.ToString("yyyy-MM") : "")

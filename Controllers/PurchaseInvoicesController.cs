@@ -39,19 +39,19 @@ namespace ERP.Controllers
         private readonly DocumentTotalsService _docTotals;    // خدمة إجماليات المستندات
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
-
-
+        private readonly IFullReturnService _fullReturnService;
 
         public PurchaseInvoicesController(AppDbContext context,
                                           DocumentTotalsService docTotals,
-                                          IUserActivityLogger activityLogger,ILedgerPostingService ledgerPosting)
-                                       
+                                          IUserActivityLogger activityLogger,
+                                          ILedgerPostingService ledgerPosting,
+                                          IFullReturnService fullReturnService)
         {
             _context = context;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
-            _ledgerPostingService = ledgerPosting;     // ✅ متغير: خدمة الترحيل
-
+            _ledgerPostingService = ledgerPosting;
+            _fullReturnService = fullReturnService;
         }
 
 
@@ -1874,6 +1874,30 @@ namespace ERP.Controllers
             await FillPurchaseInvoiceNavAsync(invoice.PIId);
 
             // =========================================
+            // 4.5) فاتورة لها مرتجع بالكامل → تصحيح الحالة في DB والقائمة (مرحلة)
+            // =========================================
+            var hasFullReturn = await _context.PurchaseReturns.AnyAsync(pr => pr.RefPIId == id);
+            if (hasFullReturn && (invoice.Status == "مفتوحة للتعديل" || !invoice.IsPosted))
+            {
+                var lastStage = await _context.LedgerEntries
+                    .Where(e => e.SourceType == LedgerSourceType.PurchaseInvoice && e.SourceId == id && e.LineNo == 1 && e.PostVersion > 0)
+                    .MaxAsync(e => (int?)e.PostVersion) ?? 1;
+                var correctStatus = $"مرحلة {lastStage}";
+                invoice.Status = correctStatus;
+                invoice.IsPosted = true;
+
+                // تحديث قاعدة البيانات حتى تظهر الحالة الصحيحة في القائمة
+                var toFix = await _context.PurchaseInvoices.FirstOrDefaultAsync(p => p.PIId == id);
+                if (toFix != null)
+                {
+                    toFix.Status = correctStatus;
+                    toFix.IsPosted = true;
+                    toFix.PostedAt = toFix.PostedAt ?? DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
+
+            // =========================================
             // 5) عرض الـ View نفسه
             // - الـ View سيقرر ماذا يعرض بناءً على ViewBag.Fragment
             // =========================================
@@ -3018,9 +3042,31 @@ namespace ERP.Controllers
             }
         }
 
+        /// <summary>مرتجع فاتورة بالكامل: ينشئ مرتجع شراء من كل أصناف الفاتورة ويرحّله تلقائياً. يدعم Ajax مثل زر التحويل في طلب الشراء.</summary>
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> CreateFullReturn(int id)
+        {
+            bool isAjax =
+                string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+                || Request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
 
-
-
+            try
+            {
+                var (purchaseReturnId, message, invoiceReposted, invoiceStatus) = await _fullReturnService.CreateFullPurchaseReturnFromInvoiceAsync(id, User.Identity?.Name);
+                if (isAjax)
+                    return Ok(new { ok = true, message, purchaseReturnId, invoiceReposted, invoiceStatus });
+                TempData["Success"] = message;
+                return RedirectToAction("Edit", "PurchaseReturns", new { id = purchaseReturnId, frame = 1 });
+            }
+            catch (Exception ex)
+            {
+                if (isAjax)
+                    return BadRequest(new { ok = false, message = ex.Message });
+                TempData["Error"] = ex.Message;
+                return RedirectToAction("Show", new { id });
+            }
+        }
 
 
 
@@ -3065,6 +3111,17 @@ namespace ERP.Controllers
                 {
                     if (isAjax) return BadRequest(new { ok = false, message = "هذه الفاتورة ليست مُرحّلة، لا يوجد ما يمكن فتحه." });
                     TempData["Error"] = "هذه الفاتورة ليست مُرحّلة.";
+                    return RedirectToAction("Show", new { id = invoice.PIId });
+                }
+
+                // ================================
+                // 2.5) لا يمكن فتح فاتورة لها مرتجع بالكامل — تبقى مرحلة
+                // ================================
+                var hasFullReturn = await _context.PurchaseReturns.AnyAsync(pr => pr.RefPIId == id);
+                if (hasFullReturn)
+                {
+                    if (isAjax) return BadRequest(new { ok = false, message = "لا يمكن فتح الفاتورة: تم إنشاء مرتجع شراء من هذه الفاتورة. الفاتورة مغلقة." });
+                    TempData["Error"] = "لا يمكن فتح الفاتورة: تم إنشاء مرتجع شراء من هذه الفاتورة. الفاتورة مغلقة.";
                     return RedirectToAction("Show", new { id = invoice.PIId });
                 }
 

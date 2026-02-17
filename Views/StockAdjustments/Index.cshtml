@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.StockAdjustment>
 
@@ -314,16 +314,21 @@
                     <th data-col="warehouse">@sortLink("warehouse", "كود المخزن")</th>
                     <th data-col="reference">@sortLink("reference", "رقم مرجعي")</th>
                     <th data-col="reason">@sortLink("reason", "السبب")</th>
+                    <th data-col="products">اسم الصنف</th>
+                    <th data-col="qtyBefore" class="text-center">الكمية قبل</th>
+                    <th data-col="qtyAfter" class="text-center">الكمية بعد</th>
+                    <th data-col="costBefore" class="text-end">التكلفة قبل</th>
+                    <th data-col="costAfter" class="text-end">التكلفة بعد</th>
                     <th data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
 
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:220px;"></th>
+                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:200px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="8" class="text-center text-muted py-4">
+                        <td colspan="13" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -332,6 +337,19 @@
                 {
                     foreach (var a in Model.Items)
                     {
+                        var lines = a.Lines ?? Enumerable.Empty<ERP.Models.StockAdjustmentLine>();
+                        var totalQtyBefore = lines.Sum(l => l.QtyBefore);
+                        var totalQtyAfter = lines.Sum(l => l.QtyAfter);
+                        var totalCostBefore = lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0);
+                        var totalCostAfter = lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0);
+                        var productNames = lines
+                            .Select(l => l.Product?.ProdName ?? $"صنف #{l.ProductId}")
+                            .Where(n => !string.IsNullOrEmpty(n))
+                            .Distinct()
+                            .ToList();
+                        var productsDisplay = productNames.Count > 3
+                            ? string.Join("، ", productNames.Take(2)) + $" و{productNames.Count - 2} أصناف أخرى"
+                            : (productNames.Any() ? string.Join("، ", productNames) : "-");
                         <tr>
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
@@ -344,19 +362,20 @@
                             <td data-col="warehouse">@a.WarehouseId</td>
                             <td data-col="reference">@a.ReferenceNo</td>
                             <td data-col="reason">@a.Reason</td>
+                            <td data-col="products" style="max-width:180px;" title="@productsDisplay">@productsDisplay</td>
+                            <td data-col="qtyBefore" class="text-center">@totalQtyBefore</td>
+                            <td data-col="qtyAfter" class="text-center">@totalQtyAfter</td>
+                            <td data-col="costBefore" class="text-end">@totalCostBefore.ToString("N2")</td>
+                            <td data-col="costAfter" class="text-end">@totalCostAfter.ToString("N2")</td>
                             <td data-col="created">@a.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Show"
-                                   asp-route-id="@a.Id"
-                                   asp-route-frame="1">
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Show", "StockAdjustments", new { id = a.Id, frame = 1 })"
+                                   data-tab-id="stock-adjustment-create"
+                                   data-tab-title="تسوية جردية"
+                                   data-url="@Url.Action("Show", "StockAdjustments", new { id = a.Id, frame = 1 })">
                                     عرض
-                                </a>
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Details"
-                                   asp-route-id="@a.Id">
-                                    تفاصيل
                                 </a>
                                 <a class="btn btn-erp btn-erp-primary btn-erp-sm"
                                    asp-action="Edit"

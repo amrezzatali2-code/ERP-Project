@@ -1,4 +1,4 @@
-﻿@model ERP.Models.StockAdjustment
+@model ERP.Models.StockAdjustment
 
 @{
     ViewData["Title"] = Model.Id == 0
@@ -16,7 +16,8 @@
 
         .adjustment-header-card,
         .adjustment-lines-card,
-        .adjustment-add-card {
+        .adjustment-add-card,
+        .invoice-side-card {
             border-radius: 1rem;
             overflow: hidden;
         }
@@ -28,10 +29,32 @@
         }
 
         .adjustment-add-card .card-header,
-        .adjustment-lines-card .card-header {
+        .adjustment-lines-card .card-header,
+        .invoice-side-card .card-header {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
             color: #ffffff;
             padding: 0.55rem 1rem;
+        }
+
+        /* شريط الأزرار: مثل فاتورة المبيعات */
+        .invoice-actions-sticky {
+            position: sticky;
+            top: 58px;
+            z-index: 3000;
+            background: #ffffff;
+            border: 1px solid rgba(13,110,253,.12);
+            padding: 10px 10px;
+            border-radius: 14px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.05);
+        }
+
+        .invoice-side-card .btn-erp {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.6rem;
+        }
+
+        .invoice-side-card .btn-erp + .btn-erp {
+            margin-top: 0.25rem;
         }
 
         .erp-table-wrapper {
@@ -124,10 +147,11 @@
 
                         <hr class="my-1" />
 
-                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm w-100"
-                           asp-action="Show"
-                           asp-route-id="0"
-                           asp-route-frame="1">
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
+                           href="@Url.Action("Show", "StockAdjustments", new { id = 0, frame = 1 })"
+                           data-tab-id="stock-adjustment-create"
+                           data-tab-title="تسوية جردية"
+                           data-url="@Url.Action("Show", "StockAdjustments", new { id = 0, frame = 1 })">
                             ➕ تسوية جديدة
                         </a>
 
@@ -228,7 +252,7 @@
                                 <input type="number" id="ProdCodeInput" class="form-control form-control-sm text-center" placeholder="بحث بالكود..." data-lock-posted="1" />
                             </div>
 
-                            <div class="col-lg-4">
+                            <div class="col-lg-3">
                                 <label class="form-label form-label-sm">اسم الصنف</label>
                                 <input id="ProdNameInput" list="productsList" class="form-control form-control-sm" placeholder="اكتب اسم الصنف..." autocomplete="off" data-lock-posted="1" />
                                 <datalist id="productsList">
@@ -252,15 +276,20 @@
 
                             <div class="col-lg-2">
                                 <label class="form-label form-label-sm">التشغيلة</label>
-                                <input type="text" id="BatchNoInput" class="form-control form-control-sm text-center" placeholder="باتش" data-lock-posted="1" />
+                                <input type="text" id="BatchNoInput" class="form-control form-control-sm text-center" placeholder="باتش (قابل للتعديل)" data-lock-posted="1" />
                             </div>
 
                             <div class="col-lg-2">
+                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                <input type="date" id="ExpiryInput" class="form-control form-control-sm text-center" data-lock-posted="1" dir="ltr" style="text-align: left;" />
+                            </div>
+
+                            <div class="col-lg-1">
                                 <label class="form-label form-label-sm">الكمية قبل</label>
-                                <input type="number" id="QtyBeforeInput" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
+                                <input type="number" id="QtyBeforeInput" class="form-control form-control-sm text-center" value="0" readonly data-lock-posted="1" />
                             </div>
 
-                            <div class="col-lg-2">
+                            <div class="col-lg-1">
                                 <label class="form-label form-label-sm">الكمية بعد</label>
                                 <input type="number" id="QtyAfterInput" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
                             </div>
@@ -272,7 +301,12 @@
                                 <input type="number" id="CostPerUnitInput" class="form-control form-control-sm text-center" step="0.0001" data-lock-posted="1" />
                             </div>
 
-                            <div class="col-lg-8">
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">سعر الصنف</label>
+                                <input type="number" id="PriceRetailInput" class="form-control form-control-sm text-center" step="0.01" data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-6">
                                 <label class="form-label form-label-sm">ملاحظات السطر</label>
                                 <input type="text" id="LineNoteInput" class="form-control form-control-sm" data-lock-posted="1" />
                             </div>
@@ -299,6 +333,7 @@
                                         <th class="text-center">#</th>
                                         <th>اسم الصنف</th>
                                         <th class="text-center">التشغيلة</th>
+                                        <th class="text-center">الصلاحية</th>
                                         <th class="text-center">الكمية قبل</th>
                                         <th class="text-center">الكمية بعد</th>
                                         <th class="text-center">الفرق</th>
@@ -316,7 +351,8 @@
                                             <tr data-line-id="@line.Id">
                                                 <td class="text-center">@lineNo</td>
                                                 <td>@(line.Product?.ProdName ?? $"صنف #{line.ProductId}")</td>
-                                                <td class="text-center">@(line.BatchId?.ToString() ?? "-")</td>
+                                                <td class="text-center">@(line.Batch?.BatchNo ?? "-")</td>
+                                                <td class="text-center">@(line.Batch?.Expiry.ToString("yyyy-MM-dd") ?? "-")</td>
                                                 <td class="text-center">@line.QtyBefore</td>
                                                 <td class="text-center">@line.QtyAfter</td>
                                                 <td class="text-center">@line.QtyDiff</td>
@@ -332,7 +368,7 @@
                                     else
                                     {
                                         <tr>
-                                            <td colspan="9" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
+                                            <td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
                                         </tr>
                                     }
                                 </tbody>
@@ -353,12 +389,41 @@
             return form?.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
         }
 
-        // Product selection
+        // تحميل بيانات الصنف تلقائياً (مثل فاتورة البيع)
+        let busyLoadInfo = false;
+        async function loadProductInfo() {
+            const prodId = parseInt(document.getElementById('ProdId').value || '0', 10);
+            const warehouseId = parseInt(document.querySelector('[name="WarehouseId"]')?.value || '0', 10);
+            if (!prodId || prodId <= 0 || !warehouseId || warehouseId <= 0) return;
+            if (busyLoadInfo) return;
+            busyLoadInfo = true;
+            const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
+            const expiry = document.getElementById('ExpiryInput').value || '';
+            try {
+                const url = '@Url.Action("GetStockAdjustmentProductInfo", "StockAdjustments")'
+                    + '?prodId=' + encodeURIComponent(prodId)
+                    + '&warehouseId=' + encodeURIComponent(warehouseId)
+                    + (batchNo ? '&batchNo=' + encodeURIComponent(batchNo) : '')
+                    + (expiry ? '&expiry=' + encodeURIComponent(expiry) : '');
+                const r = await fetch(url, { method: 'GET' });
+                const data = await r.json();
+                if (data && data.ok) {
+                    document.getElementById('QtyBeforeInput').value = data.qtyBefore || 0;
+                    document.getElementById('CostPerUnitInput').value = data.costPerUnit || '';
+                    document.getElementById('PriceRetailInput').value = data.priceRetail || '';
+                    if (data.firstBatchNo && !document.getElementById('BatchNoInput').value) document.getElementById('BatchNoInput').value = data.firstBatchNo;
+                    if (data.firstExpiry && !document.getElementById('ExpiryInput').value) document.getElementById('ExpiryInput').value = data.firstExpiry;
+                }
+            } catch (e) { console.warn('GetStockAdjustmentProductInfo:', e); }
+            finally { busyLoadInfo = false; }
+        }
+
         document.getElementById('ProdNameInput')?.addEventListener('input', function() {
             const selectedOption = document.querySelector(`#productsList option[value="${this.value}"]`);
             if (selectedOption) {
                 document.getElementById('ProdId').value = selectedOption.getAttribute('data-id');
                 document.getElementById('ProdCodeInput').value = selectedOption.getAttribute('data-id');
+                loadProductInfo();
             }
         });
 
@@ -369,12 +434,71 @@
                 if (selectedOption) {
                     document.getElementById('ProdId').value = code;
                     document.getElementById('ProdNameInput').value = selectedOption.value;
+                    loadProductInfo();
                 }
             }
         });
 
+        document.getElementById('BatchNoInput')?.addEventListener('blur', loadProductInfo);
+        document.getElementById('ExpiryInput')?.addEventListener('change', loadProductInfo);
+        document.querySelector('[name="WarehouseId"]')?.addEventListener('change', function() {
+            if (document.getElementById('ProdId').value) loadProductInfo();
+        });
+
+        // دالة مسح حقول إضافة السطر وإعادة الفوكس لاسم الصنف
+        function clearAddLineFormAndFocus() {
+            document.getElementById('ProdId').value = '';
+            document.getElementById('ProdCodeInput').value = '';
+            document.getElementById('ProdNameInput').value = '';
+            document.getElementById('BatchNoInput').value = '';
+            document.getElementById('ExpiryInput').value = '';
+            document.getElementById('QtyBeforeInput').value = '0';
+            document.getElementById('QtyAfterInput').value = '0';
+            document.getElementById('CostPerUnitInput').value = '';
+            document.getElementById('PriceRetailInput').value = '';
+            document.getElementById('LineNoteInput').value = '';
+            const prodNameInput = document.getElementById('ProdNameInput');
+            prodNameInput?.focus();
+            prodNameInput?.select?.();
+        }
+
+        // دالة إضافة صف للجدول أو تحديثه
+        function upsertAdjustmentRow(result, lineNo) {
+            const tbody = document.getElementById('AdjustmentLinesTbody');
+            const placeholder = tbody.querySelector('tr td[colspan="10"]');
+            if (placeholder) placeholder.closest('tr').remove();
+
+            const existingRow = tbody.querySelector(`tr[data-line-id="${result.lineId}"]`);
+            const costStr = result.costPerUnit != null ? parseFloat(result.costPerUnit).toFixed(4) : '-';
+            const costDiffStr = result.costDiff != null ? parseFloat(result.costDiff).toFixed(2) : '-';
+            const rowHtml = `<tr data-line-id="${result.lineId}">
+                <td class="text-center">${lineNo}</td>
+                <td>${escapeHtml(result.productName)}</td>
+                <td class="text-center">${escapeHtml(result.batchNo)}</td>
+                <td class="text-center">${escapeHtml(result.expiryDisplay)}</td>
+                <td class="text-center">${result.qtyBefore}</td>
+                <td class="text-center">${result.qtyAfter}</td>
+                <td class="text-center">${result.qtyDiff}</td>
+                <td class="text-center">${costStr}</td>
+                <td class="text-center">${costDiffStr}</td>
+                <td class="text-center no-print">
+                    <button type="button" class="btn btn-sm btn-danger btn-delete-line" data-line-id="${result.lineId}" data-lock-posted="1">🗑️</button>
+                </td>
+            </tr>`;
+
+            if (existingRow) {
+                existingRow.outerHTML = rowHtml;
+            } else {
+                tbody.insertAdjacentHTML('beforeend', rowHtml);
+            }
+            if (tbody.querySelectorAll('tr').length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
+            }
+        }
+        function escapeHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
         // Add line
-        document.getElementById('btnAddAdjustmentLine')?.addEventListener('click', async function() {
+        async function doAddAdjustmentLine() {
             const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
             if (!adjustmentId || adjustmentId <= 0) {
                 alert('لا يمكن إضافة سطور قبل حفظ التسوية. اضغط "حفظ التسوية" أولاً.');
@@ -385,7 +509,9 @@
             const qtyBefore = parseInt(document.getElementById('QtyBeforeInput').value || '0', 10);
             const qtyAfter = parseInt(document.getElementById('QtyAfterInput').value || '0', 10);
             const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
+            const expiry = document.getElementById('ExpiryInput').value || '';
             const costPerUnit = parseFloat(document.getElementById('CostPerUnitInput').value || '0');
+            const priceRetail = parseFloat(document.getElementById('PriceRetailInput').value || '0');
             const note = document.getElementById('LineNoteInput').value?.trim() || '';
 
             if (!prodId || prodId <= 0) {
@@ -401,7 +527,9 @@
             const dto = {
                 stockAdjustmentId: adjustmentId,
                 productId: prodId,
-                batchId: batchNo ? parseInt(batchNo, 10) : null,
+                batchNo: batchNo || null,
+                expiry: expiry || null,
+                priceRetail: priceRetail || null,
                 qtyBefore: qtyBefore,
                 qtyAfter: qtyAfter,
                 costPerUnit: costPerUnit || null,
@@ -409,7 +537,8 @@
             };
 
             const token = getAntiForgeryToken();
-            this.disabled = true;
+            const btn = document.getElementById('btnAddAdjustmentLine');
+            btn.disabled = true;
 
             try {
                 const response = await fetch('@Url.Action("AddLineJson", "StockAdjustments")', {
@@ -429,7 +558,17 @@
 
                 const result = await response.json();
                 if (result.ok) {
-                    location.reload();
+                    const tbody = document.getElementById('AdjustmentLinesTbody');
+                    const currentRows = tbody.querySelectorAll('tr[data-line-id]');
+                    let lineNo;
+                    if (result.isUpdate) {
+                        const existingRow = tbody.querySelector(`tr[data-line-id="${result.lineId}"]`);
+                        lineNo = existingRow ? parseInt(existingRow.querySelector('td')?.textContent || '1', 10) : currentRows.length + 1;
+                    } else {
+                        lineNo = currentRows.length + 1;
+                    }
+                    upsertAdjustmentRow(result, lineNo);
+                    clearAddLineFormAndFocus();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء إضافة السطر.');
                 }
@@ -437,47 +576,104 @@
                 console.error('Error adding line:', error);
                 alert('حدث خطأ أثناء إضافة السطر.');
             } finally {
-                this.disabled = false;
+                btn.disabled = false;
             }
-        });
+        }
 
-        // Delete line
-        document.querySelectorAll('.btn-delete-line').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                const lineId = parseInt(this.getAttribute('data-line-id') || '0', 10);
-                if (!lineId || lineId <= 0) return;
+        document.getElementById('btnAddAdjustmentLine')?.addEventListener('click', doAddAdjustmentLine);
 
-                if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
+        // الانتقال بـ Enter بين الحقول وزر الإضافة
+        const enterNavFields = [
+            document.getElementById('ProdCodeInput'),
+            document.getElementById('ProdNameInput'),
+            document.getElementById('BatchNoInput'),
+            document.getElementById('ExpiryInput'),
+            document.getElementById('QtyAfterInput'),
+            document.getElementById('CostPerUnitInput'),
+            document.getElementById('PriceRetailInput'),
+            document.getElementById('LineNoteInput'),
+            document.getElementById('btnAddAdjustmentLine')
+        ].filter(Boolean);
 
-                const token = getAntiForgeryToken();
-                this.disabled = true;
-
-                try {
-                    const response = await fetch(`@Url.Action("DeleteLineJson", "StockAdjustments")?id=${lineId}`, {
-                        method: 'POST',
-                        headers: {
-                            'RequestVerificationToken': token
+        enterNavFields.forEach((el, idx) => {
+            if (el.dataset.boundEnterNav === '1') return;
+            el.dataset.boundEnterNav = '1';
+            el.addEventListener('keydown', function(e) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                if (el === document.getElementById('ProdNameInput')) {
+                    const opt = document.querySelector(`#productsList option[value="${el.value}"]`);
+                    if (opt) {
+                        document.getElementById('ProdId').value = opt.getAttribute('data-id');
+                        document.getElementById('ProdCodeInput').value = opt.getAttribute('data-id');
+                        loadProductInfo();
+                    }
+                }
+                if (el === document.getElementById('ProdCodeInput')) {
+                    const code = el.value;
+                    if (code) {
+                        const opt = document.querySelector(`#productsList option[data-id="${code}"]`);
+                        if (opt) {
+                            document.getElementById('ProdId').value = code;
+                            document.getElementById('ProdNameInput').value = opt.value;
+                            loadProductInfo();
                         }
-                    });
-
-                    if (!response.ok) {
-                        alert('حدث خطأ أثناء حذف السطر.');
-                        return;
                     }
-
-                    const result = await response.json();
-                    if (result.ok) {
-                        location.reload();
-                    } else {
-                        alert(result.message || 'حدث خطأ أثناء حذف السطر.');
-                    }
-                } catch (error) {
-                    console.error('Error deleting line:', error);
-                    alert('حدث خطأ أثناء حذف السطر.');
-                } finally {
-                    this.disabled = false;
+                }
+                const next = enterNavFields[idx + 1];
+                if (el === document.getElementById('btnAddAdjustmentLine')) {
+                    doAddAdjustmentLine();
+                } else if (el === document.getElementById('LineNoteInput')) {
+                    doAddAdjustmentLine();
+                } else if (next) {
+                    next.focus();
+                    if (typeof next.select === 'function') next.select?.();
                 }
             });
+        });
+
+        // Delete line (event delegation للصفوف المضافة ديناميكياً)
+        document.getElementById('AdjustmentLinesTbody')?.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-delete-line');
+            if (!btn) return;
+            const lineId = parseInt(btn.getAttribute('data-line-id') || '0', 10);
+            if (!lineId || lineId <= 0) return;
+
+            if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
+
+            const token = getAntiForgeryToken();
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`@Url.Action("DeleteLineJson", "StockAdjustments")?id=${lineId}`, {
+                    method: 'POST',
+                    headers: {
+                        'RequestVerificationToken': token
+                    }
+                });
+
+                if (!response.ok) {
+                    alert('حدث خطأ أثناء حذف السطر.');
+                    return;
+                }
+
+                const result = await response.json();
+                if (result.ok) {
+                    const row = btn.closest('tr');
+                    if (row) row.remove();
+                    const tbody = document.getElementById('AdjustmentLinesTbody');
+                    if (tbody && tbody.querySelectorAll('tr[data-line-id]').length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
+                    }
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء حذف السطر.');
+                }
+            } catch (error) {
+                console.error('Error deleting line:', error);
+                alert('حدث خطأ أثناء حذف السطر.');
+            } finally {
+                btn.disabled = false;
+            }
         });
 
         // Save header
@@ -529,11 +725,14 @@
                     if (result.id && result.id > 0) {
                         document.getElementById('AdjustmentId').value = result.id;
                         document.getElementById('AdjustmentNumberDisplay').value = result.id;
-                        if (window.location.pathname.includes('/Create')) {
-                            window.history.replaceState({}, '', `@Url.Action("Show", "StockAdjustments")/${result.id}`);
-                        }
+                        const baseUrl = '@Url.Action("Show", "StockAdjustments")';
+                        const newPath = baseUrl + '/' + result.id + (window.location.search || '');
+                        window.history.replaceState({}, '', newPath);
+                        document.title = 'تسوية جرد — رقم ' + result.id;
                     }
-                    alert('تم حفظ التسوية بنجاح.');
+                    const ProdNameInput = document.getElementById('ProdNameInput');
+                    ProdNameInput?.focus();
+                    ProdNameInput?.select?.();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء حفظ التسوية.');
                 }

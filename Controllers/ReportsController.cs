@@ -124,6 +124,16 @@ namespace ERP.Controllers
                 ViewBag.IncludeZeroQty = true;
             }
 
+            // عند عدم تحديد تاريخ: استخدام الشهر الحالي افتراضياً لعرض المبيعات
+            var today = DateTime.Today;
+            if (!fromDate.HasValue && !toDate.HasValue)
+            {
+                fromDate = new DateTime(today.Year, today.Month, 1);
+                toDate = today;
+                ViewBag.FromDate = fromDate;
+                ViewBag.ToDate = toDate;
+            }
+
             // =========================================================
             // 4) بناء الاستعلام الأساسي للأصناف (عند طلب التقرير)
             // =========================================================
@@ -251,7 +261,7 @@ namespace ERP.Controllers
                 var returnsQuery = _context.SalesReturnLines
                     .AsNoTracking()
                     .Include(srl => srl.SalesReturn)
-                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null);
+                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null && srl.SalesReturn.IsPosted);
                 if (warehouseId.HasValue && warehouseId.Value > 0)
                     returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
                 if (fromDate.HasValue)
@@ -1154,6 +1164,14 @@ namespace ERP.Controllers
                 includeZeroQty = true;
             }
 
+            // عند عدم تحديد تاريخ: استخدام الشهر الحالي افتراضياً (نفس ProductBalances)
+            var todayExport = DateTime.Today;
+            if (!fromDate.HasValue && !toDate.HasValue)
+            {
+                fromDate = new DateTime(todayExport.Year, todayExport.Month, 1);
+                toDate = todayExport;
+            }
+
             // بناء الاستعلام (نفس منطق ProductBalances)
             var productsQuery = _context.Products
                 .AsNoTracking()
@@ -1262,7 +1280,7 @@ namespace ERP.Controllers
                 var returnsQuery = _context.SalesReturnLines
                     .AsNoTracking()
                     .Include(srl => srl.SalesReturn)
-                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null);
+                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null && srl.SalesReturn.IsPosted);
                 if (warehouseId.HasValue && warehouseId.Value > 0)
                     returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
                 if (fromDate.HasValue)

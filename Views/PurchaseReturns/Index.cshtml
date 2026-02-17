@@ -221,9 +221,9 @@
                               method="post"
                               class="d-inline">
                             @Html.AntiForgeryToken()
-                            <button type="submit"
-                                    class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                    onclick="return confirm('هل أنت متأكد من حذف جميع مرتجعات الشراء؟');">
+                            <button type="button"
+                                    id="btnDeleteAll"
+                                    class="btn btn-erp btn-erp-danger btn-erp-sm">
                                 حذف جميع مرتجعات الشراء
                             </button>
                         </form>
@@ -306,9 +306,9 @@
             <thead class="table-light">
                 <tr>
                     <th class="text-center no-print"
-                        data-col="actions"
+                        data-col="select"
                         data-col-fixed="true"
-                        style="width:160px;">
+                        style="width:40px;">
                         <input type="checkbox"
                                id="selectAll"
                                class="form-check-input" />
@@ -320,19 +320,21 @@
                     <th data-col="customer">@sortLink("Customer", "اسم الجهة")</th>
                     <th data-col="warehouse">@sortLink("WarehouseId", "كود المخزن")</th>
                     <th data-col="refpi">@sortLink("RefPIId", "فاتورة الشراء المرجعية")</th>
+                    <th data-col="net">@sortLink("NetTotal", "قيمة المرتجع")</th>
                     <th data-col="status">@sortLink("Status", "الحالة")</th>
                     <th data-col="posted">@sortLink("IsPosted", "مرحّل؟")</th>
                     <th data-col="postedAt">@sortLink("PostedAt", "تاريخ الترحيل")</th>
                     <th data-col="createdBy">@sortLink("CreatedBy", "أنشأه")</th>
                     <th data-col="createdAt">@sortLink("CreatedAt", "تاريخ الإنشاء")</th>
                     <th data-col="updatedAt">@sortLink("UpdatedAt", "آخر تعديل")</th>
+                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:160px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="13" class="text-center text-muted py-4">
+                        <td colspan="15" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -342,14 +344,18 @@
                     foreach (var pr in Model.Items)
                     {
                         <tr>
-                            
-
+                            <td class="text-center no-print" data-col="select">
+                                <input type="checkbox"
+                                       class="form-check-input row-select"
+                                       value="@pr.PRetId" />
+                            </td>
                             <td data-col="id">@pr.PRetId</td>
                             <td data-col="date">@pr.PRetDate.ToString("yyyy-MM-dd")</td>
                             <td data-col="customerId">@pr.CustomerId</td>
                             <td data-col="customer">@pr.Customer?.CustomerName</td>
                             <td data-col="warehouse">@pr.WarehouseId</td>
                             <td data-col="refpi">@pr.RefPIId</td>
+                            <td data-col="net">@pr.NetTotal.ToString("0.00")</td>
                             <td data-col="status">@pr.Status</td>
                             <td data-col="posted">
                                 @(pr.IsPosted ? "✓" : "✗")
@@ -377,11 +383,17 @@
                                    data-url="@Url.Action("Edit", "PurchaseReturns", new { id = pr.PRetId, frame = 1 })">
                                     تعديل
                                 </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@pr.PRetId">
-                                    حذف
-                                </a>
+                                <form asp-action="Delete"
+                                      asp-controller="PurchaseReturns"
+                                      asp-route-id="@pr.PRetId"
+                                      method="post"
+                                      class="d-inline"
+                                      onsubmit="return confirm('تأكيد حذف مرتجع الشراء رقم @pr.PRetId ؟');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">
+                                        حذف
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                     }
@@ -697,7 +709,7 @@
                     return;
                 }
 
-                if (!confirm("هل أنت متأكد من حذف المرتجعات المحددة؟")) {
+                if (!confirm("هل أنت متأكد من حذف المرتجعات المحددة؟ سيتم حذف السطور التابعة لها أيضاً.")) {
                     return;
                 }
 
@@ -715,6 +727,13 @@
                 });
 
                 bulkForm.submit();
+            });
+
+            const btnDeleteAll = document.getElementById("btnDeleteAll");
+            const deleteAllForm = document.getElementById("formDeleteAll");
+            btnDeleteAll?.addEventListener("click", function () {
+                if (!confirm("تحذير: سيتم حذف جميع مرتجعات الشراء وسطورها. هل أنت متأكد؟")) return;
+                deleteAllForm.submit();
             });
         })();
 

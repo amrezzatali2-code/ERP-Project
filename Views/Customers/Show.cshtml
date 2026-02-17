@@ -26,7 +26,8 @@
 
     // متغيرات: ملخص حجم التعامل
     decimal totalSales = ViewBag.TotalSales as decimal? ?? 0m;
-    decimal totalReturns = ViewBag.TotalReturns as decimal? ?? 0m;
+    decimal totalSalesReturns = ViewBag.TotalSalesReturns as decimal? ?? 0m;
+    decimal totalPurchaseReturns = ViewBag.TotalPurchaseReturns as decimal? ?? 0m;
     decimal totalPurchases = ViewBag.TotalPurchases as decimal? ?? 0m;
     int invoiceCount = ViewBag.InvoiceCount as int? ?? 0;
     DateTime? lastTransDate = ViewBag.LastTransactionDate as DateTime?;
@@ -297,10 +298,28 @@
                 </div>
             </div>
             <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
+                     style="cursor: pointer; transition: all 0.2s;"
+                     onclick="window.location.href='@Url.Action("Index", "SalesReturns", new { searchBy = "customer", search = Model.CustomerId.ToString() })'"
+                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
+                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
                     <div class="card-body p-2">
-                        <div class="compact-label text-muted">المرتجعات</div>
-                        <div class="compact-stat text-danger">@totalReturns.ToString("N2")</div>
+                        <div class="compact-label text-muted">مرتجعات البيع</div>
+                        <div class="compact-stat text-success">@totalSalesReturns.ToString("N2")</div>
+                        <small class="text-muted" style="font-size: 0.65rem;">يزيد حساب العميل</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-2">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
+                     style="cursor: pointer; transition: all 0.2s;"
+                     onclick="window.location.href='@Url.Action("Index", "PurchaseReturns", new { searchBy = "customerId", search = Model.CustomerId.ToString() })'"
+                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
+                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
+                    <div class="card-body p-2">
+                        <div class="compact-label text-muted">مرتجعات الشراء</div>
+                        <div class="compact-stat text-primary">@totalPurchaseReturns.ToString("N2")</div>
+                        <small class="text-muted" style="font-size: 0.65rem;">يقلل حساب العميل</small>
                     </div>
                 </div>
             </div>

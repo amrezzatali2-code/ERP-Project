@@ -23,6 +23,7 @@ namespace ERP.Controllers
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly StockAnalysisService _StockAnalysisService; // متغير: خدمة الترحيل
+        private readonly IFullReturnService _fullReturnService;
 
         // مصفوفة طرق الدفع الثابتة لعرضها في الفورم
         private static readonly string[] PaymentMethods = new[] { "نقدي", "شبكة", "آجل", "مختلط" };
@@ -30,7 +31,8 @@ namespace ERP.Controllers
         public SalesInvoicesController(AppDbContext context,
                                         DocumentTotalsService docTotals,
                                         IUserActivityLogger activityLogger, ILedgerPostingService ledgerPosting,
-                                        StockAnalysisService stockAnalysisService)
+                                        StockAnalysisService stockAnalysisService,
+                                        IFullReturnService fullReturnService)
 
         {
             _context = context;
@@ -38,6 +40,7 @@ namespace ERP.Controllers
             _activityLogger = activityLogger;
             _ledgerPostingService = ledgerPosting;     // ✅ متغير: خدمة الترحيل
             _StockAnalysisService = stockAnalysisService;
+            _fullReturnService = fullReturnService;
         }
 
 
@@ -1646,69 +1649,41 @@ namespace ERP.Controllers
                         postedLabel = postedLabel
                     });
                 }
-
-                TempData["Success"] = "تم ترحيل الفاتورة بنجاح";
-                return RedirectToAction("Show", new { id });
             }
             catch (Exception ex)
             {
-                // =========================================================
-                // تعليق: تجميع رسالة خطأ واضحة (Message + InnerException)
-                // الهدف: نعرف "السبب الحقيقي" لفشل SaveChanges داخل EF
-                // =========================================================
-
-                // متغير: الرسالة الأساسية
-                var msg = string.IsNullOrWhiteSpace(ex.Message) ? "حدث خطأ أثناء الترحيل." : ex.Message;
-
-                // متغير: رسالة الـ InnerException (لو موجودة)
-                var inner1 = ex.InnerException?.Message;
-
-                // متغير: رسالة InnerException داخل InnerException (أحيانًا EF بيحط التفاصيل هنا)
-                var inner2 = ex.InnerException?.InnerException?.Message;
-
-                // متغير: تجميع الرسائل
-                var details = msg;
-
-                if (!string.IsNullOrWhiteSpace(inner1))
-                    details += " | INNER: " + inner1;
-
-                if (!string.IsNullOrWhiteSpace(inner2))
-                    details += " | INNER2: " + inner2;
-
-                // =========================================================
-                // تعليق: لو الخطأ من EF DbUpdateException نطلع أعمق رسالة
-                // =========================================================
-                if (ex is Microsoft.EntityFrameworkCore.DbUpdateException dbEx)
-                {
-                    var dbInner1 = dbEx.InnerException?.Message;
-                    var dbInner2 = dbEx.InnerException?.InnerException?.Message;
-
-                    if (!string.IsNullOrWhiteSpace(dbInner1) && (inner1 != dbInner1))
-                        details += " | DB-INNER: " + dbInner1;
-
-                    if (!string.IsNullOrWhiteSpace(dbInner2) && (inner2 != dbInner2))
-                        details += " | DB-INNER2: " + dbInner2;
-                }
-
-                // =========================================================
-                // تعليق: لو فيه تعارض تحديث (Concurrency) نوضح ده
-                // =========================================================
-                if (ex is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException)
-                {
-                    details = "فشل الترحيل بسبب تعارض تحديث (Concurrency). حاول إعادة تحميل الفاتورة ثم الترحيل مرة أخرى."
-                              + " | DETAILS: " + details;
-                }
-
-                // =========================================================
-                // (نفس سلوكك) Ajax / غير Ajax
-                // =========================================================
-                if (isAjax)
-                    return BadRequest(new { ok = false, message = "فشل الترحيل: " + details });
-
-                TempData["Error"] = "فشل الترحيل: " + details;
+                if (isAjax) return BadRequest(new { ok = false, message = ex.Message });
+                TempData["Error"] = ex.Message;
                 return RedirectToAction("Show", new { id });
             }
 
+            return RedirectToAction("Show", new { id });
+        }
+
+        /// <summary>مرتجع فاتورة بالكامل: ينشئ مرتجع بيع من كل أصناف الفاتورة ويرحّله تلقائياً. يدعم Ajax مثل زر التحويل في طلب الشراء.</summary>
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> CreateFullReturn(int id)
+        {
+            bool isAjax =
+                string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+                || Request.Headers["Accept"].ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase);
+
+            try
+            {
+                var (salesReturnId, message, invoiceReposted, invoiceStatus) = await _fullReturnService.CreateFullSalesReturnFromInvoiceAsync(id, User.Identity?.Name);
+                if (isAjax)
+                    return Ok(new { ok = true, message, salesReturnId, invoiceReposted, invoiceStatus });
+                TempData["Success"] = message;
+                return RedirectToAction("Edit", "SalesReturns", new { id = salesReturnId, frame = 1 });
+            }
+            catch (Exception ex)
+            {
+                if (isAjax)
+                    return BadRequest(new { ok = false, message = ex.Message });
+                TempData["Error"] = ex.Message;
+                return RedirectToAction("Show", new { id });
+            }
         }
 
 
@@ -1756,6 +1731,17 @@ namespace ERP.Controllers
                 {
                     if (isAjax) return BadRequest(new { ok = false, message = "هذه الفاتورة ليست مُرحّلة، لا يوجد ما يمكن فتحه." });
                     TempData["Error"] = "هذه الفاتورة ليست مُرحّلة.";
+                    return RedirectToAction("Show", new { id = invoice.SIId });
+                }
+
+                // ================================
+                // 2.5) لا يمكن فتح فاتورة لها مرتجع بالكامل — تبقى مرحلة
+                // ================================
+                var hasFullReturn = await _context.SalesReturns.AnyAsync(sr => sr.SalesInvoiceId == id);
+                if (hasFullReturn)
+                {
+                    if (isAjax) return BadRequest(new { ok = false, message = "لا يمكن فتح الفاتورة: تم إنشاء مرتجع بيع من هذه الفاتورة. الفاتورة مغلقة." });
+                    TempData["Error"] = "لا يمكن فتح الفاتورة: تم إنشاء مرتجع بيع من هذه الفاتورة. الفاتورة مغلقة.";
                     return RedirectToAction("Show", new { id = invoice.SIId });
                 }
 
@@ -2149,6 +2135,30 @@ namespace ERP.Controllers
             // - أنت قلت: نفس نظام الأسهم => نفس أسماء الـ ViewBag
             // =========================================
             await FillSalesInvoiceNavAsync(invoice.SIId); // متغير: تجهيز First/Prev/Next/Last
+
+            // =========================================
+            // 5.5) فاتورة لها مرتجع بالكامل → تصحيح الحالة في DB والقائمة (مرحلة)
+            // =========================================
+            var hasFullReturn = await _context.SalesReturns.AnyAsync(sr => sr.SalesInvoiceId == id);
+            if (hasFullReturn && (invoice.Status == "مفتوحة للتعديل" || !invoice.IsPosted))
+            {
+                var lastStage = await _context.LedgerEntries
+                    .Where(e => e.SourceType == LedgerSourceType.SalesInvoice && e.SourceId == id && e.LineNo == 1 && e.PostVersion > 0)
+                    .MaxAsync(e => (int?)e.PostVersion) ?? 1;
+                var correctStatus = $"مرحلة {lastStage}";
+                invoice.Status = correctStatus;
+                invoice.IsPosted = true;
+
+                // تحديث قاعدة البيانات حتى تظهر الحالة الصحيحة في القائمة
+                var toFix = await _context.SalesInvoices.FirstOrDefaultAsync(s => s.SIId == id);
+                if (toFix != null)
+                {
+                    toFix.Status = correctStatus;
+                    toFix.IsPosted = true;
+                    toFix.PostedAt = toFix.PostedAt ?? DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+            }
 
             // =========================================
             // 6) عرض View "Show"

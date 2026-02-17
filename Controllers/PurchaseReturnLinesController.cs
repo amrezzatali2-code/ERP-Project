@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // List, Dictionary
 using System.Globalization;                       // CultureInfo للتصدير
 using System.Linq;                                // أوامر LINQ
@@ -49,9 +49,12 @@ namespace ERP.Controllers
             int? fromCode,                   // فلتر رقم السطر من/إلى
             int? toCode)
         {
-            // (1) الاستعلام الأساسي من جدول سطور المرتجع
+            // (1) الاستعلام الأساسي من جدول سطور المرتجع + الصنف + المورد (العميل)
             IQueryable<PurchaseReturnLine> q =
                 _context.PurchaseReturnLines
+                        .Include(l => l.Product)
+                        .Include(l => l.PurchaseReturn)
+                            .ThenInclude(pr => pr!.Customer)
                         .AsNoTracking();     // تحسين الأداء (قراءة فقط)
 
             // (2) فلتر اختياري برقم مرتجع محدد

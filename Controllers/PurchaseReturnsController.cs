@@ -268,8 +268,13 @@ namespace ERP.Controllers
                     ["PRetDate"] = pr => pr.PRetDate,                       // تاريخ المرتجع
                     ["Customer"] = pr => pr.Customer.CustomerName ?? "",    // اسم الجهة
                     ["CustomerId"] = pr => pr.CustomerId,                     // كود الجهة
+                    ["WarehouseId"] = pr => pr.WarehouseId,                   // كود المخزن
+                    ["RefPIId"] = pr => pr.RefPIId ?? 0,                     // فاتورة الشراء المرجعية
+                    ["NetTotal"] = pr => pr.NetTotal,                        // قيمة المرتجع
                     ["Status"] = pr => pr.Status ?? "",                   // الحالة
                     ["IsPosted"] = pr => pr.IsPosted,                       // مرحّل؟
+                    ["PostedAt"] = pr => pr.PostedAt ?? pr.CreatedAt,        // تاريخ الترحيل
+                    ["CreatedBy"] = pr => pr.CreatedBy ?? "",                 // أنشأه
                     ["CreatedAt"] = pr => pr.CreatedAt,                      // تاريخ الإنشاء
                     ["UpdatedAt"] = pr => pr.UpdatedAt ?? pr.CreatedAt       // آخر تعديل
                 };
@@ -453,7 +458,7 @@ namespace ERP.Controllers
             var sb = new StringBuilder();
 
             // عنوان الأعمدة
-            sb.AppendLine("PRetId,PRetDate,CustomerId,CustomerName,WarehouseId,RefPIId,Status,IsPosted,PostedAt,CreatedBy,CreatedAt,UpdatedAt");
+            sb.AppendLine("PRetId,PRetDate,CustomerId,CustomerName,WarehouseId,RefPIId,NetTotal,Status,IsPosted,PostedAt,CreatedBy,CreatedAt,UpdatedAt");
 
             // كل سطر مرتجع في CSV
             foreach (var pr in list)
@@ -465,6 +470,7 @@ namespace ERP.Controllers
                     (pr.Customer?.CustomerName ?? "").Replace(",", " "),
                     pr.WarehouseId,
                     pr.RefPIId?.ToString() ?? "",
+                    pr.NetTotal.ToString("0.00"),
                     (pr.Status ?? "").Replace(",", " "),
                     pr.IsPosted ? "1" : "0",
                     pr.PostedAt.HasValue ? pr.PostedAt.Value.ToString("yyyy-MM-dd HH:mm") : "",
@@ -481,6 +487,23 @@ namespace ERP.Controllers
             const string contentType = "text/csv";
 
             return File(bytes, contentType, fileName);
+        }
+
+        // =========================================================
+        // Delete — حذف مرتجع شراء واحد (نفس أسلوب فاتورة المشتريات)
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var result = await TryDeletePurchaseReturnDeepAsync(id);
+            if (result.Status == DeletePurchaseReturnStatus.Deleted)
+            {
+                TempData["Success"] = "تم حذف مرتجع الشراء بنجاح.";
+                return RedirectToAction(nameof(Index));
+            }
+            TempData["Error"] = result.Message ?? "تعذر حذف المرتجع.";
+            return RedirectToAction(nameof(Index));
         }
 
         // =========================================================

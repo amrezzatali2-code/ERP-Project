@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.PurchaseInvoice
 
 @{
@@ -56,12 +56,12 @@
             border-radius: 14px;
             box-shadow: 0 10px 24px rgba(0,0,0,.05); /* ✅ ظل أخف */
         }
-/* لو عندك تبويب/هيدر ثابت أعلى من النافبار زوّد top */
-@@media (max-width: 992px){
-    .invoice-actions-sticky{
-        top: 56px;
-    }
-}
+        /* لو عندك تبويب/هيدر ثابت أعلى من النافبار زوّد top */
+        @@media (max-width: 992px) {
+            .invoice-actions-sticky {
+                top: 56px;
+            }
+        }
 
 
 
@@ -233,13 +233,13 @@
 
 
             @* =========================
-               العمود الجانبي (أزرار الحركة) — ثابت برا الـ BodyHost
+               العمود الجانبي (أزرار الحركة) — على اليسار مثل فاتورة المبيعات
                ========================= *@
             <div class="col-12 col-lg-2 order-1 order-lg-2">
 
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
                     <div class="card-header py-2 text-center">
-                        <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
+                        <h6 class="mb-0">الأزرار</h6>
                     </div>
 
 
@@ -371,9 +371,15 @@
                             ⏪ فتح الفاتورة
                         </button>
 
-                        <!-- نفس بوكس الرسائل المستخدم في الترحيل -->
-                        <div id="postInvoiceMsg" class="small mt-2"></div>
-
+                        @{
+                            var canShowFullReturnBtnPI = Model?.PIId > 0 && (Model.IsPosted || Model.Status == "مفتوحة للتعديل" || (Model.Status != null && Model.Status.StartsWith("مرحلة")));
+                        }
+                        @* الزر يُعرض دائماً في DOM ليتحدّث عند التنقل (loadInvoiceBody) *@
+                        <div id="fullReturnBtnWrapper" class="@(canShowFullReturnBtnPI ? "" : "d-none")">
+                            <button type="button" class="btn btn-erp btn-erp-outline-warning btn-erp-sm w-100" id="btnCreateFullReturn" data-lock-posted="1">
+                                ↩️ مرتجع فاتورة مشتريات بالكامل
+                            </button>
+                        </div>
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
@@ -383,7 +389,22 @@
                             🗑️ مسح كل أصناف الفاتورة
                         </button>
 
-                      
+                        @* <div class="col-lg-6 col-md-12"> *@
+                        <div>
+                                <button type="button" id="btnOpenProductMovement"
+                                        class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100">
+                                    حركة الصنف
+                                </button>
+                         </div>
+
+                        <div>
+
+                                <button type="button" id="btnOpenProductEdit"
+                                        class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100">
+                                     بيانات الصنف
+                                </button>
+                         </div>
+                        
 
                        <button type="button"
                          id="btnPrintInvoice"
@@ -412,8 +433,10 @@
                 <div id="PI_BodyHost">
 
                     @* =========================
-                       قيم التنقل (لازم تكون داخل الـ BodyHost عشان تتحدّث مع frag=body)
+                       قيم التنقل + حالة الفاتورة (لازم تكون داخل الـ BodyHost عشان تتحدّث مع frag=body)
                        ========================= *@
+                    <input type="hidden" id="BodyHostIsPosted" value="@(Model?.IsPosted == true ? "1" : "0")" />
+                    <input type="hidden" id="BodyHostInvoiceStatus" value="@(Model?.Status ?? "")" />
                     <input type="hidden" id="NavFirstId" value="@(ViewBag.NavFirstId ?? 0)" />
                     <input type="hidden" id="NavLastId" value="@(ViewBag.NavLastId ?? 0)" />
                     <input type="hidden" id="NavPrevId" value="@(ViewBag.NavPrevId ?? 0)" />
@@ -444,7 +467,7 @@
                                 <h5 class="mb-1">فاتورة مشتريات</h5>
                             </div>
 
-                            <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-1">
 
                                 <div class="text-end">
                                     @if (!isNewInvoice)
@@ -480,13 +503,13 @@
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col-lg-3">
                                         <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
 
                                         <input id="CustomerNameInput"
                                                name="CustomerNameInput"
                                                class="form-control form-control-sm"
-                                               placeholder="اكتب اسم المورد ثم اختره من القائمة"
+                                               placeholder="اكتب اسم المورد"
                                                list="customersList"
                                                autocomplete="off"
                                                value="@ViewBag.SelectedCustomerName" 
@@ -512,7 +535,7 @@
                                         </datalist>
                                     </div>
 
-                                    <div class="col-lg-3 col-md-2">
+                                    <div class="col-lg-1 col-md-6">
                                         <label class="form-label form-label-sm">رقم الفاتورة</label>
 
                                         <input type="hidden"
@@ -526,34 +549,33 @@
                                                />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-6">
-                                        <div class="row g-2">
-                                            <div class="col-6">
+                                    <div class="col-lg-2">
+                                        
+                                            
                                                 <label class="form-label form-label-sm">تاريخ الفاتورة</label>
                                                 <input id="InvoiceDateDisplay"
                                                        class="form-control form-control-sm text-center"
                                                        value="@invoiceDateText"
                                                        readonly />
                                             </div>
-                                            <div class="col-6">
+                                            <div class="col-lg-1">
                                                 <label class="form-label form-label-sm">وقت الإنشاء</label>
                                                 <input id="InvoiceTimeDisplay"
                                                        class="form-control form-control-sm text-center"
                                                        value="@invoiceTimeText"
                                                        readonly />
                                             </div>
-                                        </div>
-                                    </div>
+                                        
+                                    
 
-                                </div>
 
-                                <br />
 
-                                <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
 
-                                <div class="row g-3">
+                                    <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
 
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                    
+
+                                    <div class="col-lg-1 col-md-6 col-sm-12">
                                         <label class="form-label form-label-sm">حالة الفاتورة</label>
                                         <input id="InvoiceIsPostedDisplay"
                                                class="form-control form-control-sm text-center"
@@ -561,36 +583,42 @@
                                                readonly />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">طلب الشراء المرجعي</label>
+                                    <div class="col-lg-1 col-md-6 col-sm-12">
+                                        <label class="form-label form-label-sm">رقم الطلب</label>
                                         <input class="form-control form-control-sm text-center"
                                                value="@(Model.RefPRId?.ToString() ?? "")"
                                                readonly />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                    <div class="col-lg-1 col-md-6 col-sm-12">
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
                                         <select asp-for="WarehouseId"
                                                 asp-items="ViewBag.Warehouses"
-                                                class="form-select form-select-sm" 
+                                                class="form-select form-select-sm"
                                                 data-is-posted="@(Model.IsPosted ? "1" : "0")">
                                             <option value="">اختر المخزن</option>
                                         </select>
                                     </div>
 
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                    <div class="col-lg-1 col-md-6 col-sm-12">
                                         <label class="form-label form-label-sm">كاتب الفاتورة</label>
                                         <input id="InvoiceCreatedByDisplay"
                                                class="form-control form-control-sm text-center"
                                                value="@Model.CreatedBy"
-                                               readonly 
-                                               />
+                                               readonly />
                                     </div>
+
+                                    
+
+
 
                                 </div>
 
+                               
+
+
                                 <div class="row g-4">
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">الهاتف</label>
                                         <input id="CustomerPhone"
                                                class="form-control form-control-sm"
@@ -604,7 +632,7 @@
                                                />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">المحافظة</label>
                                         <input id="CustomerGovernorate"
                                                class="form-control form-control-sm"
@@ -613,56 +641,25 @@
                                                />
                                     </div>
 
-                                    <div class="col-lg-3 col-md-3">
-                                        <label class="form-label form-label-sm">الحي</label>
-                                        <input id="CustomerDistrict"
-                                               class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.District?.DistrictName ?? "")"
-                                               readonly 
-                                               />
-                                    </div>
-
-                                    <div class="col-lg-3 col-md-3">
-                                        <label class="form-label form-label-sm">المنطقة</label>
-                                        <input id="CustomerArea"
-                                               class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Area?.AreaName ?? "")"
-                                               readonly 
-                                               />
-                                    </div>
-
-                                </div>
-
-                                <div class="row g-3">
-
-                                    <div class="col-lg-8 col-md-6">
+                                    <div class="col-lg-6 col-md-6">
                                         <label class="form-label form-label-sm">العنوان</label>
                                         <input id="CustomerAddress"
                                                class="form-control form-control-sm"
                                                value="@(Model?.Customer?.Address ?? "")"
-                                               readonly 
-                                               data-lock-posted="1"/>
-                                    </div>
-
-                                    <div class="col-lg-4 col-md-2">
-                                        <label class="form-label form-label-sm">الحد الإتماني</label>
-                                        <input id="CustomerCredit"
-                                               class="form-control form-control-sm"
-                                               value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))"
-                                               readonly 
+                                               readonly
                                                data-lock-posted="1" />
                                     </div>
 
+                                </div>
 
-
-                            </div>
+                           
                         </div>
                     </div>
 
                     @* =====================================================
                        2) كارت بيانات الصنف
                        ===================================================== *@
-                    <div class="card shadow-sm mb-3 invoice-product-card">
+                    <div class="card shadow-sm mb-2 invoice-product-card">
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h6 class="mb-0">بيانات الصنف</h6>
                             <button type="button"
@@ -679,37 +676,37 @@
                             <div class="card-body">
 
                                 <div class="row g-2 mb-3">
-                                    <div class="col-md-3 col-sm-6">
-                                        <label class="form-label form-label-sm">الكمية في هذا المخزن</label>
+                                    <div class="col-lg-2 col-sm-6">
+                                        <label class="form-label form-label-sm">كمية المخزن</label>
                                         <input type="text" id="ProdQtyCurrentWarehouse"
                                                class="form-control form-control-sm text-center" value="0" readonly />
                                     </div>
 
-                                    <div class="col-md-3 col-sm-6">
-                                        <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
+                                    <div class="col-lg-2 col-sm-6">
+                                        <label class="form-label form-label-sm">إجمالي كمية المخازن</label>
                                         <input type="text" id="ProdQtyAllWarehouses"
                                                class="form-control form-control-sm text-center" value="0" readonly />
                                     </div>
 
-                                    <div class="col-md-3 col-sm-6">
-                                        <label class="form-label form-label-sm">الصنف عليه كوتة؟</label>
+                                    <div class="col-lg-1 col-sm-6">
+                                        <label class="form-label form-label-sm">الكوتة</label>
                                         <input type="text" id="ProdQuotaText"
                                                class="form-control form-control-sm text-center" value="بدون كوتة" readonly />
                                     </div>
 
-                                    <div class="col-md-3 col-sm-6">
-                                        <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
+                                    <div class="col-lg-2 col-sm-6">
+                                        <label class="form-label form-label-sm">الخصم المرجّح</label>
                                         <input type="text" id="ProdWeightedDiscount"
                                                class="form-control form-control-sm text-center" value="0" readonly />
                                     </div>
-                                </div>
 
-                                <div class="row g-2 mb-3">
-                                    <div class="col-lg-6 col-md-6">
-                                        <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
+                                    <div class="col-lg-5 col-md-6">
+                                        <label class="form-label form-label-sm">بدائل الصنف</label>
                                         <select id="AlternativeProducts" class="form-select form-select-sm"></select>
                                     </div>
                                 </div>
+
+                                
 
                             </div>
                         </div>
@@ -718,7 +715,7 @@
                     @* =====================================================
                        4) كارت إدخال الصنف
                        ===================================================== *@
-                    <div class="card shadow-sm mb-3 invoice-Add-card">
+                    <div class="card shadow-sm mb-2 invoice-Add-card ">
                         <div class="card-header">
                             <h6 class="mb-0">إضافة صنف للفاتورة</h6>
                         </div>
@@ -727,7 +724,7 @@
 
                             <div class="row g-2 align-items-end mb-2">
 
-                                <div class="col-lg-2 col-md-4">
+                                <div class="col-lg-1 col-md-4">
                                     <label class="form-label form-label-sm">كود الصنف</label>
                                     <input type="number" id="ProdCodeInput"
                                            class="form-control form-control-sm text-center pi-input"
@@ -742,7 +739,7 @@
                                     <input id="ProdNameInput"
                                            list="productsList"
                                            class="form-control form-control-sm pi-input"
-                                           placeholder="اكتب اسم الصنف أو جزء منه..."
+                                           placeholder="اكتب اسم الصنف"
                                                autocomplete="off" 
                                                
                                                data-lock-posted="1" />
@@ -767,27 +764,13 @@
                                     <input type="hidden" id="ProdId" />
                                 </div>
 
-                                <div class="col-lg-6 col-md-12">
-                                    <div class="d-flex gap-2 justify-content-end flex-wrap">
-                                        <button type="button" id="btnOpenProductMovement"
-                                                class="btn btn-outline-secondary btn-sm">
-                                            حركة الصنف
-                                        </button>
+                                
 
-                                        <button type="button" id="btnOpenProductEdit"
-                                                class="btn btn-outline-primary btn-sm">
-                                            تعديل بيانات الصنف
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <div class="row g-2 align-items-end">
-
-                                <div class="col-lg-2 col-md-4">
+                                <div class="col-lg-1 col-md-4">
                                     <label id="ProdPriceLabel" class="form-label form-label-sm">
                                         سعر الجمهور
-                                        <small id="ProdPriceLockState" class="text-muted">(مغلق)</small>
+                                        <small id="ProdPriceLockState" class="text-muted"></small>
                                     </label>
 
                                     <input type="number" id="ProdPriceInput"
@@ -795,35 +778,35 @@
                                            readonly />
                                 </div>
 
-                                <div class="col-lg-2 col-md-4">
+                                <div class="col-lg-1 col-md-4">
                                     <label class="form-label form-label-sm">الكمية</label>
                                     <input type="number" id="ProdQtyInput"
                                            class="form-control form-control-sm text-center pi-input"
                                            placeholder="0"                                              data-lock-posted="1" />
                                 </div>
 
-                                <div class="col-lg-2 col-md-4">
+                                <div class="col-lg-1 col-md-4">
                                     <label id="ProdDisc1Label" class="form-label form-label-sm">الخصم</label>
                                     <input type="number" id="ProdDisc1Input"
                                            class="form-control form-control-sm text-center pi-input"
                                            value="0" data-lock-posted="1"/>
                                 </div>
 
-                                <div class="col-lg-2 col-md-4">
-                                    <label class="form-label form-label-sm">الباتش</label>
+                                <div class="col-lg-1 col-md-4">
+                                    <label class="form-label form-label-sm">التشغيلة</label>
                                     <input type="text" id="ProdBatchInput"
                                            class="form-control form-control-sm text-center pi-input"
                                            placeholder="باتش" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")"/>
                                 </div>
 
-                                <div class="col-lg-2 col-md-4">
-                                    <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                <div class="col-lg-1 col-md-4">
+                                    <label class="form-label form-label-sm">الصلاحية</label>
                                     <input type="text" id="ProdExpiryInput"
                                            class="form-control form-control-sm text-center pi-input"
                                                placeholder="MM/YYYY" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
                                 </div>
 
-                                <div class="col-lg-2 col-md-4 d-grid">
+                                <div class="col-lg-1 col-md-4 d-grid">
                                     <label class="form-label form-label-sm">&nbsp;</label>
                                     <button type="button" id="btnAddInvoiceLine"
                                                 class="btn btn-primary btn-sm w-100" data-lock-posted="1">
@@ -1542,53 +1525,21 @@
             // Events: اسم الصنف / كود الصنف
             // =========================================================
             if (prodNameInput) {
-                console.log('✅ تم ربط event listeners لحقل اسم الصنف');
+                // نفس سلوك فاتورة المبيعات: لا إكمال تلقائي أثناء الكتابة، فقط عند الاختيار أو Enter أو الخروج
+                prodNameInput.addEventListener('change', function () {
+                    fillProductFromOption(findProductByName(this.value));
+                });
 
-                prodNameInput.addEventListener('change', function (e) {
-                    console.log('📝 change event:', this.value);
-                    try {
-                        const found = findProductByName(this.value);
-                        fillProductFromOption(found);
-                    } catch (err) {
-                        console.error('❌ خطأ في change event:', err);
+                prodNameInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        fillProductFromOption(findProductByName(this.value));
+                        if (prodPriceInput) prodPriceInput.focus();
                     }
                 });
 
-                prodNameInput.addEventListener('blur', function (e) {
-                    console.log('👋 blur event:', this.value);
-                    try {
-                        // عند الخروج من الحقل، نحاول البحث مرة أخرى
-                        const found = findProductByName(this.value);
-                        if (found) {
-                            fillProductFromOption(found);
-                        } else if (this.value.trim()) {
-                            // لو لم نجد صنفاً لكن المستخدم كتب شيئاً، نعرض رسالة
-                            console.warn('⚠️ لم يتم العثور على صنف بهذا الاسم:', this.value);
-                        }
-                    } catch (err) {
-                        console.error('❌ خطأ في blur event:', err);
-                    }
-                });
-
-                // عند الكتابة، نحاول البحث تلقائياً بعد تأخير قصير
-                let searchTimeout = null;
-                prodNameInput.addEventListener('input', function (e) {
-                    clearTimeout(searchTimeout);
-                    const value = this.value.trim();
-                    if (value.length >= 3) {
-                        searchTimeout = setTimeout(() => {
-                            try {
-                                console.log('🔍 البحث التلقائي عن:', value);
-                                const found = findProductByName(value);
-                                if (found) {
-                                    console.log('✅ تم العثور على صنف أثناء الكتابة');
-                                    fillProductFromOption(found);
-                                }
-                            } catch (err) {
-                                console.error('❌ خطأ في البحث التلقائي:', err);
-                            }
-                        }, 300); // تأخير 300ms بعد توقف الكتابة
-                    }
+                prodNameInput.addEventListener('blur', function () {
+                    fillProductFromOption(findProductByName(this.value));
                 });
             } else {
                 console.error('❌ prodNameInput غير موجود!');
@@ -1668,6 +1619,15 @@
                 });
             }
 
+            // عند الانتقال لحقل الخصم → تحديد النص بالكامل (ليستبدل الصفر عند الكتابة)
+            if (prodDisc1Input) {
+                prodDisc1Input.addEventListener('focus', function () {
+                    if (!this.readOnly && typeof this.select === 'function') {
+                        setTimeout(() => this.select(), 0);
+                    }
+                });
+            }
+
             // =========================================================
             // التنقل بالإنتر (داخل كارت إضافة الصنف)
             // =========================================================
@@ -1682,34 +1642,19 @@
             ].filter(Boolean);
 
             lineInputs.forEach((input, index) => {
-
-                // أول ما يدخل الفوكس → تحديد النص
-                input.addEventListener('focus', function () {
-                    if (typeof this.select === 'function') {
-                        setTimeout(() => this.select(), 0);
-                    }
-                });
-
+                // لا نحدد النص تلقائياً عند الفوكس — يسبب قفز المؤشر بين الحقول
                 // Enter → يروح للحقل اللي بعده
                 input.addEventListener('keydown', function (e) {
                     if (e.key !== 'Enter') return;
 
                     e.preventDefault();
-                    console.log('⌨️ Enter pressed on:', input.id || input.className);
 
                     try {
-                        // لو المستخدم داخل اسم الصنف → نحاول نثبّت الصنف
                         if (input === prodNameInput) {
-                            console.log('🔍 البحث عن صنف قبل الانتقال:', prodNameInput.value);
-                            const found = findProductByName(prodNameInput.value);
-                            fillProductFromOption(found);
+                            fillProductFromOption(findProductByName(prodNameInput.value));
                         }
-
-                        // لو المستخدم داخل كود الصنف → نحاول نثبّت الصنف
                         if (input === prodCodeInput) {
-                            console.log('🔍 البحث عن صنف بالكود قبل الانتقال:', prodCodeInput.value);
-                            const found = findProductByCode(prodCodeInput.value);
-                            fillProductFromOption(found);
+                            fillProductFromOption(findProductByCode(prodCodeInput.value));
                         }
 
                         // البحث عن الحقل التالي القابل للتحرير (ليس readOnly)
@@ -1726,16 +1671,9 @@
                         }
 
                         if (next && !next.readOnly) {
-                            console.log('➡️ الانتقال إلى:', next.id || next.className);
                             next.focus();
-                            if (typeof next.select === 'function') {
-                                next.select();
-                            }
                         } else if (btnAddLine) {
-                            console.log('➡️ الانتقال إلى زر الإضافة');
                             btnAddLine.focus();
-                        } else {
-                            console.warn('⚠️ لا يوجد حقل تالي للانتقال إليه');
                         }
                     } catch (err) {
                         console.error('❌ خطأ في معالجة Enter:', err);
@@ -3049,10 +2987,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (typeof applyPostedUiLock === "function") applyPostedUiLock();
 
                         // =========================
-                        // 6) بعد نجاح الترحيل: فعّل زر الفتح
+                        // 6) بعد نجاح الترحيل: فعّل زر الفتح + إظهار زر المرتجع
                         // =========================
                         const btnOpen = document.getElementById("btnOpenInvoice");
                         if (btnOpen) btnOpen.disabled = false;
+
+                        const fullReturnWrapper = document.getElementById("fullReturnBtnWrapper");
+                        if (fullReturnWrapper) fullReturnWrapper.classList.remove("d-none");
 
                         const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
                         if (btnPrint) btnPrint.disabled = false;                     // ✅ بعد الترحيل: الطباعة تتفتح
@@ -3095,8 +3036,61 @@ document.addEventListener('DOMContentLoaded', () => {
             // ✅ جعل الدالة متاحة عالمياً لإعادة التهيئة بعد حذف السطر
             window.__initPostInvoice = initPostInvoice;
 
-
-
+            // زر: مرتجع فاتورة بالكامل (بنفس أسلوب تحويل طلب الشراء)
+            document.addEventListener("DOMContentLoaded", function () {
+                const btnFullReturn = document.getElementById("btnCreateFullReturn");
+                const msg = document.getElementById("postInvoiceMsg");
+                if (!btnFullReturn) return;
+                if (btnFullReturn.dataset.boundFullReturn) return;
+                btnFullReturn.dataset.boundFullReturn = "1";
+                btnFullReturn.addEventListener("click", async function () {
+                    const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+                    if (invoiceId <= 0) {
+                        if (msg) { msg.textContent = "⚠️ لازم تحفظ الفاتورة أولاً."; msg.className = "small mt-2 text-warning"; }
+                        return;
+                    }
+                    if (btnFullReturn.disabled) return;
+                    if (!confirm("هل تريد إنشاء مرتجع شراء بالكامل من هذه الفاتورة وترحيله؟")) return;
+                    const oldHtml = btnFullReturn.innerHTML;
+                    btnFullReturn.innerHTML = "⏳ جاري الإنشاء...";
+                    btnFullReturn.disabled = true;
+                    if (msg) { msg.textContent = "يتم إنشاء المرتجع وترحيله..."; msg.className = "small mt-2 text-muted"; }
+                    try {
+                        const res = await fetch(`/PurchaseInvoices/CreateFullReturn?id=${invoiceId}`, {
+                            method: "POST",
+                            credentials: "same-origin",
+                            headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" }
+                        });
+                        const raw = await res.text();
+                        let data = null;
+                        try { data = raw ? JSON.parse(raw) : null; } catch { }
+                        if (!res.ok) {
+                            const errMsg = (data && data.message) ? data.message : raw || "حدث خطأ.";
+                            throw new Error(errMsg);
+                        }
+                        const okMsg = (data && data.message) ? data.message : "تم إنشاء المرتجع بنجاح.";
+                        if (msg) { msg.textContent = okMsg; msg.className = "small mt-2 text-success"; }
+                        if (data && data.invoiceReposted) {
+                            if (typeof setInvoicePosted === "function") setInvoicePosted(true);
+                            if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                            const isPostedDisplay = document.getElementById("InvoiceIsPostedDisplay");
+                            if (isPostedDisplay && data.invoiceStatus) isPostedDisplay.value = data.invoiceStatus;
+                            const statusHidden = document.getElementById("InvoiceStatusHidden");
+                            if (statusHidden && data.invoiceStatus) statusHidden.value = data.invoiceStatus;
+                            const btnPost = document.getElementById("btnPostInvoice");
+                            if (btnPost) { btnPost.innerHTML = "✅ تم ترحيل الفاتورة"; btnPost.disabled = true; }
+                            const btnOpen = document.getElementById("btnOpenInvoice");
+                            if (btnOpen) btnOpen.disabled = false;
+                        }
+                        btnFullReturn.disabled = false;
+                        btnFullReturn.innerHTML = oldHtml;
+                    } catch (err) {
+                        btnFullReturn.disabled = false;
+                        btnFullReturn.innerHTML = oldHtml;
+                        if (msg) { msg.textContent = "فشل: " + (err.message || "خطأ غير معروف"); msg.className = "small mt-2 text-danger"; }
+                    }
+                });
+            });
 
 
 
@@ -3577,6 +3571,34 @@ document.addEventListener('DOMContentLoaded', () => {
                     } else {
                         host.innerHTML = html;
                     }
+
+                    // ✅ بعد تبديل الـ body: حدّث الشريط الجانبي (حالة الفاتورة + زر المرتجع)
+                    const bodyIsPosted = document.getElementById("BodyHostIsPosted")?.value === "1";
+                    const bodyStatus = (document.getElementById("BodyHostInvoiceStatus")?.value || "").trim();
+                    const bodyInvoiceId = parseInt((document.getElementById("NavCurrentId")?.value || "0"), 10) || 0;
+                    const invIdEl = document.getElementById("InvoiceId");
+                    if (invIdEl) invIdEl.value = bodyInvoiceId;
+                    const invFlagEl = document.getElementById("InvoiceIsPostedFlag");
+                    if (invFlagEl) invFlagEl.value = bodyIsPosted ? "1" : "0";
+                    const fullRetWrap = document.getElementById("fullReturnBtnWrapper");
+                    if (fullRetWrap) {
+                        const canShow = bodyInvoiceId > 0 && (bodyIsPosted || bodyStatus === "مفتوحة للتعديل" || (bodyStatus && bodyStatus.startsWith("مرحلة")));
+                        if (canShow) fullRetWrap.classList.remove("d-none");
+                        else fullRetWrap.classList.add("d-none");
+                    }
+                    if (typeof setInvoicePosted === "function") setInvoicePosted(bodyIsPosted);
+                    if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                    const isPostedDisplay = document.getElementById("InvoiceIsPostedDisplay");
+                    if (isPostedDisplay && bodyStatus) isPostedDisplay.value = bodyStatus;
+                    const statusHidden = document.getElementById("InvoiceStatusHidden");
+                    if (statusHidden && bodyStatus) statusHidden.value = bodyStatus;
+                    const btnPost = document.getElementById("btnPostInvoice");
+                    if (btnPost) {
+                        btnPost.innerHTML = bodyIsPosted ? "✅ تم ترحيل الفاتورة" : "📤 ترحيل الفاتورة";
+                        btnPost.disabled = !!bodyIsPosted;
+                    }
+                    const btnOpen = document.getElementById("btnOpenInvoice");
+                    if (btnOpen) btnOpen.disabled = !bodyIsPosted;
 
                     // ✅ بعد تبديل الـ body: حدّث أزرار السايد بار
                     refreshSideNavButtons();

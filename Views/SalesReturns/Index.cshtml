@@ -1,4 +1,4 @@
-﻿@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
+@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesReturn>
@@ -390,11 +390,17 @@
                                    data-url="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })">
                                     تعديل
                                 </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@sr.SRId">
-                                    حذف
-                                </a>
+                                <form asp-action="Delete"
+                                      asp-controller="SalesReturns"
+                                      asp-route-id="@sr.SRId"
+                                      method="post"
+                                      class="d-inline"
+                                      onsubmit="return confirm('تأكيد حذف مرتجع البيع رقم @sr.SRId ؟');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">
+                                        حذف
+                                    </button>
+                                </form>
                             </td>
                         </tr>
                     }

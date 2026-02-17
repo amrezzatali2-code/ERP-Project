@@ -346,6 +346,16 @@
                             ⏪ فتح الفاتورة
                         </button>
 
+                        @{
+                            var canShowFullReturnBtn = Model?.SIId > 0 && (Model.IsPosted || Model.Status == "مفتوحة للتعديل" || (Model.Status != null && Model.Status.StartsWith("مرحلة")));
+                        }
+                        @* الزر يُعرض دائماً في DOM ليتحدّث عند التنقل (loadInvoiceBody) *@
+                        <div id="fullReturnBtnWrapper" class="@(canShowFullReturnBtn ? "" : "d-none")">
+                            <button type="button" class="btn btn-erp btn-erp-outline-warning btn-erp-sm w-100" id="btnCreateFullReturn" data-lock-posted="1">
+                                ↩️ مرتجع فاتورة مبيعات بالكامل
+                            </button>
+                        </div>
+
                         <!-- نفس بوكس الرسائل المستخدم في الترحيل -->
                         <div id="postInvoiceMsg" class="small mt-2"></div>
 
@@ -386,8 +396,10 @@
                 <div id="PI_BodyHost">
 
                     @* =========================
-                       قيم التنقل (لازم تكون داخل الـ BodyHost عشان تتحدّث مع frag=body)
+                       قيم التنقل + حالة الفاتورة (لازم تكون داخل الـ BodyHost عشان تتحدّث مع frag=body)
                        ========================= *@
+                    <input type="hidden" id="BodyHostIsPosted" value="@(Model?.IsPosted == true ? "1" : "0")" />
+                    <input type="hidden" id="BodyHostInvoiceStatus" value="@(Model?.Status ?? "")" />
                     <input type="hidden" id="NavFirstId" value="@(ViewBag.NavFirstId ?? 0)" />
                     <input type="hidden" id="NavLastId" value="@(ViewBag.NavLastId ?? 0)" />
                     <input type="hidden" id="NavPrevId" value="@(ViewBag.NavPrevId ?? 0)" />
@@ -3516,10 +3528,13 @@
                                     if (typeof applyPostedUiLock === "function") applyPostedUiLock();
 
                                     // =========================
-                                    // 6) بعد نجاح الترحيل: فعّل زر الفتح
+                                    // 6) بعد نجاح الترحيل: فعّل زر الفتح + إظهار زر المرتجع
                                     // =========================
                                     const btnOpen = document.getElementById("btnOpenInvoice");
                                     if (btnOpen) btnOpen.disabled = false;
+
+                                    const fullReturnWrapper = document.getElementById("fullReturnBtnWrapper");
+                                    if (fullReturnWrapper) fullReturnWrapper.classList.remove("d-none");
 
                                     const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
                                     if (btnPrint) btnPrint.disabled = false;                     // ✅ بعد الترحيل: الطباعة تتفتح
@@ -3545,6 +3560,62 @@
                                         msg.textContent = "فشل الترحيل: " + (err.message || "خطأ غير معروف");
                                         msg.className = "small mt-2 text-danger";
                                     }
+                                }
+                            });
+                        });
+
+                        // زر: مرتجع فاتورة بالكامل (بنفس أسلوب تحويل طلب الشراء)
+                        document.addEventListener("DOMContentLoaded", function () {
+                            const btnFullReturn = document.getElementById("btnCreateFullReturn");
+                            const msg = document.getElementById("postInvoiceMsg");
+                            if (!btnFullReturn) return;
+                            if (btnFullReturn.dataset.boundFullReturn) return;
+                            btnFullReturn.dataset.boundFullReturn = "1";
+                            btnFullReturn.addEventListener("click", async function () {
+                                const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
+                                if (invoiceId <= 0) {
+                                    if (msg) { msg.textContent = "⚠️ لازم تحفظ الفاتورة أولاً."; msg.className = "small mt-2 text-warning"; }
+                                    return;
+                                }
+                                if (btnFullReturn.disabled) return;
+                                if (!confirm("هل تريد إنشاء مرتجع بيع بالكامل من هذه الفاتورة وترحيله؟")) return;
+                                const oldHtml = btnFullReturn.innerHTML;
+                                btnFullReturn.innerHTML = "⏳ جاري الإنشاء...";
+                                btnFullReturn.disabled = true;
+                                if (msg) { msg.textContent = "يتم إنشاء المرتجع وترحيله..."; msg.className = "small mt-2 text-muted"; }
+                                try {
+                                    const res = await fetch(`/SalesInvoices/CreateFullReturn?id=${invoiceId}`, {
+                                        method: "POST",
+                                        credentials: "same-origin",
+                                        headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" }
+                                    });
+                                    const raw = await res.text();
+                                    let data = null;
+                                    try { data = raw ? JSON.parse(raw) : null; } catch { }
+                                    if (!res.ok) {
+                                        const errMsg = (data && data.message) ? data.message : raw || "حدث خطأ.";
+                                        throw new Error(errMsg);
+                                    }
+                                    const okMsg = (data && data.message) ? data.message : "تم إنشاء المرتجع بنجاح.";
+                                    if (msg) { msg.textContent = okMsg; msg.className = "small mt-2 text-success"; }
+                                    if (data && data.invoiceReposted) {
+                                        if (typeof setInvoicePosted === "function") setInvoicePosted(true);
+                                        if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                                        const isPostedDisplay = document.getElementById("InvoiceIsPostedDisplay");
+                                        if (isPostedDisplay && data.invoiceStatus) isPostedDisplay.value = data.invoiceStatus;
+                                        const statusHidden = document.getElementById("InvoiceStatusHidden");
+                                        if (statusHidden && data.invoiceStatus) statusHidden.value = data.invoiceStatus;
+                                        const btnPost = document.getElementById("btnPostInvoice");
+                                        if (btnPost) { btnPost.innerHTML = "✅ تم ترحيل الفاتورة"; btnPost.disabled = true; }
+                                        const btnOpen = document.getElementById("btnOpenInvoice");
+                                        if (btnOpen) btnOpen.disabled = false;
+                                    }
+                                    btnFullReturn.disabled = false;
+                                    btnFullReturn.innerHTML = oldHtml;
+                                } catch (err) {
+                                    btnFullReturn.disabled = false;
+                                    btnFullReturn.innerHTML = oldHtml;
+                                    if (msg) { msg.textContent = "فشل: " + (err.message || "خطأ غير معروف"); msg.className = "small mt-2 text-danger"; }
                                 }
                             });
                         });
@@ -4055,6 +4126,34 @@
                                 } else {
                                     host.innerHTML = html;
                                 }
+
+                                // ✅ بعد تبديل الـ body: حدّث الشريط الجانبي (حالة الفاتورة + زر المرتجع)
+                                const bodyIsPosted = document.getElementById("BodyHostIsPosted")?.value === "1";
+                                const bodyStatus = (document.getElementById("BodyHostInvoiceStatus")?.value || "").trim();
+                                const bodyInvoiceId = parseInt((document.getElementById("NavCurrentId")?.value || "0"), 10) || 0;
+                                const invIdEl = document.getElementById("InvoiceId");
+                                if (invIdEl) invIdEl.value = bodyInvoiceId;
+                                const invFlagEl = document.getElementById("InvoiceIsPostedFlag");
+                                if (invFlagEl) invFlagEl.value = bodyIsPosted ? "1" : "0";
+                                const fullRetWrap = document.getElementById("fullReturnBtnWrapper");
+                                if (fullRetWrap) {
+                                    const canShow = bodyInvoiceId > 0 && (bodyIsPosted || bodyStatus === "مفتوحة للتعديل" || (bodyStatus && bodyStatus.startsWith("مرحلة")));
+                                    if (canShow) fullRetWrap.classList.remove("d-none");
+                                    else fullRetWrap.classList.add("d-none");
+                                }
+                                if (typeof setInvoicePosted === "function") setInvoicePosted(bodyIsPosted);
+                                if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                                const isPostedDisplay = document.getElementById("InvoiceIsPostedDisplay");
+                                if (isPostedDisplay && bodyStatus) isPostedDisplay.value = bodyStatus;
+                                const statusHidden = document.getElementById("InvoiceStatusHidden");
+                                if (statusHidden && bodyStatus) statusHidden.value = bodyStatus;
+                                const btnPost = document.getElementById("btnPostInvoice");
+                                if (btnPost) {
+                                    btnPost.innerHTML = bodyIsPosted ? "✅ تم ترحيل الفاتورة" : "📤 ترحيل الفاتورة";
+                                    btnPost.disabled = !!bodyIsPosted;
+                                }
+                                const btnOpen = document.getElementById("btnOpenInvoice");
+                                if (btnOpen) btnOpen.disabled = !bodyIsPosted;
 
                                 // ✅ بعد تبديل الـ body: حدّث أزرار السايد بار
                                 refreshSideNavButtons();

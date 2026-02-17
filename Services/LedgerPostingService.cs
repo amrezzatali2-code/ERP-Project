@@ -2156,18 +2156,14 @@ namespace ERP.Services
                     .Where(l => l.CostDiff.HasValue)
                     .Sum(l => l.CostDiff.Value);
 
-                // إنشاء قيود محاسبية
-                // مدين: المخزون (زيادة) أو دائن (نقصان) حسب الفرق
-                // دائن/مدين: حساب التسويات الجردية
+                // إنشاء قيود محاسبية (تؤثر في الربح)
+                // - زيادة مخزون: مدين مخزون / دائن إيرادات أخرى (فائض جرد)
+                // - نقصان مخزون: مدين تكلفة البضاعة / دائن مخزون (عجز جرد)
+                int inventoryAccountId = await ResolveAccountIdByCodeAsync(InventoryAccountCode); // 1105
+                int cogsAccountId = await ResolveAccountIdByCodeAsync(CogsAccountCode);          // 5100 عجز
+                int otherRevenueAccountId = await ResolveAccountIdByCodeAsync("4200");          // 4200 فائض
 
-                // ملاحظة: في تسويات الجرد، الفرق الإيجابي = زيادة مخزون، الفرق السلبي = نقصان مخزون
-                // القيد المحاسبي:
-                // - لو الفرق موجب (زيادة): مدين المخزون / دائن حساب التسويات
-                // - لو الفرق سالب (نقصان): مدين حساب التسويات / دائن المخزون
-
-                string inventoryAccountId = "1000"; // حساب المخزون
-                string adjustmentAccountId = "6000"; // حساب التسويات الجردية
-
+                string voucherNo = adjustment.Id.ToString();
                 int lineNo = 1;
                 foreach (var line in adjustment.Lines.OrderBy(l => l.Id))
                 {
@@ -2208,6 +2204,79 @@ namespace ERP.Services
 
                     _db.StockLedger.Add(ledger);
 
+                    // قيد محاسبي: مدين مخزون / دائن إيرادات (فائض) أو مدين تكلفة / دائن مخزون (عجز)
+                    decimal costDiff = (line.CostDiff ?? 0m);
+                    if (costDiff != 0)
+                    {
+                        if (costDiff > 0)
+                        {
+                            _db.LedgerEntries.Add(new LedgerEntry
+                            {
+                                EntryDate = adjustment.AdjustmentDate,
+                                SourceType = LedgerSourceType.StockAdjustment,
+                                VoucherNo = voucherNo,
+                                SourceId = adjustment.Id,
+                                LineNo = lineNo,
+                                PostVersion = newStage,
+                                AccountId = inventoryAccountId,
+                                CustomerId = null,
+                                Debit = costDiff,
+                                Credit = 0m,
+                                Description = $"زيادة مخزون تسوية جرد رقم {adjustment.Id}",
+                                CreatedAt = now
+                            });
+                            _db.LedgerEntries.Add(new LedgerEntry
+                            {
+                                EntryDate = adjustment.AdjustmentDate,
+                                SourceType = LedgerSourceType.StockAdjustment,
+                                VoucherNo = voucherNo,
+                                SourceId = adjustment.Id,
+                                LineNo = lineNo + 1000,
+                                PostVersion = newStage,
+                                AccountId = otherRevenueAccountId,
+                                CustomerId = null,
+                                Debit = 0m,
+                                Credit = costDiff,
+                                Description = $"فائض جرد تسوية رقم {adjustment.Id}",
+                                CreatedAt = now
+                            });
+                        }
+                        else
+                        {
+                            decimal absDiff = Math.Abs(costDiff);
+                            _db.LedgerEntries.Add(new LedgerEntry
+                            {
+                                EntryDate = adjustment.AdjustmentDate,
+                                SourceType = LedgerSourceType.StockAdjustment,
+                                VoucherNo = voucherNo,
+                                SourceId = adjustment.Id,
+                                LineNo = lineNo,
+                                PostVersion = newStage,
+                                AccountId = cogsAccountId,
+                                CustomerId = null,
+                                Debit = absDiff,
+                                Credit = 0m,
+                                Description = $"عجز جرد تسوية رقم {adjustment.Id}",
+                                CreatedAt = now
+                            });
+                            _db.LedgerEntries.Add(new LedgerEntry
+                            {
+                                EntryDate = adjustment.AdjustmentDate,
+                                SourceType = LedgerSourceType.StockAdjustment,
+                                VoucherNo = voucherNo,
+                                SourceId = adjustment.Id,
+                                LineNo = lineNo + 1000,
+                                PostVersion = newStage,
+                                AccountId = inventoryAccountId,
+                                CustomerId = null,
+                                Debit = 0m,
+                                Credit = absDiff,
+                                Description = $"نقصان مخزون تسوية جرد رقم {adjustment.Id}",
+                                CreatedAt = now
+                            });
+                        }
+                    }
+
                     // تحديث StockBatch
                     if (line.Batch != null && !string.IsNullOrWhiteSpace(line.Batch.BatchNo))
                     {
@@ -2236,6 +2305,32 @@ namespace ERP.Services
                                 UpdatedAt = DateTime.UtcNow
                             };
                             _db.StockBatches.Add(newStockBatch);
+                        }
+                    }
+                    else
+                    {
+                        // بدون تشغيلة: تحديث أو إنشاء StockBatch عام (BatchNo = "")
+                        var stockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b =>
+                                b.ProdId == line.ProductId &&
+                                b.WarehouseId == adjustment.WarehouseId &&
+                                (b.BatchNo == null || b.BatchNo.Trim() == ""));
+                        if (stockBatch != null)
+                        {
+                            stockBatch.QtyOnHand = line.QtyAfter;
+                            stockBatch.UpdatedAt = DateTime.UtcNow;
+                        }
+                        else if (line.QtyAfter > 0)
+                        {
+                            _db.StockBatches.Add(new StockBatch
+                            {
+                                WarehouseId = adjustment.WarehouseId,
+                                ProdId = line.ProductId,
+                                BatchNo = "",
+                                Expiry = null,
+                                QtyOnHand = line.QtyAfter,
+                                UpdatedAt = DateTime.UtcNow
+                            });
                         }
                     }
 
@@ -2276,6 +2371,12 @@ namespace ERP.Services
 
                 if (!adjustment.IsPosted)
                     throw new Exception("هذه التسوية غير مترحلة.");
+
+                // حذف قيود LedgerEntries المرتبطة بالتسوية
+                var ledgerEntries = await _db.LedgerEntries
+                    .Where(e => e.SourceType == LedgerSourceType.StockAdjustment && e.SourceId == adjustment.Id)
+                    .ToListAsync();
+                _db.LedgerEntries.RemoveRange(ledgerEntries);
 
                 // حذف حركات StockLedger المرتبطة
                 var ledgers = await _db.StockLedger
