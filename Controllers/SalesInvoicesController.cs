@@ -467,28 +467,59 @@ namespace ERP.Controllers
             // (5) تشغيلات FEFO للمخزن المختار
             // - الكمية: StockBatches
             // - السعر: Batches.PriceRetailBatch
-            // - Left Join احتياطي: لو Batch غير موجود لا يكسر
+            // - الربط على (ProdId, BatchNo, Expiry) لتجنب تكرار الصفوف (Batch له مفتاح مركب)
             // =========================
-            var batches = await (
-                from sb in _context.StockBatches.AsNoTracking()
-                join b in _context.Batches.AsNoTracking()
-                    on new { sb.ProdId, sb.BatchNo } equals new { b.ProdId, b.BatchNo } into bb
-                from b in bb.DefaultIfEmpty() // ✅ Left Join
-                where sb.ProdId == prodId
-                      && sb.WarehouseId == warehouseId
-                      && sb.QtyOnHand > 0
-                orderby sb.Expiry, sb.BatchNo
-                select new
-                {
-                    batchNo = sb.BatchNo,
-                    expiry = sb.Expiry,
-                    expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("MM/yyyy") : "",
-                    qty = sb.QtyOnHand,
+            var stockBatchList = await _context.StockBatches
+                .AsNoTracking()
+                .Where(sb => sb.ProdId == prodId && sb.WarehouseId == warehouseId && sb.QtyOnHand > 0)
+                .Select(sb => new { sb.BatchNo, sb.Expiry, sb.QtyOnHand })
+                .ToListAsync();
 
-                    // ✅ سعر التشغيلة من Batch (ولو مش موجود -> 0)
-                    priceRetailBatch = (decimal?)(b != null ? b.PriceRetailBatch : 0m) ?? 0m
-                }
-            ).ToListAsync();
+            // جلب أسعار التشغيلات من Batches (مطابقة حسب ProdId + BatchNo + Expiry)
+            var batchKeys = stockBatchList
+                .Where(x => x.Expiry.HasValue)
+                .Select(x => new { ProdId = prodId, x.BatchNo, Expiry = x.Expiry!.Value.Date })
+                .Distinct()
+                .ToList();
+
+            var batchPrices = new Dictionary<(string BatchNo, DateTime ExpiryDate), decimal>();
+            if (batchKeys.Any())
+            {
+                var expiryDates = batchKeys.Select(k => k.Expiry).Distinct().ToList();
+                var batchNos = batchKeys.Select(k => k.BatchNo).Distinct().ToList();
+                var pricesFromDb = await _context.Batches
+                    .AsNoTracking()
+                    .Where(b => b.ProdId == prodId && batchNos.Contains(b.BatchNo)
+                        && expiryDates.Contains(b.Expiry.Date))
+                    .Select(b => new { b.BatchNo, b.Expiry, b.PriceRetailBatch })
+                    .ToListAsync();
+                foreach (var p in pricesFromDb)
+                    batchPrices[(p.BatchNo, p.Expiry.Date)] = p.PriceRetailBatch ?? 0m;
+            }
+
+            // StockBatches هو المرجع — عرض كل التشغيلات، والسعر من Batches إن وُجد
+            var rawBatches = stockBatchList.Select(sb => new
+            {
+                batchNo = sb.BatchNo,
+                expiry = sb.Expiry,
+                expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("MM/yyyy") : "",
+                qty = sb.QtyOnHand,
+                priceRetailBatch = sb.Expiry.HasValue && batchPrices.TryGetValue((sb.BatchNo, sb.Expiry!.Value.Date), out var pr) ? pr : 0m
+            }).ToList();
+
+            // تجميع حسب (BatchNo, Expiry) — صف واحد لكل تشغيلة
+            var batches = rawBatches
+                .GroupBy(x => new { x.batchNo, expiryDate = x.expiry.HasValue ? x.expiry.Value.Date : (DateTime?)null })
+                .Select(g => new
+                {
+                    batchNo = g.Key.batchNo,
+                    expiry = g.First().expiry,
+                    expiryText = g.Key.expiryDate.HasValue ? g.Key.expiryDate.Value.ToString("MM/yyyy") : "",
+                    qty = g.Sum(x => x.qty),
+                    priceRetailBatch = g.First().priceRetailBatch
+                })
+                .OrderBy(x => x.expiry).ThenBy(x => x.batchNo)
+                .ToList();
 
             // =========================
             // (6) أول تشغيلة (Auto) لملء Card 3 تلقائيًا

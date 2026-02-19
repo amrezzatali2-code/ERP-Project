@@ -29,6 +29,18 @@ namespace ERP.ViewModels
 
         // آخر الحركات
         public List<DashboardRecentItem> RecentItems { get; set; } = new();
+
+        /// <summary>عدد أصناف المبيعات (أصناف متميزة مباعة في الشهر)</summary>
+        public int SalesProductsSoldCount { get; set; }
+
+        /// <summary>بيانات المخطط البياني: مبيعات آخر 7 أيام</summary>
+        public List<DashboardChartPoint> ChartData { get; set; } = new();
+    }
+
+    public class DashboardChartPoint
+    {
+        public string Date { get; set; } = "";
+        public decimal Amount { get; set; }
     }
 
     public class DashboardRecentItem

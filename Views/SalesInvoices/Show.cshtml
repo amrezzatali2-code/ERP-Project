@@ -26,114 +26,73 @@
         }
 
 
-        /* ===== التصميم الجديد: بدون سكرول — الفاتورة كلها في الشاشة ===== */
+        /* ===== نفس تصميم فاتورة المشتريات: خلفية فاتحة + سكرول واحد للصفحة + radius ===== */
         .invoice-page {
-            background-color: #ffffff;
-            height: 100vh;
-            max-height: 100vh;
-            padding: 0;
-            display: flex;
-            flex-direction: row;
-            overflow: hidden;
+            background-color: #f3f6fb;
+            min-height: 100vh;
+            padding-bottom: 2rem;
         }
-
-        html.in-frame .invoice-page { height: 100vh; }
-        html:not(.in-frame) .invoice-page { height: calc(100vh - 56px); max-height: calc(100vh - 56px); }
 
         .invoice-page .container-fluid {
             padding: 0;
             max-width: 100%;
-            height: 100%;
         }
 
-        .invoice-page .row {
-            margin: 0;
-            flex-wrap: nowrap;
-            height: 100%;
-        }
-
-        /* الشريط الجانبي — أزرق غامق */
+        /* الشريط الجانبي — بدون سكرول داخلي (الصفحة كلها تسكرول مرة واحدة) */
         .invoice-page .col-lg-2.order-1 {
-            background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%);
-            height: 100%;
             padding: 0.5rem 0.5rem;
-            border-left: 1px solid rgba(255,255,255,.08);
-            overflow-y: auto;
-            overflow-x: hidden;
         }
 
         .invoice-side-card {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
+            background: #ffffff !important;
+            border: 1px solid rgba(13,110,253,.12) !important;
+            box-shadow: 0 10px 24px rgba(0,0,0,.05) !important;
+            border-radius: 1rem;
+            overflow: hidden;
         }
 
         .invoice-side-card .card-header {
-            background: transparent !important;
-            color: rgba(255,255,255,.9) !important;
-            border-bottom: 1px solid rgba(255,255,255,.15);
-            padding: 0.75rem 0;
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
+            color: #ffffff !important;
+            border-bottom: none;
+            padding: 0.55rem 1rem;
         }
 
+        /* شريط الأزرار: radius مثل فاتورة المشتريات */
         .invoice-actions-sticky {
-            background: transparent !important;
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
+            position: sticky;
+            top: 58px;
+            z-index: 3000;
+            background: #ffffff !important;
+            border: 1px solid rgba(13,110,253,.12) !important;
+            padding: 10px 10px !important;
+            border-radius: 14px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.05) !important;
         }
-
-        .invoice-page .invoice-side-card .btn-erp,
-        .invoice-page .invoice-side-card .btn-erp-outline-primary,
-        .invoice-page .invoice-side-card .btn-erp-outline-success,
-        .invoice-page .invoice-side-card .btn-erp-outline-warning,
-        .invoice-page .invoice-side-card .btn-erp-outline-danger {
-            background: rgba(255,255,255,.1) !important;
-            border-color: rgba(255,255,255,.25) !important;
-            color: #fff !important;
-        }
-
-        .invoice-page .invoice-side-card .btn-erp:hover:not(:disabled),
-        .invoice-page .invoice-side-card .btn-erp-outline-primary:hover:not(:disabled),
-        .invoice-page .invoice-side-card .btn-erp-outline-success:hover:not(:disabled),
-        .invoice-page .invoice-side-card .btn-erp-outline-warning:hover:not(:disabled),
-        .invoice-page .invoice-side-card .btn-erp-outline-danger:hover:not(:disabled) {
-            background: rgba(255,255,255,.2) !important;
-            border-color: rgba(255,255,255,.4) !important;
-            color: #fff !important;
-        }
-
-        .invoice-page .invoice-side-card .btn-erp:disabled,
-        .invoice-page .invoice-side-card .btn-erp-outline-primary:disabled {
-            opacity: 0.5;
+        @@media (max-width: 992px) {
+            .invoice-actions-sticky {
+                top: 56px;
+            }
         }
 
         .invoice-page .invoice-side-card .form-control {
-            background: rgba(255,255,255,.1);
-            border-color: rgba(255,255,255,.2);
-            color: #fff;
+            background: #fff;
+            border-color: #dee2e6;
+            color: #212529;
         }
 
         .invoice-page .invoice-side-card .form-control::placeholder {
-            color: rgba(255,255,255,.5);
+            color: #6c757d;
         }
 
         .invoice-page .invoice-side-card #postInvoiceMsg {
-            color: rgba(255,255,255,.85);
+            color: #212529;
         }
 
-        /* العمود الرئيسي — سكرول داخله لرؤية كل المحتوى (الهيدر + الأصناف + الجدول + الإجماليات) */
-        .invoice-page .col-lg-2.order-1 {
-            flex-shrink: 0;
-        }
-
+        /* العمود الرئيسي — بدون سكرول داخلي (سكرول الصفحة فقط) */
         .invoice-page .col-lg-10.order-2 {
-            background: #ffffff;
+            background: transparent;
             padding: 0.5rem 1rem;
-            flex: 1;
-            min-width: 0;
-            height: 100%;
-            overflow-y: auto;
-            overflow-x: hidden;
         }
 
         /* حاوية المحتوى */
@@ -141,37 +100,28 @@
             display: block;
         }
 
-        /* حاوية جدول السطور */
+        /* حاوية جدول السطور — ملاصق لكارت الإضافة بدون فاصل رمادي */
         .invoice-page .invoice-lines-container {
             display: block;
+            margin-top: 0;
         }
 
         .invoice-page .invoice-lines-container .erp-table-wrapper {
-            max-height: 320px;
+            max-height: 360px;
             overflow: auto;
+            border: none;
+            border-radius: 0;
         }
 
-        /* الكروت الرئيسية */
+        /* الكروت الرئيسية — radius مثل فاتورة المشتريات */
         .invoice-header-card,
         .invoice-details-card,
         .invoice-lines-card,
         .invoice-totals-card,
         .invoice-Add-card,
         .invoice-product-card {
-            border-radius: 0.5rem;
+            border-radius: 1rem;
             overflow: hidden;
-            border: 1px solid #e5e7eb;
-            box-shadow: 0 1px 3px rgba(0,0,0,.05);
-        }
-
-        /* شاشات صغيرة — نسمح بالسكرول */
-        @@media (max-width: 992px) {
-            .invoice-page { height: auto; max-height: none; overflow: visible; }
-            .invoice-page .row { flex-wrap: wrap; height: auto; }
-            .invoice-page .col-lg-2.order-1 { height: auto; min-height: auto; border-left: none; border-bottom: 1px solid rgba(255,255,255,.15); }
-            .invoice-page .col-lg-10.order-2 { height: auto; overflow: visible; }
-            #PI_BodyHost { min-height: auto; overflow: visible; }
-            .invoice-page .invoice-lines-container .erp-table-wrapper { max-height: 200px !important; }
         }
 
 
@@ -179,27 +129,66 @@
 
 
 
-        /* شريط الهيدر — أزرق غامق متناسق مع الشريط الجانبي */
+        /* شريط الهيدر — بحجم كلمة الأزرار + مسافة أقل */
         .invoice-header-bar {
-            background: linear-gradient(90deg, #1e3a5f 0%, #2563eb 100%);
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
             color: #ffffff;
-            padding: 0.4rem 0.75rem;
+            padding: 0.35rem 0.75rem;
+        }
+        .invoice-header-bar h6 {
+            margin: 0;
+            font-size: 1rem;
+            font-weight: 600;
         }
 
-            .invoice-header-bar h5 {
-                margin-bottom: 0.1rem;
-                font-weight: 600;
-            }
-
-        /* رؤوس الكروت — رمادي فاتح نظيف */
+        /* رؤوس الكروت — نفس لون فاتورة المشتريات */
         .invoice-details-card .card-header,
-        .invoice-Add-card .card-header,
-        .invoice-product-card .card-header,
         .invoice-lines-card .card-header {
-            background: #f8fafc !important;
-            color: #1e293b !important;
-            padding: 0.35rem 0.75rem;
-            border-bottom: 1px solid #e2e8f0;
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.55rem 1rem;
+        }
+
+        /* إخفاء حدود وظل كروت بيانات الصنف وإضافة صنف — الخط الملون يكفي */
+        .invoice-product-card,
+        .invoice-Add-card {
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* صف إضافة الصنف — كل الحقول في صف واحد */
+        .invoice-Add-card .row.flex-nowrap {
+            flex-wrap: nowrap;
+        }
+        /* تقليل المسافة تحت كارت الإضافة — الجدول يلاصق العنوان مباشرة */
+        .invoice-Add-card .card-body {
+            padding-bottom: 0.35rem;
+        }
+
+        /* خط ملون بدل عنوان الكارت (بيانات الصنف + إضافة صنف) — فاصل ضيق */
+        .invoice-card-line {
+            height: 4px;
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            border-radius: 2px;
+            margin-bottom: 0.4rem;
+        }
+
+        /* تصغير حقلي الكمية في كارت بيانات الصنف */
+        .invoice-product-card #ProdQtyCurrentWarehouse,
+        .invoice-product-card #ProdQtyAllWarehouses {
+            max-width: 90px;
+        }
+
+        /* جدول تشغيلات الصنف — أصغر وأكثر تنظيمًا */
+        .invoice-product-card .invoice-batch-table-wrap {
+            max-width: 480px;
+        }
+        .invoice-product-card .invoice-batch-table {
+            font-size: 0.8rem;
+        }
+        .invoice-product-card .invoice-batch-table th,
+        .invoice-product-card .invoice-batch-table td {
+            padding: 0.25rem 0.35rem;
         }
 
         .invoice-status-badge {
@@ -241,35 +230,55 @@
             gap: 0.25rem !important;
         }
 
-        /* هيدر جدول السطور — رمادي فاتح */
-        .invoice-lines-header {
-            background: #f1f5f9 !important;
-            color: #334155 !important;
+        /* هيدر جدول السطور — لون واحد موحد لجميع العناوين */
+        .invoice-lines-container .erp-table-wrapper thead.invoice-lines-header th {
+            background-color: #374151 !important;
+            color: #ffffff !important;
+            border-color: rgba(255,255,255,.25) !important;
+            font-weight: 600;
+            box-shadow: 0 1px 0 0 rgba(255,255,255,.2);
         }
 
-            .invoice-lines-header th {
-                border-color: #e2e8f0 !important;
-                font-weight: 600;
-            }
-
         .erp-table-wrapper {
-            max-height: 280px;
+            max-height: 360px;
             overflow: auto;
         }
 
-        /* تقليل المسافات للظهور في شاشة واحدة بدون سكرول */
-        .invoice-page .card { margin-bottom: 0.4rem !important; }
-        .invoice-page .card-body { padding: 0.5rem 0.75rem !important; }
-        .invoice-page .mb-2 { margin-bottom: 0.35rem !important; }
-        .invoice-page .mb-3 { margin-bottom: 0.4rem !important; }
-        .invoice-page .row.g-3 { --bs-gutter-y: 0.4rem; --bs-gutter-x: 0.5rem; }
-        .invoice-page .row.g-4 { --bs-gutter-y: 0.35rem; --bs-gutter-x: 0.5rem; }
+        /* مسافات مناسبة مثل فاتورة المشتريات */
+        .invoice-page .card { margin-bottom: 0.5rem; }
+        .invoice-page .card-body { padding: 0.75rem 1rem; }
+        .invoice-header-card .card-body { padding: 0.5rem 0.75rem 0.35rem 0.75rem; }
         .invoice-page .form-label-sm { font-size: 0.8rem; }
         .invoice-page .form-control-sm { padding: 0.2rem 0.4rem; font-size: 0.8rem; }
 
         .summary-badge {
             min-width: 80px;
             text-align: center;
+        }
+
+        /* صف الإجماليات — توزيع flex + الإجمالي بعد الخصم والضريبة في آخر السطر */
+        .invoice-summary-row {
+            flex-wrap: wrap;
+            gap: 0.75rem 1.25rem !important;
+        }
+        .invoice-summary-item {
+            flex: 1 1 0;
+            min-width: 90px;
+        }
+        .invoice-summary-total {
+            flex: 0 0 auto;
+            margin-inline-start: auto;
+        }
+        .invoice-summary-badge {
+            font-size: 0.95rem;
+            padding: 0.4rem 0.8rem;
+            min-width: 78px;
+            text-align: center;
+            display: inline-block;
+        }
+        .invoice-summary-tax {
+            max-width: 95px;
+            font-size: 0.95rem;
         }
 
         /* =========================================================
@@ -322,14 +331,14 @@
 
 
 <div class="invoice-page" dir="rtl">
-    <div class="container-fluid pt-2">
+    <div class="container-fluid pt-0">
 
         @* فورم مخفي لتوليد Anti-Forgery Token لاستخدامه في نداءات AJAX *@
         <form id="__AntiForgeryForm" method="post" style="display:none">
             @Html.AntiForgeryToken()
         </form>
 
-        <div class="row g-3">
+        <div class="row g-3 align-items-start">
 
 
 
@@ -338,9 +347,9 @@
                ========================= *@
             <div class="col-12 col-lg-2 order-1 order-lg-2">
 
-                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
+                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 0;">
                     <div class="card-header py-2 text-center">
-                        <h6 class="mb-0">إجراءات فاتورة المبيعات</h6>
+                        <h6 class="mb-0">الأزرار</h6>
                     </div>
 
 
@@ -490,7 +499,19 @@
                             🗑️ مسح كل أصناف الفاتورة
                         </button>
 
+                        <div>
+                            <button type="button" id="btnOpenProductMovement"
+                                    class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100">
+                                حركة الصنف
+                            </button>
+                        </div>
 
+                        <div>
+                            <button type="button" id="btnOpenProductEdit"
+                                    class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100">
+                                بيانات الصنف
+                            </button>
+                        </div>
 
                         <button type="button"
                                 id="btnPrintInvoice"
@@ -531,7 +552,7 @@
                     @* ====================================================
                        1) كارت بيانات فاتورة المبيعات + العميل + المخزن
                        ==================================================== *@
-                    <div class="card shadow-sm mb-2 invoice-header-card">
+                    <div class="card shadow-sm mb-0 invoice-header-card">
 
                         @{
                             bool isNewInvoice = Model == null || Model.SIId == 0;
@@ -546,35 +567,11 @@
                             : "";
                         }
 
-                        <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
-
-                            <div>
-                                <h5 class="mb-1">فاتورة مبيعات</h5>
-                            </div>
-
-                            <div class="d-flex align-items-center gap-2">
-
-                                <div class="text-end">
-                                    @if (!isNewInvoice)
-                                    {
-                                        @* مكان رسائل الحالة إن وجدت *@
-                                    }
-                                </div>
-
-                                <button type="button"
-                                        class="btn btn-sm btn-light"
-                                        data-bs-toggle="collapse"
-                                        data-bs-target="#InvoiceHeaderCardCollapse"
-                                        aria-expanded="true"
-                                        aria-controls="InvoiceHeaderCardCollapse">
-                                    <span id="InvoiceHeaderCardArrow">▾</span>
-                                </button>
-
-                            </div>
+                        <div class="invoice-header-bar">
+                            <h6 class="mb-0">فاتورة مبيعات</h6>
                         </div>
 
-                        <div id="InvoiceHeaderCardCollapse" class="collapse show">
-                            <div class="card-body">
+                        <div class="card-body">
 
                                 <div class="row g-3 align-items-end">
 
@@ -621,7 +618,7 @@
                                         </datalist>
                                     </div>
 
-                                    <div class="col-lg-2 col-md-2">
+                                    <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">رقم الفاتورة</label>
 
                                         <input type="hidden"
@@ -651,13 +648,14 @@
                                                        readonly />
                                             </div>
                                         </div>
+
                                     </div>
 
 
                                     <!-- =========================================================
                                     سياسة العميل (تظهر تلقائيًا عند اختيار العميل)
                                     ========================================================= -->
-                                    <div class="col-lg-2 col-md-6 col-sm-12">
+                                    <div class="col-lg-1 col-md-6 col-sm-12">
                                         <label class="form-label form-label-sm" for="CustomerPolicyText">سياسة العميل</label>
 
                                         <!-- متغير: عرض السياسة كنص (مثال: 1 - Policy 1) -->
@@ -671,115 +669,59 @@
                                         <input type="hidden" id="CustomerPolicyId" value="" />
                                     </div>
 
-                                </div>
-
-                            
-
-
-                                <br />
-
-                                <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
-
-                                <div class="row g-3">
-
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">حالة الفاتورة</label>
-                                        <input id="InvoiceIsPostedDisplay"
-                                               class="form-control form-control-sm text-center"
-                                               value="@(string.IsNullOrWhiteSpace(Model.Status) ? "مسودة" : Model.Status)"
-                                               readonly />
-                                    </div>
-
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">أمر البيع المرجعي</label>
-                                        <input id="RefPRId" class="form-control form-control-sm text-center"
-                                               value="@((ViewBag.RefDocId?.ToString() ?? ""))"
-                                               readonly />
-                                    </div>
-
-                                    <div class="col-lg-3 col-md-6 col-sm-12">
+                                    <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
-                                        <select asp-for="WarehouseId"
-                                                asp-items="ViewBag.Warehouses"
-                                                data-lock-posted="1"
-                                                class="form-select form-select-sm"
-                                                data-is-posted="@(Model.IsPosted ? "1" : "0")">
+                                        <select asp-for="WarehouseId" asp-items="ViewBag.Warehouses" data-lock-posted="1"
+                                                class="form-select form-select-sm" data-is-posted="@(Model?.IsPosted == true ? "1" : "0")">
                                             <option value="">اختر المخزن</option>
                                         </select>
                                     </div>
 
-                                    <div class="col-lg-2 col-md-6 col-sm-12">
+                                    <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">كاتب الفاتورة</label>
-                                        <input id="InvoiceCreatedByDisplay"
-                                               class="form-control form-control-sm text-center"
-                                               value="@Model.CreatedBy"
-                                               readonly />
+                                        <input id="InvoiceCreatedByDisplay" class="form-control form-control-sm text-center"
+                                               value="@(Model?.CreatedBy ?? "")" readonly />
                                     </div>
 
                                 </div>
 
-                                <div class="row g-4">
-                                    <div class="col-lg-3 col-md-3">
+                                <input type="hidden" asp-for="Status" id="InvoiceStatusHidden" />
+
+                                <div class="row g-2 align-items-end">
+                                    <div class="col">
+                                        <label class="form-label form-label-sm">أمر البيع المرجعي</label>
+                                        <input id="RefPRId" class="form-control form-control-sm text-center" value="@((ViewBag.RefDocId?.ToString() ?? ""))" readonly />
+                                    </div>
+                                    <div class="col">
                                         <label class="form-label form-label-sm">الهاتف</label>
-                                        <input id="CustomerPhone"
-                                               class="form-control form-control-sm"
-                                               value="@(
-                                               Model?.Customer?.Phone1
-                                               ?? Model?.Customer?.Phone2
-                                               ?? Model?.Customer?.Whatsapp
-                                               ?? ""
-                                                                                                             )"
-                                               readonly />
+                                        <input id="CustomerPhone" class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.Phone1 ?? Model?.Customer?.Phone2 ?? Model?.Customer?.Whatsapp ?? "")" readonly />
                                     </div>
-
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col">
                                         <label class="form-label form-label-sm">المحافظة</label>
-                                        <input id="CustomerGovernorate"
-                                               class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")"
-                                               readonly />
+                                        <input id="CustomerGovernorate" class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")" readonly />
                                     </div>
-
-                                    <div class="col-lg-3 col-md-3">
+                                    <div class="col">
                                         <label class="form-label form-label-sm">الحي</label>
-                                        <input id="CustomerDistrict"
-                                               class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.District?.DistrictName ?? "")"
-                                               readonly />
+                                        <input id="CustomerDistrict" class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.District?.DistrictName ?? "")" readonly />
                                     </div>
-
-                                    <div class="col-lg-2 col-md-3">
+                                    <div class="col">
                                         <label class="form-label form-label-sm">المنطقة</label>
-                                        <input id="CustomerArea"
-                                               class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Area?.AreaName ?? "")"
-                                               readonly />
+                                        <input id="CustomerArea" class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.Area?.AreaName ?? "")" readonly />
                                     </div>
-
-                                </div>
-
-                                <div class="row g-3">
-
-                                    <div class="col-lg-6 col-md-6">
+                                    <div class="col-4 col-lg-5">
                                         <label class="form-label form-label-sm">العنوان</label>
-                                        <input id="CustomerAddress"
-                                               class="form-control form-control-sm"
-                                               value="@(Model?.Customer?.Address ?? "")"
-                                               readonly
-                                               data-lock-posted="1" />
+                                        <input id="CustomerAddress" class="form-control form-control-sm"
+                                               value="@(Model?.Customer?.Address ?? "")" readonly data-lock-posted="1" />
                                     </div>
-
-                                    <div class="col-lg-3 col-md-2">
+                                    <div class="col">
                                         <label class="form-label form-label-sm">الحد الإتماني</label>
-                                        <input id="CustomerCredit"
-                                               class="form-control form-control-sm"
-                                               value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))"
-                                               readonly
-                                               data-lock-posted="1" />
+                                        <input id="CustomerCredit" class="form-control form-control-sm"
+                                               value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))" readonly data-lock-posted="1" />
                                     </div>
-
-
-
                                 </div>
                             </div>
                         </div>
@@ -787,76 +729,55 @@
                         @* =====================================================
                        2) كارت بيانات الصنف
                        ===================================================== *@
-                        <div class="card shadow-sm mb-3 invoice-product-card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h6 class="mb-0">بيانات الصنف</h6>
-                                <button type="button"
-                                        class="btn btn-sm btn-light"
-                                        data-bs-toggle="collapse"
-                                        data-bs-target="#ProductCardCollapse"
-                                        aria-expanded="true"
-                                        aria-controls="ProductCardCollapse">
-                                    <span id="ProductCardArrow">▾</span>
-                                </button>
-                            </div>
+                        <div class="card shadow-sm mb-0 invoice-product-card">
+                            <div class="card-body pt-0 pb-0">
+                                <div class="invoice-card-line"></div>
 
-                            <div id="ProductCardCollapse" class="collapse">
-                                <div class="card-body">
-
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">الكمية في هذا المخزن</label>
+                                    <div class="row g-2 mb-2 align-items-end">
+                                        <div class="col-3 col-md-1">
+                                            <label class="form-label form-label-sm">كمية المخزن</label>
                                             <input type="text" id="ProdQtyCurrentWarehouse"
                                                    class="form-control form-control-sm text-center" value="0" readonly />
                                         </div>
-
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
+                                        <div class="col-3 col-md-1">
+                                            <label class="form-label form-label-sm">إجمالي الكمية</label>
                                             <input type="text" id="ProdQtyAllWarehouses"
                                                    class="form-control form-control-sm text-center" value="0" readonly />
                                         </div>
-
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">الصنف عليه كوتة؟</label>
+                                        <div class="col-3 col-md-2">
+                                            <label class="form-label form-label-sm">الكوتة</label>
                                             <input type="text" id="ProdQuotaText"
                                                    class="form-control form-control-sm text-center" value="بدون كوتة" readonly />
                                         </div>
-
-                                        <div class="col-md-3 col-sm-6">
-                                            <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
+                                        <div class="col-3 col-md-1">
+                                            <label class="form-label form-label-sm">الخصم المرجّح%</label>
                                             <input type="text" id="ProdWeightedDiscount"
                                                    class="form-control form-control-sm text-center" value="0" readonly />
                                         </div>
-                                    </div>
-
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-lg-6 col-md-6">
+                                        <div class="col-12 col-md-5 col-lg-5">
                                             <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
                                             <select id="AlternativeProducts" class="form-select form-select-sm"></select>
                                         </div>
-
                                     </div>
 
                                     @* =========================
-                                      ✅ جديد: قائمة تشغيلات الصنف (FEFO)
-                                          - تظهر عندما يكون للصنف تشغيلات متعددة
-                                      - مرتبة بالأقدم صلاحية أولاً
+                                      قائمة تشغيلات الصنف (FEFO)
                                            ========================= *@
-                                    <div class="mt-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div class="mt-0">
+                                        <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
                                             <label class="form-label form-label-sm mb-0">تشغيلات الصنف (حسب FEFO)</label>
-                                            <small class="text-muted">يتم اختيار أول تشغيلة تلقائيًا عند إضافة الصنف</small>
+                                            
                                         </div>
 
-                                        <div class="table-responsive">
-                                            <table class="table table-sm table-bordered align-middle text-center mb-0">
+                                        <div class="table-responsive invoice-batch-table-wrap">
+                                            <table class="table table-sm table-bordered align-middle text-center mb-0 invoice-batch-table">
                                                 <thead class="table-light">
                                                     <tr>
-                                                        <th style="width:80px;">المسلسل</th>
-                                                        <th>التشغيلة</th>
-                                                        <th style="width:120px;">الصلاحية</th>
-                                                        <th style="width:110px;">الكمية</th>
-                                                        <th style="width:140px;">سعر الجمهور</th>
+                                                        <th style="width:60px;">المسلسل</th>
+                                                        <th style="width:90px;">التشغيلة</th>
+                                                        <th style="width:100px;">الصلاحية</th>
+                                                        <th style="width:80px;">الكمية</th>
+                                                        <th style="width:110px;">سعر الجمهور</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody id="BatchQueueBody">
@@ -868,41 +789,32 @@
                                         </div>
                                     </div>
 
-
                                 </div>
-                            </div>
                         </div>
 
                         @* =====================================================
-                       3) كارت إدخال الصنف
+                       3) كارت إضافة صنف للفاتورة
                        ===================================================== *@
-                        <div class="card shadow-sm mb-3 invoice-Add-card">
-                            <div class="card-header">
-                                <h6 class="mb-0">إضافة صنف للفاتورة</h6>
-                            </div>
+                        <div class="card shadow-sm mb-0 invoice-Add-card">
+                            <div class="card-body pt-0">
+                                <div class="invoice-card-line"></div>
 
-                            <div class="card-body">
-
-                                <div class="row g-2 align-items-end mb-2">
-
-                                    <div class="col-lg-2 col-md-4">
+                                <div class="row g-2 align-items-end flex-nowrap">
+                                    <div class="col col-md-1">
                                         <label class="form-label form-label-sm">كود الصنف</label>
                                         <input type="number" id="ProdCodeInput"
                                                class="form-control form-control-sm text-center pi-input"
                                                placeholder="بحث بالكود..."
                                                data-lock-posted="1" />
                                     </div>
-
-                                    <div class="col-lg-4 col-md-8">
+                                    <div class="col col-md-4">
                                         <label class="form-label form-label-sm">اسم الصنف</label>
-
                                         <input id="ProdNameInput"
                                                list="productsList"
                                                class="form-control form-control-sm pi-input"
-                                               placeholder="اكتب اسم الصنف أو جزء منه..."
+                                               placeholder="اكتب اسم الصنف..."
                                                autocomplete="off"
                                                data-lock-posted="1" />
-
                                         <datalist id="productsList">
                                             @if (ViewBag.ProductsAuto != null)
                                             {
@@ -919,74 +831,45 @@
                                                 }
                                             }
                                         </datalist>
-
                                         <input type="hidden" id="ProdId" />
                                     </div>
-
-                                    <div class="col-lg-6 col-md-12">
-                                        <div class="d-flex gap-2 justify-content-end flex-wrap">
-                                            <button type="button" id="btnOpenProductMovement"
-                                                    class="btn btn-outline-secondary btn-sm">
-                                                حركة الصنف
-                                            </button>
-
-                                            <button type="button" id="btnOpenProductEdit"
-                                                    class="btn btn-outline-primary btn-sm">
-                                                تعديل بيانات الصنف
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div class="row g-2 align-items-end">
-
-                                    <div class="col-lg-2 col-md-4">
-                                        <label id="ProdPriceLabel" class="form-label form-label-sm">
-                                            سعر الجمهور
-                                            <small id="ProdPriceLockState" class="text-muted">(مغلق)</small>
-                                        </label>
-
+                                    <div class="col col-md-1">
+                                        <label id="ProdPriceLabel" class="form-label form-label-sm">سعر الجمهور</label>
                                         <input type="number" id="ProdPriceInput"
                                                class="form-control form-control-sm text-center pi-input bg-light text-muted"
                                                readonly />
                                     </div>
-
-                                    <div class="col-lg-2 col-md-4">
+                                    <div class="col col-md-1">
                                         <label class="form-label form-label-sm">الكمية</label>
                                         <input type="number" id="ProdQtyInput"
                                                class="form-control form-control-sm text-center pi-input"
                                                placeholder="0" data-lock-posted="1" />
                                     </div>
-
-                                    <div class="col-lg-2 col-md-4">
+                                    <div class="col col-md-1">
                                         <label id="ProdDisc1Label" class="form-label form-label-sm">الخصم</label>
                                         <input type="number" id="ProdDisc1Input"
                                                class="form-control form-control-sm text-center pi-input"
                                                value="0" data-lock-posted="1" />
                                     </div>
-
-                                    <div class="col-lg-2 col-md-4">
+                                    <div class="col col-md-1">
                                         <label class="form-label form-label-sm">الباتش</label>
                                         <input type="text" id="ProdBatchInput"
                                                class="form-control form-control-sm text-center pi-input"
                                                placeholder="باتش" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
                                     </div>
-
-                                    <div class="col-lg-2 col-md-4">
+                                    <div class="col col-md-1">
                                         <label class="form-label form-label-sm">تاريخ الصلاحية</label>
                                         <input type="text" id="ProdExpiryInput"
                                                class="form-control form-control-sm text-center pi-input"
                                                placeholder="MM/YYYY" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
                                     </div>
-
-                                    <div class="col-lg-2 col-md-4 d-grid">
+                                    <div class="col col-md-1 d-grid">
                                         <label class="form-label form-label-sm">&nbsp;</label>
                                         <button type="button" id="btnAddInvoiceLine"
                                                 class="btn btn-primary btn-sm w-100" data-lock-posted="1">
                                             إضافة
                                         </button>
                                     </div>
-
                                 </div>
                             </div>
                         </div>
@@ -1159,75 +1042,44 @@
                         <div class="card shadow-sm invoice-totals-card">
                             <div class="card-body">
 
-                                <div class="row g-3 align-items-center mb-2">
-
-                                    <div class="col-md-2">
-                                        <div class="d-flex flex-column">
-                                            <span class="small text-muted">عدد السطور</span>
-                                            <span id="TotalLinesValue" class="badge bg-light text-dark summary-badge">@totalLines</span>
-                                        </div>
+                                <div class="d-flex flex-wrap align-items-center invoice-summary-row">
+                                    <div class="invoice-summary-item">
+                                        <span class="small text-muted d-block">عدد السطور</span>
+                                        <span id="TotalLinesValue" class="badge bg-light text-dark invoice-summary-badge">@totalLines</span>
                                     </div>
-
-                                    <div class="col-md-2">
-                                        <div class="d-flex flex-column">
-                                            <span class="small text-muted">عدد الأصناف</span>
-                                            <span id="TotalItemsValue" class="badge bg-light text-dark summary-badge">@totalItems</span>
-                                        </div>
+                                    <div class="invoice-summary-item">
+                                        <span class="small text-muted d-block">عدد الأصناف</span>
+                                        <span id="TotalItemsValue" class="badge bg-light text-dark invoice-summary-badge">@totalItems</span>
                                     </div>
-
-                                    <div class="col-md-2">
-                                        <div class="d-flex flex-column">
-                                            <span class="small text-muted">إجمالي الكمية</span>
-                                            <span id="TotalQtyValue" class="badge bg-light text-dark summary-badge">@totalQty</span>
-                                        </div>
+                                    <div class="invoice-summary-item">
+                                        <span class="small text-muted d-block">إجمالي الكمية</span>
+                                        <span id="TotalQtyValue" class="badge bg-light text-dark invoice-summary-badge">@totalQty</span>
                                     </div>
-
-                                    <div class="col-md-2">
-                                        <div class="d-flex flex-column">
-                                            <span class="small text-muted">إجمالي سعر الجمهور</span>
-                                            <span id="TotalRetailValue" class="badge bg-light text-dark summary-badge">@totalRetail.ToString("0.00")</span>
-                                        </div>
+                                    <div class="invoice-summary-item">
+                                        <span class="small text-muted d-block">إجمالي سعر الجمهور</span>
+                                        <span id="TotalRetailValue" class="badge bg-light text-dark invoice-summary-badge">@totalRetail.ToString("0.00")</span>
                                     </div>
-
-                                    <div class="col-md-2">
-                                        <div class="d-flex flex-column">
-                                            <span class="small text-muted">الإجمالي بعد الخصم</span>
-                                            <span id="TotalAfterDiscountValue" class="badge bg-light text-dark summary-badge">@totalAfterDiscount.ToString("0.00")</span>
-                                        </div>
+                                    <div class="invoice-summary-item">
+                                        <span class="small text-muted d-block">الإجمالي بعد الخصم</span>
+                                        <span id="TotalAfterDiscountValue" class="badge bg-light text-dark invoice-summary-badge">@totalAfterDiscount.ToString("0.00")</span>
                                     </div>
-
-                                    <div class="col-md-2 col-sm-6">
-                                        <label class="form-label form-label-sm">قيمة الضريبة</label>
-                                        <input type="number"
-                                               step="0.01"
-                                               id="TaxAmountInput"
-                                               class="form-control form-control-sm text-center pi-input"
-                                               value="@taxAmount.ToString("0.00")" 
-                                               data-lock-posted="1"/>
+                                    <div class="invoice-summary-item">
+                                        <label class="form-label form-label-sm mb-0 small">قيمة الضريبة</label>
+                                        <input type="number" step="0.01" id="TaxAmountInput"
+                                               class="form-control form-control-sm text-center pi-input invoice-summary-tax"
+                                               value="@taxAmount.ToString("0.00")" data-lock-posted="1"/>
                                     </div>
-
-                                </div>
-
-                                <hr class="my-3" />
-
-                                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                    <div>
+                                    <div class="invoice-summary-item invoice-summary-total">
                                         <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
-                                        <h5 id="TotalAfterDiscountAndTaxValue" class="mb-1">@totalAfterDiscountAndTax.ToString("0.00")</h5>
-
-                                        <span class="small text-muted d-block mt-2">الصافي النهائي للفاتورة</span>
-                                        <h3 id="NetTotalValue" class="mb-0 text-success">@netTotal.ToString("0.00")</h3>
+                                        <span id="TotalAfterDiscountAndTaxValue" class="badge bg-primary text-white invoice-summary-badge fw-bold">@totalAfterDiscountAndTax.ToString("0.00")</span>
+                                        <span id="NetTotalValue" class="visually-hidden">@netTotal.ToString("0.00")</span>
                                     </div>
-
-                                    <div class="text-end small text-muted">
-                                        @if (Model.UpdatedAt.HasValue)
-                                        {
-                                            <div>
-                                                آخر تعديل:
-                                                <span class="fw-semibold">@Model.UpdatedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</span>
-                                            </div>
-                                        }
-                                    </div>
+                                    @if (Model.UpdatedAt.HasValue)
+                                    {
+                                        <div class="small text-muted ms-auto">
+                                            آخر تعديل: <span class="fw-semibold">@Model.UpdatedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")</span>
+                                        </div>
+                                    }
                                 </div>
 
                             </div>

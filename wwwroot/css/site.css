@@ -47,7 +47,7 @@ body {
 
 /* نحدد ارتفاع الناف بار مرة واحدة ونستخدمه في الباقي + متغيرات أزرار النظام */
 :root {
-    --erp-navbar-height: 56px; /* لو حسيت إن الارتفاع أكبر/أصغر عدّل الرقم */
+    --erp-navbar-height: 42px; /* تصغير سمك الناف بار */
     /* ألوان موحّدة لأزرار نظام الـ ERP */
     --erp-primary: #2563eb; /* أزرق للعمليات الأساسية (بحث، حفظ، تطبيق) */
     --erp-success: #16a34a; /* أخضر لعمليات الإضافة والنجاح */
@@ -326,15 +326,31 @@ body {
 /* لون وحجم نص الروابط + اسم النظام في الناف بار */
 .navbar .navbar-brand,
 .navbar .navbar-nav .nav-link {
-    color: #ffffff !important; /* يخلي لون الكلام أبيض */
-    font-size: 0.85rem; /* تصغير بسيط لحجم الخط */
+    color: #ffffff !important;
+    font-size: 0.8rem;
+}
+/* تصغير سمك الناف بار ومحتوياته */
+.navbar {
+    min-height: var(--erp-navbar-height);
+    padding-top: 0.2rem !important;
+    padding-bottom: 0.2rem !important;
+}
+.navbar .container-fluid {
+    min-height: auto;
+}
+.navbar .navbar-brand {
+    font-size: 0.9rem;
+}
+.navbar .navbar-nav .nav-link {
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
 }
 
 /* تثبيت الناف بار أعلى الصفحة */
 .navbar {
     position: sticky;
     top: 0;
-    z-index: 1050; /* رقم كبير عشان يفضل فوق الباقي */
+    z-index: 1050;
 }
 
     /* لون عند المرور بالماوس أو الفوكس على الرابط */
@@ -345,8 +361,8 @@ body {
 
     /* تصغير حجم قوائم الـ dropdown داخل الناف بار */
     .navbar .dropdown-menu .dropdown-item {
-        font-size: 0.9rem; /* حجم خط عناصر القائمة المنسدلة */
-        padding: 0.35rem 1rem; /* تصغير ارتفاع السطر */
+        font-size: 0.82rem;
+        padding: 0.25rem 0.85rem;
     }
 
         /* تأثير بسيط عند الوقوف على العنصر */
@@ -405,32 +421,34 @@ body {
 /* شريط التابات أعلى المحتوى */
 .app-tabs-bar {
     display: flex;
-    flex-direction: row-reverse; /* أول تاب ناحية اليمين */
-    gap: 0.4rem;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 0.35rem;
     border-bottom: 1px solid #e5e7eb;
-    padding: 0.25rem 0;
+    padding: 0.2rem 0;
     margin-bottom: 0.5rem;
     overflow-x: auto;
-    /* جعل شريط التابات ثابت تحت الناف بار مباشرة */
+    min-height: 36px;
     position: sticky;
-    top: var(--erp-navbar-height); /* نفس ارتفاع الناف بار */
+    top: var(--erp-navbar-height);
     z-index: 1040;
-    background-color: #f9fafb; /* خلفية ثابتة عشان ما تختلطش مع اللي تحتها */
+    background-color: #f9fafb;
 }
 
 /* زر التاب */
 .app-tab {
     display: inline-flex;
     align-items: center;
-    gap: 0.25rem;
-    border-radius: 999px; /* شكل حبوبه */
-    padding-inline: 0.75rem;
+    gap: 0.2rem;
+    border-radius: 0.3rem;
+    padding-inline: 0.6rem;
+    padding-block: 0.2rem;
     white-space: nowrap;
     border: 1px solid #e5e7eb;
     background-color: #f9fafb;
+    font-size: 0.8rem;
 }
 
-    /* التاب النشط */
     .app-tab.active {
         background-color: #0d6efd;
         color: #ffffff;
@@ -439,13 +457,13 @@ body {
 
 /* عنوان التاب */
 .app-tab-title {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
 }
 
 /* زر الإغلاق × */
 .app-tab-close {
-    order: -1; /* على يمين النص في RTL */
-    font-size: 1.25rem; /* تكبير حجم علامة × */
+    order: -1;
+    font-size: 1rem;
     margin-right: .35rem; /* مسافة من حافة التاب اليمينية */
     margin-left: .35rem; /* مسافة بين الكلمة وعلامة × */
     line-height: 1; /* ضبط الارتفاع علشان ما يزودش ارتفاع التاب */

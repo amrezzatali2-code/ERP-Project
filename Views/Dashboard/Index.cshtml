@@ -1,16 +1,35 @@
 @model ERP.ViewModels.DashboardViewModel
 @{
     ViewData["Title"] = Model.LevelName;
+    bool hasAnyData = Model.CustomersCount > 0 || Model.ProductsCount > 0 || Model.SalesInvoicesMonthCount > 0 || Model.SalesInvoicesTodayCount > 0
+        || Model.PurchaseInvoicesMonthCount > 0 || Model.RecentItems.Any();
 }
 <div class="container-fluid py-3" dir="rtl">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h3 class="mb-0">@Model.LevelName</h3>
-        @if (!string.IsNullOrEmpty(Model.UserDisplayName))
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <h3 class="mb-0">@Model.LevelName</h3>
+            @if (!string.IsNullOrEmpty(Model.UserDisplayName))
+            {
+                <small class="text-muted">مرحباً، @Model.UserDisplayName</small>
+            }
+        </div>
+        @if (!hasAnyData)
         {
-            <small class="text-muted">مرحباً، @Model.UserDisplayName</small>
+            <div class="alert alert-info border-0 shadow-sm mt-2 mb-0" role="alert">
+                <strong>مرحباً بك!</strong>
+                @if (Model.Level == "sales")
+                {
+                    <span>أضف عملاءك، ثم أنشئ أول فاتورة مبيعات. ستظهر إحصائياتك الشخصية هنا تلقائياً.</span>
+                }
+                else
+                {
+                    <span>أضف العملاء والأصناف، ثم ابدأ بتسجيل الفواتير. ستظهر ملخصاتك وإحصائياتك هنا.</span>
+                }
+            </div>
         }
     </div>
 
+    @* البطاقات الرئيسية: عدد العملاء | عدد الفواتير | مبيعات الشهر | عدد أصناف المبيعات *@
     <div class="row g-3 mb-4">
         <div class="col-md-3 col-sm-6">
             <div class="card border-0 shadow-sm h-100">
@@ -34,14 +53,14 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="text-muted mb-1">فواتير اليوم</h6>
-                            <h3 class="mb-0">@Model.SalesInvoicesTodayCount.ToString("N0")</h3>
+                            <h6 class="text-muted mb-1">عدد الفواتير</h6>
+                            <h3 class="mb-0">@Model.SalesInvoicesMonthCount.ToString("N0")</h3>
                         </div>
                         <div class="rounded-circle bg-success bg-opacity-10 p-3">
                             <span class="fw-bold text-success">📄</span>
                         </div>
                     </div>
-                    <small class="text-muted d-block mt-2">قيمة: @Model.SalesInvoicesTodayTotal.ToString("N2") ج.م</small>
+                    <small class="text-muted d-block mt-2">فواتير الشهر الحالي</small>
                 </div>
             </div>
         </div>
@@ -52,13 +71,13 @@
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
                             <h6 class="text-muted mb-1">مبيعات الشهر</h6>
-                            <h3 class="mb-0">@Model.SalesInvoicesMonthCount.ToString("N0")</h3>
+                            <h3 class="mb-0">@Model.SalesInvoicesMonthTotal.ToString("N2")</h3>
                         </div>
                         <div class="rounded-circle bg-info bg-opacity-10 p-3">
                             <span class="fw-bold text-info">📈</span>
                         </div>
                     </div>
-                    <small class="text-muted d-block mt-2">إجمالي: @Model.SalesInvoicesMonthTotal.ToString("N2") ج.م</small>
+                    <small class="text-muted d-block mt-2">ج.م (مبلغ البيع)</small>
                 </div>
             </div>
         </div>
@@ -68,14 +87,14 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <h6 class="text-muted mb-1">عدد الأصناف</h6>
-                            <h3 class="mb-0">@Model.ProductsCount.ToString("N0")</h3>
+                            <h6 class="text-muted mb-1">عدد أصناف المبيعات</h6>
+                            <h3 class="mb-0">@Model.SalesProductsSoldCount.ToString("N0")</h3>
                         </div>
                         <div class="rounded-circle bg-warning bg-opacity-10 p-3">
                             <span class="fw-bold text-warning">📦</span>
                         </div>
                     </div>
-                    <small class="text-muted d-block mt-2">الأصناف النشطة</small>
+                    <small class="text-muted d-block mt-2">أصناف متميزة مباعة هذا الشهر</small>
                 </div>
             </div>
         </div>
@@ -172,8 +191,14 @@
                     <h6 class="mb-0">@(Model.Level == "sales" ? "مبيعاتي الأخيرة" : "مبيعات آخر 7 أيام")</h6>
                 </div>
                 <div class="card-body">
-                    <div class="border rounded-3 bg-light d-flex align-items-center justify-content-center" style="height:220px;">
-                        <span class="text-muted">مخطط بياني – قريباً</span>
+                    <div class="border rounded-3 bg-light position-relative" style="height:220px;">
+                        <canvas id="dashboardSalesChart" height="220"></canvas>
+                        @if (!Model.ChartData.Any())
+                        {
+                            <div class="position-absolute top-50 start-50 translate-middle text-center text-muted">
+                                <small>بعد إضافة مبيعات، سيتوفر رسم بياني لتحليل الأداء</small>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -207,7 +232,12 @@
                             else
                             {
                                 <tr>
-                                    <td colspan="3" class="text-center text-muted py-3">لا توجد حركات حديثة</td>
+                                    <td colspan="3" class="text-center py-4">
+                                        <div class="text-muted">
+                                            <small class="d-block mb-1">لا توجد حركات حديثة</small>
+                                            <small>@(Model.Level == "sales" ? "ستظهر هنا آخر فواتيرك بعد إصدارها" : "ستظهر هنا آخر الفواتير والإيصالات بعد التسجيل")</small>
+                                        </div>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -267,3 +297,49 @@
 <style>
     .card-hover:hover { transform: translateY(-2px); transition: transform 0.2s; }
 </style>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var chartData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartData, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
+            if (chartData && chartData.length > 0) {
+                var ctx = document.getElementById('dashboardSalesChart');
+                if (ctx) {
+                    var labels = chartData.map(function(d) {
+                        var parts = (d.date || '').split('-');
+                        return parts.length >= 2 ? parts[2] + '/' + parts[1] : d.date;
+                    });
+                    var amounts = chartData.map(function(d) { return d.amount; });
+                    new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                label: 'المبيعات (ج.م)',
+                                data: amounts,
+                                borderColor: 'rgb(13, 110, 253)',
+                                backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                                tension: 0.4,
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: { display: true, position: 'top' }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ticks: { callback: function(v) { return v.toFixed(0); } }
+                                }
+                            }
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+}

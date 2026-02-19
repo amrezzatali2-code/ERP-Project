@@ -53,52 +53,72 @@ namespace ERP.Controllers
             };
 
             var userId = GetCurrentUserId();
-            if (!userId.HasValue)
+            var currentUserName = User.Identity?.Name ?? "";
+            var displayName = User.FindFirst("DisplayName")?.Value ?? "";
+            var creatorNames = new[] { currentUserName, displayName }.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+            if (!userId.HasValue && creatorNames.Count == 0)
                 return View("Index", vm);
 
             var today = DateTime.Today;
             var monthStart = new DateTime(today.Year, today.Month, 1);
 
-            // عملاء المندوب
+            // عملاء المندوب + عدد الأصناف (للعرض)
             vm.CustomersCount = await _context.Customers
                 .Where(c => c.IsActive && c.UserId == userId)
                 .CountAsync();
+            vm.ProductsCount = await _context.Products.CountAsync(p => p.IsActive);
 
-            // فواتير البيع للمندوب (عبر عملائه فقط)
-            var myCustomerIds = await _context.Customers
-                .Where(c => c.UserId == userId)
-                .Select(c => c.CustomerId)
-                .ToListAsync();
+            // فواتير البيع: إما لعملاء المندوب أو التي أنشأها بنفسه (لتظهر حتى لو العميل غير معيّن له)
+            var myCustomerIds = userId.HasValue
+                ? await _context.Customers.Where(c => c.UserId == userId).Select(c => c.CustomerId).ToListAsync()
+                : new List<int>();
 
-            if (myCustomerIds.Any())
+            var salesBase = _context.SalesInvoices
+                .Where(si => si.IsPosted &&
+                    (myCustomerIds.Contains(si.CustomerId) || (creatorNames.Any() && creatorNames.Contains(si.CreatedBy))));
+
+            vm.SalesInvoicesTodayCount = await salesBase
+                .Where(si => si.SIDate.Date == today)
+                .CountAsync();
+            vm.SalesInvoicesTodayTotal = await salesBase
+                .Where(si => si.SIDate.Date == today)
+                .SumAsync(si => si.NetTotal);
+
+            vm.SalesInvoicesMonthCount = await salesBase
+                .Where(si => si.SIDate >= monthStart)
+                .CountAsync();
+            vm.SalesInvoicesMonthTotal = await salesBase
+                .Where(si => si.SIDate >= monthStart)
+                .SumAsync(si => si.NetTotal);
+
+            // عدد أصناف المبيعات (أصناف متميزة مباعة في الشهر)
+            var monthSalesIds = await salesBase.Where(si => si.SIDate >= monthStart).Select(si => si.SIId).ToListAsync();
+            if (monthSalesIds.Any())
             {
-                var salesBase = _context.SalesInvoices
-                    .Where(si => si.IsPosted && myCustomerIds.Contains(si.CustomerId));
-
-                vm.SalesInvoicesTodayCount = await salesBase
-                    .Where(si => si.SIDate.Date == today)
+                vm.SalesProductsSoldCount = await _context.SalesInvoiceLines
+                    .Where(l => monthSalesIds.Contains(l.SIId))
+                    .Select(l => l.ProdId)
+                    .Distinct()
                     .CountAsync();
-                vm.SalesInvoicesTodayTotal = await salesBase
-                    .Where(si => si.SIDate.Date == today)
-                    .SumAsync(si => si.NetTotal);
-
-                vm.SalesInvoicesMonthCount = await salesBase
-                    .Where(si => si.SIDate >= monthStart)
-                    .CountAsync();
-                vm.SalesInvoicesMonthTotal = await salesBase
-                    .Where(si => si.SIDate >= monthStart)
-                    .SumAsync(si => si.NetTotal);
             }
 
-            // آخر فواتير المندوب
+            // بيانات المخطط: مبيعات آخر 7 أيام
+            var last7Days = Enumerable.Range(0, 7).Select(i => today.AddDays(-i)).Reverse().ToList();
+            foreach (var d in last7Days)
+            {
+                var dayTotal = await salesBase.Where(si => si.SIDate.Date == d).SumAsync(si => si.NetTotal);
+                vm.ChartData.Add(new DashboardChartPoint { Date = d.ToString("yyyy-MM-dd"), Amount = dayTotal });
+            }
+
+            // آخر فواتير المندوب (التي أنشأها أو لعملائه) — تشمل المسودة والمرحّلة
             vm.RecentItems = await _context.SalesInvoices
-                .Where(si => si.IsPosted && myCustomerIds.Contains(si.CustomerId))
+                .Where(si => myCustomerIds.Contains(si.CustomerId) || (creatorNames.Any() && creatorNames.Contains(si.CreatedBy)))
                 .Include(si => si.Customer)
                 .OrderByDescending(si => si.SIDate).ThenByDescending(si => si.SITime)
                 .Take(8)
                 .Select(si => new DashboardRecentItem
                 {
-                    Type = "فاتورة بيع",
+                    Type = si.IsPosted ? "فاتورة بيع" : "فاتورة بيع (مسودة)",
                     PartyName = si.Customer!.CustomerName,
                     Amount = si.NetTotal,
                     Date = si.SIDate
@@ -136,16 +156,12 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// الافتراضي: يوجّه حسب دور المستخدم
+        /// الافتراضي: مبيعاتي الشخصية حسب المستخدم المسجّل (بعد تسجيل الدخول)
         /// </summary>
         [HttpGet]
         public IActionResult Index()
         {
-            if (IsSalesRole() && !IsOwnerOrManager())
-                return RedirectToAction(nameof(Sales));
-            if (IsOwnerOrManager())
-                return RedirectToAction(nameof(Owner));
-            return RedirectToAction(nameof(Manager));
+            return RedirectToAction(nameof(Sales));
         }
 
         private async Task<DashboardViewModel> BuildOwnerDashboardAsync()
@@ -164,6 +180,25 @@ namespace ERP.Controllers
             vm.SalesInvoicesMonthCount = await salesQ.Where(si => si.SIDate >= monthStart).CountAsync();
             vm.SalesInvoicesMonthTotal = await salesQ.Where(si => si.SIDate >= monthStart).SumAsync(si => si.NetTotal);
             vm.SalesMonthTotal = vm.SalesInvoicesMonthTotal;
+
+            // عدد أصناف المبيعات (أصناف متميزة مباعة في الشهر)
+            var monthSalesIds = await salesQ.Where(si => si.SIDate >= monthStart).Select(si => si.SIId).ToListAsync();
+            if (monthSalesIds.Any())
+            {
+                vm.SalesProductsSoldCount = await _context.SalesInvoiceLines
+                    .Where(l => monthSalesIds.Contains(l.SIId))
+                    .Select(l => l.ProdId)
+                    .Distinct()
+                    .CountAsync();
+            }
+
+            // بيانات المخطط: مبيعات آخر 7 أيام
+            for (int i = 6; i >= 0; i--)
+            {
+                var d = today.AddDays(-i);
+                var dayTotal = await salesQ.Where(si => si.SIDate.Date == d).SumAsync(si => si.NetTotal);
+                vm.ChartData.Add(new DashboardChartPoint { Date = d.ToString("yyyy-MM-dd"), Amount = dayTotal });
+            }
 
             // فواتير المشتريات
             var purchQ = _context.PurchaseInvoices.Where(pi => pi.IsPosted);

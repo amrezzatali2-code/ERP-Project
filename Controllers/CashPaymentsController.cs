@@ -325,7 +325,22 @@ namespace ERP.Controllers
             return View(payment);   // Views/CashPayments/Details.cshtml (الفورم العادي)
         }
 
-        // (اختياري) لو حابب فورم Show موحّد ممكن نضيفه لاحقاً
+        // =========================================================
+        // Show — عرض إذن الدفع للطباعة
+        // =========================================================
+        public async Task<IActionResult> Show(int id)
+        {
+            var payment = await _context.CashPayments
+                .Include(p => p.Customer)
+                .Include(p => p.CashAccount)
+                .Include(p => p.CounterAccount)
+                .FirstOrDefaultAsync(p => p.CashPaymentId == id);
+
+            if (payment == null)
+                return NotFound();
+
+            return View(payment);
+        }
 
         // =========================================================
         // Create — GET: عرض فورم إضافة إذن جديد

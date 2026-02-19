@@ -413,14 +413,28 @@ namespace ERP.Controllers
         }
 
         // GET: DebitNotes/Create
-        public IActionResult Create()
+        public async Task<IActionResult> Create(int? customerId = null)
         {
-            PopulateLookups();
             var model = new DebitNote
             {
                 NoteDate = DateTime.Now,
                 IsPosted = false
             };
+            if (customerId.HasValue && customerId.Value > 0)
+            {
+                var customer = await _context.Customers
+                    .AsNoTracking()
+                    .Where(c => c.CustomerId == customerId.Value)
+                    .Select(c => new { c.CustomerId, c.AccountId })
+                    .FirstOrDefaultAsync();
+                if (customer != null)
+                {
+                    model.CustomerId = customer.CustomerId;
+                    model.AccountId = customer.AccountId ?? 0;
+                    ViewBag.LockCustomer = true;
+                }
+            }
+            PopulateLookups(model.CustomerId, model.AccountId > 0 ? model.AccountId : null, null);
             return View(model);
         }
 

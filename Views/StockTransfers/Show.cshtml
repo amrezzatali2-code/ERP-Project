@@ -25,7 +25,27 @@
         .transfer-header-bar {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
             color: #ffffff;
-            padding: 0.75rem 1.25rem;
+            padding: 0.4rem 1rem;
+        }
+        .transfer-header-bar h5 {
+            margin-bottom: 0;
+            font-size: 1rem;
+        }
+
+        /* خط ملون بدل عنوان الكارت */
+        .transfer-card-line {
+            height: 4px;
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            border-radius: 2px;
+            margin-bottom: 0.4rem;
+        }
+
+        /* إخفاء حدود وظل الكروت */
+        .transfer-header-card,
+        .transfer-add-card,
+        .transfer-lines-card {
+            border: none !important;
+            box-shadow: none !important;
         }
 
         .transfer-add-card .card-header,
@@ -141,14 +161,11 @@
             <div class="col-12 col-lg-10 order-2 order-lg-1">
                 @* كارت بيانات التحويل *@
                 <div class="card shadow-sm mb-2 transfer-header-card">
-                    <div class="transfer-header-bar d-flex justify-content-between align-items-center">
-                        <h5 class="mb-1">تحويل مخزني</h5>
-                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#TransferHeaderCollapse">
-                            <span>▾</span>
-                        </button>
+                    <div class="transfer-header-bar">
+                        <h5 class="mb-0">تحويل مخزني</h5>
                     </div>
 
-                    <div id="TransferHeaderCollapse" class="collapse show">
+                    <div>
                         <div class="card-body">
                             <div class="row g-3 align-items-end">
                                 <div class="col-lg-2">
@@ -192,11 +209,8 @@
                 </div>
 
                 @* كارت إدخال السطر *@
-                <div class="card shadow-sm mb-3 transfer-add-card">
-                    <div class="card-header">
-                        <h6 class="mb-0">إضافة سطر للتحويل</h6>
-                    </div>
-
+                <div class="card shadow-sm mb-2 transfer-add-card">
+                    <div class="transfer-card-line"></div>
                     <div class="card-body">
                         <div class="row g-2 align-items-end">
                             <div class="col-lg-2">
@@ -278,11 +292,8 @@
                 </div>
 
                 @* جدول السطور *@
-                <div class="card shadow-sm mb-3 transfer-lines-card">
-                    <div class="card-header">
-                        <h6 class="mb-0">سطور التحويل</h6>
-                    </div>
-
+                <div class="card shadow-sm mb-2 transfer-lines-card">
+                    <div class="transfer-card-line"></div>
                     <div class="card-body p-0">
                         <div class="erp-table-wrapper">
                             <table class="table table-sm table-striped table-hover mb-0">

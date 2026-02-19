@@ -25,7 +25,27 @@
         .adjustment-header-bar {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
             color: #ffffff;
-            padding: 0.75rem 1.25rem;
+            padding: 0.4rem 1rem;
+        }
+        .adjustment-header-bar h5 {
+            margin-bottom: 0;
+            font-size: 1rem;
+        }
+
+        /* خط ملون بدل عنوان الكارت */
+        .adjustment-card-line {
+            height: 4px;
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            border-radius: 2px;
+            margin-bottom: 0.4rem;
+        }
+
+        /* إخفاء حدود وظل الكروت */
+        .adjustment-header-card,
+        .adjustment-add-card,
+        .adjustment-lines-card {
+            border: none !important;
+            box-shadow: none !important;
         }
 
         .adjustment-add-card .card-header,
@@ -191,14 +211,11 @@
             <div class="col-12 col-lg-10 order-2 order-lg-1">
                 @* كارت بيانات التسوية *@
                 <div class="card shadow-sm mb-2 adjustment-header-card">
-                    <div class="adjustment-header-bar d-flex justify-content-between align-items-center">
-                        <h5 class="mb-1">تسوية جرد</h5>
-                        <button type="button" class="btn btn-sm btn-light" data-bs-toggle="collapse" data-bs-target="#AdjustmentHeaderCollapse">
-                            <span>▾</span>
-                        </button>
+                    <div class="adjustment-header-bar">
+                        <h5 class="mb-0">تسوية جرد</h5>
                     </div>
 
-                    <div id="AdjustmentHeaderCollapse" class="collapse show">
+                    <div>
                         <div class="card-body">
                             <div class="row g-3 align-items-end">
                                 <div class="col-lg-2">
@@ -240,11 +257,8 @@
                 </div>
 
                 @* كارت إدخال السطر *@
-                <div class="card shadow-sm mb-3 adjustment-add-card">
-                    <div class="card-header">
-                        <h6 class="mb-0">إضافة سطر للتسوية</h6>
-                    </div>
-
+                <div class="card shadow-sm mb-2 adjustment-add-card">
+                    <div class="adjustment-card-line"></div>
                     <div class="card-body">
                         <div class="row g-2 align-items-end">
                             <div class="col-lg-2">
@@ -320,11 +334,8 @@
                 </div>
 
                 @* جدول السطور *@
-                <div class="card shadow-sm mb-3 adjustment-lines-card">
-                    <div class="card-header">
-                        <h6 class="mb-0">سطور التسوية</h6>
-                    </div>
-
+                <div class="card shadow-sm mb-2 adjustment-lines-card">
+                    <div class="adjustment-card-line"></div>
                     <div class="card-body p-0">
                         <div class="erp-table-wrapper">
                             <table class="table table-sm table-striped table-hover mb-0">

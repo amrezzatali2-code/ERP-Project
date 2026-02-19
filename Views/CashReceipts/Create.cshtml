@@ -1,4 +1,4 @@
-﻿@model ERP.Models.CashReceipt
+@model ERP.Models.CashReceipt
 
 @{
     ViewData["Title"] = "إضافة إذن استلام نقدية";
@@ -43,18 +43,16 @@
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
-                    <!-- رقم المستند (CashReceiptId - تلقائي - ReadOnly) -->
+                    <!-- رقم الإذن (CashReceiptId - تلقائي - ReadOnly) -->
                     <div class="col-md-4">
-                        <label class="form-label">رقم المستند</label>
+                        <label class="form-label">رقم الإذن</label>
                         @if (Model.CashReceiptId > 0)
                         {
                             <input type="text" class="form-control" value="@Model.CashReceiptId" readonly />
-                            <small class="text-muted">رقم المستند: @Model.CashReceiptId</small>
                         }
                         else
                         {
-                            <input type="text" class="form-control" value="" readonly placeholder="سيتم توليده تلقائياً عند الحفظ" />
-                            <small class="text-muted">سيتم توليد رقم المستند تلقائياً عند الحفظ (CashReceiptId)</small>
+                            <input type="text" class="form-control" value="" readonly />
                         }
                     </div>
 
@@ -156,7 +154,15 @@
 
             <div class="card-footer d-flex justify-content-between">
                 <a asp-action="Index" class="btn btn-secondary btn-sm">عودة للقائمة</a>
-                <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
+                <div class="d-flex gap-2 align-items-center">
+                    @if (Model.CashReceiptId > 0)
+                    {
+                        <a asp-action="Show" asp-route-id="@Model.CashReceiptId" target="_blank" class="btn btn-outline-primary btn-sm">
+                            🖨️ طباعة الإذن
+                        </a>
+                    }
+                    <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
+                </div>
             </div>
         </div>
     </form>
@@ -168,6 +174,11 @@
     }
     <script>
         $(document).ready(function() {
+            // ✅ إزالة الصفر من خانة المبلغ عند التحميل
+            var $amount = $('#Amount');
+            if ($amount.length && ($amount.val() === '0' || $amount.val() === '0.00')) {
+                $amount.val('');
+            }
             // ✅ التأكد من تحديد القيم المحددة مسبقاً عند تحميل الصفحة
             @if (Model.CashAccountId > 0)
             {

@@ -1,28 +1,9 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.Governorate>
 
 @{
     ViewData["Title"] = "المحافظات";
-
-
-
-    // متغيرات: نسترجع قيم البحث من الـ QueryString
-    var q = Context.Request.Query;
-
-    string search1 = q["search1"];
-    string searchBy1 = string.IsNullOrWhiteSpace(q["searchBy1"])
-        ? "name"
-        : q["searchBy1"].ToString();
-
-    string search2 = q["search2"];
-    string searchBy2 = q["searchBy2"];
-
-    string search3 = q["search3"];
-    string searchBy3 = q["searchBy3"];
-
-    string search4 = q["search4"];
-    string searchBy4 = q["searchBy4"];
 
 
 
@@ -68,7 +49,9 @@
         useDateRange = Model.UseDateRange,
         fromDate = Model.FromDate,
         toDate = Model.ToDate,
-        dateField = dateField
+        dateField = dateField,
+        codeFrom = CodeFrom,
+        codeTo = CodeTo
     })!;
 
     // دالة لإنشاء لينك الترتيب في رأس الجدول + أيقونة السهم
@@ -154,330 +137,105 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @* ===== صف الكروت كله ===== *@
-    <div class="row g-2 mb-3 d-print-none">
+    @* ===== كارت البحث والفلاتر — مثل سجل الحركات ===== *@
+    <div class="card mb-3 d-print-none">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
 
-        @* ==========================================================
-           أولاً: كروت البحث + كارت الأكواد داخل فورم GET واحد
-           الكولمن ده واخد 10 من 12 (الباقي لإجراءات المحافظات)
-           ========================================================== *@
-        <div class="col-xxl-10 col-12">
-            @* ===== فورم واحد يضم 4 كروت بحث نصي + كارت الأكواد ===== *@
-            <form method="get"
-                  action="@Url.Action(action, controller)">
-
-                @* صف واحد فيه 5 كروت متساوية *@
-                <div class="row g-2 gov-filters-row
-                    row-cols-xxl-5
-                    row-cols-lg-3
-                    row-cols-md-2
-                    row-cols-1">
-
-                    @*======================================================
-              الكارت 1: بحث نصي 1
-              ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                @* مربع نص البحث *@
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               name="search1"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..."
-                                               value="@(ViewBag.Search1 ?? "")" />
-                                    </div>
-                                </div>
-
-                                @* اختيار عمود البحث *@
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
-                                    <select name="searchBy1"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
-                                        <option value="name"
-                                                @(Convert.ToString(ViewBag.SearchBy1 ?? "name") == "name" ? "selected" : null)>
-                                            الاسم
-                                        </option>
-                                        <option value="id"
-                                                @(Convert.ToString(ViewBag.SearchBy1 ?? "name") == "id" ? "selected" : null)>
-                                            كود المحافظة
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
-                            </div>
+                @* العمود الأول: البحث *@
+                <div class="col-lg-4">
+                    <form method="get" action="@Url.Action(action, controller)" class="row g-2 align-items-end">
+                        <div class="col-12">
+                            <label class="form-label fw-semibold">بحث</label>
                         </div>
-                    </div>
-
-                    @*======================================================
-              الكارت 2: بحث نصي 2
-              ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               name="search2"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..."
-                                               value="@(ViewBag.Search2 ?? "")" />
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
-                                    <select name="searchBy2"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
-                                        <option value="name"
-                                                @(Convert.ToString(ViewBag.SearchBy2 ?? "name") == "name" ? "selected" : null)>
-                                            الاسم
-                                        </option>
-                                        <option value="id"
-                                                @(Convert.ToString(ViewBag.SearchBy2 ?? "name") == "id" ? "selected" : null)>
-                                            كود المحافظة
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
-                            </div>
+                        <div class="col-sm-4">
+                            <input type="text" name="search" class="form-control form-control-sm"
+                                   placeholder="اكتب نص البحث..." value="@search" />
                         </div>
-                    </div>
-
-                    @*======================================================
-              الكارت 3: بحث نصي 3
-              ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               name="search3"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..."
-                                               value="@(ViewBag.Search3 ?? "")" />
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
-                                    <select name="searchBy3"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
-                                        <option value="name"
-                                                @(Convert.ToString(ViewBag.SearchBy3 ?? "name") == "name" ? "selected" : null)>
-                                            الاسم
-                                        </option>
-                                        <option value="id"
-                                                @(Convert.ToString(ViewBag.SearchBy3 ?? "name") == "id" ? "selected" : null)>
-                                            كود المحافظة
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
-                            </div>
+                        <div class="col-sm-4">
+                            <select name="searchBy" class="form-select form-select-sm">
+                                <option value="all" @Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
+                                <option value="name" @Html.Raw(searchBy == "name" ? " selected" : "")>الاسم</option>
+                                <option value="id" @Html.Raw(searchBy == "id" ? " selected" : "")>كود المحافظة</option>
+                            </select>
                         </div>
-                    </div>
-
-                    @*======================================================
-              الكارت 4: بحث نصي 4
-              ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">بحث</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">🔍</span>
-                                        <input type="text"
-                                               name="search4"
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               placeholder="اكتب نص البحث..."
-                                               value="@(ViewBag.Search4 ?? "")" />
-                                    </div>
-                                </div>
-
-                                <div class="mb-2">
-                                    <label class="form-label fw-semibold mb-1">اختيار عمود البحث</label>
-                                    <select name="searchBy4"
-                                            class="form-select"
-                                            style="font-size:.95rem;">
-                                        <option value="name"
-                                                @(Convert.ToString(ViewBag.SearchBy4 ?? "name") == "name" ? "selected" : null)>
-                                            الاسم
-                                        </option>
-                                        <option value="id"
-                                                @(Convert.ToString(ViewBag.SearchBy4 ?? "name") == "id" ? "selected" : null)>
-                                            كود المحافظة
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
-                            </div>
+                        <input type="hidden" name="sort" value="@sort" />
+                        <input type="hidden" name="dir" value="@dir" />
+                        <input type="hidden" name="page" value="1" />
+                        <input type="hidden" name="pageSize" value="@ps" />
+                        <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
+                        @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
+                        @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
+                        <input type="hidden" name="dateField" value="@dateField" />
+                        @if (CodeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@CodeFrom" /> }
+                        @if (CodeTo.HasValue) { <input type="hidden" name="codeTo" value="@CodeTo" /> }
+                        <div class="col-auto mt-1">
+                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">بحث</button>
                         </div>
-                    </div>
-
-                    @*======================================================
-              الكارت 5: فلترة كود المحافظة
-              ======================================================*@
-                    <div class="col">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-1"
-                                 style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">فلترة بالأكواد</span>
-                            </div>
-
-                            <div class="card-body py-2">
-                                @* حقل من كود *@
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">من كود</span>
-                                        <input type="number"
-                                               name="codeFrom" @* لازم نفس اسم باراميتر الأكشن *@
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
-                                    </div>
-                                </div>
-
-                                @* حقل إلى كود *@
-                                <div class="mb-2">
-                                    <div class="input-group">
-                                        <span class="input-group-text px-2">إلى كود</span>
-                                        <input type="number"
-                                               name="codeTo" @* نفس اسم باراميتر الأكشن *@
-                                               class="form-control"
-                                               style="font-size:.95rem;"
-                                               value="@(ViewBag.CodeTo?.ToString() ?? "")" />
-                                    </div>
-                                </div>
-
-                                <div class="d-flex gap-1 mt-1">
-                                    <button type="submit"
-                                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                                        بحث
-                                    </button>
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-lg"
-                                       href="@Url.Action(action, controller)">
-                                        إلغاء
-                                    </a>
-                                </div>
-                            </div>
+                        <div class="col-auto mt-1">
+                            <a class="btn btn-erp btn-erp-ghost btn-erp-sm" href="@Url.Action(action, controller)">إلغاء</a>
                         </div>
-                    </div>
-
-                </div> @* نهاية صف الكروت الخمسة *@
-
-                @* ===== الهيدن المشتركة للفورم كله (ترتيب، حجم الصفحة، التاريخ) ===== *@
-                @{
-                    var sort = Convert.ToString(ViewBag.Sort ?? "name");
-                    var dir = Convert.ToString(ViewBag.Dir ?? "asc");
-                    int ps = Model.PageSize;
-                }
-
-                <input type="hidden" name="sort" value="@sort" />
-                <input type="hidden" name="dir" value="@dir" />
-                <input type="hidden" name="page" value="1" />
-                <input type="hidden" name="pageSize" value="@ps" />
-                <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
-                @if (Model.FromDate.HasValue)
-                {
-                    <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" />
-                }
-                @if (Model.ToDate.HasValue)
-                {
-                    <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
-                }
-
-                <div class="col-12 mt-2 d-flex justify-content-center gap-2 d-print-none">
-                    <button type="submit"
-                            class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                        بحث بكل الفلاتر
-                    </button>
-
-                    <a href="@Url.Action(action, controller)"
-                       class="btn btn-erp btn-erp-secondary btn-erp-lg">
-                        إلغاء كل الفلاتر
-                    </a>
+                    </form>
                 </div>
 
-            </form>
+                @* العمود الثاني: فلتر الكود *@
+                <div class="col-lg-4">
+                    <div class="d-flex flex-wrap align-items-center gap-2">
+                        <span class="fw-semibold">من كود</span>
+                        <input id="codeFromInput" type="number" class="form-control form-control-sm" style="width:110px"
+                               value="@(CodeFrom?.ToString() ?? "")" />
+                        <span class="fw-semibold">إلى</span>
+                        <input id="codeToInput" type="number" class="form-control form-control-sm" style="width:110px"
+                               value="@(CodeTo?.ToString() ?? "")" />
+                        <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                        <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
+                    </div>
+                </div>
+
+                @* العمود الثالث: أزرار التحكم *@
+                <div class="col-lg-4">
+                    <div class="erp-toolbar justify-content-lg-end d-flex flex-wrap gap-2">
+                        <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">+ إضافة محافظة</a>
+                        <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm"
+                                data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm"
+                                data-bs-toggle="modal" data-bs-target="#columnsModalGov">اختيار الأعمدة</button>
+                        <button type="button" id="btnPrintGov" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <form method="get" asp-action="Export" asp-controller="Governorates" class="d-inline">
+                            <input type="hidden" name="search" value="@search" />
+                            <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="sort" value="@sort" />
+                            <input type="hidden" name="dir" value="@dir" />
+                            <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
+                            @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
+                            @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
+                            <input type="hidden" name="dateField" value="@dateField" />
+                            <input type="hidden" name="codeFrom" value="@(CodeFrom?.ToString() ?? "")" />
+                            <input type="hidden" name="codeTo" value="@(CodeTo?.ToString() ?? "")" />
+                            <select name="format" class="form-select form-select-sm d-inline-block" style="width:95px">
+                                <option value="excel" selected>Excel</option>
+                                <option value="csv">CSV</option>
+                            </select>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
+                        </form>
+                        <div class="dropdown d-inline-block">
+                            <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle"
+                                    data-bs-toggle="dropdown">حذف</button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="#" id="btnDeleteSelected">حذف المحدد</a></li>
+                                <li><a class="dropdown-item text-danger" href="#" id="btnDeleteAll">حذف جميع المحافظات</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
         </div>
+    </div>
 
-
-        @* ==========================================================
-           ثانياً: كارت إجراءات المحافظات (زي ما كان بالظبط – آخر كولمن)
-           ========================================================== *@
+    @* ===== كارت إجراءات إضافية (للتوافق مع الـ JS الموجود) ===== *@
+    <div class="row g-2 mb-3 d-print-none d-none" id="govButtonsCardPlaceholder">
+        @* مخفي — الأزرار انتقلت للكارت العلوي *@
         <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
             <div class="card shadow-sm h-100">
                 <div class="card-header text-white py-1"
@@ -658,19 +416,22 @@
                             </td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Details"
-                                   asp-route-id="@g.GovernorateId">
+                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm open-same-tab"
+                                   href="@(Url.Action("Details", "Governorates", new { id = g.GovernorateId }))?frame=1"
+                                   data-url="@(Url.Action("Details", "Governorates", new { id = g.GovernorateId }))?frame=1"
+                                   data-tab-title="تفاصيل المحافظة">
                                     تفاصيل
                                 </a>
-                            <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@g.GovernorateId">
+                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm open-same-tab"
+                                   href="@(Url.Action("Edit", "Governorates", new { id = g.GovernorateId }))?frame=1"
+                                   data-url="@(Url.Action("Edit", "Governorates", new { id = g.GovernorateId }))?frame=1"
+                                   data-tab-title="تعديل المحافظة">
                                     تعديل
                                 </a>
-                            <a class="bbtn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@g.GovernorateId">
+                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm open-same-tab"
+                                   href="@(Url.Action("Delete", "Governorates", new { id = g.GovernorateId }))?frame=1"
+                                   data-url="@(Url.Action("Delete", "Governorates", new { id = g.GovernorateId }))?frame=1"
+                                   data-tab-title="حذف المحافظة">
                                     حذف
                                 </a>
                             </td>

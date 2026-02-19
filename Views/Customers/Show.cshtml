@@ -103,6 +103,18 @@
         font-size: 0.8rem;
         padding: 0.25rem 0.5rem;
     }
+
+    /* بطاقات الملخص: صف واحد، الرصيد الحالي في المنتصف، يبدأ من اليمين */
+    .customer-summary-cards {
+        display: flex;
+        flex-wrap: nowrap;
+        justify-content: center;
+        align-items: stretch;
+        direction: rtl;
+    }
+    .customer-summary-cards .customer-stat-card {
+        flex: 0 0 auto;
+    }
     
     /* ✅ إصلاح عرض التبويبات مع Flexbox */
     #customerMovementTabsContent.tab-content {
@@ -218,7 +230,7 @@
         }
         else if (currentBalance < 0)
         {
-            balanceText = "دائن (له عندنا)";
+            balanceText = "دائن";
             balanceCss = "text-success";
         }
         else
@@ -261,6 +273,14 @@
                                data-tab-id="cash-payment-create-tab"
                                data-tab-title="إضافة إذن دفع نقدية">💸 دفع</a>
                             <a asp-controller="CustomerLedger" asp-action="Index" asp-route-customerId="@Model.CustomerId" class="btn btn-outline-info btn-sm action-btn-compact">📊 كشف حساب</a>
+                            <a asp-controller="DebitNotes" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                               class="btn btn-outline-warning btn-sm action-btn-compact app-menu-link"
+                               data-tab-id="debit-note-create-tab"
+                               data-tab-title="إشعار خصم">% خصم</a>
+                            <a asp-controller="CreditNotes" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                               class="btn btn-outline-success btn-sm action-btn-compact app-menu-link"
+                               data-tab-id="credit-note-create-tab"
+                               data-tab-title="إشعار إضافة">+ إضافة</a>
                         </div>
                     </div>
                 </div>
@@ -268,83 +288,67 @@
         </div>
 
         @* =====================================================
-           4) بطاقات الملخص الإجمالية (مدمجة في صف واحد)
+           4) بطاقات الملخص الإجمالية (صف واحد، الرصيد الحالي في المنتصف)
            ===================================================== *@
-        <div class="row g-2 mb-2">
-            <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
-                     style="cursor: pointer; transition: all 0.2s;"
-                     onclick="window.location.href='@Url.Action("Index", "SalesInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'"
-                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
-                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
-                    <div class="card-body p-2">
-                        <div class="compact-label text-muted">المبيعات</div>
-                        <div class="compact-stat text-success">@totalSales.ToString("N2")</div>
-                        <small class="text-muted" style="font-size: 0.7rem;">اضغط لعرض الفواتير</small>
+        <div class="row g-1 mb-2 flex-nowrap customer-summary-cards" style="overflow-x: auto;">
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm" style="min-width: 85px;">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">عدد الفواتير</div>
+                        <div class="compact-stat" style="font-size: 0.95rem;">@invoiceCount</div>
                     </div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
-                     style="cursor: pointer; transition: all 0.2s;"
-                     onclick="window.location.href='@Url.Action("Index", "PurchaseInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'"
-                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
-                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
-                    <div class="card-body p-2">
-                        <div class="compact-label text-muted">المشتريات</div>
-                        <div class="compact-stat text-primary">@totalPurchases.ToString("N2")</div>
-                        <small class="text-muted" style="font-size: 0.7rem;">اضغط لعرض الفواتير</small>
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                     onclick="window.location.href='@Url.Action("Index", "SalesInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">المبيعات</div>
+                        <div class="compact-stat text-success" style="font-size: 0.95rem;">@totalSales.ToString("N2")</div>
                     </div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
-                     style="cursor: pointer; transition: all 0.2s;"
-                     onclick="window.location.href='@Url.Action("Index", "SalesReturns", new { searchBy = "customer", search = Model.CustomerId.ToString() })'"
-                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
-                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
-                    <div class="card-body p-2">
-                        <div class="compact-label text-muted">مرتجعات البيع</div>
-                        <div class="compact-stat text-success">@totalSalesReturns.ToString("N2")</div>
-                        <small class="text-muted" style="font-size: 0.65rem;">يزيد حساب العميل</small>
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                     onclick="window.location.href='@Url.Action("Index", "PurchaseInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">المشتريات</div>
+                        <div class="compact-stat text-primary" style="font-size: 0.95rem;">@totalPurchases.ToString("N2")</div>
                     </div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" 
-                     style="cursor: pointer; transition: all 0.2s;"
-                     onclick="window.location.href='@Url.Action("Index", "PurchaseReturns", new { searchBy = "customerId", search = Model.CustomerId.ToString() })'"
-                     onmouseover="this.style.transform='scale(1.05)'; this.style.boxShadow='0 4px 8px rgba(0,0,0,0.15)';"
-                     onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.1)';">
-                    <div class="card-body p-2">
-                        <div class="compact-label text-muted">مرتجعات الشراء</div>
-                        <div class="compact-stat text-primary">@totalPurchaseReturns.ToString("N2")</div>
-                        <small class="text-muted" style="font-size: 0.65rem;">يقلل حساب العميل</small>
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                     onclick="window.location.href='@Url.Action("Index", "SalesReturns", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات البيع</div>
+                        <div class="compact-stat text-success" style="font-size: 0.95rem;">@totalSalesReturns.ToString("N2")</div>
                     </div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm" style="border: 3px solid #ff9800 !important; box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3) !important;">
-                    <div class="card-body p-2">
-                        <div class="compact-label text-muted">الرصيد الحالي</div>
-                        <div class="compact-stat @balanceCss">@currentBalance.ToString("N2")</div>
-                        <small class="@balanceCss" style="font-size: 0.7rem;">@balanceText</small>
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                     onclick="window.location.href='@Url.Action("Index", "PurchaseReturns", new { searchBy = "customerId", search = Model.CustomerId.ToString() })'">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات الشراء</div>
+                        <div class="compact-stat text-primary" style="font-size: 0.95rem;">@totalPurchaseReturns.ToString("N2")</div>
                     </div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm">
-                    <div class="card-body p-2">
-                        <div class="compact-label text-muted">عدد الفواتير</div>
-                        <div class="compact-stat">@invoiceCount</div>
+            <div class="col-auto customer-stat-card" style="flex: 0 0 auto;">
+                <div class="card compact-card text-center shadow-sm" style="min-width: 85px; border: 3px solid #ff9800 !important; box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3) !important;">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">الرصيد الحالي</div>
+                        <div class="compact-stat @balanceCss" style="font-size: 0.95rem;">@currentBalance.ToString("N2")</div>
+                        <small class="@balanceCss" style="font-size: 0.6rem;">@balanceText</small>
                     </div>
                 </div>
             </div>
-            <div class="col-6 col-lg-2">
-                <div class="card compact-card text-center shadow-sm">
-                    <div class="card-body p-2">
-                        <div class="compact-label text-muted">آخر عملية</div>
-                        <div class="compact-stat">@(lastTransDate?.ToString("yyyy/MM/dd") ?? "-")</div>
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm" style="min-width: 85px;">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">آخر عملية</div>
+                        <div class="compact-stat" style="font-size: 0.85rem;">@(lastTransDate?.ToString("yyyy/MM/dd") ?? "-")</div>
                     </div>
                 </div>
             </div>
@@ -355,12 +359,10 @@
            ===================================================== *@
         <div class="card compact-card shadow-sm mb-2" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
             <div class="card-header p-2" style="flex-shrink: 0;">
-                <div class="d-flex justify-content-between align-items-center">
-                    <strong class="small">حركة العميل</strong>
+                <div class="d-flex justify-content-end align-items-center" style="direction: rtl;">
                     <div style="overflow-x: auto; white-space: nowrap;">
-                        <ul class="nav nav-pills nav-sm flex-nowrap" id="customerMovementTabs" role="tablist">
-                            <li class="nav-item"><button class="nav-link active nav-tabs-compact" id="tab-agg-link" data-bs-toggle="tab" data-bs-target="#tab-agg">الحركة المجمعة</button></li>
-                            <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-sales">المبيعات</button></li>
+                        <ul class="nav nav-pills nav-sm flex-nowrap" id="customerMovementTabs" role="tablist" style="direction: rtl;">
+                            <li class="nav-item"><button class="nav-link active nav-tabs-compact" id="tab-sales-link" data-bs-toggle="tab" data-bs-target="#tab-sales">المبيعات</button></li>
                             <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-salesReturns">مرتجعات البيع</button></li>
                             <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-purchases">المشتريات</button></li>
                             <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-purchaseReturns">مرتجعات الشراء</button></li>
@@ -377,8 +379,8 @@
 
             <div class="card-body p-2" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;">
                 <div class="tab-content h-100" id="customerMovementTabsContent" style="overflow: hidden; display: flex; flex-direction: column;">
-                    @* --- تبويب: الحركة المجمعة --- *@
-                    <div class="tab-pane fade show active h-100" id="tab-agg" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                    @* --- تبويب: المبيعات (الافتراضي) --- *@
+                    <div class="tab-pane fade h-100" id="tab-agg" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
                         <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact table-hover mb-0">
                                 <thead class="table-light sticky-top">
@@ -404,7 +406,7 @@
                     </div>
 
                     @* --- باقي التبويبات (بنفس التصميم المضغوط) --- *@
-                    <div class="tab-pane fade h-100" id="tab-sales" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+                    <div class="tab-pane fade show active h-100" id="tab-sales" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
                         <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
@@ -803,6 +805,11 @@
             var list = document.getElementById('partySuggestions');
             var form = document.getElementById('customerSearchForm');
             var activeIndex = -1;
+
+            // تركيز على حقل البحث عند فتح حجم التعامل
+            if (input) {
+                setTimeout(function () { input.focus(); }, 150);
+            }
 
             if (input && hiddenId && list && form) {
                 input.addEventListener('input', function () {

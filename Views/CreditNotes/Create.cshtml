@@ -2,6 +2,7 @@
 
 @{
     ViewData["Title"] = "إضافة إشعار إضافة";
+    bool lockCustomer = ViewBag.LockCustomer is bool b && b;
 }
 
 <div class="container" dir="rtl">
@@ -48,9 +49,17 @@
 
                     <div class="col-md-4">
                         <label asp-for="CustomerId" class="form-label"></label>
-                        <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect">
-                            <option value="">-- اختر الطرف --</option>
-                        </select>
+                        @if (lockCustomer)
+                        {
+                            <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect" disabled></select>
+                            <input type="hidden" asp-for="CustomerId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CustomerId" asp-items="ViewBag.CustomerId" class="form-select" id="customerSelect">
+                                <option value="">-- اختر الطرف --</option>
+                            </select>
+                        }
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
                     <div class="col-md-4">

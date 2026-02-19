@@ -1,19 +1,19 @@
-﻿@model ERP.Models.CashReceipt
+@model ERP.Models.CashPayment
 
 @{
-    ViewData["Title"] = "إيصال استلام نقدية";
+    ViewData["Title"] = "إذن دفع نقدية";
 }
 
 <div class="container mt-3" dir="rtl">
     <div class="card" style="max-width: 700px; margin:auto;">
         <div class="card-header text-center">
-            <h4 class="mb-0">إيصال استلام نقدية</h4>
+            <h4 class="mb-0">إذن دفع نقدية</h4>
         </div>
         <div class="card-body">
             <div class="d-flex justify-content-between mb-3">
                 <div>
-                    <strong>رقم الإيصال:</strong> @Model.ReceiptNumber<br />
-                    <strong>التاريخ:</strong> @Model.ReceiptDate.ToString("yyyy-MM-dd")
+                    <strong>رقم الإذن:</strong> @Model.CashPaymentId<br />
+                    <strong>التاريخ:</strong> @Model.PaymentDate.ToString("yyyy-MM-dd")
                 </div>
                 <div class="text-end">
                     <strong>الطرف:</strong> @Model.Customer?.CustomerName<br />
@@ -23,11 +23,14 @@
 
             <hr />
 
-            <p><strong>تم استلام مبلغ وقدره:</strong> @Model.Amount.ToString("N2")</p>
-            <p><strong>من السيد/السيدة:</strong> @Model.Customer?.CustomerName</p>
+            <p><strong>تم صرف مبلغ وقدره:</strong> @Model.Amount.ToString("N2")</p>
+            <p><strong>للسيد/السيدة:</strong> @Model.Customer?.CustomerName</p>
             <p>
                 <strong>حساب الصندوق/البنك:</strong>
-                @($"{Model.CashAccount.AccountCode} - {Model.CashAccount.AccountName}")
+                @if (Model.CashAccount != null)
+                {
+                    @($"{Model.CashAccount.AccountCode} - {Model.CashAccount.AccountName}")
+                }
             </p>
             <p><strong>بيان:</strong> @Model.Description</p>
 
