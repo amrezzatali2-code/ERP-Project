@@ -9,8 +9,8 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // DebitNote + Customer + Account + LedgerSourceType
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                                 // DebitNote, UserActionType...
 using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
@@ -24,11 +24,13 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILedgerPostingService _ledgerPostingService;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public DebitNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService)
+        public DebitNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
+            _activityLogger = activityLogger;
         }
 
         // =========================================================
@@ -458,6 +460,8 @@ namespace ERP.Controllers
                 _context.Add(debitNote);
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Create, "DebitNote", debitNote.DebitNoteId, $"إنشاء إشعار خصم رقم {debitNote.DebitNoteId}");
+
                 try
                 {
                     await _ledgerPostingService.PostDebitNoteAsync(debitNote.DebitNoteId, User?.Identity?.Name ?? "System");
@@ -548,19 +552,30 @@ namespace ERP.Controllers
 
             try
             {
-                await _context.SaveChangesAsync();
-                if (!existing.IsPosted)
+                string? postedBy = User?.Identity?.Name ?? "System";
+
+                if (existing.IsPosted)
                 {
-                    try
-                    {
-                        await _ledgerPostingService.PostDebitNoteAsync(id, User?.Identity?.Name ?? "System");
-                    }
-                    catch (Exception ex)
-                    {
-                        TempData["Error"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
-                    }
+                    // إشعار مرحّل: نعكس القيود القديمة ثم نرحّل بالمبلغ الجديد
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(Models.LedgerSourceType.DebitNote, id, postedBy, "تعديل إشعار خصم وإعادة ترحيله");
+                    existing.IsPosted = false;
+                    existing.PostedAt = null;
+                    existing.PostedBy = null;
                 }
-                TempData["Success"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
+
+                await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Edit, "DebitNote", id, $"تعديل إشعار خصم رقم {id}");
+
+                try
+                {
+                    await _ledgerPostingService.PostDebitNoteAsync(id, postedBy);
+                    TempData["Success"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
+                }
+                catch (Exception ex)
+                {
+                    TempData["Error"] = $"تم الحفظ وعكس الترحيل القديم، لكن فشل الترحيل الجديد: {ex.Message}";
+                }
                 return RedirectToAction(nameof(Edit), new { id });
             }
             catch (DbUpdateConcurrencyException)
@@ -604,6 +619,9 @@ namespace ERP.Controllers
 
                 _context.DebitNotes.Remove(debitNote);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "DebitNote", id, $"حذف إشعار خصم رقم {id}");
+
                 TempData["Success"] = "تم حذف إشعار الخصم.";
             }
             catch (Exception ex)

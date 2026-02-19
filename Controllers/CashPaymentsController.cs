@@ -836,14 +836,24 @@ namespace ERP.Controllers
 
             try
             {
+                foreach (var p in payments.Where(x => x.IsPosted))
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                        Models.LedgerSourceType.Payment,
+                        p.CashPaymentId,
+                        User?.Identity?.Name ?? "SYSTEM",
+                        "حذف جماعي إذون دفع");
+                }
+
                 _context.CashPayments.RemoveRange(payments);
                 await _context.SaveChangesAsync();
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
 
                 TempData["CashPaymentSuccess"] = $"تم حذف {payments.Count} من إذون الدفع المحددة.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["CashPaymentError"] = "لا يمكن حذف بعض الإذون بسبب ارتباطها بحركات محاسبية أخرى.";
+                TempData["CashPaymentError"] = $"لا يمكن حذف بعض الإذون: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -867,14 +877,24 @@ namespace ERP.Controllers
 
             try
             {
+                foreach (var p in all.Where(x => x.IsPosted))
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                        Models.LedgerSourceType.Payment,
+                        p.CashPaymentId,
+                        User?.Identity?.Name ?? "SYSTEM",
+                        "حذف جميع إذون الدفع");
+                }
+
                 _context.CashPayments.RemoveRange(all);
                 await _context.SaveChangesAsync();
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
 
                 TempData["CashPaymentSuccess"] = "تم حذف جميع إذون الدفع.";
             }
-            catch (DbUpdateException)
+            catch (Exception ex)
             {
-                TempData["CashPaymentError"] = "لا يمكن حذف جميع إذون الدفع بسبب وجود ارتباطات محاسبية.";
+                TempData["CashPaymentError"] = $"لا يمكن حذف جميع إذون الدفع: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));

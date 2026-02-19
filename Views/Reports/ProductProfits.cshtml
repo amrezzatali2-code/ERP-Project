@@ -205,6 +205,12 @@
                         <a href="@Url.Action("ProductProfits", "Reports")" class="btn btn-secondary btn-sm">
                             <span>🔄</span> إعادة تعيين
                         </a>
+                        <form method="post" asp-action="FixOrphanedPaymentEntries" asp-controller="Reports" class="d-inline" onsubmit="return confirm('هل تريد إعادة حساب أرصدة العملاء من القيود الحالية؟ (يُصلح ظهور ربح أو التزامات خاطئة بعد حذف القيود)');">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-warning btn-sm" title="إعادة حساب أرصدة العملاء من القيود">
+                                <span>🔧</span> إصلاح أرصدة العملاء
+                            </button>
+                        </form>
                         @if (reportData.Any())
                         {
                             <div class="d-flex align-items-center gap-2">

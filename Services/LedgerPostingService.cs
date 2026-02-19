@@ -2365,6 +2365,7 @@ namespace ERP.Services
             {
                 var adjustment = await _db.StockAdjustments
                     .Include(a => a.Lines)
+                        .ThenInclude(l => l.Batch)
                     .FirstOrDefaultAsync(a => a.Id == stockAdjustmentId);
 
                 if (adjustment == null)
@@ -2386,7 +2387,7 @@ namespace ERP.Services
 
                 _db.StockLedger.RemoveRange(ledgers);
 
-                // استعادة الكميات في StockBatch
+                // استعادة الكميات في StockBatch (يجب أن تتطابق مع PostStockAdjustment)
                 foreach (var line in adjustment.Lines)
                 {
                     if (line.Batch != null && !string.IsNullOrWhiteSpace(line.Batch.BatchNo))
@@ -2400,9 +2401,32 @@ namespace ERP.Services
 
                         if (stockBatch != null)
                         {
-                            // استعادة الكمية قبل التسوية
-                            stockBatch.QtyOnHand = line.QtyBefore;
-                            stockBatch.UpdatedAt = DateTime.UtcNow;
+                            if (line.QtyBefore > 0)
+                            {
+                                stockBatch.QtyOnHand = line.QtyBefore;
+                                stockBatch.UpdatedAt = DateTime.UtcNow;
+                            }
+                            else
+                                _db.StockBatches.Remove(stockBatch);
+                        }
+                    }
+                    else
+                    {
+                        // بدون تشغيلة: تحديث StockBatch العام (BatchNo فارغ)
+                        var stockBatch = await _db.StockBatches
+                            .FirstOrDefaultAsync(b =>
+                                b.ProdId == line.ProductId &&
+                                b.WarehouseId == adjustment.WarehouseId &&
+                                (b.BatchNo == null || b.BatchNo.Trim() == ""));
+                        if (stockBatch != null)
+                        {
+                            if (line.QtyBefore > 0)
+                            {
+                                stockBatch.QtyOnHand = line.QtyBefore;
+                                stockBatch.UpdatedAt = DateTime.UtcNow;
+                            }
+                            else
+                                _db.StockBatches.Remove(stockBatch);
                         }
                     }
                 }
@@ -2631,6 +2655,7 @@ namespace ERP.Services
             {
                 var transfer = await _db.StockTransfers
                     .Include(t => t.Lines)
+                        .ThenInclude(l => l.Batch)
                     .FirstOrDefaultAsync(t => t.Id == stockTransferId);
 
                 if (transfer == null)

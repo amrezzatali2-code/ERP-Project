@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToLi
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
 using ERP.Models;                                 // LedgerEntry + Account + Customer
+using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
 {
@@ -25,10 +26,12 @@ namespace ERP.Controllers
     {
         // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;   // متغير: السياق الأساسي للتعامل مع الـ DB
+        private readonly ILedgerPostingService _ledgerPostingService;
 
-        public LedgerEntriesController(AppDbContext context)
+        public LedgerEntriesController(AppDbContext context, ILedgerPostingService ledgerPostingService)
         {
             _context = context;
+            _ledgerPostingService = ledgerPostingService;
         }
 
         // =========================================================
@@ -340,6 +343,9 @@ namespace ERP.Controllers
                 _context.LedgerEntries.RemoveRange(entries);
                 await _context.SaveChangesAsync();
 
+                // إعادة حساب أرصدة العملاء من القيود المتبقية (لضمان توافق تقارير الربح/الأرصدة)
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
+
                 TempData["Success"] = $"تم حذف {entries.Count} من القيود المحددة.";
             }
             catch (DbUpdateException)
@@ -371,6 +377,9 @@ namespace ERP.Controllers
             {
                 _context.LedgerEntries.RemoveRange(all);
                 await _context.SaveChangesAsync();
+
+                // إعادة حساب أرصدة العملاء (تصفيرها عند عدم وجود قيود)
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
 
                 TempData["Success"] = "تم حذف جميع القيود من دفتر الأستاذ.";
             }

@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -8,8 +8,8 @@ using System.Threading.Tasks;                     // async / await
 using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // User
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                                 // User, UserActionType
 using ClosedXML.Excel;                      // لتصدير Excel
 using System.IO;
 
@@ -28,12 +28,13 @@ namespace ERP.Controllers
     /// </summary>
     public class UsersController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _context;   // متغير: السياق الأساسي للتعامل مع الـ DB
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public UsersController(AppDbContext context)
+        public UsersController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
 
@@ -306,6 +307,8 @@ namespace ERP.Controllers
             _context.Users.Add(model);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "User", model.UserId, $"إنشاء مستخدم: {model.UserName}");
+
             TempData["Success"] = "تم إضافة المستخدم بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -433,6 +436,8 @@ namespace ERP.Controllers
             // ======================================================
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Edit, "User", model.UserId, $"تعديل مستخدم: {model.UserName}");
+
             TempData["Success"] = "تم حفظ تعديلات المستخدم بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -500,6 +505,9 @@ namespace ERP.Controllers
             {
                 _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "User", id, $"حذف مستخدم: {user?.UserName}");
+
                 TempData["Success"] = "تم حذف المستخدم بنجاح.";
             }
             catch

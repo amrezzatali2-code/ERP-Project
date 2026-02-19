@@ -82,21 +82,7 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @* ===== رسائل النجاح / الخطأ ===== *@
-    @if (TempData["SuccessMessage"] != null)
-    {
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            @TempData["SuccessMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="إغلاق"></button>
-        </div>
-    }
-    @if (TempData["ErrorMessage"] != null)
-    {
-        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            @TempData["ErrorMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="إغلاق"></button>
-        </div>
-    }
+    @* رسائل النجاح/الخطأ تُعرض من _Layout.cshtml *@
 
     @* ===== الكارت العلوي: بحث + فلتر كود + أزرار التحكم ===== *@
     <div class="card mb-3 d-print-none">
@@ -363,8 +349,7 @@
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select-st"
-                                       value="@t.Id"
-                                       @(t.IsPosted ? "disabled" : "") />
+                                       value="@t.Id" />
                             </td>
 
                             <td data-col="id">@t.Id</td>
@@ -387,18 +372,15 @@
                                    data-url="@Url.Action("Show", "StockTransfers", new { id = t.Id, frame = 1 })">
                                     عرض
                                 </a>
-                                @if (!t.IsPosted)
-                                {
-                                    <form asp-action="Delete"
-                                          asp-controller="StockTransfers"
-                                          asp-route-id="@t.Id"
-                                          method="post"
-                                          class="d-inline"
-                                          onsubmit="return confirm('تأكيد حذف التحويل رقم @t.Id؟');">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
-                                    </form>
-                                }
+                                <form asp-action="Delete"
+                                      asp-controller="StockTransfers"
+                                      asp-route-id="@t.Id"
+                                      method="post"
+                                      class="d-inline"
+                                      onsubmit="return confirm('تأكيد حذف التحويل رقم @t.Id؟');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
+                                </form>
                             </td>
                         </tr>
                     }
@@ -615,7 +597,7 @@
             const selectedEl = document.getElementById("stSelectedIdsInput");
 
             chkAll?.addEventListener("change", function () {
-                rowsChk().forEach(cb => { if (!cb.disabled) cb.checked = chkAll.checked; });
+                rowsChk().forEach(cb => { cb.checked = chkAll.checked; });
             });
 
             table.addEventListener("change", function (e) {
@@ -628,7 +610,7 @@
             const btnDeleteSelected = document.getElementById("btnStDeleteSelected");
             btnDeleteSelected?.addEventListener("click", function () {
                 const ids = Array.from(rowsChk())
-                    .filter(cb => cb.checked && !cb.disabled)
+                    .filter(cb => cb.checked)
                     .map(cb => cb.value);
 
                 if (ids.length === 0) {

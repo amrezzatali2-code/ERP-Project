@@ -1,9 +1,9 @@
-﻿using Azure.Core;
+using Azure.Core;
 using ClosedXML.Excel;                            // مكتبة Excel
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                                   // AppDbContext
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // Governorate
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                                 // Governorate, UserActionType
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -24,12 +24,13 @@ namespace ERP.Controllers
     /// </summary>
     public class BranchesController : Controller
     {
-        // كائن سياق قاعدة البيانات
         private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public BranchesController(AppDbContext db)
+        public BranchesController(AppDbContext db, IUserActivityLogger activityLogger)
         {
             _db = db;
+            _activityLogger = activityLogger;
         }
 
 
@@ -281,6 +282,8 @@ namespace ERP.Controllers
             _db.Branches.Add(branch);
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "Branch", branch.BranchId, $"إنشاء فرع: {branch.BranchName}");
+
             TempData["Ok"] = "تمت إضافة الفرع بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -323,6 +326,8 @@ namespace ERP.Controllers
 
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Edit, "Branch", id, $"تعديل فرع: {dbBranch.BranchName}");
+
             TempData["Ok"] = "تم تعديل بيانات الفرع.";
             return RedirectToAction(nameof(Index));
         }
@@ -358,6 +363,8 @@ namespace ERP.Controllers
 
             _db.Branches.Remove(branch);
             await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "Branch", id, $"حذف فرع: {branch.BranchName}");
 
             TempData["Ok"] = "تم حذف السجل.";
             return RedirectToAction(nameof(Index));

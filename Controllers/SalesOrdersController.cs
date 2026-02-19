@@ -1,6 +1,6 @@
-﻿using ERP.Data;                               // تعليق: سياق قاعدة البيانات AppDbContext
-using ERP.Infrastructure;                    // تعليق: PagedResult + ApplySearchSort
-using ERP.Models;                            // تعليق: الموديل SalesOrder
+using ERP.Data;                               // تعليق: سياق قاعدة البيانات AppDbContext
+using ERP.Infrastructure;                    // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                            // SalesOrder, UserActionType
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -21,12 +21,13 @@ namespace ERP.Controllers
     /// </summary>
     public class SalesOrdersController : Controller
     {
-        // متغير: سياق قاعدة البيانات
         private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public SalesOrdersController(AppDbContext context)
+        public SalesOrdersController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
         #region خرائط الحقول للبحث والترتيب (مستخدمة في Index و Export)
@@ -290,6 +291,8 @@ namespace ERP.Controllers
 
                 await tx.CommitAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Delete, "SalesOrder", id, $"حذف أمر بيع رقم {id}");
+
                 TempData["ok"] = $"تم حذف أمر البيع رقم {id}.";
             }
             catch (Exception ex)
@@ -514,6 +517,8 @@ namespace ERP.Controllers
             _context.SalesOrders.Add(order);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "SalesOrder", order.SOId, $"إنشاء أمر بيع رقم {order.SOId}");
+
             TempData["Msg"] = "تم إنشاء أمر البيع بنجاح.";
 
             // بعد الحفظ نفتح شاشة Edit للأمر الجديد
@@ -588,6 +593,8 @@ namespace ERP.Controllers
 
                 // حفظ التغييرات فعلياً في SQL Server
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Edit, "SalesOrder", order.SOId, $"تعديل أمر بيع رقم {order.SOId}");
 
                 TempData["Msg"] = "تم تعديل أمر البيع بنجاح.";
                 return RedirectToAction(nameof(Index));

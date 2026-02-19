@@ -1,7 +1,7 @@
-﻿// Controllers/CitiesController.cs
+// Controllers/CitiesController.cs
 using ERP.Data;
-using ERP.Infrastructure;            // محرك البحث/الترتيب الموحّد
-using ERP.Models;                    // City, Governorate
+using ERP.Infrastructure;            // PagedResult + UserActivityLogger
+using ERP.Models;                    // City, UserActionType
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -15,11 +15,13 @@ namespace ERP.Controllers
 {
     public class CitiesController : Controller
     {
-        private readonly AppDbContext _db;   // سياق قاعدة البيانات (DI)
+        private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public CitiesController(AppDbContext db)
+        public CitiesController(AppDbContext db, IUserActivityLogger activityLogger)
         {
-            _db = db; // حفظ السياق لاستخدامه في كل الدوال
+            _db = db;
+            _activityLogger = activityLogger;
         }
 
         // دالة مساعدة لتحميل قائمة المحافظات (للفورم Create/Edit)
@@ -152,6 +154,9 @@ namespace ERP.Controllers
 
             _db.Cities.Add(model);
             await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Create, "City", model.CityId, $"إنشاء مدينة: {model.CityName}");
+
             return RedirectToAction(nameof(Index));
         }
 
@@ -190,6 +195,8 @@ namespace ERP.Controllers
                 model.UpdatedAt = DateTime.Now;     // تتبع التعديل (لو العمود موجود)
                 _db.Update(model);
                 await _db.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Edit, "City", id, $"تعديل مدينة: {model.CityName}");
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -228,6 +235,9 @@ namespace ERP.Controllers
 
             _db.Cities.Remove(city);
             await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "City", id, $"حذف مدينة: {city.CityName}");
+
             return RedirectToAction(nameof(Index));
         }
     }

@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using ERP.Data;
-using ERP.Infrastructure;                  // كلاس PagedResult + ApplySearchSort
+using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -20,10 +20,12 @@ namespace ERP.Controllers
     public class DocumentSeriesController : Controller
     {
         private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public DocumentSeriesController(AppDbContext context)
+        public DocumentSeriesController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
         // ======================= Index =======================
@@ -226,6 +228,8 @@ namespace ERP.Controllers
             _context.DocumentSeries.Add(m);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "DocumentSeries", m.SeriesId, $"إنشاء سلسلة مستندات: {m.DocType}");
+
             TempData["ok"] = "تمت إضافة السلسلة بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -263,6 +267,8 @@ namespace ERP.Controllers
                 _context.Update(m);
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Edit, "DocumentSeries", id, $"تعديل سلسلة مستندات: {m.DocType}");
+
                 TempData["ok"] = "تم تعديل السلسلة بنجاح.";
             }
             catch (DbUpdateConcurrencyException)
@@ -296,6 +302,8 @@ namespace ERP.Controllers
 
             _context.DocumentSeries.Remove(m);
             await _context.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "DocumentSeries", id, $"حذف سلسلة مستندات: {m.DocType}");
 
             TempData["ok"] = "تم حذف السلسلة.";
             return RedirectToAction(nameof(Index));

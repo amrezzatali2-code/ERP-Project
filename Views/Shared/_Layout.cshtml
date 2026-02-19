@@ -128,15 +128,13 @@
     <header>
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
             <div class="container-fluid">
-                <a class="navbar-brand fw-bold" asp-area="" asp-controller="Home" asp-action="Index">ERP</a>
-
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNavbar"
                         aria-controls="mainNavbar" aria-expanded="false" aria-label="تبديل القائمة">
                     <span class="navbar-toggler-icon"></span>
                 </button>
 
-                <div class="collapse navbar-collapse" id="mainNavbar">
-                    <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
+                <div class="collapse navbar-collapse justify-content-between" id="mainNavbar">
+                    <ul class="navbar-nav mb-2 mb-lg-0 order-2 order-lg-1">
 
                         @* ===== الإعدادات ===== *@
                         <li class="nav-item dropdown">
@@ -845,32 +843,52 @@
                             </ul>
                         </li>
 
-                        @* ===== dash board ===== *@
-                        <li class="nav-item">
-                            <a class="nav-link" asp-controller="Home" asp-action="Privacy">Dash Board</a>
+                        @* ===== لوحات التحكم (مستويات متعددة) ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="dashboardMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                لوحات التحكم
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="dashboardMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link" asp-controller="Dashboard" asp-action="Sales"
+                                       data-tab-id="dashboard-sales" data-tab-title="مبيعاتي الشخصية">
+                                        📊 مبيعاتي الشخصية
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link" asp-controller="Dashboard" asp-action="Manager"
+                                       data-tab-id="dashboard-manager" data-tab-title="لوحة المدير">
+                                        📈 لوحة المدير
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link" asp-controller="Dashboard" asp-action="Owner"
+                                       data-tab-id="dashboard-owner" data-tab-title="لوحة الإدارة الكاملة">
+                                        📋 لوحة الإدارة الكاملة
+                                    </a>
+                                </li>
+                            </ul>
                         </li>
-
-                        <li class="nav-item">
-                            <button id="btnRefreshActiveTab"
-                                    type="button"
-                                    class="btn btn-sm btn-light"
-                                    title="تحديث محتوى التاب النشط فقط">
-                                تحديث
-                            </button>
-                        </li>
-
+                    </ul>
+                    @* أزرار تحديث وتسجيل الخروج - أقصى اليسار (order-lg-2 لتظهر بعد العناصر في الوضع العادي) *@
+                    <div class="d-flex gap-2 align-items-center flex-shrink-0 order-1 order-lg-2">
+                        <button id="btnRefreshActiveTab"
+                                type="button"
+                                class="btn btn-outline-light btn-sm"
+                                title="تحديث محتوى التاب النشط فقط">
+                            تحديث
+                        </button>
                         @if (User.Identity?.IsAuthenticated == true)
                         {
-                            <li class="nav-item">
-                                <form asp-controller="Login" asp-action="Logout" method="post" class="d-inline">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-outline-light btn-sm">
-                                        تسجيل الخروج
-                                    </button>
-                                </form>
-                            </li>
+                            <form asp-controller="Login" asp-action="Logout" method="post" class="d-inline mb-0">
+                                @Html.AntiForgeryToken()
+                                <button type="submit" class="btn btn-outline-light btn-sm">
+                                    تسجيل الخروج
+                                </button>
+                            </form>
                         }
-                    </ul>
+                    </div>
                 </div>
             </div>
         </nav>

@@ -20,11 +20,94 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly StockAnalysisService _stockAnalysisService;
+        private readonly ILedgerPostingService _ledgerPostingService;
 
-        public ReportsController(AppDbContext context, StockAnalysisService stockAnalysisService)
+        public ReportsController(AppDbContext context, StockAnalysisService stockAnalysisService, ILedgerPostingService ledgerPostingService)
         {
             _context = context;
             _stockAnalysisService = stockAnalysisService;
+            _ledgerPostingService = ledgerPostingService;
+        }
+
+        /// <summary>
+        /// إصلاح القيود المتبقية من مستندات محذوفة (أذون استلام/دفع، إشعارات) دون عكس، ثم إعادة حساب أرصدة العملاء.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> FixOrphanedPaymentEntries()
+        {
+            var postedBy = User?.Identity?.Name ?? "SYSTEM";
+            int fixedCount = 0;
+
+            // إذون الدفع
+            var existingPaymentIds = await _context.CashPayments.Select(p => p.CashPaymentId).ToListAsync();
+            var orphanedPayments = await _context.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.Payment && e.SourceId.HasValue && e.LineNo < 9000)
+                .Select(e => e.SourceId!.Value).Distinct()
+                .Where(id => !existingPaymentIds.Contains(id)).ToListAsync();
+
+            foreach (var id in orphanedPayments)
+            {
+                try
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(LedgerSourceType.Payment, id, postedBy, "إصلاح إذن دفع محذوف");
+                    fixedCount++;
+                }
+                catch { }
+            }
+
+            // إذون الاستلام
+            var existingReceiptIds = await _context.CashReceipts.Select(r => r.CashReceiptId).ToListAsync();
+            var orphanedReceipts = await _context.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.Receipt && e.SourceId.HasValue && e.LineNo < 9000)
+                .Select(e => e.SourceId!.Value).Distinct()
+                .Where(id => !existingReceiptIds.Contains(id)).ToListAsync();
+
+            foreach (var id in orphanedReceipts)
+            {
+                try
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(LedgerSourceType.Receipt, id, postedBy, "إصلاح إذن استلام محذوف");
+                    fixedCount++;
+                }
+                catch { }
+            }
+
+            // إشعارات الخصم والإضافة
+            var existingDebitIds = await _context.DebitNotes.Select(d => d.DebitNoteId).ToListAsync();
+            var existingCreditIds = await _context.CreditNotes.Select(c => c.CreditNoteId).ToListAsync();
+
+            var orphanedDebits = await _context.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.DebitNote && e.SourceId.HasValue && e.LineNo < 9000)
+                .Select(e => e.SourceId!.Value).Distinct()
+                .Where(id => !existingDebitIds.Contains(id)).ToListAsync();
+
+            var orphanedCredits = await _context.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.CreditNote && e.SourceId.HasValue && e.LineNo < 9000)
+                .Select(e => e.SourceId!.Value).Distinct()
+                .Where(id => !existingCreditIds.Contains(id)).ToListAsync();
+
+            foreach (var id in orphanedDebits)
+            {
+                try
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(LedgerSourceType.DebitNote, id, postedBy, "إصلاح إشعار خصم محذوف");
+                    fixedCount++;
+                }
+                catch { }
+            }
+            foreach (var id in orphanedCredits)
+            {
+                try
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(LedgerSourceType.CreditNote, id, postedBy, "إصلاح إشعار إضافة محذوف");
+                    fixedCount++;
+                }
+                catch { }
+            }
+
+            await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
+            TempData["SuccessMessage"] = fixedCount > 0 ? $"تم إصلاح {fixedCount} قيد وإعادة حساب أرصدة العملاء." : "تم إعادة حساب أرصدة العملاء حسب القيود الحالية في دفتر الأستاذ.";
+            return RedirectToAction(nameof(CustomerBalances), new { loadReport = true });
         }
 
         // =========================================================
@@ -564,10 +647,17 @@ namespace ERP.Controllers
                     c.CustomerName,
                     c.PartyCategory,
                     c.Phone1,
-                    c.CurrentBalance,
                     c.CreditLimit
                 })
                 .ToDictionaryAsync(c => c.CustomerId);
+
+            // 6.1.1) حساب الرصيد الحالي من LedgerEntries (مصدر الحقيقة)
+            var balanceByCustomer = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value))
+                .GroupBy(e => e.CustomerId!.Value)
+                .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
+                .ToDictionaryAsync(x => x.CustomerId, x => x.Balance);
 
             // 6.2) تحميل المبيعات (دائماً - إذا وُجدت فلاتر تاريخ نطبقها)
             Dictionary<int, decimal> salesTotals = new Dictionary<int, decimal>();
@@ -715,7 +805,7 @@ namespace ERP.Controllers
             {
                 if (!customersDict.TryGetValue(customerId, out var customer)) continue;
 
-                decimal currentBalance = customer.CurrentBalance;
+                decimal currentBalance = balanceByCustomer.TryGetValue(customerId, out var bal) ? bal : 0m;
                 decimal creditLimit = customer.CreditLimit;
 
                 // فلتر الأرصدة الصفرية
@@ -894,10 +984,16 @@ namespace ERP.Controllers
                     c.CustomerName,
                     c.PartyCategory,
                     c.Phone1,
-                    c.CurrentBalance,
                     c.CreditLimit
                 })
                 .ToDictionaryAsync(c => c.CustomerId);
+
+            var balanceByCustomer = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value))
+                .GroupBy(e => e.CustomerId!.Value)
+                .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
+                .ToDictionaryAsync(x => x.CustomerId, x => x.Balance);
 
             Dictionary<int, decimal> salesTotals = new Dictionary<int, decimal>();
             if (fromDate.HasValue || toDate.HasValue)
@@ -1029,7 +1125,7 @@ namespace ERP.Controllers
             {
                 if (!customersDict.TryGetValue(customerId, out var customer)) continue;
 
-                decimal currentBalance = customer.CurrentBalance;
+                decimal currentBalance = balanceByCustomer.TryGetValue(customerId, out var bal) ? bal : 0m;
                 decimal creditLimit = customer.CreditLimit;
 
                 if (!includeZeroBalance && currentBalance == 0)
@@ -1684,19 +1780,26 @@ namespace ERP.Controllers
             decimal treasuryBalance = 0m;     // رصيد الخزنة
             decimal inventoryCostTotal = 0m;  // تكلفة البضاعة في المخزن
 
-            // 6.1) مجموع العملاء المدينين والدائنين (نفس مصدر تقرير أرصدة العملاء: Customer.CurrentBalance)
-            var customerBalancesData = await _context.Customers
+            // 6.1) مجموع العملاء المدينين والدائنين من LedgerEntries (مصدر الحقيقة - يتوافق مع حذف القيود)
+            var activeCustomerIds = await _context.Customers
                 .AsNoTracking()
                 .Where(c => c.IsActive == true)
-                .Select(c => new { c.CustomerId, c.CurrentBalance })
+                .Select(c => c.CustomerId)
                 .ToListAsync();
 
-            foreach (var c in customerBalancesData)
+            var customerBalancesFromLedger = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId.HasValue && activeCustomerIds.Contains(e.CustomerId.Value))
+                .GroupBy(e => e.CustomerId!.Value)
+                .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
+                .ToListAsync();
+
+            foreach (var c in customerBalancesFromLedger)
             {
-                if (c.CurrentBalance > 0)
-                    customersDebitSum += c.CurrentBalance;
-                else if (c.CurrentBalance < 0)
-                    customersCreditSum += Math.Abs(c.CurrentBalance);
+                if (c.Balance > 0)
+                    customersDebitSum += c.Balance;
+                else if (c.Balance < 0)
+                    customersCreditSum += Math.Abs(c.Balance);
             }
 
             // 6.2) رصيد الخزنة (حسابات الخزينة والبنوك)

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;     // SelectList / SelectListItem
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;
 using ERP.Models;
-using ERP.Infrastructure;                     // PagedResult
+using ERP.Infrastructure;                     // PagedResult + UserActivityLogger
 using System.IO;                 // MemoryStream
 using System.Text;               // StringBuilder + Encoding للـ CSV
 using System.Globalization;      // CultureInfo لو احتجنا تنسيق أرقام
@@ -24,9 +24,14 @@ namespace ERP.Controllers
     /// </summary>
     public class WarehousesController : Controller
     {
-        private readonly AppDbContext _db;    // متغير: سياق قاعدة البيانات
+        private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public WarehousesController(AppDbContext db) => _db = db;
+        public WarehousesController(AppDbContext db, IUserActivityLogger activityLogger)
+        {
+            _db = db;
+            _activityLogger = activityLogger;
+        }
 
         // =========================
         // Index — قائمة المخازن
@@ -251,6 +256,8 @@ namespace ERP.Controllers
             _db.Warehouses.Add(w);
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "Warehouse", w.WarehouseId, $"إنشاء مخزن جديد: {w.WarehouseName}");
+
             TempData["Ok"] = "تمت إضافة المخزن بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -286,14 +293,17 @@ namespace ERP.Controllers
             var existing = await _db.Warehouses.FindAsync(id);
             if (existing == null) return NotFound();
 
-            // تحديث الحقول المسموح بتعديلها فقط
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { existing.WarehouseName, existing.BranchId, existing.IsActive });
             existing.WarehouseName = w.WarehouseName;
             existing.BranchId = w.BranchId;
             existing.IsActive = w.IsActive;
             existing.Notes = w.Notes;
-            existing.UpdatedAt = DateTime.UtcNow;   // تسجيل وقت آخر تعديل
+            existing.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new { existing.WarehouseName, existing.BranchId, existing.IsActive });
+            await _activityLogger.LogAsync(UserActionType.Edit, "Warehouse", existing.WarehouseId, $"تعديل مخزن: {existing.WarehouseName}", oldValues, newValues);
 
             TempData["Ok"] = "تم تعديل بيانات المخزن.";
             return RedirectToAction(nameof(Index));
@@ -324,8 +334,11 @@ namespace ERP.Controllers
             var w = await _db.Warehouses.FindAsync(id);
             if (w == null) return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { w.WarehouseName });
             _db.Warehouses.Remove(w);
             await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "Warehouse", id, $"حذف مخزن: {w.WarehouseName}", oldValues: oldValues);
 
             TempData["Ok"] = "تم حذف السجل.";
             return RedirectToAction(nameof(Index));

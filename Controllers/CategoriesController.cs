@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;         // SelectListItem
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;
 using ERP.Models;
-using ERP.Infrastructure;                         // PagedResult
+using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
 using System.IO;                 // MemoryStream
 using System.Text;               // StringBuilder + Encoding للـ CSV
 using System.Globalization;      // CultureInfo لو احتجنا تنسيق أرقام
@@ -21,9 +21,14 @@ namespace ERP.Controllers
     /// </summary>
     public class CategoriesController : Controller
     {
-        private readonly AppDbContext _db;   // متغير: سياق قاعدة البيانات
+        private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public CategoriesController(AppDbContext db) => _db = db;
+        public CategoriesController(AppDbContext db, IUserActivityLogger activityLogger)
+        {
+            _db = db;
+            _activityLogger = activityLogger;
+        }
 
         // =========================
         // Index — قائمة الفئات مع البحث/الترتيب/الترقيم + فلترة بالتاريخ
@@ -223,8 +228,10 @@ namespace ERP.Controllers
             cat.CreatedAt = DateTime.UtcNow;
             cat.UpdatedAt = null;
 
-            _db.Categories.Add(cat);           // إضافة الفئة في السياق
-            await _db.SaveChangesAsync();      // حفظ في قاعدة البيانات
+            _db.Categories.Add(cat);
+            await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Create, "Category", cat.CategoryId, $"إنشاء فئة جديدة: {cat.CategoryName}");
 
             TempData["Ok"] = "تمت إضافة الفئة بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -263,10 +270,19 @@ namespace ERP.Controllers
                 return View(cat);
             }
 
-            existing.CategoryName = cat.CategoryName;   // تحديث الاسم فقط
-            existing.UpdatedAt = DateTime.UtcNow;   // تسجيل آخر تعديل
+            var oldName = existing.CategoryName;
+            existing.CategoryName = cat.CategoryName;
+            existing.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(
+                UserActionType.Edit,
+                "Category",
+                existing.CategoryId,
+                $"تعديل فئة: {cat.CategoryName}",
+                System.Text.Json.JsonSerializer.Serialize(new { CategoryName = oldName }),
+                System.Text.Json.JsonSerializer.Serialize(new { CategoryName = existing.CategoryName }));
 
             TempData["Ok"] = "تم تعديل بيانات الفئة.";
             return RedirectToAction(nameof(Index));
@@ -295,8 +311,12 @@ namespace ERP.Controllers
 
             try
             {
-                _db.Categories.Remove(cat);               // إزالة الفئة من السياق
-                await _db.SaveChangesAsync();             // حفظ التغييرات في قاعدة البيانات
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { cat.CategoryName });
+                _db.Categories.Remove(cat);
+                await _db.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "Category", id, $"حذف فئة: {cat.CategoryName}", oldValues: oldValues);
+
                 TempData["Ok"] = "تم حذف السجل.";
             }
             catch (DbUpdateException)

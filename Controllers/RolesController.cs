@@ -1,12 +1,12 @@
-﻿using System;                                     // متغيرات التوقيت DateTime
+using System;                                     // متغيرات التوقيت DateTime
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لتكوين ملف CSV
 using System.Threading.Tasks;                     // async / await
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync, FindAsync
 using ERP.Data;                                   // AppDbContext كائن قاعدة البيانات
-using ERP.Infrastructure;                         // PagedResult لتقسيم الصفحات
-using ERP.Models;                                 // الموديل Role
+using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
+using ERP.Models;                                 // Role, UserActionType
 using ClosedXML.Excel;                      // لتصدير Excel
 using System.IO;
 
@@ -19,12 +19,13 @@ namespace ERP.Controllers
     /// </summary>
     public class RolesController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _context;   // متغير: يمثل DB Context الرئيسي
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public RolesController(AppDbContext context)
+        public RolesController(AppDbContext context, IUserActivityLogger activityLogger)
         {
-            _context = context;                   // تخزين الكونتكست في متغير خاص
+            _context = context;
+            _activityLogger = activityLogger;
         }
 
 
@@ -296,8 +297,10 @@ namespace ERP.Controllers
             role.CreatedAt = DateTime.UtcNow;
             role.UpdatedAt = null;
 
-            _context.Roles.Add(role);          // تجهيز الدور للإضافة في قاعدة البيانات
-            await _context.SaveChangesAsync(); // تنفيذ الحفظ
+            _context.Roles.Add(role);
+            await _context.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Create, "Role", role.RoleId, $"إنشاء دور: {role.Name}");
 
             TempData["Success"] = "تم إنشاء الدور بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -352,7 +355,9 @@ namespace ERP.Controllers
             // تحديث وقت آخر تعديل
             role.UpdatedAt = DateTime.UtcNow;
 
-            await _context.SaveChangesAsync();  // حفظ التعديلات
+            await _context.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Edit, "Role", id, $"تعديل دور: {role.Name}");
 
             TempData["Success"] = "تم تعديل بيانات الدور بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -404,6 +409,8 @@ namespace ERP.Controllers
 
             _context.Roles.Remove(role);
             await _context.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "Role", id, $"حذف دور: {role.Name}");
 
             TempData["Success"] = "تم حذف الدور بنجاح.";
             return RedirectToAction(nameof(Index));

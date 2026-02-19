@@ -949,6 +949,7 @@ namespace ERP.Controllers
 
                 _context.CashReceipts.RemoveRange(receipts);
                 await _context.SaveChangesAsync();
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
 
                 TempData["CashReceiptSuccess"] = $"تم حذف {receipts.Count} من إذون الاستلام المحددة.";
             }
@@ -997,6 +998,7 @@ namespace ERP.Controllers
 
                 _context.CashReceipts.RemoveRange(all);
                 await _context.SaveChangesAsync();
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
 
                 TempData["CashReceiptSuccess"] = $"تم حذف جميع إذون الاستلام ({all.Count}).";
             }

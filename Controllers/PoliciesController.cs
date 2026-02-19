@@ -1,7 +1,7 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using ERP.Data;                                   // AppDbContext (الاتصال بقاعدة البيانات)
-using ERP.Infrastructure;                         // كلاس PagedResult + ApplySearchSort
-using ERP.Models;                                 // الموديل Policy
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                                 // Policy, UserActionType
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync, AnyAsync
 using System;                                     // متغيرات الوقت DateTime
@@ -19,11 +19,13 @@ namespace ERP.Controllers
     /// </summary>
     public class PoliciesController : Controller
     {
-        private readonly AppDbContext _context;   // متغير: كائن الاتصال بقاعدة البيانات
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public PoliciesController(AppDbContext context)
+        public PoliciesController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
 
@@ -355,6 +357,8 @@ namespace ERP.Controllers
             _context.Policies.Add(policy);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "Policy", policy.PolicyId, $"إنشاء سياسة: {policy.Name}");
+
             TempData["SuccessMessage"] = "تم إضافة السياسة بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -415,6 +419,8 @@ namespace ERP.Controllers
 
                 // حفظ التغييرات
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Edit, "Policy", id, $"تعديل سياسة: {policy.Name}");
 
                 TempData["SuccessMessage"] = "تم تعديل السياسة بنجاح.";
                 return RedirectToAction(nameof(Index));
@@ -479,6 +485,8 @@ namespace ERP.Controllers
             {
                 _context.Policies.Remove(policy);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "Policy", id, $"حذف سياسة: {policy.Name}");
 
                 TempData["SuccessMessage"] = "تم حذف السياسة بنجاح.";
             }

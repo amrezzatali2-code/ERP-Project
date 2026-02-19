@@ -1,9 +1,9 @@
-﻿using Azure.Core;
+using Azure.Core;
 using ClosedXML.Excel;                            // مكتبة Excel
 using DocumentFormat.OpenXml.Wordprocessing;
 using ERP.Data;                                   // AppDbContext
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // Governorate
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                                 // Governorate, UserActionType
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -26,10 +26,14 @@ namespace ERP.Controllers
     /// </summary>
     public class GovernoratesController : Controller
     {
-        // متغير: سياق قاعدة البيانات
         private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public GovernoratesController(AppDbContext ctx) => _db = ctx;
+        public GovernoratesController(AppDbContext ctx, IUserActivityLogger activityLogger)
+        {
+            _db = ctx;
+            _activityLogger = activityLogger;
+        }
 
         // =========================================================================
         // دالة موحّدة: SearchSortFilter
@@ -445,6 +449,8 @@ namespace ERP.Controllers
             _db.Governorates.Add(vm);
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "Governorate", vm.GovernorateId, $"إنشاء محافظة: {vm.GovernorateName}");
+
             TempData["Ok"] = "تم إضافة المحافظة بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -476,6 +482,8 @@ namespace ERP.Controllers
 
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Edit, "Governorate", id, $"تعديل محافظة: {entity.GovernorateName}");
+
             TempData["Ok"] = "تم تعديل بيانات المحافظة.";
             return RedirectToAction(nameof(Index));
         }
@@ -499,6 +507,9 @@ namespace ERP.Controllers
             {
                 _db.Governorates.Remove(entity);
                 await _db.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "Governorate", id, $"حذف محافظة: {entity.GovernorateName}");
+
                 TempData["Ok"] = "تم حذف المحافظة.";
             }
 

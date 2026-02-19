@@ -1,6 +1,6 @@
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
-using ERP.Infrastructure;                  // كلاس PagedResult + ApplySearchSort
-using ERP.Models;                          // الموديل StockAdjustment, Batch
+using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                          // StockAdjustment, UserActionType...
 using ERP.Services;                        // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;  // SelectList
@@ -21,11 +21,13 @@ namespace ERP.Controllers
     /// </summary>
     public class StockAdjustmentsController : Controller
     {
-        private readonly AppDbContext _context;   // متغير: الاتصال بقاعدة البيانات
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public StockAdjustmentsController(AppDbContext context)
+        public StockAdjustmentsController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
         // =========================
@@ -426,6 +428,8 @@ namespace ERP.Controllers
             _context.StockAdjustments.Add(adjustment);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "StockAdjustment", adjustment.Id, $"إنشاء تسوية جرد رقم {adjustment.Id}");
+
             TempData["Msg"] = "تم إضافة تسوية جرد جديدة بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -474,6 +478,8 @@ namespace ERP.Controllers
                 _context.Update(adjustment);
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Edit, "StockAdjustment", adjustment.Id, $"تعديل تسوية جرد رقم {adjustment.Id}");
+
                 TempData["Msg"] = "تم تعديل التسوية بنجاح.";
             }
             catch (DbUpdateConcurrencyException)
@@ -512,33 +518,45 @@ namespace ERP.Controllers
         }
 
         // =========================
-        // Delete — POST: حذف تسوية واحدة
+        // Delete — POST: حذف تسوية واحدة (مثل المبيعات/المشتريات: الحذف من القائمة بغض النظر عن الترحيل)
+        // إذا كانت مترحلة: نعكس الترحيل أولاً ثم نحذف
         // =========================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var adjustment = await _context.StockAdjustments
-                                           .FirstOrDefaultAsync(a => a.Id == id);
+                .Include(a => a.Lines)
+                .FirstOrDefaultAsync(a => a.Id == id);
 
             if (adjustment == null)
                 return NotFound();
 
-            if (adjustment.IsPosted)
+            try
             {
-                TempData["ErrorMessage"] = "لا يمكن حذف تسوية مترحلة. افتح التسوية أولاً ثم أعد المحاولة.";
-                return RedirectToAction(nameof(Index));
+                if (adjustment.IsPosted)
+                {
+                    var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+                    await ledgerPostingService.ReverseStockAdjustmentAsync(id, User?.Identity?.Name ?? "SYSTEM");
+                }
+
+                _context.StockAdjustments.Remove(adjustment);
+                await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "StockAdjustment", id, $"حذف تسوية جرد رقم {id}");
+
+                TempData["Msg"] = "تم حذف التسوية بنجاح.";
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = $"تعذر حذف التسوية: {ex.Message}";
             }
 
-            _context.StockAdjustments.Remove(adjustment);
-            await _context.SaveChangesAsync();
-
-            TempData["Msg"] = "تم حذف التسوية بنجاح.";
             return RedirectToAction(nameof(Index));
         }
 
         // =========================
-        // BulkDelete — حذف مجموعة تسويات محددة
+        // BulkDelete — حذف مجموعة تسويات محددة (مثل المبيعات/المشتريات: بغض النظر عن الترحيل)
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -555,6 +573,7 @@ namespace ERP.Controllers
                 .Select(s => int.TryParse(s, out var n) ? (int?)n : null)
                 .Where(n => n.HasValue)
                 .Select(n => n!.Value)
+                .Distinct()
                 .ToList();
 
             if (!ids.Any())
@@ -563,55 +582,93 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var adjustments = await _context.StockAdjustments
-                                            .Where(a => ids.Contains(a.Id))
-                                            .ToListAsync();
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            int deletedCount = 0;
+            var failedIds = new List<int>();
 
-            var postedOnes = adjustments.Where(a => a.IsPosted).ToList();
-            if (postedOnes.Any())
+            foreach (var id in ids)
             {
-                TempData["ErrorMessage"] = $"لا يمكن حذف تسويات مترحلة (مثل: {string.Join(", ", postedOnes.Select(a => a.Id))}). افتحها أولاً.";
-                return RedirectToAction(nameof(Index));
+                try
+                {
+                    var adjustment = await _context.StockAdjustments
+                        .Include(a => a.Lines)
+                        .FirstOrDefaultAsync(a => a.Id == id);
+
+                    if (adjustment == null)
+                        continue;
+
+                    if (adjustment.IsPosted)
+                        await ledgerPostingService.ReverseStockAdjustmentAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+                    _context.StockAdjustments.Remove(adjustment);
+                    await _context.SaveChangesAsync();
+                    deletedCount++;
+                }
+                catch
+                {
+                    failedIds.Add(id);
+                }
             }
 
-            if (!adjustments.Any())
-            {
-                TempData["Msg"] = "لم يتم العثور على التسويات المحددة.";
-                return RedirectToAction(nameof(Index));
-            }
+            if (deletedCount > 0)
+                TempData["Msg"] = failedIds.Any()
+                    ? $"تم حذف {deletedCount} تسوية. فشل حذف: {string.Join(", ", failedIds)}"
+                    : $"تم حذف {deletedCount} تسوية.";
+            if (failedIds.Any())
+                TempData["ErrorMessage"] = $"فشل حذف التسويات: {string.Join(", ", failedIds)}";
 
-            _context.StockAdjustments.RemoveRange(adjustments);
-            await _context.SaveChangesAsync();
-
-            TempData["Msg"] = $"تم حذف {adjustments.Count} تسوية.";
             return RedirectToAction(nameof(Index));
         }
 
         // =========================
-        // DeleteAll — حذف جميع التسويات (خطير)
+        // DeleteAll — حذف جميع التسويات (مثل المبيعات/المشتريات: بغض النظر عن الترحيل)
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            var adjustments = await _context.StockAdjustments.ToListAsync();
-            if (!adjustments.Any())
+            var ids = await _context.StockAdjustments.Select(a => a.Id).ToListAsync();
+            if (!ids.Any())
             {
                 TempData["Msg"] = "لا توجد تسويات لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
-            var postedOnes = adjustments.Where(a => a.IsPosted).ToList();
-            if (postedOnes.Any())
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            int deletedCount = 0;
+            var failedIds = new List<int>();
+
+            foreach (var id in ids)
             {
-                TempData["ErrorMessage"] = $"يوجد تسويات مترحلة ({postedOnes.Count}). لا يمكن حذفها. افتحها أولاً ثم أعد المحاولة.";
-                return RedirectToAction(nameof(Index));
+                try
+                {
+                    var adjustment = await _context.StockAdjustments
+                        .Include(a => a.Lines)
+                        .FirstOrDefaultAsync(a => a.Id == id);
+
+                    if (adjustment == null)
+                        continue;
+
+                    if (adjustment.IsPosted)
+                        await ledgerPostingService.ReverseStockAdjustmentAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+                    _context.StockAdjustments.Remove(adjustment);
+                    await _context.SaveChangesAsync();
+                    deletedCount++;
+                }
+                catch
+                {
+                    failedIds.Add(id);
+                }
             }
 
-            _context.StockAdjustments.RemoveRange(adjustments);
-            await _context.SaveChangesAsync();
+            if (deletedCount > 0)
+                TempData["Msg"] = failedIds.Any()
+                    ? $"تم حذف {deletedCount} تسوية. فشل حذف: {string.Join(", ", failedIds)}"
+                    : $"تم حذف {deletedCount} تسوية.";
+            if (failedIds.Any())
+                TempData["ErrorMessage"] = $"فشل حذف التسويات: {string.Join(", ", failedIds)}";
 
-            TempData["Msg"] = $"تم حذف جميع تسويات الجرد ({adjustments.Count}).";
             return RedirectToAction(nameof(Index));
         }
 

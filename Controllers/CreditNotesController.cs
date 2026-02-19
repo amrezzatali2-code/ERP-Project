@@ -9,8 +9,8 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // CreditNote + Account + Customer
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                                 // CreditNote, UserActionType...
 using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
@@ -30,11 +30,13 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly ILedgerPostingService _ledgerPostingService;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public CreditNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService)
+        public CreditNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
+            _activityLogger = activityLogger;
         }
 
         // =========================================================
@@ -492,6 +494,8 @@ namespace ERP.Controllers
                 _context.Add(creditNote);
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Create, "CreditNote", creditNote.CreditNoteId, $"إنشاء إشعار إضافة رقم {creditNote.CreditNoteId}");
+
                 try
                 {
                     await _ledgerPostingService.PostCreditNoteAsync(creditNote.CreditNoteId, User?.Identity?.Name ?? "System");
@@ -583,19 +587,30 @@ namespace ERP.Controllers
 
             try
             {
-                await _context.SaveChangesAsync();
-                if (!existing.IsPosted)
+                string? postedBy = User?.Identity?.Name ?? "System";
+
+                if (existing.IsPosted)
                 {
-                    try
-                    {
-                        await _ledgerPostingService.PostCreditNoteAsync(id, User?.Identity?.Name ?? "System");
-                    }
-                    catch (Exception ex)
-                    {
-                        TempData["Error"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
-                    }
+                    // إشعار مرحّل: نعكس القيود القديمة ثم نرحّل بالمبلغ الجديد
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(Models.LedgerSourceType.CreditNote, id, postedBy, "تعديل إشعار إضافة وإعادة ترحيله");
+                    existing.IsPosted = false;
+                    existing.PostedAt = null;
+                    existing.PostedBy = null;
                 }
-                TempData["Success"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
+
+                await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Edit, "CreditNote", id, $"تعديل إشعار إضافة رقم {id}");
+
+                try
+                {
+                    await _ledgerPostingService.PostCreditNoteAsync(id, postedBy);
+                    TempData["Success"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
+                }
+                catch (Exception ex)
+                {
+                    TempData["Error"] = $"تم الحفظ وعكس الترحيل القديم، لكن فشل الترحيل الجديد: {ex.Message}";
+                }
                 return RedirectToAction(nameof(Edit), new { id });
             }
             catch (DbUpdateConcurrencyException)
@@ -641,6 +656,9 @@ namespace ERP.Controllers
 
                 _context.CreditNotes.Remove(creditNote);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "CreditNote", id, $"حذف إشعار إضافة رقم {id}");
+
                 TempData["Success"] = "تم حذف إشعار الإضافة بنجاح.";
             }
             catch (Exception ex)

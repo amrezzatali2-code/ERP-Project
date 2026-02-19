@@ -1,4 +1,4 @@
-﻿using ERP.Data;                  // سياق قاعدة البيانات AppDbContext
+using ERP.Data;                  // سياق قاعدة البيانات AppDbContext
 using ERP.Models;                // UserActivityLog, UserActionType
 using Microsoft.AspNetCore.Http; // IHttpContextAccessor
 using System;
@@ -10,9 +10,11 @@ namespace ERP.Infrastructure
     /// <summary>
     /// خدمة لتسجيل نشاط المستخدمين في جدول UserActivityLogs.
     /// 
-    /// سياسة التسجيل هنا (حسب طلبك):
-    /// - نسجل "التعديل" و "الحذف" فقط
-    /// - نتجاهل Create / View / Import / Export ... لتقليل الحمل
+    /// سياسة التسجيل: نسجل أي تعديل على البيانات
+    /// - Create: إنشاء سجل جديد
+    /// - Edit: تعديل سجل
+    /// - Delete: حذف سجل
+    /// - Post/Unpost: ترحيل وإلغاء ترحيل المستندات
     /// </summary>
     public interface IUserActivityLogger
     {
@@ -46,10 +48,13 @@ namespace ERP.Infrastructure
             string? newValues = null)
         {
             // =========================================================
-            // (1) فلترة: نسجل "التعديل" و"الحذف" فقط
+            // (1) فلترة: نسجل العمليات المهمة (إنشاء، تعديل، حذف، ترحيل، إلغاء ترحيل)
+            // نتجاهل View/Export/Import لتقليل الحمل
             // =========================================================
-            if (actionType != UserActionType.Edit && actionType != UserActionType.Delete)
-                return; // ✅ تجاهل أي نوع آخر لتخفيف اللوج والبرنامج
+            if (actionType != UserActionType.Create && actionType != UserActionType.Edit &&
+                actionType != UserActionType.Delete && actionType != UserActionType.Post &&
+                actionType != UserActionType.Unpost)
+                return;
 
             // =========================================================
             // (2) حماية بسيطة: لازم اسم كيان

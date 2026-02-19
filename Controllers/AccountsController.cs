@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;                    // القوائم List
 using System.Linq;                                   // استعلامات LINQ
 using System.Text;                                   // بناء ملف CSV
@@ -7,18 +7,20 @@ using Microsoft.AspNetCore.Mvc;                      // الكنترولر و IA
 using Microsoft.AspNetCore.Mvc.Rendering;            // SelectListItem
 using Microsoft.EntityFrameworkCore;                 // AsNoTracking / ToListAsync
 using ERP.Data;                                      // AppDbContext
-using ERP.Infrastructure;                            // PagedResult
-using ERP.Models;                                    // الموديلات (Account)
+using ERP.Infrastructure;                             // PagedResult + UserActivityLogger
+using ERP.Models;                                    // Account, UserActionType
 
 namespace ERP.Controllers
 {
     public class AccountsController : Controller
     {
-        private readonly AppDbContext _context;      // متغير: كائن الداتا بيز
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public AccountsController(AppDbContext context)
+        public AccountsController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
         // =========================================================
@@ -362,6 +364,12 @@ namespace ERP.Controllers
             _context.Accounts.Add(account);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(
+                UserActionType.Create,
+                "Account",
+                account.AccountId,
+                $"إنشاء حساب جديد: {account.AccountCode} - {account.AccountName}");
+
             TempData["SuccessMessage"] = "تم إضافة الحساب بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -418,11 +426,26 @@ namespace ERP.Controllers
                 }
             }
 
+            var existing = await _context.Accounts.AsNoTracking().FirstOrDefaultAsync(a => a.AccountId == id);
+            var oldValues = existing != null
+                ? System.Text.Json.JsonSerializer.Serialize(new { existing.AccountCode, existing.AccountName, existing.AccountType })
+                : null;
+
             try
             {
                 account.UpdatedAt = DateTime.Now;
                 _context.Update(account);
                 await _context.SaveChangesAsync();
+
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { account.AccountCode, account.AccountName, account.AccountType });
+                await _activityLogger.LogAsync(
+                    UserActionType.Edit,
+                    "Account",
+                    account.AccountId,
+                    $"تعديل حساب: {account.AccountCode} - {account.AccountName}",
+                    oldValues,
+                    newValues);
+
                 TempData["SuccessMessage"] = "تم تحديث الحساب بنجاح.";
             }
             catch (DbUpdateConcurrencyException)
@@ -447,8 +470,16 @@ namespace ERP.Controllers
             if (account == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { account.AccountCode, account.AccountName });
             _context.Accounts.Remove(account);
             await _context.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(
+                UserActionType.Delete,
+                "Account",
+                id,
+                $"حذف حساب: {account.AccountCode} - {account.AccountName}",
+                oldValues: oldValues);
 
             TempData["SuccessMessage"] = "تم حذف الحساب بنجاح.";
             return RedirectToAction(nameof(Index));

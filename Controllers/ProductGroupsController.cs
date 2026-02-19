@@ -1,6 +1,6 @@
-﻿using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
-using ERP.Infrastructure;                  // كلاس PagedResult + ApplySearchSort
-using ERP.Models;                          // الموديل ProductGroup
+using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
+using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                          // ProductGroup, UserActionType
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -18,11 +18,13 @@ namespace ERP.Controllers
     /// </summary>
     public class ProductGroupsController : Controller
     {
-        private readonly AppDbContext _context;   // الاتصال بقاعدة البيانات
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public ProductGroupsController(AppDbContext context)
+        public ProductGroupsController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
         // =========================
@@ -246,6 +248,8 @@ namespace ERP.Controllers
             _context.ProductGroups.Add(group);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "ProductGroup", group.ProductGroupId, $"إنشاء مجموعة أصناف: {group.Name}");
+
             TempData["Msg"] = "تم إضافة مجموعة أصناف جديدة بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -284,6 +288,8 @@ namespace ERP.Controllers
                 group.UpdatedAt = DateTime.Now;
                 _context.Update(group);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Edit, "ProductGroup", id, $"تعديل مجموعة أصناف: {group.Name}");
 
                 TempData["Msg"] = "تم تعديل مجموعة الأصناف بنجاح.";
             }
@@ -334,6 +340,8 @@ namespace ERP.Controllers
 
             _context.ProductGroups.Remove(group);
             await _context.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "ProductGroup", id, $"حذف مجموعة أصناف: {group.Name}");
 
             TempData["Msg"] = "تم حذف مجموعة الأصناف.";
             return RedirectToAction(nameof(Index));

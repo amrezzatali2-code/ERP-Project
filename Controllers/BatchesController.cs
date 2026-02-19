@@ -1,12 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ClosedXML.Excel;                          // لتصدير Excel
 using ERP.Data;                                // سياق قاعدة البيانات
-using ERP.Infrastructure;                      // كلاس PagedResult
-using ERP.Models;                              // الموديلات Batch / Product / Customer
+using ERP.Infrastructure;                      // PagedResult + UserActivityLogger
+using ERP.Models;                              // Batch, UserActionType...
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;      // القوائم المنسدلة
 using Microsoft.EntityFrameworkCore;           // LINQ to Entities
@@ -22,12 +22,13 @@ namespace ERP.Controllers
     /// </summary>
     public class BatchesController : Controller
     {
-        private readonly AppDbContext _db;   // متغير: سياق قاعدة البيانات
+        private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        // دالة البناء: نستقبل السياق من الـ DI
-        public BatchesController(AppDbContext context)
+        public BatchesController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _db = context;
+            _activityLogger = activityLogger;
         }
 
         // =========================================================
@@ -386,8 +387,10 @@ namespace ERP.Controllers
 
             model.CreatedAt = DateTime.UtcNow;
 
-            _db.Batches.Add(model);              // إضافة السجل
-            await _db.SaveChangesAsync();        // حفظ في قاعدة البيانات
+            _db.Batches.Add(model);
+            await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Create, "Batch", model.BatchId, $"إنشاء تشغيلة: {model.BatchNo}");
 
             TempData["Success"] = "تم إضافة التشغيلة بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -445,6 +448,8 @@ namespace ERP.Controllers
                 model.UpdatedAt = DateTime.UtcNow;   // تحديث آخر تعديل
                 _db.Batches.Update(model);
                 await _db.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Edit, "Batch", id, $"تعديل تشغيلة: {model.BatchNo}");
 
                 TempData["Success"] = "تم حفظ تعديلات التشغيلة بنجاح.";
                 return RedirectToAction(nameof(Index));
@@ -529,6 +534,9 @@ namespace ERP.Controllers
             {
                 _db.Batches.Remove(batch);
                 await _db.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "Batch", id, $"حذف تشغيلة: {batch?.BatchNo}");
+
                 TempData["Success"] = "تم حذف التشغيلة.";
             }
 

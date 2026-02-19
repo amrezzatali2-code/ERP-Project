@@ -16,10 +16,9 @@ namespace ERP.Controllers
 
         // هنا مفيش [AllowAnonymous] ⇒ الصفحة الرئيسية هتحتاج Login
 
-       
         public IActionResult Index()
         {
-            return View();
+            return RedirectToAction("Index", "Dashboard");
         }
 
         // نفس الكلام: صفحة Privacy للمستخدمين المسجّلين فقط

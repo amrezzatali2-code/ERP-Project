@@ -354,8 +354,7 @@
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select-sa"
-                                       value="@a.Id"
-                                       @(a.IsPosted ? "disabled" : "") />
+                                       value="@a.Id" />
                             </td>
 
                             <td data-col="id">@a.Id</td>
@@ -378,18 +377,15 @@
                                    data-url="@Url.Action("Show", "StockAdjustments", new { id = a.Id, frame = 1 })">
                                     عرض
                                 </a>
-                                @if (!a.IsPosted)
-                                {
-                                    <form asp-action="Delete"
-                                          asp-controller="StockAdjustments"
-                                          asp-route-id="@a.Id"
-                                          method="post"
-                                          class="d-inline"
-                                          onsubmit="return confirm('تأكيد حذف التسوية رقم @a.Id؟');">
-                                        @Html.AntiForgeryToken()
-                                        <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
-                                    </form>
-                                }
+                                <form asp-action="Delete"
+                                      asp-controller="StockAdjustments"
+                                      asp-route-id="@a.Id"
+                                      method="post"
+                                      class="d-inline"
+                                      onsubmit="return confirm('تأكيد حذف التسوية رقم @a.Id؟');">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
+                                </form>
                             </td>
                         </tr>
                     }
@@ -621,7 +617,7 @@
             const btnDeleteSelected = document.getElementById("btnSaDeleteSelected");
             btnDeleteSelected?.addEventListener("click", function () {
                 const ids = Array.from(rowsChk())
-                    .filter(cb => cb.checked && !cb.disabled)
+                    .filter(cb => cb.checked)
                     .map(cb => cb.value);
 
                 if (ids.length === 0) {

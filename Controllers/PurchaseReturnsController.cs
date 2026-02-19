@@ -8,8 +8,8 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectListItem لقوائم البحث
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext
-using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
-using ERP.Models;                                 // PurchaseReturn, PurchaseReturnLine, StockLedger, StockBatch
+using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                                 // PurchaseReturn, UserActionType...
 using ERP.Services;                               // ILedgerPostingService, DocumentTotalsService
 using ERP.ViewModels;                             // PurchaseReturnHeaderDto
 
@@ -24,12 +24,14 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly ILedgerPostingService _ledgerPostingService;
         private readonly DocumentTotalsService _docTotals;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals)
+        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
             _docTotals = docTotals;
+            _activityLogger = activityLogger;
         }
 
 
@@ -145,6 +147,8 @@ namespace ERP.Controllers
                 // حفظ التغييرات في قاعدة البيانات
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Edit, "PurchaseReturn", purchaseReturn.PRetId, $"تعديل مرتجع شراء رقم {purchaseReturn.PRetId}");
+
                 TempData["Msg"] = "تم تعديل مرتجع الشراء بنجاح.";
             }
             catch (DbUpdateConcurrencyException)
@@ -195,6 +199,9 @@ namespace ERP.Controllers
                 };
                 _context.PurchaseReturns.Add(entity);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Create, "PurchaseReturn", entity.PRetId, $"إنشاء مرتجع شراء رقم {entity.PRetId}");
+
                 return Json(new { success = true, pretId = entity.PRetId, returnNumber = entity.PRetId.ToString(), returnDate = entity.PRetDate.ToString("yyyy/MM/dd"), returnTime = entity.CreatedAt.ToLocalTime().ToString("HH:mm"), status = entity.Status, isPosted = entity.IsPosted, createdBy = entity.CreatedBy });
             }
             var existing = await _context.PurchaseReturns.FirstOrDefaultAsync(pr => pr.PRetId == dto.PRetId);
@@ -681,6 +688,8 @@ namespace ERP.Controllers
 
                 await _context.SaveChangesAsync();
                 await tx.CommitAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "PurchaseReturn", id, $"حذف مرتجع شراء رقم {id}");
 
                 return new DeletePurchaseReturnResult(DeletePurchaseReturnStatus.Deleted, "تم الحذف.");
             }

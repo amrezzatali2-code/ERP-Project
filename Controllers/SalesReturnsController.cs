@@ -1,6 +1,6 @@
 using ERP.Data;                        // سياق قاعدة البيانات AppDbContext
-using ERP.Infrastructure;              // PagedResult + ApplySearchSort
-using ERP.Models;                      // الموديل SalesReturn
+using ERP.Infrastructure;              // PagedResult + ApplySearchSort + UserActivityLogger
+using ERP.Models;                      // SalesReturn, UserActionType
 using ERP.Services;                    // ILedgerPostingService, DocumentTotalsService
 using ERP.ViewModels;                  // SalesReturnHeaderDto
 using Microsoft.AspNetCore.Mvc;
@@ -28,12 +28,14 @@ namespace ERP.Controllers
         private readonly AppDbContext context;
         private readonly ILedgerPostingService _ledgerPostingService;
         private readonly DocumentTotalsService _docTotals;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public SalesReturnsController(AppDbContext ctx, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals)
+        public SalesReturnsController(AppDbContext ctx, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger)
         {
             context = ctx;
             _ledgerPostingService = ledgerPostingService;
             _docTotals = docTotals;
+            _activityLogger = activityLogger;
         }
 
 
@@ -233,6 +235,8 @@ namespace ERP.Controllers
                 // حفظ التغييرات فعلياً في SQL Server
                 await context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Edit, "SalesReturn", salesReturn.SRId, $"تعديل مرتجع بيع رقم {salesReturn.SRId}");
+
                 TempData["Msg"] = "تم تعديل مرتجع البيع بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
@@ -288,6 +292,9 @@ namespace ERP.Controllers
                 };
                 context.SalesReturns.Add(entity);
                 await context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Create, "SalesReturn", entity.SRId, $"إنشاء مرتجع بيع رقم {entity.SRId}");
+
                 return Json(new { success = true, srId = entity.SRId, returnNumber = entity.SRId.ToString(), returnDate = entity.SRDate.ToString("yyyy/MM/dd"), returnTime = DateTime.Today.Add(entity.SRTime).ToString("HH:mm"), status = entity.Status, isPosted = entity.IsPosted, createdBy = entity.CreatedBy });
             }
             var existing = await context.SalesReturns.FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
@@ -1260,6 +1267,8 @@ namespace ERP.Controllers
 
                 await context.SaveChangesAsync();
                 await tx.CommitAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "SalesReturn", id, $"حذف مرتجع بيع رقم {id}");
 
                 return new DeleteReturnResult(DeleteReturnStatus.Deleted, "تم الحذف.");
             }

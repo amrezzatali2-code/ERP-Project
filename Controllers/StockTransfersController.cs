@@ -1,6 +1,6 @@
 using ERP.Data;                                  // AppDbContext
-using ERP.Infrastructure;                        // كلاس PagedResult لتقسيم الصفحات
-using ERP.Models;                                // StockTransfer و Warehouse و StockTransferLine
+using ERP.Infrastructure;                        // PagedResult + UserActivityLogger
+using ERP.Models;                                // StockTransfer, UserActionType...
 using ERP.Services;                              // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;                  // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;        // SelectList و SelectListItem
@@ -24,11 +24,13 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly StockAnalysisService _stockAnalysisService;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public StockTransfersController(AppDbContext context, StockAnalysisService stockAnalysisService)
+        public StockTransfersController(AppDbContext context, StockAnalysisService stockAnalysisService, IUserActivityLogger activityLogger)
         {
             _context = context;
             _stockAnalysisService = stockAnalysisService;
+            _activityLogger = activityLogger;
         }
 
         #region Index (قائمة التحويلات بالنظام الموحد)
@@ -411,6 +413,8 @@ namespace ERP.Controllers
             _context.StockTransfers.Add(stockTransfer);
             await _context.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "StockTransfer", stockTransfer.Id, $"إنشاء تحويل مخزني رقم {stockTransfer.Id}");
+
             TempData["SuccessMessage"] = "تم إضافة التحويل المخزني بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -470,6 +474,8 @@ namespace ERP.Controllers
                 _context.Update(stockTransfer);
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Edit, "StockTransfer", stockTransfer.Id, $"تعديل تحويل مخزني رقم {stockTransfer.Id}");
+
                 TempData["SuccessMessage"] = "تم تعديل التحويل المخزني بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
@@ -504,6 +510,10 @@ namespace ERP.Controllers
             return View(transfer);
         }
 
+        /// <summary>
+        /// حذف تحويل واحد (مثل المبيعات/المشتريات: الحذف من القائمة بغض النظر عن الترحيل).
+        /// إذا كان مترحلاً: نعكس الترحيل أولاً ثم نحذف.
+        /// </summary>
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
@@ -518,62 +528,144 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            _context.StockTransfers.Remove(transfer);
-            await _context.SaveChangesAsync();
+            try
+            {
+                if (transfer.IsPosted)
+                {
+                    var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+                    await ledgerPostingService.ReverseStockTransferAsync(id, User?.Identity?.Name ?? "SYSTEM");
+                }
 
-            TempData["SuccessMessage"] = $"تم حذف التحويل رقم {id} بنجاح.";
+                _context.StockTransfers.Remove(transfer);
+                await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "StockTransfer", id, $"حذف تحويل مخزني رقم {id}");
+
+                TempData["SuccessMessage"] = $"تم حذف التحويل رقم {id} بنجاح.";
+            }
+            catch (Exception ex)
+            {
+                TempData["ErrorMessage"] = $"تعذر حذف التحويل: {ex.Message}";
+            }
+
             return RedirectToAction(nameof(Index));
         }
 
         /// <summary>
-        /// حذف مجموعة مختارة من التحويلات (BulkDelete).
+        /// حذف مجموعة مختارة من التحويلات (مثل المبيعات/المشتريات: بغض النظر عن الترحيل).
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkDelete(int[] selectedIds)
+        public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
-            if (selectedIds == null || selectedIds.Length == 0)
+            if (string.IsNullOrWhiteSpace(selectedIds))
             {
                 TempData["ErrorMessage"] = "لم يتم اختيار أي سجلات للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
-            var items = await _context.StockTransfers
-                .Where(t => selectedIds.Contains(t.Id) && !t.IsPosted)
-                .ToListAsync();
+            var ids = selectedIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => int.TryParse(s, out var n) ? (int?)n : null)
+                .Where(n => n.HasValue)
+                .Select(n => n!.Value)
+                .Distinct()
+                .ToList();
 
-            if (items.Count == 0)
+            if (!ids.Any())
             {
-                TempData["ErrorMessage"] = "لم يتم العثور على السجلات المحددة.";
+                TempData["ErrorMessage"] = "لم يتم اختيار أكواد صحيحة للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
-            _context.StockTransfers.RemoveRange(items);
-            await _context.SaveChangesAsync();
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            int deletedCount = 0;
+            var failedIds = new List<int>();
 
-            TempData["SuccessMessage"] = $"تم حذف {items.Count} تحويل(ات) بنجاح.";
+            foreach (var id in ids)
+            {
+                try
+                {
+                    var transfer = await _context.StockTransfers
+                        .Include(t => t.Lines)
+                        .FirstOrDefaultAsync(t => t.Id == id);
+
+                    if (transfer == null)
+                        continue;
+
+                    if (transfer.IsPosted)
+                        await ledgerPostingService.ReverseStockTransferAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+                    _context.StockTransfers.Remove(transfer);
+                    await _context.SaveChangesAsync();
+                    deletedCount++;
+                }
+                catch
+                {
+                    failedIds.Add(id);
+                }
+            }
+
+            if (deletedCount > 0)
+                TempData["SuccessMessage"] = failedIds.Any()
+                    ? $"تم حذف {deletedCount} تحويل. فشل حذف: {string.Join(", ", failedIds)}"
+                    : $"تم حذف {deletedCount} تحويل(ات) بنجاح.";
+            if (failedIds.Any())
+                TempData["ErrorMessage"] = $"فشل حذف التحويلات: {string.Join(", ", failedIds)}";
+
             return RedirectToAction(nameof(Index));
         }
 
         /// <summary>
-        /// حذف جميع التحويلات من الجدول (DeleteAll).
+        /// حذف جميع التحويلات (مثل المبيعات/المشتريات: بغض النظر عن الترحيل).
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            var allTransfers = await _context.StockTransfers.ToListAsync();
+            var ids = await _context.StockTransfers.Select(t => t.Id).ToListAsync();
 
-            if (allTransfers.Count == 0)
+            if (!ids.Any())
             {
                 TempData["ErrorMessage"] = "لا توجد سجلات لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
-            _context.StockTransfers.RemoveRange(allTransfers);
-            await _context.SaveChangesAsync();
+            var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+            int deletedCount = 0;
+            var failedIds = new List<int>();
 
-            TempData["SuccessMessage"] = "تم حذف جميع التحويلات المخزنية بنجاح.";
+            foreach (var id in ids)
+            {
+                try
+                {
+                    var transfer = await _context.StockTransfers
+                        .Include(t => t.Lines)
+                        .FirstOrDefaultAsync(t => t.Id == id);
+
+                    if (transfer == null)
+                        continue;
+
+                    if (transfer.IsPosted)
+                        await ledgerPostingService.ReverseStockTransferAsync(id, User?.Identity?.Name ?? "SYSTEM");
+
+                    _context.StockTransfers.Remove(transfer);
+                    await _context.SaveChangesAsync();
+                    deletedCount++;
+                }
+                catch
+                {
+                    failedIds.Add(id);
+                }
+            }
+
+            if (deletedCount > 0)
+                TempData["SuccessMessage"] = failedIds.Any()
+                    ? $"تم حذف {deletedCount} تحويل. فشل حذف: {string.Join(", ", failedIds)}"
+                    : $"تم حذف {deletedCount} تحويل بنجاح.";
+            if (failedIds.Any())
+                TempData["ErrorMessage"] = $"فشل حذف التحويلات: {string.Join(", ", failedIds)}";
+
             return RedirectToAction(nameof(Index));
         }
 

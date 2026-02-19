@@ -1,12 +1,12 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لبناء CSV
 using System.Threading.Tasks;                     // Task و async
 
 using ERP.Data;                                   // AppDbContext
-using ERP.Infrastructure;                         // PagedResult
-using ERP.Models;                                 // موديل Permission
+using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
+using ERP.Models;                                 // Permission, UserActionType
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // Include, AsNoTracking, ToListAsync
 using ClosedXML.Excel;                      // لتصدير Excel
@@ -23,11 +23,13 @@ namespace ERP.Controllers
     /// </summary>
     public class PermissionsController : Controller
     {
-        private readonly AppDbContext _context;   // متغير: كائن الاتصال بقاعدة البيانات
+        private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public PermissionsController(AppDbContext context)
+        public PermissionsController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
         // ========= دالة مساعدة لتطبيق الفلاتر (بحث + كود + تاريخ) =========
@@ -265,6 +267,8 @@ namespace ERP.Controllers
                 _context.Add(permission);
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(UserActionType.Create, "Permission", permission.PermissionId, $"إنشاء صلاحية: {permission.NameAr}");
+
                 TempData["Success"] = "تم إضافة الصلاحية بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
@@ -315,6 +319,8 @@ namespace ERP.Controllers
                     permission.UpdatedAt = DateTime.UtcNow;   // تحديث تاريخ التعديل
                     _context.Update(permission);
                     await _context.SaveChangesAsync();
+
+                    await _activityLogger.LogAsync(UserActionType.Edit, "Permission", id, $"تعديل صلاحية: {permission.NameAr}");
 
                     TempData["Success"] = "تم تعديل الصلاحية بنجاح.";
                 }
@@ -367,6 +373,8 @@ namespace ERP.Controllers
             {
                 _context.Permissions.Remove(permission);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(UserActionType.Delete, "Permission", id, $"حذف صلاحية: {permission.NameAr}");
 
                 TempData["Success"] = "تم حذف الصلاحية.";
             }

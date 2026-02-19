@@ -1,6 +1,6 @@
-﻿using ERP.Data;                                    // كائن AppDbContext
-using ERP.Infrastructure;                          // كلاس PagedResult لتقسيم الصفحات
-using ERP.Models;                                  // الموديل Area
+using ERP.Data;                                    // كائن AppDbContext
+using ERP.Infrastructure;                          // PagedResult + UserActivityLogger
+using ERP.Models;                                  // Area, UserActionType
 using Microsoft.AspNetCore.Mvc;                    // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;          // SelectList و SelectListItem
 using Microsoft.EntityFrameworkCore;               // Include, AsNoTracking, ToListAsync
@@ -17,13 +17,13 @@ namespace ERP.Controllers
     /// </summary>
     public class AreasController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _db;          // _db يمثل قاعدة البيانات
+        private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        // الكونستركتور: استلام AppDbContext من الـ Dependency Injection
-        public AreasController(AppDbContext db)
+        public AreasController(AppDbContext db, IUserActivityLogger activityLogger)
         {
             _db = db;
+            _activityLogger = activityLogger;
         }
 
         // ===============================
@@ -272,6 +272,8 @@ namespace ERP.Controllers
             _db.Areas.Add(area);
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "Area", area.AreaId, $"إنشاء منطقة: {area.AreaName}");
+
             TempData["Ok"] = "تمت إضافة المنطقة بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -323,6 +325,8 @@ namespace ERP.Controllers
 
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Edit, "Area", id, $"تعديل منطقة: {dbItem.AreaName}");
+
             TempData["Ok"] = "تم تعديل المنطقة بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -357,6 +361,8 @@ namespace ERP.Controllers
 
             _db.Areas.Remove(item);
             await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "Area", id, $"حذف منطقة: {item.AreaName}");
 
             TempData["Ok"] = "تم حذف المنطقة بنجاح.";
             return RedirectToAction(nameof(Index));

@@ -1,8 +1,8 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                         // AppDbContext
-using ERP.Infrastructure;               // PagedResult
-using ERP.Models;                       // District
+using ERP.Infrastructure;               // PagedResult + UserActivityLogger
+using ERP.Models;                       // District, UserActionType
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -19,11 +19,13 @@ namespace ERP.Controllers
     /// </summary>
     public class DistrictsController : Controller
     {
-        private readonly AppDbContext _db;   // الاتصال بقاعدة البيانات
+        private readonly AppDbContext _db;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public DistrictsController(AppDbContext db)
+        public DistrictsController(AppDbContext db, IUserActivityLogger activityLogger)
         {
             _db = db;
+            _activityLogger = activityLogger;
         }
 
         // =========================================
@@ -227,6 +229,8 @@ namespace ERP.Controllers
             _db.Districts.Add(model);
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Create, "District", model.DistrictId, $"إنشاء حي/مركز: {model.DistrictName}");
+
             TempData["Ok"] = "تمت إضافة الحي/المركز بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -272,6 +276,8 @@ namespace ERP.Controllers
 
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(UserActionType.Edit, "District", id, $"تعديل حي/مركز: {dbEntity.DistrictName}");
+
             TempData["Ok"] = "تم تعديل البيانات بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -316,6 +322,8 @@ namespace ERP.Controllers
 
             _db.Districts.Remove(item);
             await _db.SaveChangesAsync();
+
+            await _activityLogger.LogAsync(UserActionType.Delete, "District", id, $"حذف حي/مركز: {item.DistrictName}");
 
             TempData["Ok"] = "تم حذف السجل.";
             return RedirectToAction(nameof(Index));

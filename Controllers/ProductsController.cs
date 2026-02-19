@@ -3,8 +3,8 @@ using ClosedXML.Excel;                  // مكتبة Excel
 using OfficeOpenXml;
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                         // سياق قاعدة البيانات الرئيسي
-using ERP.Infrastructure;               // كلاس PagedResult<T> لتقسيم الصفحات
-using ERP.Models;                       // الموديلات Product, Category,...
+using ERP.Infrastructure;               // PagedResult + UserActivityLogger
+using ERP.Models;                       // Product, Category, UserActionType...
 using ERP.Services;                     // StockAnalysisService
 using ERP.ViewModels;                   // ViewModels الخاصة بحركة الصنف
 using Microsoft.AspNetCore.Mvc;
@@ -27,14 +27,15 @@ namespace ERP.Controllers
     /// </summary>
     public class ProductsController : Controller
     {
-        // كائن الـ DbContext للتعامل مع قاعدة البيانات
         private readonly AppDbContext _db;
         private readonly StockAnalysisService _stockAnalysisService;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public ProductsController(AppDbContext db, StockAnalysisService stockAnalysisService)
+        public ProductsController(AppDbContext db, StockAnalysisService stockAnalysisService, IUserActivityLogger activityLogger)
         {
             _db = db;
             _stockAnalysisService = stockAnalysisService;
+            _activityLogger = activityLogger;
         }
 
 
@@ -523,6 +524,12 @@ namespace ERP.Controllers
             _db.Products.Add(model);
             await _db.SaveChangesAsync();
 
+            await _activityLogger.LogAsync(
+                UserActionType.Create,
+                "Product",
+                model.ProdId,
+                $"إنشاء صنف جديد: {model.ProdName}");
+
             TempData["Msg"] = "تم إضافة الصنف بنجاح.";
             return RedirectToAction(nameof(Index));
         }
@@ -580,6 +587,14 @@ namespace ERP.Controllers
                                     .FirstOrDefaultAsync(p => p.ProdId == id);
             if (original == null) return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                original.ProdName,
+                original.Barcode,
+                original.PriceRetail,
+                original.CategoryId
+            });
+
             // المحافظة على تاريخ الإنشاء القديم
             model.CreatedAt = original.CreatedAt;
 
@@ -594,6 +609,21 @@ namespace ERP.Controllers
 
             _db.Products.Update(model);
             await _db.SaveChangesAsync();
+
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                model.ProdName,
+                model.Barcode,
+                model.PriceRetail,
+                model.CategoryId
+            });
+            await _activityLogger.LogAsync(
+                UserActionType.Edit,
+                "Product",
+                model.ProdId,
+                $"تعديل صنف: {model.ProdName}",
+                oldValues,
+                newValues);
 
             TempData["Msg"] = "تم تعديل الصنف بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -626,8 +656,22 @@ namespace ERP.Controllers
             var m = await _db.Products.FindAsync(id);
             if (m != null)
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    m.ProdName,
+                    m.Barcode,
+                    m.PriceRetail
+                });
                 _db.Products.Remove(m);
                 await _db.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(
+                    UserActionType.Delete,
+                    "Product",
+                    id,
+                    $"حذف صنف: {m.ProdName}",
+                    oldValues: oldValues);
+
                 TempData["Msg"] = "تم حذف الصنف.";
             }
 

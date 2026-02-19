@@ -158,6 +158,130 @@ body {
     margin-bottom: .25rem;
 }
 
+/* شريط أزرار على صفّين */
+.erp-toolbar-two-rows .erp-toolbar-row {
+    align-items: center;
+}
+
+/* ================== تصميم احترافي موحد لشريط فلاتر القوائم ================== */
+.erp-list-filter-bar {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+
+.erp-list-filter-bar .form-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+/* الحقول والأزرار: ارتفاع وأبعاد موحدة */
+.erp-list-filter-bar .erp-filter-input,
+.erp-list-filter-bar .form-control.erp-filter-input,
+.erp-list-filter-bar .form-select.erp-filter-input {
+    height: 34px;
+    min-height: 34px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #fff;
+    color: #374151;
+    transition: border-color .15s, box-shadow .15s;
+}
+
+.erp-list-filter-bar .erp-filter-input:focus,
+.erp-list-filter-bar .form-control.erp-filter-input:focus,
+.erp-list-filter-bar .form-select.erp-filter-input:focus {
+    border-color: var(--erp-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    outline: none;
+}
+
+/* أزرار الشريط: نفس الارتفاع للحقول */
+.erp-list-filter-bar .btn-erp-sm {
+    height: 34px;
+    min-height: 34px;
+    padding: 0.35rem 0.9rem;
+    font-size: 0.8125rem;
+    border-radius: 6px;
+}
+
+.erp-list-filter-bar .erp-toolbar .btn-erp-sm {
+    height: 34px;
+    min-height: 34px;
+}
+
+/* صف البحث */
+.erp-list-search-row .form-control[type="text"].erp-filter-input {
+    width: 165px;
+    min-width: 140px;
+}
+
+/* سهم القائمة المنسدلة - موحد مع باقي العناصر */
+.erp-list-filter-bar .form-select.form-select-arrow,
+.erp-list-filter-bar .form-select.erp-filter-input {
+    background-color: #fff;
+    padding-inline-end: 2rem;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3e%3cpolygon fill='%236b7280' points='6,8 2,4 10,4'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: left 0.5rem center;
+    background-size: 10px 8px;
+}
+
+/* فورم التصدير: تناسق مع الشريط */
+.erp-export-form .form-select {
+    height: 34px;
+    padding: 0.35rem 0.75rem;
+}
+
+.erp-list-filter-bar .input-group {
+    border-radius: var(--erp-radius);
+    border: 1px solid var(--erp-secondary);
+    background: #fff;
+    box-shadow: var(--erp-shadow-sm);
+}
+
+.erp-list-filter-bar .input-group .form-control,
+.erp-list-filter-bar .input-group .form-select {
+    border: none;
+    border-inline-start: 1px solid #e2e8f0;
+}
+
+.erp-list-filter-bar .input-group .form-control:first-child,
+.erp-list-filter-bar .input-group .form-select:first-child {
+    border-inline-start: none;
+}
+
+.erp-list-code-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.6rem;
+}
+
+/* أقسام الشريط الثلاثة: مساحات متساوية ومحتوى في المنتصف */
+.erp-list-filter-bar .erp-filter-section {
+    min-width: 0; /* يسمح بالـ flex shrink بشكل صحيح */
+}
+.erp-list-filter-bar .erp-filter-section .erp-list-search-row.justify-content-center {
+    justify-content: center;
+}
+
+.erp-list-code-filter .erp-filter-input {
+    width: 78px;
+    min-width: 70px;
+    text-align: center;
+}
+
 /* كلاس مساعد لعدم لفّ النص في Label حجم الصفحة (لو لم يكن معرفاً من قبل) */
 .nowrap {
     white-space: nowrap;

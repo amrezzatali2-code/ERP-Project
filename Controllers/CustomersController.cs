@@ -1,7 +1,7 @@
 using ClosedXML.Excel;                            // مكتبة Excel لإنشاء ملف xlsx
 using ERP.Data;                                   // AppDbContext
-using ERP.Infrastructure;                         // PagedResult
-using ERP.Models;                                 // Customer
+using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
+using ERP.Models;                                 // Customer, UserActionType
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -20,8 +20,9 @@ namespace ERP.Controllers
     /// </summary>
     public class CustomersController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;
+        private readonly IUserActivityLogger _activityLogger;
+
 
         // قائمة ثابتة لأنواع الأطراف (عميل / مورد / موظف / مستثمر / بنك / مصروف / مالك)
         private static readonly string[] PartyCategoryOptions = new[]
@@ -35,9 +36,10 @@ namespace ERP.Controllers
             "Owner"       // صاحب / شريك (مالك المنشأة أو الشريك الرئيسي)
         };
 
-        public CustomersController(AppDbContext context)
+        public CustomersController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
+            _activityLogger = activityLogger;
         }
 
         /// <summary>
@@ -1062,6 +1064,12 @@ namespace ERP.Controllers
                 _context.Add(customer);
                 await _context.SaveChangesAsync();
 
+                await _activityLogger.LogAsync(
+                    UserActionType.Create,
+                    "Customer",
+                    customer.CustomerId,
+                    $"إنشاء عميل جديد: {customer.CustomerName}");
+
                 TempData["SuccessMessage"] = "تم إضافة العميل بنجاح.";
                 return RedirectToAction(nameof(Index));
             }
@@ -1164,6 +1172,16 @@ namespace ERP.Controllers
             if (existing == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                existing.CustomerName,
+                existing.Phone1,
+                existing.Address,
+                existing.PartyCategory,
+                existing.CreditLimit,
+                existing.IsActive
+            });
+
             try
             {
                 // ===== البيانات الأساسية =====
@@ -1194,6 +1212,24 @@ namespace ERP.Controllers
                 existing.UpdatedAt = DateTime.Now;
 
                 await _context.SaveChangesAsync();
+
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    existing.CustomerName,
+                    existing.Phone1,
+                    existing.Address,
+                    existing.PartyCategory,
+                    existing.CreditLimit,
+                    existing.IsActive
+                });
+                await _activityLogger.LogAsync(
+                    UserActionType.Edit,
+                    "Customer",
+                    existing.CustomerId,
+                    $"تعديل عميل: {existing.CustomerName}",
+                    oldValues,
+                    newValues);
+
                 TempData["SuccessMessage"] = "تم تعديل بيانات العميل بنجاح.";
             }
             catch (DbUpdateConcurrencyException)
@@ -1241,8 +1277,23 @@ namespace ERP.Controllers
             var customer = await _context.Customers.FindAsync(id);
             if (customer != null)
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    customer.CustomerName,
+                    customer.Phone1,
+                    customer.PartyCategory,
+                    customer.CreditLimit
+                });
                 _context.Customers.Remove(customer);
                 await _context.SaveChangesAsync();
+
+                await _activityLogger.LogAsync(
+                    UserActionType.Delete,
+                    "Customer",
+                    id,
+                    $"حذف عميل: {customer.CustomerName}",
+                    oldValues: oldValues);
+
                 TempData["SuccessMessage"] = "تم حذف العميل بنجاح.";
             }
 

@@ -1,12 +1,13 @@
-﻿using System;                                // متغيرات التاريخ DateTime
+using System;                                // متغيرات التاريخ DateTime
 using System.Linq;                           // أوامر LINQ مثل Where و OrderBy
 using System.Text;                           // StringBuilder لتجهيز ملف التصدير
+using ClosedXML.Excel;                       // تصدير Excel فعلي (.xlsx)
 using System.Threading.Tasks;                // async / await
 using Microsoft.AspNetCore.Mvc;              // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;         // Include / AsNoTracking
 using ERP.Data;                              // AppDbContext
 using ERP.Infrastructure;                    // PagedResult
-using ERP.Models;                            // UserActivityLog, User
+using ERP.Models;                            // UserActivityLog, User, UserActionType
 
 namespace ERP.Controllers
 {
@@ -40,6 +41,11 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null)
         {
+            // تصحيح: إذا وُضع اسم عمود ترتيب (مثل ActionTime) بالخطأ في حقل البحث، نتجاهله
+            var sortColumnNames = new[] { "Id", "UserName", "ActionType", "EntityName", "EntityId", "ActionTime", "IpAddress" };
+            if (!string.IsNullOrWhiteSpace(search) && sortColumnNames.Contains(search.Trim(), StringComparer.OrdinalIgnoreCase))
+                search = null;
+
             // استعلام أساسي مع Include للمستخدم
             // مهم: نثبّت النوع كـ IQueryable لحل مشكلة CS0266
             IQueryable<UserActivityLog> query = _context.UserActivityLogs
@@ -66,22 +72,24 @@ namespace ERP.Controllers
                 "Id" => desc
                     ? query.OrderByDescending(x => x.Id)
                     : query.OrderBy(x => x.Id),
-
                 "UserName" => desc
                     ? query.OrderByDescending(x => x.User!.UserName)
                     : query.OrderBy(x => x.User!.UserName),
-
                 "ActionType" => desc
                     ? query.OrderByDescending(x => x.ActionType)
                     : query.OrderBy(x => x.ActionType),
-
                 "EntityName" => desc
                     ? query.OrderByDescending(x => x.EntityName)
                     : query.OrderBy(x => x.EntityName),
-
+                "EntityId" => desc
+                    ? query.OrderByDescending(x => x.EntityId)
+                    : query.OrderBy(x => x.EntityId),
                 "ActionTime" => desc
                     ? query.OrderByDescending(x => x.ActionTime)
                     : query.OrderBy(x => x.ActionTime),
+                "IpAddress" => desc
+                    ? query.OrderByDescending(x => x.IpAddress)
+                    : query.OrderBy(x => x.IpAddress),
 
                 _ => desc
                     ? query.OrderByDescending(x => x.ActionTime)
@@ -133,6 +141,11 @@ namespace ERP.Controllers
                 string term = search.Trim();
                 string mode = (searchBy ?? "all").ToLower();
 
+                // نوع العملية enum: لا نستخدم ToString() في الـ query لأنه لا يترجم لـ SQL
+                var matchingActionTypes = Enum.GetValues<UserActionType>()
+                    .Where(e => e.ToString().Contains(term, StringComparison.OrdinalIgnoreCase))
+                    .ToArray();
+
                 query = mode switch
                 {
                     // البحث باسم المستخدم أو الاسم الظاهر
@@ -143,9 +156,10 @@ namespace ERP.Controllers
                             (x.User.DisplayName != null && x.User.DisplayName.Contains(term))
                         )),
 
-                    // البحث بنوع العملية
-                    "action" => query.Where(x =>
-                        x.ActionType.ToString().Contains(term)),
+                    // البحث بنوع العملية (مقارنة enum بدون ToString في SQL)
+                    "action" => matchingActionTypes.Length > 0
+                        ? query.Where(x => matchingActionTypes.Contains(x.ActionType))
+                        : query.Where(x => false),
 
                     // البحث باسم الكيان
                     "entity" => query.Where(x =>
@@ -160,7 +174,7 @@ namespace ERP.Controllers
                         ? query.Where(x => x.Id == idVal)
                         : query.Where(x => false),
 
-                    // البحث في الكل
+                    // البحث في الكل (ActionType عبر enum values بدل ToString)
                     _ => query.Where(x =>
                         (x.User != null &&
                             (
@@ -172,7 +186,11 @@ namespace ERP.Controllers
                         ||
                         (x.Description != null && x.Description.Contains(term))
                         ||
-                        x.ActionType.ToString().Contains(term))
+                        (x.OldValues != null && x.OldValues.Contains(term))
+                        ||
+                        (x.NewValues != null && x.NewValues.Contains(term))
+                        ||
+                        (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType)))
                 };
             }
 
@@ -333,66 +351,73 @@ namespace ERP.Controllers
 
             query = sort switch
             {
-                "Id" => desc
-                    ? query.OrderByDescending(x => x.Id)
-                    : query.OrderBy(x => x.Id),
-                "UserName" => desc
-                    ? query.OrderByDescending(x => x.User!.UserName)
-                    : query.OrderBy(x => x.User!.UserName),
-                "ActionType" => desc
-                    ? query.OrderByDescending(x => x.ActionType)
-                    : query.OrderBy(x => x.ActionType),
-                "EntityName" => desc
-                    ? query.OrderByDescending(x => x.EntityName)
-                    : query.OrderBy(x => x.EntityName),
-                "ActionTime" => desc
-                    ? query.OrderByDescending(x => x.ActionTime)
-                    : query.OrderBy(x => x.ActionTime),
-                _ => desc
-                    ? query.OrderByDescending(x => x.ActionTime)
-                    : query.OrderBy(x => x.ActionTime)
+                "Id" => desc ? query.OrderByDescending(x => x.Id) : query.OrderBy(x => x.Id),
+                "UserName" => desc ? query.OrderByDescending(x => x.User!.UserName) : query.OrderBy(x => x.User!.UserName),
+                "ActionType" => desc ? query.OrderByDescending(x => x.ActionType) : query.OrderBy(x => x.ActionType),
+                "EntityName" => desc ? query.OrderByDescending(x => x.EntityName) : query.OrderBy(x => x.EntityName),
+                "EntityId" => desc ? query.OrderByDescending(x => x.EntityId) : query.OrderBy(x => x.EntityId),
+                "ActionTime" => desc ? query.OrderByDescending(x => x.ActionTime) : query.OrderBy(x => x.ActionTime),
+                "IpAddress" => desc ? query.OrderByDescending(x => x.IpAddress) : query.OrderBy(x => x.IpAddress),
+                _ => desc ? query.OrderByDescending(x => x.ActionTime) : query.OrderBy(x => x.ActionTime)
             };
 
             var data = await query.ToListAsync();
 
-            // تجهيز ملف CSV يمكن فتحه في Excel
-            var sb = new StringBuilder();
-
-            // عنوان الأعمدة
-            sb.AppendLine("Id,UserName,ActionType,EntityName,EntityId,ActionTime,Description,IpAddress,UserAgent");
-
-            foreach (var r in data)
+            if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
             {
-                string userName = r.User?.UserName ?? "";
-                string entity = r.EntityName ?? "";
-                string descText = r.Description ?? "";
-                string ip = r.IpAddress ?? "";
-                string agent = r.UserAgent ?? "";
+                // تصدير Excel فعلي (.xlsx) باستخدام ClosedXML
+                using var workbook = new XLWorkbook();
+                var ws = workbook.Worksheets.Add("سجل النشاط");
+                ws.RightToLeft = true; // دعم اتجاه RTL للعربية
 
-                // دالة مساعدة لتأمين النص (تجنب كسر CSV)
-                string Safe(string? s) =>
-                    string.IsNullOrEmpty(s)
-                        ? ""
-                        : "\"" + s.Replace("\"", "\"\"") + "\"";
+                string[] headers = { "المعرّف", "المستخدم", "نوع العملية", "اسم الكيان", "رقم السجل", "وقت العملية", "الوصف", "عنوان IP", "قبل", "بعد" };
+                for (int i = 0; i < headers.Length; i++)
+                    ws.Cell(1, i + 1).Value = headers[i];
 
-                string line = string.Join(",",
-                    r.Id,
-                    Safe(userName),
-                    r.ActionType.ToString(),
-                    Safe(entity),
-                    r.EntityId?.ToString() ?? "",
-                    r.ActionTime.ToString("yyyy-MM-dd HH:mm:ss"),
-                    Safe(descText),
-                    Safe(ip),
-                    Safe(agent));
+                int row = 2;
+                foreach (var r in data)
+                {
+                    ws.Cell(row, 1).Value = r.Id;
+                    ws.Cell(row, 2).Value = r.User?.UserName ?? "";
+                    ws.Cell(row, 3).Value = r.ActionType.ToString();
+                    ws.Cell(row, 4).Value = r.EntityName ?? "";
+                    ws.Cell(row, 5).Value = r.EntityId?.ToString() ?? "";
+                    ws.Cell(row, 6).Value = r.ActionTime.ToString("yyyy-MM-dd HH:mm:ss");
+                    ws.Cell(row, 7).Value = r.Description ?? "";
+                    ws.Cell(row, 8).Value = r.IpAddress ?? "";
+                    ws.Cell(row, 9).Value = r.OldValues ?? "";
+                    ws.Cell(row, 10).Value = r.NewValues ?? "";
+                    row++;
+                }
 
-                sb.AppendLine(line);
+                using var stream = new System.IO.MemoryStream();
+                workbook.SaveAs(stream);
+                var fileName = $"UserActivityLog_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = $"UserActivityLog_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
-
-            return File(bytes, "text/csv; charset=utf-8", fileName);
+            // CSV
+            var sb = new StringBuilder();
+            sb.AppendLine("Id,UserName,ActionType,EntityName,EntityId,ActionTime,Description,IpAddress,UserAgent,OldValues,NewValues");
+            foreach (var r in data)
+            {
+                string Safe(string? s) => string.IsNullOrEmpty(s) ? "" : "\"" + s.Replace("\"", "\"\"") + "\"";
+                sb.AppendLine(string.Join(",",
+                    r.Id,
+                    Safe(r.User?.UserName),
+                    r.ActionType.ToString(),
+                    Safe(r.EntityName),
+                    r.EntityId?.ToString() ?? "",
+                    r.ActionTime.ToString("yyyy-MM-dd HH:mm:ss"),
+                    Safe(r.Description),
+                    Safe(r.IpAddress),
+                    Safe(r.UserAgent),
+                    Safe(r.OldValues),
+                    Safe(r.NewValues)));
+            }
+            var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+            var bytes = utf8.GetBytes(sb.ToString());
+            return File(bytes, "text/csv; charset=utf-8", $"UserActivityLog_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
         }
     }
 }
