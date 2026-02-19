@@ -28,6 +28,12 @@ namespace ERP.ViewModels
         public decimal AccountBalanceProfit { get; set; }   // الربح من الأرصدة = Revenue Balance - COGS Balance
         public decimal AccountBalanceProfitPercent { get; set; } // نسبة الربح من الأرصدة
         
+        // الربح من التسويات (من StockAdjustmentLines)
+        public decimal AdjustmentProfit { get; set; }   // صافي الربح/الخسارة من التسويات (فائض - عجز)
+
+        // الربح من التحويلات (من StockTransferLines — خصم أقل من المرجح)
+        public decimal TransferProfit { get; set; }     // ربح التحويلات بين المخازن
+
         // إحصائيات إضافية
         public decimal SalesQty { get; set; }          // كمية المبيعات
         public decimal AvgUnitPrice { get; set; }      // متوسط سعر الوحدة

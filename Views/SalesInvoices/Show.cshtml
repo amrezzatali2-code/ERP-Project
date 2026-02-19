@@ -26,42 +26,152 @@
         }
 
 
-        /* خلفية عامة للصفحة */
+        /* ===== التصميم الجديد: بدون سكرول — الفاتورة كلها في الشاشة ===== */
         .invoice-page {
-            background-color: #f3f6fb; /* لون خفيف مريح للعين */
-            min-height: 100vh;
-            padding-bottom: 2rem;
+            background-color: #ffffff;
+            height: 100vh;
+            max-height: 100vh;
+            padding: 0;
+            display: flex;
+            flex-direction: row;
+            overflow: hidden;
         }
 
-        /* الكروت الرئيسية (الهيدر + تفاصيل + إدخال صنف + بيانات الصنف + السطور + الإجماليات + الكارت الجانبي) */
+        html.in-frame .invoice-page { height: 100vh; }
+        html:not(.in-frame) .invoice-page { height: calc(100vh - 56px); max-height: calc(100vh - 56px); }
+
+        .invoice-page .container-fluid {
+            padding: 0;
+            max-width: 100%;
+            height: 100%;
+        }
+
+        .invoice-page .row {
+            margin: 0;
+            flex-wrap: nowrap;
+            height: 100%;
+        }
+
+        /* الشريط الجانبي — أزرق غامق */
+        .invoice-page .col-lg-2.order-1 {
+            background: linear-gradient(180deg, #1e3a5f 0%, #152a45 100%);
+            height: 100%;
+            padding: 0.5rem 0.5rem;
+            border-left: 1px solid rgba(255,255,255,.08);
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        .invoice-side-card {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        .invoice-side-card .card-header {
+            background: transparent !important;
+            color: rgba(255,255,255,.9) !important;
+            border-bottom: 1px solid rgba(255,255,255,.15);
+            padding: 0.75rem 0;
+        }
+
+        .invoice-actions-sticky {
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+        }
+
+        .invoice-page .invoice-side-card .btn-erp,
+        .invoice-page .invoice-side-card .btn-erp-outline-primary,
+        .invoice-page .invoice-side-card .btn-erp-outline-success,
+        .invoice-page .invoice-side-card .btn-erp-outline-warning,
+        .invoice-page .invoice-side-card .btn-erp-outline-danger {
+            background: rgba(255,255,255,.1) !important;
+            border-color: rgba(255,255,255,.25) !important;
+            color: #fff !important;
+        }
+
+        .invoice-page .invoice-side-card .btn-erp:hover:not(:disabled),
+        .invoice-page .invoice-side-card .btn-erp-outline-primary:hover:not(:disabled),
+        .invoice-page .invoice-side-card .btn-erp-outline-success:hover:not(:disabled),
+        .invoice-page .invoice-side-card .btn-erp-outline-warning:hover:not(:disabled),
+        .invoice-page .invoice-side-card .btn-erp-outline-danger:hover:not(:disabled) {
+            background: rgba(255,255,255,.2) !important;
+            border-color: rgba(255,255,255,.4) !important;
+            color: #fff !important;
+        }
+
+        .invoice-page .invoice-side-card .btn-erp:disabled,
+        .invoice-page .invoice-side-card .btn-erp-outline-primary:disabled {
+            opacity: 0.5;
+        }
+
+        .invoice-page .invoice-side-card .form-control {
+            background: rgba(255,255,255,.1);
+            border-color: rgba(255,255,255,.2);
+            color: #fff;
+        }
+
+        .invoice-page .invoice-side-card .form-control::placeholder {
+            color: rgba(255,255,255,.5);
+        }
+
+        .invoice-page .invoice-side-card #postInvoiceMsg {
+            color: rgba(255,255,255,.85);
+        }
+
+        /* العمود الرئيسي — سكرول داخله لرؤية كل المحتوى (الهيدر + الأصناف + الجدول + الإجماليات) */
+        .invoice-page .col-lg-2.order-1 {
+            flex-shrink: 0;
+        }
+
+        .invoice-page .col-lg-10.order-2 {
+            background: #ffffff;
+            padding: 0.5rem 1rem;
+            flex: 1;
+            min-width: 0;
+            height: 100%;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* حاوية المحتوى */
+        #PI_BodyHost {
+            display: block;
+        }
+
+        /* حاوية جدول السطور */
+        .invoice-page .invoice-lines-container {
+            display: block;
+        }
+
+        .invoice-page .invoice-lines-container .erp-table-wrapper {
+            max-height: 320px;
+            overflow: auto;
+        }
+
+        /* الكروت الرئيسية */
         .invoice-header-card,
         .invoice-details-card,
         .invoice-lines-card,
         .invoice-totals-card,
-        .invoice-side-card,
         .invoice-Add-card,
         .invoice-product-card {
-            border-radius: 1rem;
+            border-radius: 0.5rem;
             overflow: hidden;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0,0,0,.05);
         }
 
-        /* شريط الأزرار: يفضل ظاهر ومثبت */
-        .invoice-actions-sticky {
-            position: sticky;
-            top: 58px; /* عدّلها حسب ارتفاع الـ Navbar عندك */
-            z-index: 3000; /* أعلى من أي كروت/هيدر */
-
-            background: #ffffff; /* ✅ أفتح لون (بدل الرمادي) */
-            border: 1px solid rgba(13,110,253,.12); /* ✅ بوردر خفيف */
-            padding: 10px 10px;
-            border-radius: 14px;
-            box-shadow: 0 10px 24px rgba(0,0,0,.05); /* ✅ ظل أخف */
-        }
-        /* لو عندك تبويب/هيدر ثابت أعلى من النافبار زوّد top */
+        /* شاشات صغيرة — نسمح بالسكرول */
         @@media (max-width: 992px) {
-            .invoice-actions-sticky {
-                top: 56px;
-            }
+            .invoice-page { height: auto; max-height: none; overflow: visible; }
+            .invoice-page .row { flex-wrap: wrap; height: auto; }
+            .invoice-page .col-lg-2.order-1 { height: auto; min-height: auto; border-left: none; border-bottom: 1px solid rgba(255,255,255,.15); }
+            .invoice-page .col-lg-10.order-2 { height: auto; overflow: visible; }
+            #PI_BodyHost { min-height: auto; overflow: visible; }
+            .invoice-page .invoice-lines-container .erp-table-wrapper { max-height: 200px !important; }
         }
 
 
@@ -69,26 +179,27 @@
 
 
 
-        /* شريط الهيدر الملون للهيدر الرئيسي */
+        /* شريط الهيدر — أزرق غامق متناسق مع الشريط الجانبي */
         .invoice-header-bar {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            background: linear-gradient(90deg, #1e3a5f 0%, #2563eb 100%);
             color: #ffffff;
-            padding: 0.75rem 1.25rem;
+            padding: 0.4rem 0.75rem;
         }
 
             .invoice-header-bar h5 {
                 margin-bottom: 0.1rem;
+                font-weight: 600;
             }
 
-        /* نفس لون الهيدر لباقي الكروت */
+        /* رؤوس الكروت — رمادي فاتح نظيف */
         .invoice-details-card .card-header,
         .invoice-Add-card .card-header,
         .invoice-product-card .card-header,
-        .invoice-lines-card .card-header,
-        .invoice-side-card .card-header {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            color: #ffffff;
-            padding: 0.55rem 1rem;
+        .invoice-lines-card .card-header {
+            background: #f8fafc !important;
+            color: #1e293b !important;
+            padding: 0.35rem 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
         }
 
         .invoice-status-badge {
@@ -122,24 +233,39 @@
             padding: 0.35rem 0.6rem;
         }
 
-            .invoice-side-card .btn-erp + .btn-erp {
-                margin-top: 0.25rem;
-            }
+        .invoice-side-card .btn-erp + .btn-erp {
+            margin-top: 0.15rem;
+        }
 
-        /* هيدر جدول السطور */
+        .invoice-page .invoice-actions-sticky.d-flex.flex-column.gap-2 {
+            gap: 0.25rem !important;
+        }
+
+        /* هيدر جدول السطور — رمادي فاتح */
         .invoice-lines-header {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            color: #fff;
+            background: #f1f5f9 !important;
+            color: #334155 !important;
         }
 
             .invoice-lines-header th {
-                border-color: #0b5ed7 !important;
+                border-color: #e2e8f0 !important;
+                font-weight: 600;
             }
 
         .erp-table-wrapper {
-            max-height: 360px;
+            max-height: 280px;
             overflow: auto;
         }
+
+        /* تقليل المسافات للظهور في شاشة واحدة بدون سكرول */
+        .invoice-page .card { margin-bottom: 0.4rem !important; }
+        .invoice-page .card-body { padding: 0.5rem 0.75rem !important; }
+        .invoice-page .mb-2 { margin-bottom: 0.35rem !important; }
+        .invoice-page .mb-3 { margin-bottom: 0.4rem !important; }
+        .invoice-page .row.g-3 { --bs-gutter-y: 0.4rem; --bs-gutter-x: 0.5rem; }
+        .invoice-page .row.g-4 { --bs-gutter-y: 0.35rem; --bs-gutter-x: 0.5rem; }
+        .invoice-page .form-label-sm { font-size: 0.8rem; }
+        .invoice-page .form-control-sm { padding: 0.2rem 0.4rem; font-size: 0.8rem; }
 
         .summary-badge {
             min-width: 80px;
@@ -196,7 +322,7 @@
 
 
 <div class="invoice-page" dir="rtl">
-    <div class="container-fluid pt-3">
+    <div class="container-fluid pt-2">
 
         @* فورم مخفي لتوليد Anti-Forgery Token لاستخدامه في نداءات AJAX *@
         <form id="__AntiForgeryForm" method="post" style="display:none">
@@ -355,10 +481,6 @@
                                 ↩️ مرتجع فاتورة مبيعات بالكامل
                             </button>
                         </div>
-
-                        <!-- نفس بوكس الرسائل المستخدم في الترحيل -->
-                        <div id="postInvoiceMsg" class="small mt-2"></div>
-
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
@@ -678,7 +800,7 @@
                                 </button>
                             </div>
 
-                            <div id="ProductCardCollapse" class="collapse show">
+                            <div id="ProductCardCollapse" class="collapse">
                                 <div class="card-body">
 
                                     <div class="row g-2 mb-3">
@@ -880,9 +1002,10 @@
                         </div> *@
 
                         @* <div class="card-body p-0"> *@
+                        <div class="invoice-lines-container">
                         <div class="erp-table-wrapper mb-0">
                             <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                                <thead>
+                                <thead class="invoice-lines-header">
                                     <tr>
                                         <th class="text-center">#</th>
                                         <th>اسم الصنف</th>
@@ -1008,6 +1131,7 @@
                                     }
                                 </tbody>
                             </table>
+                        </div>
                         </div>
                         @*     </div>
                     </div> *@

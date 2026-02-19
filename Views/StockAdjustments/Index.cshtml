@@ -350,11 +350,12 @@
                         var productsDisplay = productNames.Count > 3
                             ? string.Join("، ", productNames.Take(2)) + $" و{productNames.Count - 2} أصناف أخرى"
                             : (productNames.Any() ? string.Join("، ", productNames) : "-");
-                        <tr>
+                        <tr data-adjustment-id="@a.Id" data-is-posted="@(a.IsPosted ? "1" : "0")">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select-sa"
-                                       value="@a.Id" />
+                                       value="@a.Id"
+                                       @(a.IsPosted ? "disabled" : "") />
                             </td>
 
                             <td data-col="id">@a.Id</td>
@@ -377,16 +378,18 @@
                                    data-url="@Url.Action("Show", "StockAdjustments", new { id = a.Id, frame = 1 })">
                                     عرض
                                 </a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@a.Id">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@a.Id">
-                                    حذف
-                                </a>
+                                @if (!a.IsPosted)
+                                {
+                                    <form asp-action="Delete"
+                                          asp-controller="StockAdjustments"
+                                          asp-route-id="@a.Id"
+                                          method="post"
+                                          class="d-inline"
+                                          onsubmit="return confirm('تأكيد حذف التسوية رقم @a.Id؟');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
+                                    </form>
+                                }
                             </td>
                         </tr>
                     }
@@ -605,7 +608,7 @@
             const selectedEl = document.getElementById("saSelectedIdsInput");
 
             chkAll?.addEventListener("change", function () {
-                rowsChk().forEach(cb => cb.checked = chkAll.checked);
+                rowsChk().forEach(cb => { if (!cb.disabled) cb.checked = chkAll.checked; });
             });
 
             table.addEventListener("change", function (e) {
@@ -618,7 +621,7 @@
             const btnDeleteSelected = document.getElementById("btnSaDeleteSelected");
             btnDeleteSelected?.addEventListener("click", function () {
                 const ids = Array.from(rowsChk())
-                    .filter(cb => cb.checked)
+                    .filter(cb => cb.checked && !cb.disabled)
                     .map(cb => cb.value);
 
                 if (ids.length === 0) {

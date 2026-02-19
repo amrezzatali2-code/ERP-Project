@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;       // Display و Required
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;              // Precision
@@ -37,6 +37,18 @@ namespace ERP.Models
         [Display(Name = "تكلفة الوحدة")]
         [Precision(18, 4)]
         public decimal UnitCost { get; set; }        // متغير: تكلفة الوحدة وقت التحويل (لأغراض التقارير)
+
+        [Precision(18, 2)]
+        [Display(Name = "سعر الجمهور")]
+        public decimal? PriceRetail { get; set; }    // سعر الجمهور (من الصنف أو التشغيلة)
+
+        [Precision(5, 2)]
+        [Display(Name = "الخصم المرجح %")]
+        public decimal? WeightedDiscountPct { get; set; }  // الخصم المرجح من المشتريات في المخزن المصدر
+
+        [Precision(5, 2)]
+        [Display(Name = "الخصم %")]
+        public decimal? DiscountPct { get; set; }    // خصم التحويل (مختلف عن المرجح — للربح من التحويل)
 
         [Display(Name = "ملاحظات")]
         [StringLength(500)]

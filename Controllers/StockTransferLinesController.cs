@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;             // القوائم List
 using System.Globalization;                   // تنسيق التاريخ فى Export
 using System.Linq;                            // أوامر LINQ
@@ -97,6 +97,15 @@ namespace ERP.Controllers
 
                 ("date", false) => query.OrderBy(l => l.StockTransfer!.TransferDate).ThenBy(l => l.Id),
                 ("date", true) => query.OrderByDescending(l => l.StockTransfer!.TransferDate).ThenByDescending(l => l.Id),
+
+                ("fromwh", false) => query.OrderBy(l => l.StockTransfer!.FromWarehouseId).ThenBy(l => l.Id),
+                ("fromwh", true) => query.OrderByDescending(l => l.StockTransfer!.FromWarehouseId).ThenByDescending(l => l.Id),
+
+                ("towh", false) => query.OrderBy(l => l.StockTransfer!.ToWarehouseId).ThenBy(l => l.Id),
+                ("towh", true) => query.OrderByDescending(l => l.StockTransfer!.ToWarehouseId).ThenByDescending(l => l.Id),
+
+                ("note", false) => query.OrderBy(l => l.Note ?? "").ThenBy(l => l.Id),
+                ("note", true) => query.OrderByDescending(l => l.Note ?? "").ThenByDescending(l => l.Id),
 
                 _ when !descending => query.OrderBy(l => l.Id),
                 _ => query.OrderByDescending(l => l.Id)

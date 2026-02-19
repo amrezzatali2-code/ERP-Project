@@ -389,6 +389,100 @@
             return form?.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
         }
 
+        // الانتقال داخل التاب (عند فتح الصفحة في iframe) — يمنع الشاشة البيضاء
+        function navigateAdjustmentTab(url) {
+            try {
+                if (window.top && window.top !== window.self) {
+                    window.top.postMessage({ type: 'erp-update-current-tab', url: url, title: 'فاتورة تسوية جردية' }, '*');
+                } else {
+                    window.location.href = url;
+                }
+            } catch (e) { window.location.href = url; }
+        }
+
+        // =========================================================
+        // قفل الأزرار والحقول عند الترحيل (مثل فاتورة المبيعات)
+        // =========================================================
+        function isAdjustmentPosted() {
+            const flag = document.getElementById('AdjustmentIsPostedFlag');
+            return flag && flag.value === '1';
+        }
+
+        function setAdjustmentPosted(posted) {
+            const flag = document.getElementById('AdjustmentIsPostedFlag');
+            if (flag) flag.value = posted ? '1' : '0';
+        }
+
+        function applyPostedUiLock() {
+            const posted = isAdjustmentPosted();
+            const lockables = document.querySelectorAll('[data-lock-posted="1"]');
+
+            lockables.forEach(el => {
+                if (el.dataset.lockInit !== '1') {
+                    el.dataset.lockInit = '1';
+                    el.dataset.origDisabled = el.disabled ? '1' : '0';
+                    el.dataset.origReadonly = el.readOnly ? '1' : '0';
+                    el.dataset.origTabIndex = el.getAttribute('tabindex') ?? '';
+                }
+
+                const tag = (el.tagName || '').toUpperCase();
+
+                if (posted) {
+                    if (tag === 'BUTTON') { el.disabled = true; return; }
+                    if (tag === 'A') {
+                        el.classList.add('disabled', 'pe-none');
+                        el.setAttribute('aria-disabled', 'true');
+                        el.setAttribute('tabindex', '-1');
+                        return;
+                    }
+                    if (tag === 'INPUT' || tag === 'TEXTAREA') {
+                        el.readOnly = true;
+                        el.classList.add('bg-light', 'text-muted');
+                        return;
+                    }
+                    if (tag === 'SELECT') { el.disabled = true; return; }
+                    return;
+                }
+
+                const origDisabled = el.dataset.origDisabled === '1';
+                const origReadonly = el.dataset.origReadonly === '1';
+                const origTabIndex = el.dataset.origTabIndex;
+
+                if (tag === 'BUTTON') { el.disabled = origDisabled; return; }
+                if (tag === 'A') {
+                    el.classList.remove('disabled', 'pe-none');
+                    el.removeAttribute('aria-disabled');
+                    if (origTabIndex === '') el.removeAttribute('tabindex');
+                    else el.setAttribute('tabindex', origTabIndex);
+                    return;
+                }
+                if (tag === 'INPUT' || tag === 'TEXTAREA') {
+                    el.readOnly = origReadonly;
+                    el.classList.remove('bg-light', 'text-muted');
+                    return;
+                }
+                if (tag === 'SELECT') { el.disabled = origDisabled; return; }
+            });
+
+            const btnPost = document.getElementById('btnPostAdjustment');
+            if (btnPost) {
+                btnPost.disabled = posted;
+                btnPost.innerHTML = posted ? '✅ تم ترحيل التسوية' : '📤 ترحيل التسوية';
+            }
+
+            const btnOpen = document.getElementById('btnOpenAdjustment');
+            if (btnOpen) btnOpen.disabled = !posted;
+        }
+
+        // تطبيق القفل عند تحميل الصفحة إن كانت التسوية مترحلة
+        (function() {
+            const serverIsPosted = @Model.IsPosted.ToString().ToLower();
+            if (serverIsPosted) {
+                setAdjustmentPosted(true);
+                applyPostedUiLock();
+            }
+        })();
+
         // تحميل بيانات الصنف تلقائياً (مثل فاتورة البيع)
         let busyLoadInfo = false;
         async function loadProductInfo() {
@@ -499,6 +593,7 @@
 
         // Add line
         async function doAddAdjustmentLine() {
+            if (typeof isAdjustmentPosted === 'function' && isAdjustmentPosted()) return;
             const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
             if (!adjustmentId || adjustmentId <= 0) {
                 alert('لا يمكن إضافة سطور قبل حفظ التسوية. اضغط "حفظ التسوية" أولاً.');
@@ -636,8 +731,10 @@
         document.getElementById('AdjustmentLinesTbody')?.addEventListener('click', async function(e) {
             const btn = e.target.closest('.btn-delete-line');
             if (!btn) return;
+            if (btn.disabled) return;
             const lineId = parseInt(btn.getAttribute('data-line-id') || '0', 10);
             if (!lineId || lineId <= 0) return;
+            if (typeof isAdjustmentPosted === 'function' && isAdjustmentPosted()) return;
 
             if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
 
@@ -744,7 +841,7 @@
             }
         });
 
-        // Post adjustment
+        // Post adjustment — نفس أسلوب فاتورة البيع: تحديث الواجهة دون إعادة تحميل
         document.getElementById('btnPostAdjustment')?.addEventListener('click', async function() {
             const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
             if (!adjustmentId || adjustmentId <= 0) {
@@ -756,8 +853,11 @@
 
             const token = getAntiForgeryToken();
             const msgDiv = document.getElementById('postAdjustmentMsg');
-            this.disabled = true;
-            msgDiv.textContent = 'جاري الترحيل...';
+            const btnPost = this;
+            const oldHtml = btnPost.innerHTML;
+            btnPost.disabled = true;
+            btnPost.innerHTML = '⏳ جاري الترحيل...';
+            if (msgDiv) { msgDiv.textContent = 'جاري الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
 
             try {
                 const response = await fetch(`@Url.Action("PostAdjustment", "StockAdjustments")?id=${adjustmentId}`, {
@@ -769,26 +869,47 @@
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    msgDiv.textContent = 'خطأ: ' + errorText;
-                    msgDiv.className = 'small mt-2 text-danger';
+                    if (msgDiv) { msgDiv.textContent = 'خطأ: ' + errorText; msgDiv.className = 'small mt-2 text-danger'; }
+                    btnPost.disabled = false;
+                    btnPost.innerHTML = oldHtml;
                     return;
                 }
 
                 const result = await response.json();
                 if (result.ok) {
-                    msgDiv.textContent = 'تم الترحيل بنجاح.';
-                    msgDiv.className = 'small mt-2 text-success';
-                    location.reload();
+                    // تحديث الواجهة دون إعادة تحميل (مثل فاتورة البيع)
+                    setAdjustmentPosted(true);
+                    applyPostedUiLock();
+
+                    const statusDisplay = document.getElementById('AdjustmentStatusDisplay');
+                    if (statusDisplay) statusDisplay.value = 'مترحلة';
+
+                    const btnOpen = document.getElementById('btnOpenAdjustment');
+                    if (btnOpen) btnOpen.disabled = false;
+
+                    btnPost.innerHTML = '✅ تم ترحيل التسوية';
+                    btnPost.disabled = true;
+
+                    if (msgDiv) {
+                        msgDiv.textContent = result.message || 'تم الترحيل بنجاح.';
+                        msgDiv.className = 'small mt-2 text-success';
+                    }
                 } else {
-                    msgDiv.textContent = result.message || 'حدث خطأ أثناء الترحيل.';
-                    msgDiv.className = 'small mt-2 text-danger';
+                    if (msgDiv) {
+                        msgDiv.textContent = result.message || 'حدث خطأ أثناء الترحيل.';
+                        msgDiv.className = 'small mt-2 text-danger';
+                    }
+                    btnPost.disabled = false;
+                    btnPost.innerHTML = oldHtml;
                 }
             } catch (error) {
                 console.error('Error posting adjustment:', error);
-                msgDiv.textContent = 'حدث خطأ أثناء الترحيل.';
-                msgDiv.className = 'small mt-2 text-danger';
-            } finally {
-                this.disabled = false;
+                if (msgDiv) {
+                    msgDiv.textContent = 'حدث خطأ أثناء الترحيل.';
+                    msgDiv.className = 'small mt-2 text-danger';
+                }
+                btnPost.disabled = false;
+                btnPost.innerHTML = oldHtml;
             }
         });
 
@@ -820,8 +941,19 @@
 
                 const result = await response.json();
                 if (result.ok) {
+                    setAdjustmentPosted(false);
+                    applyPostedUiLock();
+
+                    const statusDisplay = document.getElementById('AdjustmentStatusDisplay');
+                    if (statusDisplay) statusDisplay.value = 'مسودة';
+
+                    const btnPost = document.getElementById('btnPostAdjustment');
+                    if (btnPost) { btnPost.disabled = false; btnPost.innerHTML = '📤 ترحيل التسوية'; }
+
+                    const btnOpen = document.getElementById('btnOpenAdjustment');
+                    if (btnOpen) btnOpen.disabled = true;
+
                     alert('تم فتح التسوية بنجاح.');
-                    location.reload();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء فتح التسوية.');
                 }
@@ -835,6 +967,7 @@
 
         // Clear lines
         document.getElementById('btnClearAdjustmentLines')?.addEventListener('click', async function() {
+            if (typeof isAdjustmentPosted === 'function' && isAdjustmentPosted()) return;
             const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
             if (!adjustmentId || adjustmentId <= 0) {
                 alert('لا توجد تسوية لمسح سطورها.');
@@ -862,7 +995,8 @@
                 const result = await response.json();
                 if (result.ok) {
                     alert('تم مسح السطور بنجاح.');
-                    location.reload();
+                    // مسح السطور يغيّر بنية الجدول — إعادة تحميل لعرض الحالة الجديدة
+                    window.location.reload();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء مسح السطور.');
                 }
@@ -877,22 +1011,22 @@
         // Navigation
         document.getElementById('btnFirstAdjustment')?.addEventListener('click', function() {
             const firstId = @(ViewBag.NavFirstId ?? 0);
-            if (firstId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + firstId + '?frame=1';
+            if (firstId > 0) navigateAdjustmentTab('@Url.Action("Show", "StockAdjustments")/' + firstId + '?frame=1');
         });
 
         document.getElementById('btnPrevAdjustment')?.addEventListener('click', function() {
             const prevId = @(ViewBag.NavPrevId ?? 0);
-            if (prevId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + prevId + '?frame=1';
+            if (prevId > 0) navigateAdjustmentTab('@Url.Action("Show", "StockAdjustments")/' + prevId + '?frame=1');
         });
 
         document.getElementById('btnNextAdjustment')?.addEventListener('click', function() {
             const nextId = @(ViewBag.NavNextId ?? 0);
-            if (nextId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + nextId + '?frame=1';
+            if (nextId > 0) navigateAdjustmentTab('@Url.Action("Show", "StockAdjustments")/' + nextId + '?frame=1');
         });
 
         document.getElementById('btnLastAdjustment')?.addEventListener('click', function() {
             const lastId = @(ViewBag.NavLastId ?? 0);
-            if (lastId > 0) window.location.href = '@Url.Action("Show", "StockAdjustments")/' + lastId + '?frame=1';
+            if (lastId > 0) navigateAdjustmentTab('@Url.Action("Show", "StockAdjustments")/' + lastId + '?frame=1');
         });
     </script>
 }

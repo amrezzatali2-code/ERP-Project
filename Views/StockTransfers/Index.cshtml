@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<ERP.Models.StockTransfer>
@@ -359,11 +359,12 @@
                 {
                     foreach (var t in Model.Items)
                     {
-                        <tr>
+                        <tr data-transfer-id="@t.Id" data-is-posted="@(t.IsPosted ? "1" : "0")">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select-st"
-                                       value="@t.Id" />
+                                       value="@t.Id"
+                                       @(t.IsPosted ? "disabled" : "") />
                             </td>
 
                             <td data-col="id">@t.Id</td>
@@ -379,21 +380,25 @@
                             </td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Details"
-                                   asp-route-id="@t.Id">
-                                    تفاصيل
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Show", "StockTransfers", new { id = t.Id, frame = 1 })"
+                                   data-tab-id="stock-transfer-show"
+                                   data-tab-title="تحويل مخزني"
+                                   data-url="@Url.Action("Show", "StockTransfers", new { id = t.Id, frame = 1 })">
+                                    عرض
                                 </a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@t.Id">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@t.Id">
-                                    حذف
-                                </a>
+                                @if (!t.IsPosted)
+                                {
+                                    <form asp-action="Delete"
+                                          asp-controller="StockTransfers"
+                                          asp-route-id="@t.Id"
+                                          method="post"
+                                          class="d-inline"
+                                          onsubmit="return confirm('تأكيد حذف التحويل رقم @t.Id؟');">
+                                        @Html.AntiForgeryToken()
+                                        <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
+                                    </form>
+                                }
                             </td>
                         </tr>
                     }
@@ -610,7 +615,7 @@
             const selectedEl = document.getElementById("stSelectedIdsInput");
 
             chkAll?.addEventListener("change", function () {
-                rowsChk().forEach(cb => cb.checked = chkAll.checked);
+                rowsChk().forEach(cb => { if (!cb.disabled) cb.checked = chkAll.checked; });
             });
 
             table.addEventListener("change", function (e) {
@@ -623,7 +628,7 @@
             const btnDeleteSelected = document.getElementById("btnStDeleteSelected");
             btnDeleteSelected?.addEventListener("click", function () {
                 const ids = Array.from(rowsChk())
-                    .filter(cb => cb.checked)
+                    .filter(cb => cb.checked && !cb.disabled)
                     .map(cb => cb.value);
 
                 if (ids.length === 0) {

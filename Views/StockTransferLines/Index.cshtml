@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<StockTransferLine>
@@ -225,34 +225,7 @@
                             اختيار الأعمدة
                         </button>
 
-                        @* حذف المحدد *@
-                        <form id="stlBulkDeleteForm"
-                              asp-action="BulkDelete"
-                              method="post"
-                              class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="selectedIds" id="stlSelectedIdsInput" />
-                            <button type="button"
-                                    id="btnStlDeleteSelected"
-                                    class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                حذف السطور المحددة
-                            </button>
-                        </form>
-
-                        @* حذف الكل *@
-                        <form id="stlDeleteAllForm"
-                              asp-action="DeleteAll"
-                              method="post"
-                              class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <button type="button"
-                                    id="btnStlDeleteAll"
-                                    class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                حذف كل السطور
-                            </button>
-                        </form>
-
-                        @* زر الطباعة (أخضر) *@
+                        @* زر الطباعة *@
                         <button type="button"
                                 id="btnStlPrint"
                                 class="btn btn-erp btn-success btn-erp-sm">
@@ -311,10 +284,6 @@
         <table id="stlTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light">
                 <tr>
-                    <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
-                        <input type="checkbox" id="stlChkAllRows" />
-                    </th>
-
                     <th data-col="id">@sortLink("id", "كود السطر")</th>
                     <th data-col="transfer">@sortLink("transfer", "رقم التحويل")</th>
                     <th data-col="date">@sortLink("date", "تاريخ التحويل")</th>
@@ -324,14 +293,14 @@
                     <th data-col="qty">@sortLink("qty", "الكمية")</th>
                     <th data-col="note">@sortLink("note", "ملاحظات السطر")</th>
 
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:220px;"></th>
+                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:100px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="10" class="text-center text-muted py-4">
+                        <td colspan="9" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -344,12 +313,6 @@
                         .ToString("yyyy-MM-dd") ?? "";
 
                         <tr>
-                            <td class="text-center no-print" data-col="select">
-                                <input type="checkbox"
-                                       class="row-select-stl"
-                                       value="@l.Id" />
-                            </td>
-
                             <td data-col="id">@l.Id</td>
                             <td data-col="transfer">@l.StockTransferId</td>
                             <td data-col="date">@transferDate</td>
@@ -360,20 +323,12 @@
                             <td data-col="note">@l.Note</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Details"
-                                   asp-route-id="@l.Id">
-                                    تفاصيل
-                                </a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@l.Id">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@l.Id">
-                                    حذف
+                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                   href="@Url.Action("Show", "StockTransfers", new { id = l.StockTransferId, frame = 1 })"
+                                   data-tab-id="stock-transfer-show"
+                                   data-tab-title="تحويل مخزني"
+                                   data-url="@Url.Action("Show", "StockTransfers", new { id = l.StockTransferId, frame = 1 })">
+                                    عرض
                                 </a>
                             </td>
                         </tr>
@@ -579,55 +534,6 @@
         document.getElementById("btnStlPrint")?.addEventListener("click", function () {
             window.print();
         });
-
-        // =========================
-        // تحديد الصفوف / حذف المحدد / حذف الكل
-        // =========================
-        (function () {
-            const table = document.getElementById("stlTable");
-            if (!table) return;
-
-            const chkAll = document.getElementById("stlChkAllRows");
-            const rowsChk = () => table.querySelectorAll("tbody .row-select-stl");
-            const bulkForm = document.getElementById("stlBulkDeleteForm");
-            const selectedEl = document.getElementById("stlSelectedIdsInput");
-
-            chkAll?.addEventListener("change", function () {
-                rowsChk().forEach(cb => cb.checked = chkAll.checked);
-            });
-
-            table.addEventListener("change", function (e) {
-                const target = e.target;
-                if (target && target.classList.contains("row-select-stl")) {
-                    if (!target.checked && chkAll) chkAll.checked = false;
-                }
-            });
-
-            const btnDeleteSelected = document.getElementById("btnStlDeleteSelected");
-            btnDeleteSelected?.addEventListener("click", function () {
-                const ids = Array.from(rowsChk())
-                    .filter(cb => cb.checked)
-                    .map(cb => cb.value);
-
-                if (ids.length === 0) {
-                    alert("من فضلك اختر على الأقل سطر واحد للحذف.");
-                    return;
-                }
-
-                if (!confirm("هل أنت متأكد من حذف السطور المحددة؟")) return;
-
-                selectedEl.value = ids.join(",");
-                bulkForm.submit();
-            });
-
-            const btnDeleteAll = document.getElementById("btnStlDeleteAll");
-            const deleteAllForm = document.getElementById("stlDeleteAllForm");
-
-            btnDeleteAll?.addEventListener("click", function () {
-                if (!confirm("تحذير: سيتم حذف جميع سطور التحويل. هل أنت متأكد؟")) return;
-                deleteAllForm.submit();
-            });
-        })();
 
         // =========================
         // اختيار الأعمدة + localStorage

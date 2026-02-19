@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -101,6 +101,30 @@ namespace ERP.Services
             return weighted / totalRemaining;
         }
 
+        /// <summary>
+        /// الخصم المرجح للصنف في مخزن معين (للاستخدام في التحويل بين المخازن).
+        /// </summary>
+        public async Task<decimal> GetWeightedPurchaseDiscountForWarehouseAsync(int prodId, int warehouseId)
+        {
+            var rows = await _context.StockLedger
+                .AsNoTracking()
+                .Where(x =>
+                    x.ProdId == prodId &&
+                    x.WarehouseId == warehouseId &&
+                    x.SourceType == "Purchase" &&
+                    (x.RemainingQty ?? 0) > 0)
+                .Select(x => new
+                {
+                    remaining = (decimal)(x.RemainingQty ?? 0),
+                    discPct = (decimal?)(x.PurchaseDiscount) ?? 0m
+                })
+                .ToListAsync();
+
+            if (rows.Count == 0) return 0m;
+            decimal totalRemaining = rows.Sum(r => r.remaining);
+            if (totalRemaining <= 0m) return 0m;
+            return rows.Sum(r => r.remaining * r.discPct) / totalRemaining;
+        }
 
         // ============================================================
         // 4) متوسط تكلفة الوحدة (حسب FIFO)

@@ -1601,6 +1601,81 @@ namespace ERP.Controllers
             }
 
             // =========================================================
+            // 5.2) أرباح التسويات (من StockAdjustmentLines المترحلة)
+            // CostDiff موجب = فائض جرد (ربح)، CostDiff سالب = عجز جرد (خسارة)
+            // =========================================================
+            var adjustmentProfitQuery = from sal in _context.StockAdjustmentLines.AsNoTracking()
+                                       join sa in _context.StockAdjustments.AsNoTracking() on sal.StockAdjustmentId equals sa.Id
+                                       where sa.IsPosted &&
+                                             productIds.Contains(sal.ProductId) &&
+                                             sal.CostDiff.HasValue && sal.CostDiff.Value != 0
+                                       select new { sal.ProductId, sal.CostDiff, sa.WarehouseId, sa.AdjustmentDate };
+
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                adjustmentProfitQuery = adjustmentProfitQuery.Where(x => x.WarehouseId == warehouseId.Value);
+            }
+
+            if (fromDate.HasValue)
+            {
+                var from = fromDate.Value.Date;
+                adjustmentProfitQuery = adjustmentProfitQuery.Where(x => x.AdjustmentDate >= from);
+            }
+
+            if (toDate.HasValue)
+            {
+                var to = toDate.Value.Date.AddDays(1);
+                adjustmentProfitQuery = adjustmentProfitQuery.Where(x => x.AdjustmentDate < to);
+            }
+
+            var adjustmentProfitData = await adjustmentProfitQuery
+                .GroupBy(x => x.ProductId)
+                .Select(g => new { ProdId = g.Key, AdjustmentProfit = g.Sum(x => x.CostDiff!.Value) })
+                .ToDictionaryAsync(x => x.ProdId, x => x.AdjustmentProfit);
+
+            // =========================================================
+            // 5.3) أرباح التحويلات (من StockTransferLines المترحلة — خصم أقل من المرجح)
+            // ربح السطر = (سعر التحويل - التكلفة) × الكمية، حيث سعر التحويل = PriceRetail × (1 - DiscountPct/100)
+            // =========================================================
+            var transferProfitQuery = from stl in _context.StockTransferLines.AsNoTracking()
+                                     join st in _context.StockTransfers.AsNoTracking() on stl.StockTransferId equals st.Id
+                                     where st.IsPosted &&
+                                           productIds.Contains(stl.ProductId) &&
+                                           stl.PriceRetail.HasValue && stl.PriceRetail.Value > 0 &&
+                                           stl.DiscountPct.HasValue && stl.UnitCost > 0
+                                     select new
+                                     {
+                                         stl.ProductId,
+                                         st.FromWarehouseId,
+                                         st.TransferDate,
+                                         LineProfit = (stl.PriceRetail!.Value * (1m - stl.DiscountPct!.Value / 100m) - stl.UnitCost) * stl.Qty
+                                     };
+
+            transferProfitQuery = transferProfitQuery.Where(x => x.LineProfit > 0);
+
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                transferProfitQuery = transferProfitQuery.Where(x => x.FromWarehouseId == warehouseId.Value);
+            }
+
+            if (fromDate.HasValue)
+            {
+                var from = fromDate.Value.Date;
+                transferProfitQuery = transferProfitQuery.Where(x => x.TransferDate >= from);
+            }
+
+            if (toDate.HasValue)
+            {
+                var to = toDate.Value.Date.AddDays(1);
+                transferProfitQuery = transferProfitQuery.Where(x => x.TransferDate < to);
+            }
+
+            var transferProfitData = await transferProfitQuery
+                .GroupBy(x => x.ProductId)
+                .Select(g => new { ProdId = g.Key, TransferProfit = g.Sum(x => x.LineProfit) })
+                .ToDictionaryAsync(x => x.ProdId, x => x.TransferProfit);
+
+            // =========================================================
             // 6) حساب ربح الميزانية (طريقة جديدة):
             // الربح = مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن - مجموع العملاء الدائنين
             // =========================================================
@@ -1722,6 +1797,12 @@ namespace ERP.Controllers
                 decimal salesProfit = salesRevenue - salesCost;
                 decimal salesProfitPercent = salesRevenue > 0 ? (salesProfit / salesRevenue) * 100m : 0m;
 
+                // ربح التسويات (فائض جرد - عجز جرد)
+                decimal adjustmentProfit = adjustmentProfitData.TryGetValue(prodId, out var adjProfit) ? adjProfit : 0m;
+
+                // ربح التحويلات (خصم أقل من المرجح)
+                decimal transferProfit = transferProfitData.TryGetValue(prodId, out var trfProfit) ? trfProfit : 0m;
+
                 // ربح الميزانية: رقم إجمالي على مستوى الشركة (لا يوزع على الأصناف)
                 decimal ledgerRevenue = 0m;
                 decimal ledgerCost = 0m;
@@ -1754,6 +1835,8 @@ namespace ERP.Controllers
                     AccountBalanceCost = accountBalanceCost,
                     AccountBalanceProfit = accountBalanceProfit,
                     AccountBalanceProfitPercent = accountBalanceProfitPercent,
+                    AdjustmentProfit = adjustmentProfit,
+                    TransferProfit = transferProfit,
                     SalesQty = salesQty,
                     AvgUnitPrice = avgUnitPrice,
                     AvgUnitCost = avgUnitCost
@@ -1775,6 +1858,16 @@ namespace ERP.Controllers
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.SalesProfit).ToList()
                         : reportData.OrderBy(r => r.SalesProfit).ToList();
+                    break;
+                case "adjustmentprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.AdjustmentProfit).ToList()
+                        : reportData.OrderBy(r => r.AdjustmentProfit).ToList();
+                    break;
+                case "transferprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.TransferProfit).ToList()
+                        : reportData.OrderBy(r => r.TransferProfit).ToList();
                     break;
                 case "ledgerprofit":
                     reportData = isDesc
@@ -1799,6 +1892,9 @@ namespace ERP.Controllers
             decimal totalSalesRevenue = reportData.Sum(r => r.SalesRevenue);
             decimal totalSalesCost = reportData.Sum(r => r.SalesCost);
             decimal totalSalesProfit = totalSalesRevenue - totalSalesCost;
+            decimal totalAdjustmentProfit = reportData.Sum(r => r.AdjustmentProfit);
+            decimal totalTransferProfit = reportData.Sum(r => r.TransferProfit);
+            decimal totalProfit = totalSalesProfit + totalAdjustmentProfit + totalTransferProfit;
 
             int totalCount = reportData.Count;
 
@@ -1831,6 +1927,9 @@ namespace ERP.Controllers
             ViewBag.TotalSalesRevenue = totalSalesRevenue;
             ViewBag.TotalSalesCost = totalSalesCost;
             ViewBag.TotalSalesProfit = totalSalesProfit;
+            ViewBag.TotalAdjustmentProfit = totalAdjustmentProfit;
+            ViewBag.TotalTransferProfit = totalTransferProfit;
+            ViewBag.TotalProfit = totalProfit;
 
             // =========================================================
             // 11) بيانات ربح الميزانية (للعرض تحت الجدول) - ProductProfits

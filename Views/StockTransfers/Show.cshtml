@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.StockTransfer
 
 @{
@@ -33,6 +33,22 @@
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
             color: #ffffff;
             padding: 0.55rem 1rem;
+        }
+
+        .invoice-actions-sticky {
+            position: sticky;
+            top: 58px;
+            z-index: 3000;
+            background: #ffffff;
+            border: 1px solid rgba(13,110,253,.12);
+            padding: 10px 10px;
+            border-radius: 14px;
+            box-shadow: 0 10px 24px rgba(0,0,0,.05);
+        }
+
+        .invoice-side-card .btn-erp {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.6rem;
         }
 
         .erp-table-wrapper {
@@ -188,7 +204,7 @@
                                 <input type="number" id="ProdCodeInput" class="form-control form-control-sm text-center" placeholder="بحث بالكود..." data-lock-posted="1" />
                             </div>
 
-                            <div class="col-lg-4">
+                            <div class="col-lg-3">
                                 <label class="form-label form-label-sm">اسم الصنف</label>
                                 <input id="ProdNameInput" list="productsList" class="form-control form-control-sm" placeholder="اكتب اسم الصنف..." autocomplete="off" data-lock-posted="1" />
                                 <datalist id="productsList">
@@ -212,26 +228,47 @@
 
                             <div class="col-lg-2">
                                 <label class="form-label form-label-sm">التشغيلة</label>
-                                <input type="text" id="BatchNoInput" class="form-control form-control-sm text-center" placeholder="باتش" data-lock-posted="1" />
+                                <select id="BatchSelect" class="form-select form-select-sm" data-lock-posted="1">
+                                    <option value="">-- اختر --</option>
+                                </select>
+                                <input type="hidden" id="BatchId" />
+                                <input type="hidden" id="BatchNoInput" />
                             </div>
 
                             <div class="col-lg-2">
+                                <label class="form-label form-label-sm">التاريخ</label>
+                                <input type="text" id="ExpiryInput" class="form-control form-control-sm text-center" readonly placeholder="يظهر عند اختيار التشغيلة" data-lock-posted="1" dir="ltr" style="text-align: left;" />
+                            </div>
+
+                            <div class="col-lg-1">
+                                <label class="form-label form-label-sm">الكمية المتوفرة</label>
+                                <input type="number" id="QtyAvailableInput" class="form-control form-control-sm text-center" value="0" readonly data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-1">
                                 <label class="form-label form-label-sm">الكمية</label>
                                 <input type="number" id="QtyInput" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
                             </div>
 
-                            <div class="col-lg-2">
-                                <label class="form-label form-label-sm">تكلفة الوحدة</label>
-                                <input type="number" id="UnitCostInput" class="form-control form-control-sm text-center" step="0.0001" data-lock-posted="1" />
+                            <div class="col-lg-1">
+                                <label class="form-label form-label-sm">سعر الجمهور</label>
+                                <input type="number" id="PriceRetailInput" class="form-control form-control-sm text-center" step="0.01" readonly data-lock-posted="1" />
                             </div>
+
+                            <div class="col-lg-1">
+                                <label class="form-label form-label-sm">الخصم المرجح %</label>
+                                <input type="number" id="WeightedDiscountInput" class="form-control form-control-sm text-center" step="0.01" readonly data-lock-posted="1" />
+                            </div>
+
+                            <div class="col-lg-1">
+                                <label class="form-label form-label-sm">الخصم %</label>
+                                <input type="number" id="DiscountInput" class="form-control form-control-sm text-center" step="0.01" placeholder="0" data-lock-posted="1" />
+                            </div>
+
+                            <input type="hidden" id="UnitCostInput" />
                         </div>
 
                         <div class="row g-2 mt-2">
-                            <div class="col-lg-10">
-                                <label class="form-label form-label-sm">ملاحظات السطر</label>
-                                <input type="text" id="LineNoteInput" class="form-control form-control-sm" data-lock-posted="1" />
-                            </div>
-
                             <div class="col-lg-2 d-grid">
                                 <label class="form-label form-label-sm">&nbsp;</label>
                                 <button type="button" id="btnAddTransferLine" class="btn btn-erp btn-erp-primary btn-erp-sm w-100" data-lock-posted="1">إضافة</button>
@@ -254,8 +291,11 @@
                                         <th class="text-center">#</th>
                                         <th>اسم الصنف</th>
                                         <th class="text-center">التشغيلة</th>
+                                        <th class="text-center">التاريخ</th>
                                         <th class="text-center">الكمية</th>
-                                        <th class="text-center">تكلفة الوحدة</th>
+                                        <th class="text-center">سعر الجمهور</th>
+                                        <th class="text-center">الخصم المرجح %</th>
+                                        <th class="text-center">الخصم %</th>
                                         <th class="text-center">الإجمالي</th>
                                         <th class="text-center no-print">مسح</th>
                                     </tr>
@@ -269,9 +309,12 @@
                                             <tr data-line-id="@line.Id">
                                                 <td class="text-center">@lineNo</td>
                                                 <td>@(line.Product?.ProdName ?? $"صنف #{line.ProductId}")</td>
-                                                <td class="text-center">@(line.BatchId?.ToString() ?? "-")</td>
+                                                <td class="text-center">@(line.Batch?.BatchNo ?? "-")</td>
+                                                <td class="text-center">@(line.Batch?.Expiry.ToString("yyyy-MM-dd") ?? "-")</td>
                                                 <td class="text-center">@line.Qty</td>
-                                                <td class="text-center">@line.UnitCost.ToString("0.0000")</td>
+                                                <td class="text-center">@(line.PriceRetail?.ToString("0.00") ?? "-")</td>
+                                                <td class="text-center">@(line.WeightedDiscountPct?.ToString("0.00") ?? "-")</td>
+                                                <td class="text-center">@(line.DiscountPct?.ToString("0.00") ?? "-")</td>
                                                 <td class="text-center">@((line.Qty * line.UnitCost).ToString("0.00"))</td>
                                                 <td class="text-center no-print">
                                                     <button type="button" class="btn btn-sm btn-danger btn-delete-line" data-line-id="@line.Id" data-lock-posted="1">🗑️</button>
@@ -283,7 +326,7 @@
                                     else
                                     {
                                         <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
+                                            <td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
                                         </tr>
                                     }
                                 </tbody>
@@ -304,14 +347,183 @@
             return form?.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
         }
 
-        // Product selection
-        document.getElementById('ProdNameInput')?.addEventListener('input', function() {
-            const selectedOption = document.querySelector(`#productsList option[value="${this.value}"]`);
-            if (selectedOption) {
-                document.getElementById('ProdId').value = selectedOption.getAttribute('data-id');
-                document.getElementById('ProdCodeInput').value = selectedOption.getAttribute('data-id');
+        let productInfoCache = null;
+
+        // قفل الأزرار والحقول عند الترحيل (مثل تسوية الجرد)
+        function isTransferPosted() {
+            const flag = document.getElementById('TransferIsPostedFlag');
+            return flag && flag.value === '1';
+        }
+        function setTransferPosted(posted) {
+            const flag = document.getElementById('TransferIsPostedFlag');
+            if (flag) flag.value = posted ? '1' : '0';
+        }
+        function applyPostedUiLock() {
+            const posted = isTransferPosted();
+            const lockables = document.querySelectorAll('[data-lock-posted="1"]');
+            lockables.forEach(el => {
+                if (el.dataset.lockInit !== '1') {
+                    el.dataset.lockInit = '1';
+                    el.dataset.origDisabled = el.disabled ? '1' : '0';
+                    el.dataset.origReadonly = el.readOnly ? '1' : '0';
+                    el.dataset.origTabIndex = el.getAttribute('tabindex') ?? '';
+                }
+                const tag = (el.tagName || '').toUpperCase();
+                if (posted) {
+                    if (tag === 'BUTTON') { el.disabled = true; return; }
+                    if (tag === 'A') { el.classList.add('disabled', 'pe-none'); el.setAttribute('aria-disabled', 'true'); el.setAttribute('tabindex', '-1'); return; }
+                    if (tag === 'INPUT' || tag === 'TEXTAREA') { el.readOnly = true; el.classList.add('bg-light', 'text-muted'); return; }
+                    if (tag === 'SELECT') { el.disabled = true; return; }
+                    return;
+                }
+                const origDisabled = el.dataset.origDisabled === '1';
+                const origReadonly = el.dataset.origReadonly === '1';
+                const origTabIndex = el.dataset.origTabIndex;
+                if (tag === 'BUTTON') { el.disabled = origDisabled; return; }
+                if (tag === 'A') { el.classList.remove('disabled', 'pe-none'); el.removeAttribute('aria-disabled'); if (origTabIndex === '') el.removeAttribute('tabindex'); else el.setAttribute('tabindex', origTabIndex); return; }
+                if (tag === 'INPUT' || tag === 'TEXTAREA') { el.readOnly = origReadonly; el.classList.remove('bg-light', 'text-muted'); return; }
+                if (tag === 'SELECT') { el.disabled = origDisabled; return; }
+            });
+            const btnPost = document.getElementById('btnPostTransfer');
+            if (btnPost) { btnPost.disabled = posted; btnPost.innerHTML = posted ? '✅ تم ترحيل التحويل' : '📤 ترحيل التحويل'; }
+            const btnOpen = document.getElementById('btnOpenTransfer');
+            if (btnOpen) btnOpen.disabled = !posted;
+        }
+        (function() {
+            const serverIsPosted = @Model.IsPosted.ToString().ToLower();
+            if (serverIsPosted) { setTransferPosted(true); applyPostedUiLock(); }
+        })();
+
+        function clearAddLineFormAndFocus() {
+            document.getElementById('ProdId').value = '';
+            document.getElementById('ProdCodeInput').value = '';
+            document.getElementById('ProdNameInput').value = '';
+            document.getElementById('BatchSelect').innerHTML = '<option value="">-- اختر --</option>';
+            document.getElementById('BatchId').value = '';
+            document.getElementById('BatchNoInput').value = '';
+            document.getElementById('ExpiryInput').value = '';
+            document.getElementById('QtyAvailableInput').value = '0';
+            document.getElementById('QtyInput').value = '0';
+            document.getElementById('PriceRetailInput').value = '';
+            document.getElementById('WeightedDiscountInput').value = '';
+            document.getElementById('DiscountInput').value = '';
+            document.getElementById('UnitCostInput').value = '';
+            productInfoCache = null;
+            const prodNameInput = document.getElementById('ProdNameInput');
+            prodNameInput?.focus();
+            prodNameInput?.select?.();
+        }
+        function clearAddLineForm() {
+            clearAddLineFormAndFocus();
+        }
+
+        function escapeHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+        function upsertTransferRow(result, lineNo) {
+            const tbody = document.getElementById('TransferLinesTbody');
+            const placeholder = tbody.querySelector('tr td[colspan="10"]');
+            if (placeholder) placeholder.closest('tr').remove();
+            const existingRow = tbody.querySelector(`tr[data-line-id="${result.lineId}"]`);
+            const priceStr = result.priceRetail != null ? parseFloat(result.priceRetail).toFixed(2) : '-';
+            const wdStr = result.weightedDiscountPct != null ? parseFloat(result.weightedDiscountPct).toFixed(2) : '-';
+            const dStr = result.discountPct != null ? parseFloat(result.discountPct).toFixed(2) : '-';
+            const totalStr = result.total != null ? parseFloat(result.total).toFixed(2) : '-';
+            const rowHtml = `<tr data-line-id="${result.lineId}">
+                <td class="text-center">${lineNo}</td>
+                <td>${escapeHtml(result.productName)}</td>
+                <td class="text-center">${escapeHtml(result.batchNo)}</td>
+                <td class="text-center">${escapeHtml(result.expiryDisplay)}</td>
+                <td class="text-center">${result.qty}</td>
+                <td class="text-center">${priceStr}</td>
+                <td class="text-center">${wdStr}</td>
+                <td class="text-center">${dStr}</td>
+                <td class="text-center">${totalStr}</td>
+                <td class="text-center no-print">
+                    <button type="button" class="btn btn-sm btn-danger btn-delete-line" data-line-id="${result.lineId}" data-lock-posted="1">🗑️</button>
+                </td>
+            </tr>`;
+            if (existingRow) existingRow.outerHTML = rowHtml;
+            else tbody.insertAdjacentHTML('beforeend', rowHtml);
+            if (tbody.querySelectorAll('tr[data-line-id]').length === 0)
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
+        }
+
+        async function loadTransferProductInfo() {
+            const prodId = parseInt(document.getElementById('ProdId').value || '0', 10);
+            const fromWh = parseInt(document.querySelector('[name="FromWarehouseId"]')?.value || '0', 10);
+            if (!prodId || prodId <= 0 || !fromWh || fromWh <= 0) {
+                document.getElementById('BatchSelect').innerHTML = '<option value="">-- اختر --</option>';
+                document.getElementById('BatchId').value = '';
+                document.getElementById('BatchNoInput').value = '';
+                document.getElementById('ExpiryInput').value = '';
+                document.getElementById('QtyAvailableInput').value = '0';
+                document.getElementById('PriceRetailInput').value = '';
+                document.getElementById('WeightedDiscountInput').value = '';
+                document.getElementById('UnitCostInput').value = '';
+                productInfoCache = null;
+                return;
             }
-        });
+            try {
+                const res = await fetch(`@Url.Action("GetTransferProductInfo", "StockTransfers")?prodId=${prodId}&fromWarehouseId=${fromWh}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.ok) return;
+                const batches = data.batches || [];
+                productInfoCache = data;
+
+                const sel = document.getElementById('BatchSelect');
+                sel.innerHTML = '<option value="">-- اختر --</option>';
+                batches.forEach((b, idx) => {
+                    const opt = document.createElement('option');
+                    const bid = b.batchId ?? b.BatchId ?? idx;
+                    const bno = (b.batchNo ?? b.BatchNo ?? '').toString();
+                    const exp = (b.expiryText ?? b.ExpiryText ?? '-').toString();
+                    opt.value = bid;
+                    opt.textContent = (bno || '-') + ' | ' + (exp || '-');
+                    opt.dataset.batchNo = bno;
+                    opt.dataset.expiry = exp;
+                    opt.dataset.priceRetail = b.priceRetailBatch ?? b.PriceRetailBatch ?? '';
+                    opt.dataset.unitCost = b.unitCost ?? b.UnitCost ?? '';
+                    opt.dataset.qty = (b.qty ?? b.Qty ?? 0).toString();
+                    sel.appendChild(opt);
+                });
+
+                document.getElementById('PriceRetailInput').value = data.priceRetail ?? '';
+                document.getElementById('WeightedDiscountInput').value = data.weightedDiscount ?? '';
+                document.getElementById('UnitCostInput').value = data.unitCost ?? '';
+                document.getElementById('QtyAvailableInput').value = '0';
+
+                // FIFO: اختيار أول تشغيلة تلقائياً (مرتبة حسب الصلاحية)
+                if (batches.length >= 1) {
+                    const first = batches[0];
+                    const firstId = first.batchId ?? first.BatchId ?? 0;
+                    sel.value = firstId;
+                    document.getElementById('BatchId').value = firstId;
+                    document.getElementById('BatchNoInput').value = (first.batchNo ?? first.BatchNo ?? '').toString();
+                    document.getElementById('ExpiryInput').value = (first.expiryText ?? first.ExpiryText ?? '').toString();
+                    document.getElementById('PriceRetailInput').value = first.priceRetailBatch ?? first.PriceRetailBatch ?? data.priceRetail ?? '';
+                    document.getElementById('UnitCostInput').value = first.unitCost ?? first.UnitCost ?? data.unitCost ?? '';
+                    document.getElementById('QtyAvailableInput').value = (first.qty ?? first.Qty ?? 0).toString();
+                }
+            } catch (e) {
+                console.warn('loadTransferProductInfo:', e);
+            }
+        }
+
+        function onProductSelected() {
+            const val = document.getElementById('ProdNameInput')?.value?.trim();
+            if (!val) return;
+            const selectedOption = document.querySelector(`#productsList option[value="${val}"]`);
+            if (selectedOption) {
+                const id = selectedOption.getAttribute('data-id');
+                document.getElementById('ProdId').value = id;
+                document.getElementById('ProdCodeInput').value = id;
+                loadTransferProductInfo();
+            }
+        }
+
+        document.getElementById('ProdNameInput')?.addEventListener('input', onProductSelected);
+        document.getElementById('ProdNameInput')?.addEventListener('change', onProductSelected);
 
         document.getElementById('ProdCodeInput')?.addEventListener('input', function() {
             const code = this.value;
@@ -320,12 +532,39 @@
                 if (selectedOption) {
                     document.getElementById('ProdId').value = code;
                     document.getElementById('ProdNameInput').value = selectedOption.value;
+                    loadTransferProductInfo();
+                }
+            }
+        });
+
+        document.querySelector('[name="FromWarehouseId"]')?.addEventListener('change', function() {
+            if (document.getElementById('ProdId').value) loadTransferProductInfo();
+        });
+
+        document.getElementById('BatchSelect')?.addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            if (opt && opt.value) {
+                document.getElementById('BatchId').value = opt.value;
+                document.getElementById('BatchNoInput').value = opt.dataset.batchNo || '';
+                document.getElementById('ExpiryInput').value = opt.dataset.expiry || '';
+                document.getElementById('PriceRetailInput').value = opt.dataset.priceRetail || '';
+                document.getElementById('UnitCostInput').value = opt.dataset.unitCost || '';
+                document.getElementById('QtyAvailableInput').value = opt.dataset.qty || '0';
+            } else {
+                document.getElementById('BatchId').value = '';
+                document.getElementById('BatchNoInput').value = '';
+                document.getElementById('ExpiryInput').value = '';
+                document.getElementById('QtyAvailableInput').value = '0';
+                if (productInfoCache) {
+                    document.getElementById('PriceRetailInput').value = productInfoCache.priceRetail || '';
+                    document.getElementById('UnitCostInput').value = productInfoCache.unitCost || '';
                 }
             }
         });
 
         // Add line
         document.getElementById('btnAddTransferLine')?.addEventListener('click', async function() {
+            if (typeof isTransferPosted === 'function' && isTransferPosted()) return;
             const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
             if (!transferId || transferId <= 0) {
                 alert('لا يمكن إضافة سطور قبل حفظ التحويل. اضغط "حفظ التحويل" أولاً.');
@@ -334,9 +573,12 @@
 
             const prodId = parseInt(document.getElementById('ProdId').value || '0', 10);
             const qty = parseInt(document.getElementById('QtyInput').value || '0', 10);
+            const batchId = document.getElementById('BatchId').value ? parseInt(document.getElementById('BatchId').value, 10) : null;
             const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
             const unitCost = parseFloat(document.getElementById('UnitCostInput').value || '0');
-            const note = document.getElementById('LineNoteInput').value?.trim() || '';
+            const priceRetail = document.getElementById('PriceRetailInput').value ? parseFloat(document.getElementById('PriceRetailInput').value) : null;
+            const weightedDiscountPct = document.getElementById('WeightedDiscountInput').value ? parseFloat(document.getElementById('WeightedDiscountInput').value) : null;
+            const discountPct = document.getElementById('DiscountInput').value ? parseFloat(document.getElementById('DiscountInput').value) : null;
 
             if (!prodId || prodId <= 0) {
                 alert('من فضلك اختر صنفاً صحيحاً.');
@@ -351,10 +593,14 @@
             const dto = {
                 stockTransferId: transferId,
                 productId: prodId,
+                batchId: batchId,
                 batchNo: batchNo,
                 qty: qty,
                 unitCost: unitCost,
-                note: note
+                priceRetail: priceRetail,
+                weightedDiscountPct: weightedDiscountPct,
+                discountPct: discountPct,
+                note: ''
             };
 
             const token = getAntiForgeryToken();
@@ -378,7 +624,11 @@
 
                 const result = await response.json();
                 if (result.ok) {
-                    location.reload();
+                    const tbody = document.getElementById('TransferLinesTbody');
+                    const currentRows = tbody.querySelectorAll('tr[data-line-id]');
+                    const lineNo = currentRows.length + 1;
+                    upsertTransferRow(result, lineNo);
+                    clearAddLineFormAndFocus();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء إضافة السطر.');
                 }
@@ -390,43 +640,48 @@
             }
         });
 
-        // Delete line
-        document.querySelectorAll('.btn-delete-line').forEach(btn => {
-            btn.addEventListener('click', async function() {
-                const lineId = parseInt(this.getAttribute('data-line-id') || '0', 10);
-                if (!lineId || lineId <= 0) return;
+        // Delete line (event delegation للصفوف المضافة ديناميكياً)
+        document.getElementById('TransferLinesTbody')?.addEventListener('click', async function(e) {
+            const btn = e.target.closest('.btn-delete-line');
+            if (!btn) return;
+            if (btn.disabled) return;
+            const lineId = parseInt(btn.getAttribute('data-line-id') || '0', 10);
+            if (!lineId || lineId <= 0) return;
+            if (typeof isTransferPosted === 'function' && isTransferPosted()) return;
 
-                if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
+            if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
 
-                const token = getAntiForgeryToken();
-                this.disabled = true;
+            const token = getAntiForgeryToken();
+            btn.disabled = true;
 
-                try {
-                    const response = await fetch(`@Url.Action("DeleteLineJson", "StockTransfers")?id=${lineId}`, {
-                        method: 'POST',
-                        headers: {
-                            'RequestVerificationToken': token
-                        }
-                    });
+            try {
+                const response = await fetch(`@Url.Action("DeleteLineJson", "StockTransfers")?id=${lineId}`, {
+                    method: 'POST',
+                    headers: { 'RequestVerificationToken': token }
+                });
 
-                    if (!response.ok) {
-                        alert('حدث خطأ أثناء حذف السطر.');
-                        return;
-                    }
-
-                    const result = await response.json();
-                    if (result.ok) {
-                        location.reload();
-                    } else {
-                        alert(result.message || 'حدث خطأ أثناء حذف السطر.');
-                    }
-                } catch (error) {
-                    console.error('Error deleting line:', error);
+                if (!response.ok) {
                     alert('حدث خطأ أثناء حذف السطر.');
-                } finally {
-                    this.disabled = false;
+                    return;
                 }
-            });
+
+                const result = await response.json();
+                if (result.ok) {
+                    const row = btn.closest('tr');
+                    if (row) row.remove();
+                    const tbody = document.getElementById('TransferLinesTbody');
+                    if (tbody && tbody.querySelectorAll('tr[data-line-id]').length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
+                    }
+                } else {
+                    alert(result.message || 'حدث خطأ أثناء حذف السطر.');
+                }
+            } catch (error) {
+                console.error('Error deleting line:', error);
+                alert('حدث خطأ أثناء حذف السطر.');
+            } finally {
+                btn.disabled = false;
+            }
         });
 
         // Save header
@@ -488,11 +743,14 @@
                     if (result.id && result.id > 0) {
                         document.getElementById('TransferId').value = result.id;
                         document.getElementById('TransferNumberDisplay').value = result.id;
-                        if (window.location.pathname.includes('/Create')) {
-                            window.history.replaceState({}, '', `@Url.Action("Show", "StockTransfers")/${result.id}`);
-                        }
+                        const baseUrl = '@Url.Action("Show", "StockTransfers")';
+                        const newPath = baseUrl + '/' + result.id + (window.location.search || '');
+                        window.history.replaceState({}, '', newPath);
+                        document.title = 'تحويل مخزني — رقم ' + result.id;
                     }
-                    alert('تم حفظ التحويل بنجاح.');
+                    const ProdNameInput = document.getElementById('ProdNameInput');
+                    ProdNameInput?.focus();
+                    ProdNameInput?.select?.();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء حفظ التحويل.');
                 }
@@ -504,7 +762,7 @@
             }
         });
 
-        // Post transfer
+        // Post transfer — تحديث الواجهة دون إعادة تحميل
         document.getElementById('btnPostTransfer')?.addEventListener('click', async function() {
             const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
             if (!transferId || transferId <= 0) {
@@ -516,43 +774,51 @@
 
             const token = getAntiForgeryToken();
             const msgDiv = document.getElementById('postTransferMsg');
-            this.disabled = true;
-            msgDiv.textContent = 'جاري الترحيل...';
+            const btnPost = this;
+            const oldHtml = btnPost.innerHTML;
+            btnPost.disabled = true;
+            btnPost.innerHTML = '⏳ جاري الترحيل...';
+            if (msgDiv) { msgDiv.textContent = 'جاري الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
 
             try {
                 const response = await fetch(`@Url.Action("PostTransfer", "StockTransfers")?id=${transferId}`, {
                     method: 'POST',
-                    headers: {
-                        'RequestVerificationToken': token
-                    }
+                    headers: { 'RequestVerificationToken': token }
                 });
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    msgDiv.textContent = 'خطأ: ' + errorText;
-                    msgDiv.className = 'small mt-2 text-danger';
+                    if (msgDiv) { msgDiv.textContent = 'خطأ: ' + errorText; msgDiv.className = 'small mt-2 text-danger'; }
+                    btnPost.disabled = false;
+                    btnPost.innerHTML = oldHtml;
                     return;
                 }
 
                 const result = await response.json();
                 if (result.ok) {
-                    msgDiv.textContent = 'تم الترحيل بنجاح.';
-                    msgDiv.className = 'small mt-2 text-success';
-                    location.reload();
+                    setTransferPosted(true);
+                    applyPostedUiLock();
+                    const statusDisplay = document.getElementById('TransferStatusDisplay');
+                    if (statusDisplay) statusDisplay.value = 'مترحل';
+                    const btnOpen = document.getElementById('btnOpenTransfer');
+                    if (btnOpen) btnOpen.disabled = false;
+                    btnPost.innerHTML = '✅ تم ترحيل التحويل';
+                    btnPost.disabled = true;
+                    if (msgDiv) { msgDiv.textContent = result.message || 'تم الترحيل بنجاح.'; msgDiv.className = 'small mt-2 text-success'; }
                 } else {
-                    msgDiv.textContent = result.message || 'حدث خطأ أثناء الترحيل.';
-                    msgDiv.className = 'small mt-2 text-danger';
+                    if (msgDiv) { msgDiv.textContent = result.message || 'حدث خطأ أثناء الترحيل.'; msgDiv.className = 'small mt-2 text-danger'; }
+                    btnPost.disabled = false;
+                    btnPost.innerHTML = oldHtml;
                 }
             } catch (error) {
                 console.error('Error posting transfer:', error);
-                msgDiv.textContent = 'حدث خطأ أثناء الترحيل.';
-                msgDiv.className = 'small mt-2 text-danger';
-            } finally {
-                this.disabled = false;
+                if (msgDiv) { msgDiv.textContent = 'حدث خطأ أثناء الترحيل.'; msgDiv.className = 'small mt-2 text-danger'; }
+                btnPost.disabled = false;
+                btnPost.innerHTML = oldHtml;
             }
         });
 
-        // Open transfer
+        // Open transfer — تحديث الواجهة دون إعادة تحميل
         document.getElementById('btnOpenTransfer')?.addEventListener('click', async function() {
             const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
             if (!transferId || transferId <= 0) {
@@ -568,9 +834,7 @@
             try {
                 const response = await fetch(`@Url.Action("OpenTransfer", "StockTransfers")?id=${transferId}`, {
                     method: 'POST',
-                    headers: {
-                        'RequestVerificationToken': token
-                    }
+                    headers: { 'RequestVerificationToken': token }
                 });
 
                 if (!response.ok) {
@@ -580,8 +844,15 @@
 
                 const result = await response.json();
                 if (result.ok) {
+                    setTransferPosted(false);
+                    applyPostedUiLock();
+                    const statusDisplay = document.getElementById('TransferStatusDisplay');
+                    if (statusDisplay) statusDisplay.value = 'مسودة';
+                    const btnPost = document.getElementById('btnPostTransfer');
+                    if (btnPost) { btnPost.disabled = false; btnPost.innerHTML = '📤 ترحيل التحويل'; }
+                    const btnOpen = document.getElementById('btnOpenTransfer');
+                    if (btnOpen) btnOpen.disabled = true;
                     alert('تم فتح التحويل بنجاح.');
-                    location.reload();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء فتح التحويل.');
                 }
@@ -593,8 +864,9 @@
             }
         });
 
-        // Clear lines
+        // Clear lines — مسح السطور يغيّر بنية الجدول — إعادة تحميل
         document.getElementById('btnClearTransferLines')?.addEventListener('click', async function() {
+            if (typeof isTransferPosted === 'function' && isTransferPosted()) return;
             const transferId = parseInt(document.getElementById('TransferId').value || '0', 10);
             if (!transferId || transferId <= 0) {
                 alert('لا توجد تحويل لمسح سطوره.');
@@ -609,9 +881,7 @@
             try {
                 const response = await fetch(`@Url.Action("ClearLinesJson", "StockTransfers")?id=${transferId}`, {
                     method: 'POST',
-                    headers: {
-                        'RequestVerificationToken': token
-                    }
+                    headers: { 'RequestVerificationToken': token }
                 });
 
                 if (!response.ok) {
@@ -622,7 +892,7 @@
                 const result = await response.json();
                 if (result.ok) {
                     alert('تم مسح السطور بنجاح.');
-                    location.reload();
+                    window.location.reload();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء مسح السطور.');
                 }
@@ -632,6 +902,52 @@
             } finally {
                 this.disabled = false;
             }
+        });
+
+        // الانتقال بـ Enter بين الحقول وزر الإضافة
+        const enterNavFields = [
+            document.getElementById('ProdCodeInput'),
+            document.getElementById('ProdNameInput'),
+            document.getElementById('BatchSelect'),
+            document.getElementById('ExpiryInput'),
+            document.getElementById('QtyInput'),
+            document.getElementById('DiscountInput'),
+            document.getElementById('btnAddTransferLine')
+        ].filter(Boolean);
+
+        enterNavFields.forEach((el, idx) => {
+            if (el.dataset.boundEnterNav === '1') return;
+            el.dataset.boundEnterNav = '1';
+            el.addEventListener('keydown', function(e) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                if (el === document.getElementById('ProdNameInput')) {
+                    const opt = document.querySelector(`#productsList option[value="${el.value}"]`);
+                    if (opt) {
+                        document.getElementById('ProdId').value = opt.getAttribute('data-id');
+                        document.getElementById('ProdCodeInput').value = opt.getAttribute('data-id');
+                        loadTransferProductInfo();
+                    }
+                }
+                if (el === document.getElementById('ProdCodeInput')) {
+                    const code = el.value;
+                    if (code) {
+                        const opt = document.querySelector(`#productsList option[data-id="${code}"]`);
+                        if (opt) {
+                            document.getElementById('ProdId').value = code;
+                            document.getElementById('ProdNameInput').value = opt.value;
+                            loadTransferProductInfo();
+                        }
+                    }
+                }
+                const next = enterNavFields[idx + 1];
+                if (el === document.getElementById('btnAddTransferLine') || el === document.getElementById('DiscountInput')) {
+                    document.getElementById('btnAddTransferLine')?.click();
+                } else if (next) {
+                    next.focus();
+                    if (typeof next.select === 'function') next.select?.();
+                }
+            });
         });
     </script>
 }

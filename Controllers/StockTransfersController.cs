@@ -22,12 +22,13 @@ namespace ERP.Controllers
     /// </summary>
     public class StockTransfersController : Controller
     {
-        // كائن الاتصال بقاعدة البيانات
-        private readonly AppDbContext _context;   // متغير: يحتفظ بالسياق للتعامل مع الجداول
+        private readonly AppDbContext _context;
+        private readonly StockAnalysisService _stockAnalysisService;
 
-        public StockTransfersController(AppDbContext context)
+        public StockTransfersController(AppDbContext context, StockAnalysisService stockAnalysisService)
         {
             _context = context;
+            _stockAnalysisService = stockAnalysisService;
         }
 
         #region Index (قائمة التحويلات بالنظام الموحد)
@@ -538,7 +539,7 @@ namespace ERP.Controllers
             }
 
             var items = await _context.StockTransfers
-                .Where(t => selectedIds.Contains(t.Id))
+                .Where(t => selectedIds.Contains(t.Id) && !t.IsPosted)
                 .ToListAsync();
 
             if (items.Count == 0)
@@ -673,24 +674,26 @@ namespace ERP.Controllers
         {
             var warehouses = await _context.Warehouses
                 .AsNoTracking()
-                .OrderBy(w => w.WarehouseId)
-                .Select(w => new
+                .Where(w => w.IsActive)
+                .OrderBy(w => w.WarehouseName)
+                .                Select(w => new
                 {
-                    w.WarehouseId
+                    w.WarehouseId,
+                    w.WarehouseName
                 })
                 .ToListAsync();
 
             ViewData["FromWarehouseId"] = new SelectList(
                 warehouses,
                 "WarehouseId",
-                "WarehouseId",
+                "WarehouseName",
                 fromSelectedId
             );
 
             ViewData["ToWarehouseId"] = new SelectList(
                 warehouses,
                 "WarehouseId",
-                "WarehouseId",
+                "WarehouseName",
                 toSelectedId
             );
         }
@@ -777,6 +780,83 @@ namespace ERP.Controllers
         }
 
         // =========================
+        // GetTransferProductInfo — جلب بيانات الصنف للتحويل (تشغيلات، سعر، خصم مرجح)
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> GetTransferProductInfo(int prodId, int fromWarehouseId)
+        {
+            if (prodId <= 0 || fromWarehouseId <= 0)
+                return Json(new { ok = false, message = "بيانات غير صحيحة." });
+
+            var product = await _context.Products
+                .AsNoTracking()
+                .Where(p => p.ProdId == prodId)
+                .Select(p => new { p.ProdId, p.ProdName, p.PriceRetail })
+                .FirstOrDefaultAsync();
+
+            if (product == null)
+                return Json(new { ok = false, message = "الصنف غير موجود." });
+
+            var stockBatches = await _context.StockBatches
+                .AsNoTracking()
+                .Where(sb => sb.ProdId == prodId && sb.WarehouseId == fromWarehouseId && sb.QtyOnHand > 0)
+                .OrderBy(sb => sb.Expiry)
+                .ThenBy(sb => sb.BatchNo)
+                .ToListAsync();
+
+            var batchInfos = new List<TransferBatchInfo>();
+            foreach (var sb in stockBatches)
+            {
+                var batch = await _context.Batches
+                    .AsNoTracking()
+                    .Where(b => b.ProdId == prodId && b.BatchNo == sb.BatchNo &&
+                        (sb.Expiry == null || b.Expiry.Date == sb.Expiry.Value.Date))
+                    .Select(b => new { b.BatchId, b.PriceRetailBatch, b.UnitCostDefault })
+                    .FirstOrDefaultAsync();
+                batchInfos.Add(new TransferBatchInfo
+                {
+                    BatchId = batch?.BatchId ?? 0,
+                    BatchNo = sb.BatchNo ?? "",
+                    ExpiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                    Qty = sb.QtyOnHand,
+                    PriceRetailBatch = batch?.PriceRetailBatch ?? product.PriceRetail,
+                    UnitCost = batch?.UnitCostDefault ?? 0m
+                });
+            }
+
+            decimal weightedDiscount = await _stockAnalysisService.GetWeightedPurchaseDiscountForWarehouseAsync(prodId, fromWarehouseId);
+
+            decimal priceRetail = product.PriceRetail;
+            decimal unitCost = 0m;
+            string? firstBatchNo = null;
+            string? firstExpiry = null;
+            int? firstBatchId = null;
+            if (batchInfos.Count > 0)
+            {
+                var first = batchInfos[0];
+                priceRetail = first.PriceRetailBatch;
+                unitCost = first.UnitCost;
+                firstBatchNo = first.BatchNo;
+                firstExpiry = first.ExpiryText;
+                firstBatchId = first.BatchId;
+            }
+
+            return Json(new
+            {
+                ok = true,
+                prodId = product.ProdId,
+                prodName = product.ProdName,
+                priceRetail,
+                unitCost,
+                weightedDiscount,
+                firstBatchNo = firstBatchNo ?? "",
+                firstExpiry = firstExpiry ?? "",
+                firstBatchId,
+                batches = batchInfos.Select(b => new { b.BatchId, b.BatchNo, b.ExpiryText, b.Qty, b.PriceRetailBatch, b.UnitCost })
+            });
+        }
+
+        // =========================
         // AddLineJson — إضافة سطر للتحويل (JSON API)
         // =========================
         [HttpPost]
@@ -811,19 +891,23 @@ namespace ERP.Controllers
                 return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
             }
 
-            // البحث عن Batch إذا كان موجوداً
-            int? batchId = null;
-            if (!string.IsNullOrWhiteSpace(dto.BatchNo))
+            int? batchId = dto.BatchId;
+            if (!batchId.HasValue && !string.IsNullOrWhiteSpace(dto.BatchNo))
             {
                 var batch = await _context.Batches
                     .FirstOrDefaultAsync(b => b.BatchNo.Trim() == dto.BatchNo.Trim() && b.ProdId == dto.ProductId);
                 if (batch != null)
-                {
                     batchId = batch.BatchId;
-                }
             }
 
-            // حساب رقم السطر التالي
+            decimal unitCost = dto.UnitCost;
+            if (unitCost <= 0 && batchId.HasValue)
+            {
+                var batch = await _context.Batches.FindAsync(batchId.Value);
+                if (batch != null)
+                    unitCost = batch.UnitCostDefault ?? 0m;
+            }
+
             int nextLineNo = transfer.Lines.Any() ? transfer.Lines.Max(l => l.LineNo) + 1 : 1;
 
             var line = new StockTransferLine
@@ -833,14 +917,33 @@ namespace ERP.Controllers
                 ProductId = dto.ProductId,
                 BatchId = batchId,
                 Qty = dto.Qty,
-                UnitCost = dto.UnitCost,
+                UnitCost = unitCost,
+                PriceRetail = dto.PriceRetail,
+                WeightedDiscountPct = dto.WeightedDiscountPct,
+                DiscountPct = dto.DiscountPct,
                 Note = dto.Note
             };
 
             _context.StockTransferLines.Add(line);
             await _context.SaveChangesAsync();
 
-            return Json(new { ok = true, lineId = line.Id });
+            var product = await _context.Products.FindAsync(dto.ProductId);
+            var batchEntity = batchId.HasValue ? await _context.Batches.FindAsync(batchId.Value) : null;
+            return Json(new
+            {
+                ok = true,
+                lineId = line.Id,
+                isUpdate = false,
+                productName = product?.ProdName ?? $"صنف #{dto.ProductId}",
+                batchNo = batchEntity?.BatchNo ?? dto.BatchNo ?? "-",
+                expiryDisplay = batchEntity?.Expiry.ToString("yyyy-MM-dd") ?? "-",
+                qty = line.Qty,
+                priceRetail = line.PriceRetail,
+                weightedDiscountPct = line.WeightedDiscountPct,
+                discountPct = line.DiscountPct,
+                unitCost = line.UnitCost,
+                total = line.Qty * line.UnitCost
+            });
         }
 
         // =========================
@@ -966,6 +1069,16 @@ namespace ERP.Controllers
         public string? Note { get; set; }
     }
 
+    public class TransferBatchInfo
+    {
+        public int BatchId { get; set; }
+        public string BatchNo { get; set; } = "";
+        public string ExpiryText { get; set; } = "";
+        public decimal Qty { get; set; }
+        public decimal PriceRetailBatch { get; set; }
+        public decimal UnitCost { get; set; }
+    }
+
     public class StockTransferLineDto
     {
         public int StockTransferId { get; set; }
@@ -974,6 +1087,9 @@ namespace ERP.Controllers
         public int? BatchId { get; set; }
         public int Qty { get; set; }
         public decimal UnitCost { get; set; }
+        public decimal? PriceRetail { get; set; }
+        public decimal? WeightedDiscountPct { get; set; }
+        public decimal? DiscountPct { get; set; }
         public string? Note { get; set; }
     }
 }

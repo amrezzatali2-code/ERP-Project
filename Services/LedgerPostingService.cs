@@ -547,6 +547,7 @@ namespace ERP.Services
         private const string SalesRevenueAccountCode = "4100"; // متغير: كود حساب إيرادات المبيعات
         private const string InventoryAccountCode = "1105"; // متغير: كود حساب المخزون
         private const string CogsAccountCode = "5100"; // متغير: كود حساب تكلفة البضاعة المباعة
+        private const string TransferProfitAccountCode = "4200"; // إيرادات أخرى / أرباح التحويلات الداخلية
 
         // ================================
         // ثابت: SourceType المستخدم في StockLedger للمبيعات
@@ -2449,11 +2450,30 @@ namespace ERP.Services
 
                 var now = DateTime.UtcNow;
                 int movementGroupId = transfer.Id; // استخدام ID التحويل كرقم مجموعة
+                decimal totalProfit = 0m;
+                string voucherNo = $"تحويل-{transfer.Id}";
 
                 int lineNo = 1;
                 foreach (var line in transfer.Lines.OrderBy(l => l.LineNo))
                 {
-                    // حركة خروج من المخزن المصدر
+                    // تكلفة الوحدة (من الشراء)
+                    decimal costPerUnit = line.UnitCost;
+                    // سعر التحويل: سعر الجمهور × (1 - خصم التحويل%)
+                    decimal transferPricePerUnit = costPerUnit;
+                    if (line.PriceRetail.HasValue && line.PriceRetail.Value > 0 && line.DiscountPct.HasValue)
+                    {
+                        transferPricePerUnit = line.PriceRetail.Value * (1m - (line.DiscountPct.Value / 100m));
+                    }
+                    // ربح السطر: عندما الخصم < المرجح → سعر التحويل > التكلفة
+                    decimal lineProfit = 0m;
+                    if (transferPricePerUnit > costPerUnit)
+                    {
+                        lineProfit = (transferPricePerUnit - costPerUnit) * line.Qty;
+                        totalProfit += lineProfit;
+                    }
+                    decimal inUnitCost = lineProfit > 0 ? transferPricePerUnit : costPerUnit;
+
+                    // حركة خروج من المخزن المصدر (بالتكلفة)
                     var outLedger = new StockLedger
                     {
                         TranDate = transfer.TransferDate,
@@ -2464,7 +2484,7 @@ namespace ERP.Services
                         Expiry = line.Batch?.Expiry,
                         QtyIn = 0,
                         QtyOut = line.Qty,
-                        UnitCost = line.UnitCost,
+                        UnitCost = costPerUnit,
                         RemainingQty = null,
                         SourceType = "TransferOut",
                         SourceId = transfer.Id,
@@ -2475,7 +2495,7 @@ namespace ERP.Services
                     };
                     _db.StockLedger.Add(outLedger);
 
-                    // حركة دخول للمخزن الوجهة
+                    // حركة دخول للمخزن الوجهة (بسعر التحويل عند وجود ربح)
                     var inLedger = new StockLedger
                     {
                         TranDate = transfer.TransferDate,
@@ -2486,7 +2506,7 @@ namespace ERP.Services
                         Expiry = line.Batch?.Expiry,
                         QtyIn = line.Qty,
                         QtyOut = 0,
-                        UnitCost = line.UnitCost,
+                        UnitCost = inUnitCost,
                         RemainingQty = line.Qty,
                         SourceType = "TransferIn",
                         SourceId = transfer.Id,
@@ -2547,6 +2567,43 @@ namespace ERP.Services
                     lineNo++;
                 }
 
+                // قيد محاسبي للربح: عند التحويل بخصم أقل من المرجح → ربح
+                if (totalProfit > 0)
+                {
+                    int inventoryAccountId = await ResolveAccountIdByCodeAsync(InventoryAccountCode);
+                    int transferProfitAccountId = await ResolveAccountIdByCodeAsync(TransferProfitAccountCode);
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = transfer.TransferDate,
+                        SourceType = LedgerSourceType.StockTransfer,
+                        VoucherNo = voucherNo,
+                        SourceId = transfer.Id,
+                        LineNo = 1,
+                        PostVersion = 1,
+                        AccountId = inventoryAccountId,
+                        CustomerId = null,
+                        Debit = totalProfit,
+                        Credit = 0m,
+                        Description = $"ربح تحويل مخزني رقم {transfer.Id} (خصم أقل من المرجح)",
+                        CreatedAt = now
+                    });
+                    _db.LedgerEntries.Add(new LedgerEntry
+                    {
+                        EntryDate = transfer.TransferDate,
+                        SourceType = LedgerSourceType.StockTransfer,
+                        VoucherNo = voucherNo,
+                        SourceId = transfer.Id,
+                        LineNo = 2,
+                        PostVersion = 1,
+                        AccountId = transferProfitAccountId,
+                        CustomerId = null,
+                        Debit = 0m,
+                        Credit = totalProfit,
+                        Description = $"ربح تحويل مخزني رقم {transfer.Id} (خصم أقل من المرجح)",
+                        CreatedAt = now
+                    });
+                }
+
                 // تحديث حالة التحويل
                 transfer.IsPosted = true;
                 transfer.Status = "مترحل";
@@ -2588,6 +2645,35 @@ namespace ERP.Services
                     .ToListAsync();
 
                 _db.StockLedger.RemoveRange(ledgers);
+
+                // عكس قيد الربح (إن وُجد): قيد عكسي
+                var profitEntries = await _db.LedgerEntries
+                    .Where(e => e.SourceType == LedgerSourceType.StockTransfer && e.SourceId == transfer.Id && e.PostVersion > 0)
+                    .OrderBy(e => e.LineNo)
+                    .ToListAsync();
+                if (profitEntries.Any())
+                {
+                    string voucherNo = $"تحويل-{transfer.Id}-عكس";
+                    var now = DateTime.UtcNow;
+                    foreach (var e in profitEntries)
+                    {
+                        _db.LedgerEntries.Add(new LedgerEntry
+                        {
+                            EntryDate = transfer.TransferDate,
+                            SourceType = LedgerSourceType.StockTransfer,
+                            VoucherNo = voucherNo,
+                            SourceId = transfer.Id,
+                            LineNo = e.LineNo == 1 ? 9001 : 9002,
+                            PostVersion = 0,
+                            AccountId = e.AccountId,
+                            CustomerId = null,
+                            Debit = e.Credit,
+                            Credit = e.Debit,
+                            Description = $"عكس ربح تحويل مخزني رقم {transfer.Id}",
+                            CreatedAt = now
+                        });
+                    }
+                }
 
                 // استعادة الكميات في StockBatch
                 foreach (var line in transfer.Lines)

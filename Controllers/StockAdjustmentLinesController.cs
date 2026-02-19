@@ -1,4 +1,4 @@
-﻿using ERP.Data;                             // الاتصال بقاعدة البيانات AppDbContext
+using ERP.Data;                             // الاتصال بقاعدة البيانات AppDbContext
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort
 using ERP.Models;                          // الموديلات StockAdjustmentLine, StockAdjustment
 using Microsoft.AspNetCore.Mvc;
@@ -87,7 +87,8 @@ namespace ERP.Controllers
                     ["qtyAfter"] = l => l.QtyAfter,
                     ["qtyDiff"] = l => l.QtyDiff,
                     ["costPer"] = l => l.CostPerUnit ?? 0,
-                    ["costDiff"] = l => l.CostDiff ?? 0
+                    ["costDiff"] = l => l.CostDiff ?? 0,
+                    ["note"] = l => (object)(l.Note ?? "")
                 };
 
             // 7) تطبيق البحث + الترتيب بالنظام الموحد

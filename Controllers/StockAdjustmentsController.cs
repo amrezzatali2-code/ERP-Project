@@ -524,6 +524,12 @@ namespace ERP.Controllers
             if (adjustment == null)
                 return NotFound();
 
+            if (adjustment.IsPosted)
+            {
+                TempData["ErrorMessage"] = "لا يمكن حذف تسوية مترحلة. افتح التسوية أولاً ثم أعد المحاولة.";
+                return RedirectToAction(nameof(Index));
+            }
+
             _context.StockAdjustments.Remove(adjustment);
             await _context.SaveChangesAsync();
 
@@ -561,6 +567,13 @@ namespace ERP.Controllers
                                             .Where(a => ids.Contains(a.Id))
                                             .ToListAsync();
 
+            var postedOnes = adjustments.Where(a => a.IsPosted).ToList();
+            if (postedOnes.Any())
+            {
+                TempData["ErrorMessage"] = $"لا يمكن حذف تسويات مترحلة (مثل: {string.Join(", ", postedOnes.Select(a => a.Id))}). افتحها أولاً.";
+                return RedirectToAction(nameof(Index));
+            }
+
             if (!adjustments.Any())
             {
                 TempData["Msg"] = "لم يتم العثور على التسويات المحددة.";
@@ -585,6 +598,13 @@ namespace ERP.Controllers
             if (!adjustments.Any())
             {
                 TempData["Msg"] = "لا توجد تسويات لحذفها.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var postedOnes = adjustments.Where(a => a.IsPosted).ToList();
+            if (postedOnes.Any())
+            {
+                TempData["ErrorMessage"] = $"يوجد تسويات مترحلة ({postedOnes.Count}). لا يمكن حذفها. افتحها أولاً ثم أعد المحاولة.";
                 return RedirectToAction(nameof(Index));
             }
 
