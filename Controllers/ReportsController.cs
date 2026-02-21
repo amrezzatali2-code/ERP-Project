@@ -110,6 +110,215 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(CustomerBalances), new { loadReport = true });
         }
 
+        /// <summary>
+        /// تصفير رصيد عميل محدد (حذف كل قيود LedgerEntries المرتبطة به + تصفير Customer.CurrentBalance).
+        /// استخدم عند وجود رصيد شاذ أو لبدء حساب من جديد.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> ZeroCustomerBalance(int customerId)
+        {
+            if (customerId <= 0)
+            {
+                TempData["ErrorMessage"] = "معرّف العميل غير صالح.";
+                return RedirectToAction(nameof(CustomerBalances), new { loadReport = true });
+            }
+
+            var customer = await _context.Customers.FindAsync(customerId);
+            if (customer == null)
+            {
+                TempData["ErrorMessage"] = "العميل غير موجود.";
+                return RedirectToAction(nameof(CustomerBalances), new { loadReport = true });
+            }
+
+            var entries = await _context.LedgerEntries
+                .Where(e => e.CustomerId == customerId)
+                .ToListAsync();
+
+            _context.LedgerEntries.RemoveRange(entries);
+            customer.CurrentBalance = 0;
+            customer.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = $"تم تصفير رصيد العميل «{customer.CustomerName ?? customerId.ToString()}» ({entries.Count} قيد). لا يمكن التراجع.";
+            return RedirectToAction(nameof(CustomerBalances), new { loadReport = true });
+        }
+
+        /// <summary>
+        /// مزامنة StockBatches من StockLedger (مصدر الحقيقة).
+        /// يُصلح عدم التزامن عند حذف مشتريات/تسويات دون تحديث StockBatches.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> SyncStockBatchesFromLedger()
+        {
+            var ledgerBalances = await _context.StockLedger
+                .AsNoTracking()
+                .GroupBy(sl => new { sl.WarehouseId, sl.ProdId, BatchNo = sl.BatchNo ?? "", Expiry = sl.Expiry.HasValue ? sl.Expiry.Value.Date : (DateTime?)null })
+                .Select(g => new
+                {
+                    g.Key.WarehouseId,
+                    g.Key.ProdId,
+                    g.Key.BatchNo,
+                    g.Key.Expiry,
+                    Qty = g.Sum(sl => sl.QtyIn - sl.QtyOut)
+                })
+                .ToListAsync();
+
+            int updated = 0, created = 0;
+            foreach (var lb in ledgerBalances)
+            {
+                int qtyToSet = Math.Max(0, lb.Qty);
+                var sb = await _context.StockBatches.FirstOrDefaultAsync(x =>
+                    x.WarehouseId == lb.WarehouseId && x.ProdId == lb.ProdId &&
+                    (x.BatchNo ?? "").Trim() == (lb.BatchNo ?? "").Trim() &&
+                    ((x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null) == lb.Expiry));
+                if (sb != null)
+                {
+                    if (sb.QtyOnHand != qtyToSet)
+                    {
+                        sb.QtyOnHand = qtyToSet;
+                        sb.UpdatedAt = DateTime.UtcNow;
+                        sb.Note = $"مزامنة من StockLedger {DateTime.UtcNow:yyyy-MM-dd}";
+                        updated++;
+                    }
+                }
+                else if (qtyToSet > 0)
+                {
+                    _context.StockBatches.Add(new StockBatch
+                    {
+                        WarehouseId = lb.WarehouseId,
+                        ProdId = lb.ProdId,
+                        BatchNo = lb.BatchNo ?? "",
+                        Expiry = lb.Expiry,
+                        QtyOnHand = qtyToSet,
+                        UpdatedAt = DateTime.UtcNow,
+                        Note = $"مزامنة من StockLedger {DateTime.UtcNow:yyyy-MM-dd}"
+                    });
+                    created++;
+                }
+            }
+            // تصفير StockBatches التي ليس لها رصيد في Ledger (أرصدة يتيمة)
+            var allBatches = await _context.StockBatches.Where(sb => sb.QtyOnHand > 0).ToListAsync();
+            foreach (var sb in allBatches)
+            {
+                var key = (sb.WarehouseId, sb.ProdId, BatchNo: (sb.BatchNo ?? "").Trim(), Expiry: sb.Expiry.HasValue ? sb.Expiry.Value.Date : (DateTime?)null);
+                if (!ledgerBalances.Any(lb => lb.WarehouseId == key.WarehouseId && lb.ProdId == key.ProdId &&
+                    (lb.BatchNo ?? "").Trim() == key.BatchNo && ((lb.Expiry.HasValue ? lb.Expiry.Value.Date : (DateTime?)null) == key.Expiry)))
+                {
+                    sb.QtyOnHand = 0;
+                    sb.UpdatedAt = DateTime.UtcNow;
+                    sb.Note = $"مزامنة: تصفير (لا رصيد في Ledger) {DateTime.UtcNow:yyyy-MM-dd}";
+                    updated++;
+                }
+            }
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = $"تمت المزامنة: {updated} تحديث، {created} إنشاء. StockBatches الآن مطابق لـ StockLedger.";
+            return RedirectToAction(nameof(ProductBalances), new { loadReport = true });
+        }
+
+        /// <summary>
+        /// حذف قيود StockLedger اليتيمة (مصدرها محذوف: مشتريات، مرتجعات، تسويات، تحويلات).
+        /// يُصلح ظهور كمية بدون تكلفة عند حذف المستند الأصلي دون تنظيف StockLedger.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> CleanOrphanedStockLedger()
+        {
+            int removed = 0;
+
+            // Purchase: SourceId = PIId
+            var existingPIIds = await _context.PurchaseInvoices.Select(p => p.PIId).ToListAsync();
+            var orphanPurchase = await _context.StockLedger
+                .Where(sl => sl.SourceType == "Purchase" && !existingPIIds.Contains(sl.SourceId))
+                .ToListAsync();
+            if (orphanPurchase.Any()) { _context.StockLedger.RemoveRange(orphanPurchase); removed += orphanPurchase.Count; }
+
+            // Sales: SourceId = SIId
+            var existingSIIds = await _context.SalesInvoices.Select(s => s.SIId).ToListAsync();
+            var orphanSales = await _context.StockLedger
+                .Where(sl => sl.SourceType == "Sales" && !existingSIIds.Contains(sl.SourceId))
+                .ToListAsync();
+            if (orphanSales.Any()) { _context.StockLedger.RemoveRange(orphanSales); removed += orphanSales.Count; }
+
+            // SalesReturn: SourceId = SRId
+            var existingSRIds = await _context.SalesReturns.Select(s => s.SRId).ToListAsync();
+            var orphanSR = await _context.StockLedger
+                .Where(sl => sl.SourceType == "SalesReturn" && !existingSRIds.Contains(sl.SourceId))
+                .ToListAsync();
+            if (orphanSR.Any()) { _context.StockLedger.RemoveRange(orphanSR); removed += orphanSR.Count; }
+
+            // PurchaseReturn: SourceId = PRetId
+            var existingPRetIds = await _context.PurchaseReturns.Select(p => p.PRetId).ToListAsync();
+            var orphanPRet = await _context.StockLedger
+                .Where(sl => sl.SourceType == "PurchaseReturn" && !existingPRetIds.Contains(sl.SourceId))
+                .ToListAsync();
+            if (orphanPRet.Any()) { _context.StockLedger.RemoveRange(orphanPRet); removed += orphanPRet.Count; }
+
+            // Adjustment: SourceId = StockAdjustment Id
+            var existingAdjIds = await _context.StockAdjustments.Select(a => a.Id).ToListAsync();
+            var orphanAdj = await _context.StockLedger
+                .Where(sl => sl.SourceType == "Adjustment" && !existingAdjIds.Contains(sl.SourceId))
+                .ToListAsync();
+            if (orphanAdj.Any()) { _context.StockLedger.RemoveRange(orphanAdj); removed += orphanAdj.Count; }
+
+            // TransferIn / TransferOut: SourceId = StockTransfer Id
+            var existingTransferIds = await _context.StockTransfers.Select(t => t.Id).ToListAsync();
+            var orphanTransfer = await _context.StockLedger
+                .Where(sl => (sl.SourceType == "TransferIn" || sl.SourceType == "TransferOut") && !existingTransferIds.Contains(sl.SourceId))
+                .ToListAsync();
+            if (orphanTransfer.Any()) { _context.StockLedger.RemoveRange(orphanTransfer); removed += orphanTransfer.Count; }
+
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = removed > 0
+                ? $"تم حذف {removed} قيد يتيم من StockLedger. نفّذ «مزامنة الأرصدة» لتحديث StockBatches."
+                : "لا توجد قيود يتيمة في StockLedger.";
+            return RedirectToAction(nameof(ProductBalances), new { loadReport = true });
+        }
+
+        /// <summary>
+        /// تصفير رصيد صنف محدد (حذف كل قيود StockLedger + تصفير StockBatches).
+        /// استخدم عند وجود رصيد شاذ من مصدر غير معروف بعد التنظيف.
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> ZeroProductBalance(int prodId, int? warehouseId = null)
+        {
+            if (prodId <= 0)
+            {
+                TempData["ErrorMessage"] = "معرّف الصنف غير صالح.";
+                return RedirectToAction(nameof(ProductBalances), new { loadReport = true });
+            }
+
+            var ledgers = await _context.StockLedger
+                .Where(sl => sl.ProdId == prodId && (!warehouseId.HasValue || sl.WarehouseId == warehouseId.Value))
+                .ToListAsync();
+
+            var entryIds = ledgers.Select(l => l.EntryId).ToList();
+            if (entryIds.Any())
+            {
+                var fifoMaps = await _context.Set<StockFifoMap>()
+                    .Where(f => entryIds.Contains(f.OutEntryId) || entryIds.Contains(f.InEntryId))
+                    .ToListAsync();
+                if (fifoMaps.Any())
+                    _context.Set<StockFifoMap>().RemoveRange(fifoMaps);
+                _context.StockLedger.RemoveRange(ledgers);
+            }
+
+            var batches = await _context.StockBatches
+                .Where(sb => sb.ProdId == prodId && (!warehouseId.HasValue || sb.WarehouseId == warehouseId.Value))
+                .ToListAsync();
+            foreach (var sb in batches)
+            {
+                sb.QtyOnHand = 0;
+                sb.UpdatedAt = DateTime.UtcNow;
+                sb.Note = $"تصفير يدوي {DateTime.UtcNow:yyyy-MM-dd}";
+            }
+
+            await _context.SaveChangesAsync();
+            var prod = await _context.Products.FindAsync(prodId);
+            TempData["SuccessMessage"] = $"تم تصفير رصيد الصنف «{prod?.ProdName ?? prodId.ToString()}» ({ledgers.Count} قيد، {batches.Count} تشغيلة).";
+            return RedirectToAction(nameof(ProductBalances), new { loadReport = true });
+        }
+
         // =========================================================
         // تقرير: أرصدة الأصناف
         // يعرض الصنف، الكمية الحالية، الخصم المرجح، المبيعات بين تاريخين، 
@@ -191,20 +400,20 @@ namespace ERP.Controllers
             if (!loadReport)
             {
                 // الصفحة تفتح بدون بيانات - فقط الفلاتر
-                // الافتراضي: عرض الصفر = true (عند أول فتح)
-                ViewBag.IncludeZeroQty = true;
+                // الافتراضي: عرض الصفر = false (غير مفعل عند أول فتح)
+                ViewBag.IncludeZeroQty = false;
                 ViewBag.ReportData = new List<ProductBalanceReportDto>();
                 ViewBag.TotalCost = 0m;
                 return View();
             }
 
-            // عند تحميل التقرير: إذا لم يتم تحديد includeZeroQty في الـ query، اجعله true افتراضياً
+            // عند تحميل التقرير: إذا لم يتم تحديد includeZeroQty في الـ query، اجعله false افتراضياً
             // (لأن checkbox غير المُفعّل لا يُرسل في الـ form GET)
             string? includeZeroQtyStr = Request.Query["includeZeroQty"].FirstOrDefault();
             if (string.IsNullOrEmpty(includeZeroQtyStr))
             {
-                includeZeroQty = true; // الافتراضي: عرض الصفر
-                ViewBag.IncludeZeroQty = true;
+                includeZeroQty = false; // الافتراضي: عدم عرض الصفر
+                ViewBag.IncludeZeroQty = false;
             }
 
             // عند عدم تحديد تاريخ: استخدام الشهر الحالي افتراضياً لعرض المبيعات
@@ -271,28 +480,27 @@ namespace ERP.Controllers
                 })
                 .ToDictionaryAsync(p => p.ProdId);
 
-            // 6.2) تحميل جميع StockBatches دفعة واحدة (GroupBy ProdId)
-            var stockBatchesQ = _context.StockBatches
+            // 6.2) الكمية من StockLedger (مصدر الحقيقة) = Sum(QtyIn - QtyOut) لتجنب عدم التزامن مع StockBatches
+            var ledgerQtyQuery = _context.StockLedger
                 .AsNoTracking()
-                .Where(sb => productIds.Contains(sb.ProdId));
-
+                .Where(sl => productIds.Contains(sl.ProdId));
             if (warehouseId.HasValue && warehouseId.Value > 0)
-            {
-                stockBatchesQ = stockBatchesQ.Where(sb => sb.WarehouseId == warehouseId.Value);
-            }
+                ledgerQtyQuery = ledgerQtyQuery.Where(sl => sl.WarehouseId == warehouseId.Value);
+            var stockQuantities = await ledgerQtyQuery
+                .GroupBy(sl => sl.ProdId)
+                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sl => sl.QtyIn - sl.QtyOut) })
+                .ToDictionaryAsync(x => x.ProdId, x => Math.Max(0, x.TotalQty));
 
-            var stockQuantities = await stockBatchesQ
-                .GroupBy(sb => sb.ProdId)
-                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sb => sb.QtyOnHand) })
-                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
-
-            // 6.3) تحميل جميع StockLedger للخصم المرجح والتكلفة دفعة واحدة
-            var stockLedgerDiscount = await _context.StockLedger
+            // 6.3) تحميل StockLedger للخصم المرجح والتكلفة (Purchase مع RemainingQty > 0)
+            var stockLedgerCostQuery = _context.StockLedger
                 .AsNoTracking()
                 .Where(x =>
                     productIds.Contains(x.ProdId) &&
                     x.SourceType == "Purchase" &&
-                    (x.RemainingQty ?? 0) > 0)
+                    (x.RemainingQty ?? 0) > 0);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                stockLedgerCostQuery = stockLedgerCostQuery.Where(x => x.WarehouseId == warehouseId.Value);
+            var stockLedgerDiscount = await stockLedgerCostQuery
                 .GroupBy(x => x.ProdId)
                 .Select(g => new
                 {
@@ -561,7 +769,7 @@ namespace ERP.Controllers
             // =========================================================
             if (!loadReport)
             {
-                ViewBag.IncludeZeroBalance = true;
+                ViewBag.IncludeZeroBalance = false;
                 ViewBag.ReportData = new List<CustomerBalanceReportDto>();
                 ViewBag.TotalBalance = 0m;
                 ViewBag.TotalDebit = 0m;
@@ -576,12 +784,12 @@ namespace ERP.Controllers
                 return View();
             }
 
-            // عند تحميل التقرير: إذا لم يتم تحديد includeZeroBalance في الـ query، اجعله true افتراضياً
+            // عند تحميل التقرير: إذا لم يتم تحديد includeZeroBalance في الـ query، اجعله false افتراضياً
             string? includeZeroBalanceStr = Request.Query["includeZeroBalance"].FirstOrDefault();
             if (string.IsNullOrEmpty(includeZeroBalanceStr))
             {
-                includeZeroBalance = true;
-                ViewBag.IncludeZeroBalance = true;
+                includeZeroBalance = false;
+                ViewBag.IncludeZeroBalance = false;
             }
 
             // =========================================================
@@ -937,11 +1145,11 @@ namespace ERP.Controllers
             string? sortBy = "name",
             string? sortDir = "asc")
         {
-            // عند التصدير: إذا لم يتم تحديد includeZeroBalance، اجعله true افتراضياً
+            // عند التصدير: إذا لم يتم تحديد includeZeroBalance، اجعله false افتراضياً
             string? includeZeroBalanceStr = Request.Query["includeZeroBalance"].FirstOrDefault();
             if (string.IsNullOrEmpty(includeZeroBalanceStr))
             {
-                includeZeroBalance = true;
+                includeZeroBalance = false;
             }
 
             // بناء الاستعلام (نفس منطق CustomerBalances)
@@ -1253,11 +1461,11 @@ namespace ERP.Controllers
             string? sortBy = "name",
             string? sortDir = "asc")
         {
-            // عند التصدير: إذا لم يتم تحديد includeZeroQty، اجعله true افتراضياً
+            // عند التصدير: إذا لم يتم تحديد includeZeroQty، اجعله false افتراضياً
             string? includeZeroQtyStr = Request.Query["includeZeroQty"].FirstOrDefault();
             if (string.IsNullOrEmpty(includeZeroQtyStr))
             {
-                includeZeroQty = true;
+                includeZeroQty = false;
             }
 
             // عند عدم تحديد تاريخ: استخدام الشهر الحالي افتراضياً (نفس ProductBalances)
@@ -1307,26 +1515,26 @@ namespace ERP.Controllers
                 })
                 .ToDictionaryAsync(p => p.ProdId);
 
-            var stockBatchesQ = _context.StockBatches
+            // الكمية من StockLedger (مصدر الحقيقة) - نفس منطق ProductBalances
+            var ledgerQtyQueryExp = _context.StockLedger
                 .AsNoTracking()
-                .Where(sb => productIds.Contains(sb.ProdId));
-
+                .Where(sl => productIds.Contains(sl.ProdId));
             if (warehouseId.HasValue && warehouseId.Value > 0)
-            {
-                stockBatchesQ = stockBatchesQ.Where(sb => sb.WarehouseId == warehouseId.Value);
-            }
+                ledgerQtyQueryExp = ledgerQtyQueryExp.Where(sl => sl.WarehouseId == warehouseId.Value);
+            var stockQuantities = await ledgerQtyQueryExp
+                .GroupBy(sl => sl.ProdId)
+                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sl => sl.QtyIn - sl.QtyOut) })
+                .ToDictionaryAsync(x => x.ProdId, x => Math.Max(0, x.TotalQty));
 
-            var stockQuantities = await stockBatchesQ
-                .GroupBy(sb => sb.ProdId)
-                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sb => sb.QtyOnHand) })
-                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
-
-            var stockLedgerDiscount = await _context.StockLedger
+            var stockLedgerCostQueryExp = _context.StockLedger
                 .AsNoTracking()
                 .Where(x =>
                     productIds.Contains(x.ProdId) &&
                     x.SourceType == "Purchase" &&
-                    (x.RemainingQty ?? 0) > 0)
+                    (x.RemainingQty ?? 0) > 0);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                stockLedgerCostQueryExp = stockLedgerCostQueryExp.Where(x => x.WarehouseId == warehouseId.Value);
+            var stockLedgerDiscount = await stockLedgerCostQueryExp
                 .GroupBy(x => x.ProdId)
                 .Select(g => new
                 {
@@ -1645,21 +1853,32 @@ namespace ERP.Controllers
                 salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate < to);
             }
 
+            // الإيرادات والكمية من SalesInvoiceLines
             var salesProfitData = await salesProfitQuery
                 .GroupBy(sil => sil.ProdId)
                 .Select(g => new
                 {
                     ProdId = g.Key,
                     SalesRevenue = g.Sum(sil => sil.LineNetTotal),
-                    SalesCost = g.Sum(sil => 
-                        sil.CostTotal > 0 
-                            ? sil.CostTotal 
-                            : (sil.ProfitValue > 0 
-                                ? (sil.LineNetTotal - sil.ProfitValue) 
-                                : 0m)),
                     SalesQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m
                 })
                 .ToDictionaryAsync(x => x.ProdId);
+
+            // التكلفة من StockLedger (مصدر الحقيقة - تكلفة FIFO من فواتير الشراء)
+            var siIdsInRange = await salesProfitQuery.Select(sil => sil.SIId).Distinct().ToListAsync();
+            var salesCostFromLedger = new Dictionary<int, decimal>();
+            if (siIdsInRange.Any())
+            {
+                var ledgerCostQuery = _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.SourceType == "Sales" && sl.QtyOut > 0 && siIdsInRange.Contains(sl.SourceId) && productIds.Contains(sl.ProdId));
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    ledgerCostQuery = ledgerCostQuery.Where(sl => sl.WarehouseId == warehouseId.Value);
+                salesCostFromLedger = await ledgerCostQuery
+                    .GroupBy(sl => sl.ProdId)
+                    .Select(g => new { ProdId = g.Key, SalesCost = g.Sum(sl => sl.TotalCost ?? (sl.UnitCost * sl.QtyOut)) })
+                    .ToDictionaryAsync(x => x.ProdId, x => x.SalesCost);
+            }
 
             // =========================================================
             // 5.1) مرتجعات البيع – خصم من الإيرادات والتكلفة والكمية
@@ -1787,9 +2006,12 @@ namespace ERP.Controllers
                 .Select(c => c.CustomerId)
                 .ToListAsync();
 
-            var customerBalancesFromLedger = await _context.LedgerEntries
+            var customerLedgerQuery = _context.LedgerEntries
                 .AsNoTracking()
-                .Where(e => e.CustomerId.HasValue && activeCustomerIds.Contains(e.CustomerId.Value))
+                .Where(e => e.CustomerId.HasValue && activeCustomerIds.Contains(e.CustomerId.Value));
+            if (toDate.HasValue)
+                customerLedgerQuery = customerLedgerQuery.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+            var customerBalancesFromLedger = await customerLedgerQuery
                 .GroupBy(e => e.CustomerId!.Value)
                 .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
                 .ToListAsync();
@@ -1814,14 +2036,15 @@ namespace ERP.Controllers
 
             if (cashAccountIds.Any())
             {
+                // رصيد الخزنة = الرصيد التراكمي حتى نهاية الفترة (مثل العملاء والمخزون)
+                // وليس التغير في الفترة - ليتوافق ربح الميزانية مع صافي الأصول
                 var treasuryQuery = _context.LedgerEntries
                     .AsNoTracking()
                     .Where(e => cashAccountIds.Contains(e.AccountId) && e.PostVersion > 0);
 
-                if (fromDate.HasValue)
-                    treasuryQuery = treasuryQuery.Where(e => e.EntryDate >= fromDate.Value.Date);
                 if (toDate.HasValue)
                     treasuryQuery = treasuryQuery.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+                // لا نستخدم fromDate - نأخذ كل القيود حتى toDate للحصول على الرصيد التراكمي
 
                 treasuryBalance = await treasuryQuery
                     .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
@@ -1887,8 +2110,9 @@ namespace ERP.Controllers
                 if (!productsDict.TryGetValue(prodId, out var product)) continue;
 
                 // الربح من البيع (بعد خصم مرتجعات البيع)
+                // التكلفة من StockLedger (FIFO) لتطابق فواتير الشراء
                 decimal salesRevenue = salesProfitData.TryGetValue(prodId, out var salesData) ? salesData.SalesRevenue : 0m;
-                decimal salesCost = salesProfitData.TryGetValue(prodId, out var salesData2) ? salesData2.SalesCost : 0m;
+                decimal salesCost = salesCostFromLedger.TryGetValue(prodId, out var costVal) ? costVal : 0m;
                 decimal salesQty = salesProfitData.TryGetValue(prodId, out var salesData3) ? salesData3.SalesQty : 0m;
                 if (returnRevenueQty.TryGetValue(prodId, out var ret))
                 {

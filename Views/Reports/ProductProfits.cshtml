@@ -247,15 +247,6 @@
         </div>
     }
 
-    @* ===== ملخص الربح الإجمالي (بيع + تسويات) ===== *@
-    @if (reportData.Any())
-    {
-        <div class="alert alert-light border mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <span><strong>إجمالي الربح (بيع + تسويات + تحويلات):</strong></span>
-            <span class="fs-5 @(totalProfit >= 0 ? "text-success" : "text-danger")"><strong>@totalProfit.ToString("N2")</strong></span>
-        </div>
-    }
-
     @* ===== جدول البيانات ===== *@
     @if (reportData.Any())
     {
@@ -278,8 +269,8 @@
                                 <th>الفئة</th>
                                 
                                 @* ربح البيع *@
-                                <th class="text-end" style="min-width: 120px;">الإيرادات (بيع)</th>
-                                <th class="text-end" style="min-width: 120px;">التكلفة (بيع)</th>
+                                <th class="text-end" style="min-width: 120px;">البيع</th>
+                                <th class="text-end" style="min-width: 120px;">التكلفة</th>
                                 <th class="text-end" style="min-width: 120px;">
                                     <a href="@sortUrl("salesprofit", sortBy == "salesprofit" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
                                         الربح (بيع) @if (sortBy == "salesprofit") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
@@ -422,7 +413,7 @@
             <div class="card shadow-sm mt-4">
                 <div class="card-header bg-primary text-white">
                     <h5 class="mb-0">📊 ربح الميزانية</h5>
-                    <small>مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن − مجموع العملاء الدائنين + ربح التسوية + ربح التحويل</small>
+                    <small>مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن − مجموع العملاء الدائنين</small>
                 </div>
                 <div class="card-body">
                     <div class="row">
@@ -468,7 +459,7 @@
                                 <div class="card-body">
                                     <h5 class="card-title">حساب الربح من الميزانية:</h5>
                                     @{
-                                        var profitWithAdjustAndTransfer = bs.BalanceSheetProfit + totalAdjustmentProfit + totalTransferProfit;
+                                        var balanceProfit = bs.CustomersDebitSum + bs.TreasuryBalance + bs.InventoryCostTotal - bs.CustomersCreditSum;
                                     }
                                     <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                         <div>
@@ -476,14 +467,15 @@
                                             <p class="mb-1"><strong>+ رصيد الخزنة:</strong> @bs.TreasuryBalance.ToString("N2")</p>
                                             <p class="mb-1"><strong>+ تكلفة المخزون:</strong> @bs.InventoryCostTotal.ToString("N2")</p>
                                             <p class="mb-1"><strong>− العملاء الدائنون:</strong> <span class="text-danger">@bs.CustomersCreditSum.ToString("N2")</span></p>
-                                            <p class="mb-1"><strong>+ ربح التسوية:</strong> <span class="text-success">@totalAdjustmentProfit.ToString("N2")</span></p>
-                                            <p class="mb-1"><strong>+ ربح التحويل:</strong> <span class="text-success">@totalTransferProfit.ToString("N2")</span></p>
                                             <hr class="my-2" />
-                                            <p class="mb-0"><strong>إجمالي الربح (ميزانية + تسويات + تحويلات):</strong></p>
+                                            <p class="mb-0"><strong>إجمالي الربح (صافي الأصول):</strong></p>
+                                            <p class="mb-2 mt-1 small text-muted">للعلم فقط (مُدمجة في تكلفة المخزون، لا تُضاف مرة ثانية):</p>
+                                            <p class="mb-1 small"><strong>ربح التسوية:</strong> @totalAdjustmentProfit.ToString("N2")</p>
+                                            <p class="mb-1 small"><strong>ربح التحويل:</strong> @totalTransferProfit.ToString("N2")</p>
                                         </div>
                                         <div class="text-end">
-                                            <h3 class="mb-0 @(profitWithAdjustAndTransfer >= 0 ? "text-success" : "text-danger")">
-                                                @profitWithAdjustAndTransfer.ToString("N2")
+                                            <h3 class="mb-0 @(balanceProfit >= 0 ? "text-success" : "text-danger")">
+                                                @balanceProfit.ToString("N2")
                                             </h3>
                                         </div>
                                     </div>
@@ -498,7 +490,8 @@
                                 <li><strong>ربح البيع:</strong> إيرادات المبيعات − تكلفة البضاعة المباعة (من فواتير المبيعات)</li>
                                 <li><strong>ربح التسويات:</strong> فائض الجرد (زيادة مخزون) − عجز الجرد (نقصان مخزون) من التسويات المترحلة</li>
                                 <li><strong>ربح التحويلات:</strong> ربح التحويلات بين المخازن عند التحويل بخصم أقل من الخصم المرجح</li>
-                                <li><strong>ربح الميزانية:</strong> مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن − مجموع العملاء الدائنين</li>
+                                <li><strong>ربح الميزانية:</strong> مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن − مجموع العملاء الدائنين (صافي الأصول)</li>
+                                <li><strong>الفرق:</strong> ربح البيع = ربح الفترة من المبيعات. ربح الميزانية = صافي الأصول التراكمي (قد يختلف بسبب أرصدة سابقة أو فترات أخرى)</li>
                             </ul>
                             @if (fromDate.HasValue || toDate.HasValue)
                             {

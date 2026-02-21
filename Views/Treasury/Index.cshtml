@@ -1,4 +1,4 @@
-﻿@using ERP.Models
+@using ERP.Models
 @{
     ViewData["Title"] = "الخزينة الرئيسية";
 
@@ -58,36 +58,37 @@
     </div>
 
     @* ===== بطاقة الرصيد الإجمالي ===== *@
+    @* الترتيب (RTL): الدفع يسار | الرصيد وسط | الاستلام يمين *@
     <div class="row mb-4">
-        <div class="col-md-4">
+        <div class="col-md-4 order-3">
             <div class="card border-secondary">
-                <div class="card-header bg-light border-bottom">
-                    <h5 class="mb-0 text-secondary">الرصيد الإجمالي للخزينة</h5>
-                </div>
-                <div class="card-body text-center">
-                    <h2 class="text-secondary mb-0">@totalBalance.ToString("N2")</h2>
-                    <small class="text-muted">جنيه مصري</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-secondary">
-                <div class="card-header bg-light border-bottom">
-                    <h5 class="mb-0 text-secondary">إجمالي أذون الاستلام</h5>
-                </div>
-                <div class="card-body text-center">
-                    <h2 class="text-secondary mb-0">@totalReceiptsAmount.ToString("N2")</h2>
-                    <small class="text-muted">جنيه مصري</small>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-4">
-            <div class="card border-secondary">
-                <div class="card-header bg-light border-bottom">
+                <div class="card-header bg-light border-bottom text-center">
                     <h5 class="mb-0 text-secondary">إجمالي أذون الدفع</h5>
                 </div>
                 <div class="card-body text-center">
                     <h2 class="text-secondary mb-0">@totalPaymentsAmount.ToString("N2")</h2>
+                    <small class="text-muted">جنيه مصري</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 order-2">
+            <div class="card border-primary shadow-sm" style="border-width: 2px;">
+                <div class="card-header text-white border-bottom text-center" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);">
+                    <h5 class="mb-0">الرصيد الإجمالي للخزينة</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="mb-0 @(totalBalance >= 0 ? "text-primary" : "text-danger")">@totalBalance.ToString("N2")</h2>
+                    <small class="text-muted">جنيه مصري</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 order-1">
+            <div class="card border-secondary">
+                <div class="card-header bg-light border-bottom text-center">
+                    <h5 class="mb-0 text-secondary">إجمالي أذون الاستلام</h5>
+                </div>
+                <div class="card-body text-center">
+                    <h2 class="text-secondary mb-0">@totalReceiptsAmount.ToString("N2")</h2>
                     <small class="text-muted">جنيه مصري</small>
                 </div>
             </div>

@@ -154,5 +154,41 @@ namespace ERP.Controllers
 
             return View();
         }
+
+        /// <summary>
+        /// تصفير رصيد الخزينة (حذف كل قيود LedgerEntries لحسابات الخزينة والبنوك).
+        /// استخدم عند البدء من جديد. لا يمكن التراجع.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> ZeroTreasuryBalance()
+        {
+            var cashAccounts = await _context.Accounts
+                .AsNoTracking()
+                .Where(a => a.AccountType == AccountType.Asset &&
+                           (a.AccountName.Contains("خزينة") ||
+                            a.AccountName.Contains("بنك") ||
+                            a.AccountName.Contains("صندوق") ||
+                            a.AccountCode.StartsWith("1101") ||
+                            a.AccountCode.StartsWith("1102")))
+                .Select(a => a.AccountId)
+                .ToListAsync();
+
+            if (cashAccounts.Count == 0)
+            {
+                TempData["ErrorMessage"] = "لم يتم العثور على حسابات الخزينة.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            var entries = await _context.LedgerEntries
+                .Where(e => cashAccounts.Contains(e.AccountId))
+                .ToListAsync();
+
+            _context.LedgerEntries.RemoveRange(entries);
+            await _context.SaveChangesAsync();
+
+            TempData["SuccessMessage"] = $"تم تصفير رصيد الخزينة ({entries.Count} قيد). لا يمكن التراجع.";
+            return RedirectToAction(nameof(Index));
+        }
     }
 }
