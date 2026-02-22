@@ -53,6 +53,7 @@ namespace ERP.Controllers
             // هنا بنرجّع نفس الشكل المستخدم في فاتورة البيع:
             // Name / Id / PolicyName / UserName / Phone / Address / CreditLimit
             var customers = await context.Customers
+                .Where(c => c.IsActive == true)
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
                 {

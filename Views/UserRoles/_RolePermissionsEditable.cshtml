@@ -1,0 +1,81 @@
+@model IEnumerable<ERP.ViewModels.RolePermissionEditItem>
+@{
+    var list = Model?.ToList() ?? new List<ERP.ViewModels.RolePermissionEditItem>();
+    var byModule = list
+        .GroupBy(x => x.Module ?? "")
+        .OrderBy(g => g.Key)
+        .ToList();
+}
+@if (!list.Any())
+{
+    <div class="text-muted">لا توجد صلاحيات. اختر دوراً من القائمة.</div>
+}
+else
+{
+    <div class="mb-2">
+        <label class="form-label form-label-sm mb-0">بحث / فلترة بالموديول</label>
+        <input type="text" id="permSearchInput" list="permModulesList" class="form-control form-control-sm"
+               placeholder="اختر موديول أو اكتب للبحث..." autocomplete="off" />
+        <datalist id="permModulesList">
+            <option value="">كل الموديولات</option>
+            @foreach (var m in byModule.Select(g => string.IsNullOrWhiteSpace(g.Key) ? "(بدون موديول)" : g.Key).Distinct())
+            {
+                <option value="@m">@m</option>
+            }
+        </datalist>
+    </div>
+    <div class="table-responsive" style="max-height: 550px; overflow-y: auto;">
+        <table class="table table-sm table-bordered table-hover mb-0" id="permEditableTable">
+            <thead class="table-light sticky-top">
+                <tr>
+                    <th style="width: 40px;" class="text-center"></th>
+                    <th style="width: 50px;" class="text-center">
+                        <input type="checkbox" id="chkAllPerms" class="form-check-input" title="تحديد الكل" />
+                    </th>
+                    <th>الموديول / الصلاحية</th>
+                    <th style="width: 80px;" class="text-center">مسموح؟</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{ int modIdx = 0; }
+                @foreach (var grp in byModule)
+                {
+                    var modName = string.IsNullOrWhiteSpace(grp.Key) ? "(بدون موديول)" : grp.Key;
+                    var perms = grp.ToList();
+                    var allAllowed = perms.All(p => p.IsAllowed);
+                    var modId = "mod-" + (modIdx++);
+                    <tr class="perm-module-row perm-collapsed" data-module="@modName" data-search="@modName" id="@modId">
+                        <td class="text-center align-middle">
+                            <button type="button" class="btn btn-sm btn-outline-secondary p-0 perm-expand" style="width:24px;height:24px;font-size:14px;line-height:1;" title="فتح الشجرة" aria-expanded="false">+</button>
+                        </td>
+                        <td class="text-center align-middle">
+                            <input type="checkbox" class="form-check-input perm-module-cb" data-module="@modName"
+                                   @(allAllowed ? "checked" : "") title="تحديد كل صلاحيات هذا الموديول" />
+                        </td>
+                        <td class="fw-semibold align-middle">@modName</td>
+                        <td class="text-center align-middle">
+                            <span class="perm-module-status @(allAllowed ? "text-success" : "text-danger")">@(allAllowed ? "✔" : "✖")</span>
+                        </td>
+                    </tr>
+                    @foreach (var p in perms)
+                    {
+                        <tr class="perm-child-row" data-module="@modName" data-search="@($"{modName} {p.NameAr} {p.Code}")" data-parent="@modId" style="display:none;">
+                            <td></td>
+                            <td class="text-center align-middle">
+                                <input type="checkbox" name="selectedPermissionIds" value="@p.PermissionId" class="form-check-input perm-cb"
+                                       @(p.IsAllowed ? "checked" : "") />
+                            </td>
+                            <td class="ps-4 align-middle"><span class="text-muted small">↳</span> @(p.NameAr ?? p.Code ?? "")</td>
+                            <td class="text-center align-middle">
+                                <span class="perm-status @(p.IsAllowed ? "text-success" : "text-danger")">@(p.IsAllowed ? "✔" : "✖")</span>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+    <div class="form-text mt-1">
+        ✔ مسموح = مفعّلة. ✖ ممنوع = معطّلة. (−) إغلاق الشجرة. (+) فتح الشجرة. يمكنك التعديل بالنقر على خانة الصح.
+    </div>
+}

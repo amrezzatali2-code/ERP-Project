@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ
 using System.Text;                                // StringBuilder للتصدير
@@ -6,6 +6,7 @@ using System.Threading.Tasks;                     // Task و async
 using ERP.Data;                                   // AppDbContext
 using ERP.Infrastructure;                         // PagedResult لتقسيم الصفحات
 using ERP.Models;                                 // الموديلات UserRole, User, Role
+using ERP.ViewModels;                             // RolePermissionEditItem
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
 using Microsoft.EntityFrameworkCore;              // Include, AsNoTracking, ToListAsync
@@ -318,34 +319,21 @@ namespace ERP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(
-      [Bind("UserId,RoleId,IsPrimary")] UserRole item)
+            [Bind("UserId,RoleId,IsPrimary")] UserRole item,
+            int[]? selectedPermissionIds)
         {
-            // ⭐ مهم: إزالة أي أخطاء تلقائية على الخصائص الملاحية
             ModelState.Remove(nameof(UserRole.User));
             ModelState.Remove(nameof(UserRole.Role));
 
-            // التحقق اليدوي من اختيار المستخدم
             if (item.UserId <= 0)
-            {
                 ModelState.AddModelError("UserId", "من فضلك اختر مستخدم.");
-            }
-
-            // التحقق اليدوي من اختيار الدور
             if (item.RoleId <= 0)
-            {
                 ModelState.AddModelError("RoleId", "من فضلك اختر دور.");
-            }
 
-            // منع تكرار نفس (UserId, RoleId)
             bool exists = await _context.UserRoles
-                .AnyAsync(x => x.UserId == item.UserId &&
-                               x.RoleId == item.RoleId);
-
+                .AnyAsync(x => x.UserId == item.UserId && x.RoleId == item.RoleId);
             if (exists)
-            {
-                ModelState.AddModelError(string.Empty,
-                    "هذا المستخدم لديه بالفعل نفس الدور (لا يمكن تكرار نفس المستخدم ونفس الدور).");
-            }
+                ModelState.AddModelError(string.Empty, "هذا المستخدم لديه بالفعل نفس الدور.");
 
             if (!ModelState.IsValid)
             {
@@ -354,8 +342,50 @@ namespace ERP.Controllers
             }
 
             item.AssignedAt = DateTime.UtcNow;
-
             _context.Add(item);
+            await _context.SaveChangesAsync();
+
+            // حفظ استثناءات الصلاحيات (تعديلات المستخدم)
+            var allowed = new HashSet<int>(selectedPermissionIds ?? Array.Empty<int>());
+            var rolePermIds = await _context.RolePermissions
+                .Where(rp => rp.RoleId == item.RoleId && rp.IsAllowed)
+                .Select(rp => rp.PermissionId)
+                .ToListAsync();
+
+            foreach (var permId in rolePermIds.Where(id => !allowed.Contains(id)))
+            {
+                if (!await _context.UserDeniedPermissions.AnyAsync(x => x.UserId == item.UserId && x.PermissionId == permId))
+                {
+                    _context.UserDeniedPermissions.Add(new UserDeniedPermission
+                    {
+                        UserId = item.UserId,
+                        PermissionId = permId,
+                        IsAllowed = false
+                    });
+                }
+            }
+            var toRemoveDenied = await _context.UserDeniedPermissions
+                .Where(x => x.UserId == item.UserId && rolePermIds.Contains(x.PermissionId) && allowed.Contains(x.PermissionId))
+                .ToListAsync();
+            _context.UserDeniedPermissions.RemoveRange(toRemoveDenied);
+
+            var allPermIds = await _context.Permissions.Where(p => p.IsActive).Select(p => p.PermissionId).ToListAsync();
+            foreach (var permId in allPermIds.Where(id => allowed.Contains(id) && !rolePermIds.Contains(id)))
+            {
+                if (!await _context.UserExtraPermissions.AnyAsync(x => x.UserId == item.UserId && x.PermissionId == permId))
+                {
+                    _context.UserExtraPermissions.Add(new UserExtraPermissions
+                    {
+                        UserId = item.UserId,
+                        PermissionId = permId
+                    });
+                }
+            }
+            var toRemoveExtra = await _context.UserExtraPermissions
+                .Where(x => x.UserId == item.UserId && !allowed.Contains(x.PermissionId) && !rolePermIds.Contains(x.PermissionId))
+                .ToListAsync();
+            _context.UserExtraPermissions.RemoveRange(toRemoveExtra);
+
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "تم إسناد الدور للمستخدم بنجاح.";
@@ -395,6 +425,39 @@ namespace ERP.Controllers
 
             // إرجاع البارشيال مع البيانات
             return PartialView("_RolePermissionsPreview", list);
+        }
+
+        /// <summary>
+        /// إرجاع كل الصلاحيات مع إمكانية التعديل (شيك بوكس) — الحالة الابتدائية من الدور.
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetRolePermissionsEditable(int roleId)
+        {
+            if (roleId <= 0)
+            {
+                return PartialView("_RolePermissionsEditable", Enumerable.Empty<RolePermissionEditItem>());
+            }
+
+            var rolePermIds = new HashSet<int>(await _context.RolePermissions
+                .Where(rp => rp.RoleId == roleId && rp.IsAllowed)
+                .Select(rp => rp.PermissionId)
+                .ToListAsync());
+
+            var allPerms = await _context.Permissions
+                .AsNoTracking()
+                .OrderBy(p => p.Module)
+                .ThenBy(p => p.NameAr)
+                .Select(p => new RolePermissionEditItem
+                {
+                    PermissionId = p.PermissionId,
+                    Code = p.Code,
+                    NameAr = p.NameAr,
+                    Module = p.Module,
+                    IsAllowed = rolePermIds.Contains(p.PermissionId)
+                })
+                .ToListAsync();
+
+            return PartialView("_RolePermissionsEditable", allPerms);
         }
 
 

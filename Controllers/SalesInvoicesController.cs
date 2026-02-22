@@ -59,6 +59,7 @@ namespace ERP.Controllers
             // =========================================================
             var customers = await _context.Customers
       .AsNoTracking()
+      .Where(c => c.IsActive == true) // ✅ عرض العملاء النشطين فقط
       .Include(c => c.Governorate)
       .Include(c => c.District)
       .Include(c => c.Area)
@@ -168,6 +169,12 @@ namespace ERP.Controllers
             if (dto.CustomerId <= 0)
                 return BadRequest("يجب اختيار العميل قبل حفظ الفاتورة.");
 
+            var customer = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId);
+            if (customer == null)
+                return BadRequest("العميل غير موجود.");
+            if (!customer.IsActive)
+                return BadRequest("لا يمكن التعامل مع عميل غير نشط. يرجى تفعيل العميل أولاً.");
+
             if (dto.WarehouseId <= 0)
                 return BadRequest("يجب اختيار المخزن قبل حفظ الفاتورة.");
 
@@ -237,6 +244,7 @@ namespace ERP.Controllers
             // (3) تعديل فاتورة موجودة (InvoiceId > 0)
             // =========================================================
             var existing = await _context.SalesInvoices
+                .Include(s => s.Lines)
                 .FirstOrDefaultAsync(s => s.SIId == dto.InvoiceId);
 
             if (existing == null)
@@ -244,6 +252,24 @@ namespace ERP.Controllers
 
             if (existing.IsPosted)
                 return BadRequest("لا يمكن تعديل فاتورة تم ترحيلها.");
+
+            // =========================================================
+            // (3.1) عند تغيير العميل: التحقق من الحد الائتماني لو الفاتورة فيها سطور
+            // =========================================================
+            if (dto.CustomerId != existing.CustomerId && existing.Lines.Any())
+            {
+                decimal invoiceNet = existing.Lines.Sum(l => l.LineNetTotal);
+                var newCust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId);
+                if (newCust != null && newCust.CreditLimit > 0)
+                {
+                    decimal newDebit = newCust.CurrentBalance + invoiceNet;
+                    if (newDebit > newCust.CreditLimit)
+                    {
+                        decimal remaining = Math.Max(0, newCust.CreditLimit - newCust.CurrentBalance);
+                        return BadRequest(new { ok = false, message = $"هذا العميل متخطى الحد الائتماني. المبلغ المتبقي له: {remaining:N2} جنيه." });
+                    }
+                }
+            }
 
             // =========================================================
             // (4) تحديث بيانات الهيدر فقط (حسب اختيارك A)
@@ -281,34 +307,37 @@ namespace ERP.Controllers
 
         // =========================================================
         // دالة مساعدة: تحميل قائمة الأصناف للأوتوكومبليت فى سطر الفاتورة (المبيعات)
-        // ثابت مهم:
-        // - هذه القائمة للبحث السريع فقط (اسم/كود/شركة/اسم علمي...)
-        // - سعر البيع "ليس اختياريًا" لكنه لا يُحدد هنا لأن FEFO يعتمد على WarehouseId
-        // - السعر الحقيقي سيأتي بعد اختيار الصنف من:
-        //   StockBatch (كمية + ترتيب FEFO) + Batch (PriceRetailBatch)
+        // - includeZeroQty: false = أصناف لها رصيد فقط، true = كل الأصناف
+        // - warehouseId: عند عرض أصناف لها رصيد، نفلتر حسب المخزن (اختياري)
         // =========================================================
-        private async Task LoadProductsForAutoCompleteAsync()
+        private async Task LoadProductsForAutoCompleteAsync(bool includeZeroQty = false, int? warehouseId = null)
         {
-            // متغير: قائمة الأصناف من جدول Products
-            var products = await _context.Products
-                .AsNoTracking()                      // تعليق: قراءة فقط بدون تتبع (أسرع)
-                .OrderBy(p => p.ProdName)            // تعليق: ترتيب حسب اسم الصنف
+            var productsQuery = _context.Products.AsNoTracking().OrderBy(p => p.ProdName);
+
+            if (!includeZeroQty)
+            {
+                // أصناف لها رصيد (QtyOnHand > 0) في StockBatches
+                var prodIdsWithStock = _context.StockBatches
+                    .AsNoTracking()
+                    .Where(sb => sb.QtyOnHand > 0);
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    prodIdsWithStock = prodIdsWithStock.Where(sb => sb.WarehouseId == warehouseId.Value);
+                var ids = await prodIdsWithStock.Select(sb => sb.ProdId).Distinct().ToListAsync();
+                productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
+            }
+
+            var products = await productsQuery
                 .Select(p => new
                 {
-                    Id = p.ProdId,                               // متغير: كود الصنف الداخلي (الكود الوحيد)
-                    Name = p.ProdName ?? string.Empty,           // متغير: اسم الصنف
-                    GenericName = p.GenericName ?? string.Empty, // متغير: الاسم العلمي (للـبدائل)
-                    Company = p.Company ?? string.Empty,         // متغير: الشركة
-                    HasQuota = p.HasQuota,                       // متغير: هل للصنف كوتة أم لا
-
-                    // ✅ مهم: في المبيعات لا نأخذ سعر من Products هنا
-                    // لأن السعر الحقيقي يعتمد على (Warehouse + FEFO) ويأتي من Batch.PriceRetailBatch
-                    // لذلك نتركه 0 هنا، وسيتم ملؤه تلقائيًا بعد اختيار الصنف
+                    Id = p.ProdId,
+                    Name = p.ProdName ?? string.Empty,
+                    GenericName = p.GenericName ?? string.Empty,
+                    Company = p.Company ?? string.Empty,
+                    HasQuota = p.HasQuota,
                     PriceRetail = 0m
                 })
                 .ToListAsync();
 
-            // متغير: نرسل القائمة إلى الواجهة لتغذية الـ datalist
             ViewBag.ProductsAuto = products;
         }
 
@@ -1055,6 +1084,30 @@ namespace ERP.Controllers
                 // متغير: الصافي
                 decimal netTotal = totalAfterDiscount + taxAmount;
 
+                // =========================
+                // 6.1) التحقق من الحد الائتماني قبل الحفظ
+                // رصيد العميل + صافي الفاتورة (بعد إضافة السطر) لا يتجاوز الحد
+                // =========================
+                if (invoice.CustomerId > 0)
+                {
+                    var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
+                    if (cust != null && cust.CreditLimit > 0)
+                    {
+                        decimal currentBalance = cust.CurrentBalance;
+                        decimal newDebit = currentBalance + netTotal;
+                        if (newDebit > cust.CreditLimit)
+                        {
+                            decimal remaining = Math.Max(0, cust.CreditLimit - currentBalance);
+                            await tx.RollbackAsync();
+                            return BadRequest(new
+                            {
+                                ok = false,
+                                message = $"هذا العميل متخطى الحد الائتماني. المبلغ المتبقي له: {remaining:N2} جنيه."
+                            });
+                        }
+                    }
+                }
+
                 // تحديث هيدر الفاتورة
                 invoice.TotalBeforeDiscount = Math.Round(totalRetail, 2);
                 invoice.TotalAfterDiscountBeforeTax = Math.Round(totalAfterDiscount, 2);
@@ -1642,6 +1695,20 @@ namespace ERP.Controllers
                 }
 
                 // ================================
+                // 3.1) التحقق من أن العميل نشط
+                // ================================
+                var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
+                if (cust == null || !cust.IsActive)
+                {
+                    var m = "لا يمكن ترحيل فاتورة لعميل غير نشط. يرجى تفعيل العميل أولاً.";
+                    if (isAjax) return BadRequest(new { ok = false, message = m });
+                    TempData["Error"] = m;
+                    return RedirectToAction("Show", new { id = invoice.SIId });
+                }
+
+                // ملاحظة: التحقق من الحد الائتماني يتم عند إضافة السطور (AddLineJson) وليس عند الترحيل
+
+                // ================================
                 // 4) تنفيذ الترحيل (كل المنطق داخل السيرفيس)
                 // - السيرفيس هو اللي يكتب: IsPosted + Status(مرحلة X) + PostedAt/PostedBy
                 // ================================
@@ -2062,7 +2129,7 @@ namespace ERP.Controllers
         //   - لو فتح عادي => يفتح أقرب فاتورة (التالي ثم السابق) بدل صفحة فاضية
         // =========================================================
         [HttpGet]
-        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null, bool includeZeroQty = false)
         {
             // =========================================
             // متغير: هل هذا الطلب يطلب "Body فقط"؟
@@ -2076,7 +2143,7 @@ namespace ERP.Controllers
             // - لو فتح عادي => نُجبر frame=1 عشان يفتح داخل التابات دائمًا
             // =========================================
             if (!isBodyOnly && frame != 1)
-                return RedirectToAction(nameof(Show), new { id = id, frag = frag, frame = 1 });
+                return RedirectToAction(nameof(Show), new { id = id, frag = frag, frame = 1, includeZeroQty });
 
             // =========================================
             // 0) تمرير حالة الـ Fragment للـ View
@@ -2151,7 +2218,8 @@ namespace ERP.Controllers
             // لكن بما إنك لم تثبّت هذا الشرط هنا بعد، سنلتزم بسلوكك الحالي بدون تغيير.
             // =========================================
             await PopulateDropDownsAsync(invoice.CustomerId, invoice.WarehouseId); // متغير: تثبيت العميل/المخزن المختارين
-            await LoadProductsForAutoCompleteAsync();                               // متغير: تجهيز الداتا ليست للأصناف
+            await LoadProductsForAutoCompleteAsync(includeZeroQty, invoice.WarehouseId > 0 ? invoice.WarehouseId : null);
+            ViewBag.IncludeZeroQty = includeZeroQty;
 
             // =========================================
             // 4) حالة القفل (مقفولة لو IsPosted أو Status Posted/Closed)
@@ -2388,7 +2456,7 @@ namespace ERP.Controllers
         // Create — GET: فتح شاشة إنشاء فاتورة مبيعات جديدة
         // =========================================================
         [HttpGet]
-        public async Task<IActionResult> Create()
+        public async Task<IActionResult> Create(bool includeZeroQty = false)
         {
             // =========================================================
             // (1) تجهيز موديل جديد بقيم افتراضية
@@ -2427,7 +2495,8 @@ namespace ERP.Controllers
             // =========================================================
             // ✅ (4.1) تجهيز الأصناف للداتا ليست (ضروري لظهور الأصناف)
             // =========================================================
-            await LoadProductsForAutoCompleteAsync();
+            await LoadProductsForAutoCompleteAsync(includeZeroQty, defaultWarehouseId);
+            ViewBag.IncludeZeroQty = includeZeroQty;
 
             // =========================================================
             // ✅ (4.2) تجهيز الأسهم حتى في الفاتورة الجديدة (SIId = 0)
@@ -2449,7 +2518,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create(SalesInvoice invoice)
+        public async Task<IActionResult> Create(SalesInvoice invoice, bool includeZeroQty = false)
         {
             // تحقق إضافي على نسبة خصم الهيدر (0..100)
             if (invoice.HeaderDiscountPercent < 0 || invoice.HeaderDiscountPercent > 100)
@@ -2469,7 +2538,8 @@ namespace ERP.Controllers
                 );
 
                 // ✅ مهم: تجهيز الأصناف للداتا ليست حتى لا تختفي
-                await LoadProductsForAutoCompleteAsync();
+                await LoadProductsForAutoCompleteAsync(includeZeroQty, invoice.WarehouseId > 0 ? invoice.WarehouseId : null);
+                ViewBag.IncludeZeroQty = includeZeroQty;
 
                 // ✅ مهم: تجهيز الأسهم حتى في حالة الخطأ
                 await FillSalesInvoiceNavAsync(invoice.SIId);

@@ -302,25 +302,77 @@
                 overflow: visible !important;
             }
             /* تنسيق جدول الطباعة لو اتنسخ */
-            #piPrintArea table {
+            #piPrintArea table,
+            .pi-print-copy table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 12px;
             }
 
-            #piPrintArea th, #piPrintArea td {
+            #piPrintArea th, #piPrintArea td,
+            .pi-print-copy th, .pi-print-copy td {
                 border: 1px solid #d0d0d0;
                 padding: 6px;
                 vertical-align: middle;
                 white-space: nowrap;
             }
 
-            #piPrintArea thead {
+            #piPrintArea thead,
+            .pi-print-copy thead {
                 display: table-header-group;
             }
 
-            #piPrintArea tr {
+            #piPrintArea tr,
+            .pi-print-copy tr {
                 break-inside: avoid;
+            }
+            /* صفحة واحدة طولية */
+            .print-mode-1 { }
+            /* أصل وصورة: صفحة عرضية مقسومة لقسمين — تصغير لاحتواء النسختين */
+            .print-mode-2 {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr;
+                gap: 0.5rem;
+                width: 100%;
+            }
+            .print-mode-2 .pi-print-copy {
+                break-inside: avoid;
+                min-width: 0;
+                transform: scale(0.85);
+                transform-origin: top center;
+                font-size: 10px !important;
+            }
+            .print-mode-2 .pi-print-copy th,
+            .print-mode-2 .pi-print-copy td {
+                padding: 3px !important;
+                font-size: inherit !important;
+            }
+            .print-mode-2 .pi-print-copy .mb-3,
+            .print-mode-2 .pi-print-copy .small {
+                font-size: 9px !important;
+            }
+            /* أصل وصورتين: صفحة عرضية مقسومة لثلاثة أقسام — تصغير لاحتواء النسخ الثلاث */
+            .print-mode-3 {
+                display: grid !important;
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 0.25rem;
+                width: 100%;
+            }
+            .print-mode-3 .pi-print-copy {
+                break-inside: avoid;
+                min-width: 0;
+                transform: scale(0.6);
+                transform-origin: top center;
+                font-size: 8px !important;
+            }
+            .print-mode-3 .pi-print-copy th,
+            .print-mode-3 .pi-print-copy td {
+                padding: 2px !important;
+                font-size: inherit !important;
+            }
+            .print-mode-3 .pi-print-copy .mb-3,
+            .print-mode-3 .pi-print-copy .small {
+                font-size: 7px !important;
             }
         }
 
@@ -392,7 +444,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="si-show-tab"
                                     data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navFirst ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navFirst ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(navFirst ?? 0)"
                                     title="أول فاتورة"
                                     @(canFirst ? "" : "disabled")>
@@ -404,7 +456,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="si-show-tab"
                                     data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (prevEffective ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (prevEffective ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(prevEffective ?? 0)"
                                     title="الفاتورة السابقة"
                                     @(canPrev ? "" : "disabled")>
@@ -416,7 +468,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="si-show-tab"
                                     data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (nextEffective ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (nextEffective ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(nextEffective ?? 0)"
                                     title="الفاتورة التالية"
                                     @(canNext ? "" : "disabled")>
@@ -428,7 +480,7 @@
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="si-show-tab"
                                     data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navLast ?? 0), frame = 1 })"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navLast ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(navLast ?? 0)"
                                     title="آخر فاتورة"
                                     @(canLast ? "" : "disabled")>
@@ -513,11 +565,26 @@
                             </button>
                         </div>
 
-                        <button type="button"
-                                id="btnPrintInvoice"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
-                            🖨️ طباعة الفاتورة
-                        </button>
+                        <a href="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "#")" id="btnCustomerVolume" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none"
+                           data-tab-id="customer-engagement"
+                           data-tab-title="حجم تعامل عميل"
+                           data-url="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "")">
+                            📊 حجم تعامل
+                        </a>
+
+                        <div class="dropdown w-100">
+                            <button type="button" id="btnPrintInvoiceDropdown"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false">
+                                🖨️ طباعة الفاتورة
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end w-100" aria-labelledby="btnPrintInvoiceDropdown">
+                                <li><a class="dropdown-item" href="#" data-print-mode="1">طباعة صفحة واحدة</a></li>
+                                <li><a class="dropdown-item" href="#" data-print-mode="2">طباعة أصل وصورة</a></li>
+                                <li><a class="dropdown-item" href="#" data-print-mode="3">طباعة أصل وصورتين</a></li>
+                            </ul>
+                        </div>
 
 
 
@@ -556,14 +623,14 @@
 
                         @{
                             bool isNewInvoice = Model == null || Model.SIId == 0;
-                            bool hasInvoice = !isNewInvoice;
+                            bool hasInvoice = !isNewInvoice && Model != null;
 
                             string invoiceDateText = hasInvoice
-                            ? Model.SIDate.ToString("yyyy/MM/dd")
+                            ? Model!.SIDate.ToString("yyyy/MM/dd")
                             : "";
 
                             string invoiceTimeText = hasInvoice
-                            ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
+                            ? Model!.CreatedAt.ToLocalTime().ToString("HH:mm")
                             : "";
                         }
 
@@ -808,6 +875,12 @@
                                                data-lock-posted="1" />
                                     </div>
                                     <div class="col col-md-4">
+                                        <label class="form-label form-label-sm mb-0">
+                                            <input type="checkbox" id="chkIncludeZeroQty" class="form-check-input me-1"
+                                                   @(ViewBag.IncludeZeroQty == true ? "checked" : "")
+                                                   title="عرض الأصناف التي رصيدها صفر">
+                                            <span class="small text-muted">عرض الصفر</span>
+                                        </label>
                                         <label class="form-label form-label-sm">اسم الصنف</label>
                                         <input id="ProdNameInput"
                                                list="productsList"
@@ -855,13 +928,13 @@
                                         <label class="form-label form-label-sm">الباتش</label>
                                         <input type="text" id="ProdBatchInput"
                                                class="form-control form-control-sm text-center pi-input"
-                                               placeholder="باتش" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
+                                               placeholder="باتش" data-lock-posted="1" data-is-posted="@(Model?.IsPosted == true ? "1" : "0")" />
                                     </div>
                                     <div class="col col-md-1">
                                         <label class="form-label form-label-sm">تاريخ الصلاحية</label>
                                         <input type="text" id="ProdExpiryInput"
                                                class="form-control form-control-sm text-center pi-input"
-                                               placeholder="MM/YYYY" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")" />
+                                               placeholder="MM/YYYY" data-lock-posted="1" data-is-posted="@(Model?.IsPosted == true ? "1" : "0")" />
                                     </div>
                                     <div class="col col-md-1 d-grid">
                                         <label class="form-label form-label-sm">&nbsp;</label>
@@ -1108,7 +1181,8 @@
          ERP — منطقة طباعة فاتورة المبيعات (ثابت معتمد)
          ملاحظة: الـ site.css عندك بيطبع فقط .erp-print-area
     ========================================================= -->
-    <div id="piPrintArea" class="erp-print-area print-only">
+    <div id="piPrintWrapper" class="erp-print-area print-only">
+    <div id="piPrintArea" class="pi-print-copy">
 
         <!-- ===== هيدر الطباعة (قابل للتخصيص لاحقاً: لوجو/بيانات شركة) ===== -->
         <div class="mb-3">
@@ -1145,6 +1219,7 @@
         <!-- ===== الإجماليات ===== -->
         <div id="piPrintTotalsWrap"></div>
 
+    </div>
     </div>
 
 
@@ -2717,11 +2792,16 @@
                                 body: JSON.stringify(dto)
                             });
 
-                            // لو السيرفر رجّع خطأ HTTP
+                            // لو السيرفر رجّع خطأ HTTP (مثل 400 BadRequest)
                             if (!resp.ok) {
                                 const errTxt = await resp.text().catch(() => '');
-                                console.error('AddLineJson HTTP Error:', resp.status, errTxt);
-                                alert('حدث خطأ أثناء إضافة السطر (HTTP). راجع Console لمعرفة السبب.');
+                                let errMsg = 'حدث خطأ أثناء إضافة السطر.';
+                                try {
+                                    const errJson = errTxt ? JSON.parse(errTxt) : null;
+                                    if (errJson && (errJson.message || errJson.error))
+                                        errMsg = errJson.message || errJson.error;
+                                } catch (_) { }
+                                alert(errMsg);
                                 return;
                             }
 
@@ -3102,7 +3182,7 @@
                 if (!confirm('هل تريد مسح هذا الصنف بكل تشغيلاته من الفاتورة؟')) return;
 
                 const token = getAntiForgeryToken();
-                const invoiceId = parseInt('@(Model.SIId)', 10);
+                const invoiceId = parseInt('@(Model?.SIId ?? 0)', 10);
 
                 const res = await fetch('@Url.Action("RemoveProductLinesJson", "SalesInvoices")', {
                     method: 'POST',
@@ -3279,7 +3359,7 @@
             async function saveTaxAjax() {
 
                 const token = getAntiForgeryToken();
-                const invoiceId = parseInt('@(Model.SIId)', 10);
+                const invoiceId = parseInt('@(Model?.SIId ?? 0)', 10);
 
                 const taxInput = document.getElementById('TaxAmountInput');
                 const taxVal = parseFloat(taxInput?.value || '0') || 0;
@@ -3512,7 +3592,7 @@
                                     const fullReturnWrapper = document.getElementById("fullReturnBtnWrapper");
                                     if (fullReturnWrapper) fullReturnWrapper.classList.remove("d-none");
 
-                                    const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
+                                    const btnPrint = document.getElementById("btnPrintInvoiceDropdown"); // متغير: زر الطباعة
                                     if (btnPrint) btnPrint.disabled = false;                     // ✅ بعد الترحيل: الطباعة تتفتح
 
 
@@ -3715,7 +3795,7 @@
                             btnPost.disabled = false;
                             btnPost.innerHTML = "📌 ترحيل الفاتورة";
 
-                            const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر الطباعة
+                            const btnPrint = document.getElementById("btnPrintInvoiceDropdown"); // متغير: زر الطباعة
                             if (btnPrint) btnPrint.disabled = true;                      // ✅ بعد فتح الفاتورة: الطباعة تتقفل
 
 
@@ -3856,6 +3936,21 @@
 
                         // تشغيل القفل مرة عند تحميل الصفحة
                         document.addEventListener("DOMContentLoaded", applyPostedUiLock);
+
+                        // تشيك بوكس "عرض الصفر": عند التغيير نعيد تحميل الصفحة بالمعامل الجديد
+                        document.addEventListener("DOMContentLoaded", function () {
+                            const chk = document.getElementById('chkIncludeZeroQty');
+                            if (!chk) return;
+                            chk.addEventListener('change', function () {
+                                const url = new URL(window.location.href);
+                                if (chk.checked) {
+                                    url.searchParams.set('includeZeroQty', 'true');
+                                } else {
+                                    url.searchParams.delete('includeZeroQty');
+                                }
+                                window.location.href = url.toString();
+                            });
+                        });
 
 
 
@@ -4069,6 +4164,17 @@
                             setBtnState(btnLast, canLast);
                             setBtnState(btnPrev, canPrev);
                             setBtnState(btnNext, canNext);
+
+                            // ✅ تحديث زر حجم تعامل العميل (حسب CustomerId في الهيدر)
+                            const customerId = getInt('CustomerId');
+                            const btnVolume = document.getElementById('btnCustomerVolume');
+                            if (btnVolume) {
+                                const volumeUrl = customerId > 0 ? `/Customers/Show/${customerId}?frame=1` : '';
+                                btnVolume.setAttribute('href', volumeUrl || '#');
+                                btnVolume.setAttribute('data-url', volumeUrl || '');
+                                btnVolume.style.pointerEvents = customerId > 0 ? '' : 'none';
+                                btnVolume.style.opacity = customerId > 0 ? '1' : '0.5';
+                            }
                         }
 
                         // =========================
@@ -4331,83 +4437,50 @@
 
 
                         // =========================================================
-            // ERP — زر طباعة الفاتورة (Purchase Invoice) [ثابت معتمد]
-            // - ممنوع الطباعة إلا لو الفاتورة مُرحّلة (مغلقة)
-            // - نقرأ InvoiceId وقت الضغط
-            // - نطبع فقط .erp-print-area (حسب site.css)
-            // - نجهز (الهيدر + السطور + الإجماليات) قبل الطباعة
+            // ERP — زر طباعة الفاتورة (قائمة منسدلة: صفحة واحدة / أصل وصورة / أصل وصورتين)
             // =========================================================
             document.addEventListener("DOMContentLoaded", function () {
 
-                const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الفاتورة
-                const msg = document.getElementById("postInvoiceMsg");       // متغير: صندوق الرسائل
+                const btnPrint = document.getElementById("btnPrintInvoiceDropdown");
+                const msg = document.getElementById("postInvoiceMsg");
 
                 if (!btnPrint) return;
 
-                // ✅ ربط مرة واحدة
                 if (btnPrint.dataset.boundPrint) return;
                 btnPrint.dataset.boundPrint = "1";
 
-                // ✅ عند فتح الصفحة: لو الفاتورة مش مُرحّلة نقفل زر الطباعة
                 if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
                     btnPrint.disabled = true;
                 }
 
-                // متغير: منع فتح نافذة الطباعة مرتين
                 let printing = false;
+                let landscapeStyleEl = null;
 
-                // =========================================================
-                // دالة: تجهيز منطقة الطباعة من القيم الظاهرة في الشاشة
-                // =========================================================
                 function prepareSalesInvoicePrint() {
-
-                    // متغير: منطقة الطباعة
                     const printArea = document.getElementById("piPrintArea");
                     if (!printArea) return false;
 
-                    // =========================
-                    // (1) هيدر الطباعة
-                    // =========================
-
-                    // متغير: رقم الفاتورة
                     const invoiceId = (document.getElementById("InvoiceId")?.value || "").trim();
-
-                    // متغير: تاريخ الفاتورة (لو عندك input اسمه PIDate)
-                    const invoiceDate =
-                        (document.getElementById("PIDate")?.value || "").trim() ||
-                        "";
-
-                    // متغير: اسم العميل من الـ Select (CustomerId)
-                    let supplierName = "";
-                    const customerSel = document.getElementById("CustomerId");
-                    if (customerSel && customerSel.options && customerSel.selectedIndex >= 0) {
-                        supplierName = (customerSel.options[customerSel.selectedIndex].text || "").trim();
-                    }
-
-                    // متغير: اسم المخزن من الـ Select (WarehouseId)
+                    const invoiceDate = (document.getElementById("InvoiceDateDisplay")?.value || document.getElementById("PIDate")?.value || "").trim();
+                    const supplierName = (document.getElementById("CustomerNameInput")?.value || "").trim();
                     let warehouseName = "";
                     const whSel = document.getElementById("WarehouseId");
                     if (whSel && whSel.options && whSel.selectedIndex >= 0) {
                         warehouseName = (whSel.options[whSel.selectedIndex].text || "").trim();
                     }
 
-                    // تعبئة عناصر الهيدر
-                    document.getElementById("piPrintNow").textContent = new Date().toLocaleString();
-                    document.getElementById("piPrintTitle").textContent = `ERP — فاتورة مبيعات رقم ${invoiceId || ""}`;
-                    document.getElementById("piPrintInvoiceNo").textContent = invoiceId || "";
-                    document.getElementById("piPrintInvoiceDate").textContent = invoiceDate || "";
-                    document.getElementById("piPrintSupplier").textContent = supplierName || "";
-                    document.getElementById("piPrintWarehouse").textContent = warehouseName || "";
+                    const el = (id) => document.getElementById(id);
+                    if (el("piPrintNow")) el("piPrintNow").textContent = new Date().toLocaleString();
+                    if (el("piPrintTitle")) el("piPrintTitle").textContent = `ERP — فاتورة مبيعات رقم ${invoiceId || ""}`;
+                    if (el("piPrintInvoiceNo")) el("piPrintInvoiceNo").textContent = invoiceId || "";
+                    if (el("piPrintInvoiceDate")) el("piPrintInvoiceDate").textContent = invoiceDate || "";
+                    if (el("piPrintSupplier")) el("piPrintSupplier").textContent = supplierName || "";
+                    if (el("piPrintWarehouse")) el("piPrintWarehouse").textContent = warehouseName || "";
 
-                    // =========================
-                    // (2) السطور: ننسخ جدول السطور الموجود
-                    // =========================
-                    const linesWrap = document.getElementById("piPrintLinesWrap");
+                    const linesWrap = el("piPrintLinesWrap");
                     if (!linesWrap) return false;
-
                     linesWrap.innerHTML = "";
-
-                    const tbody = document.getElementById("PILinesTbody"); // متغير: tbody الخاص بسطور الفاتورة
+                    const tbody = document.getElementById("PILinesTbody");
                     if (!tbody) {
                         linesWrap.innerHTML = `<div class="text-muted small">لا توجد سطور للطباعة.</div>`;
                     } else {
@@ -4415,124 +4488,97 @@
                         if (!table) {
                             linesWrap.innerHTML = `<div class="text-muted small">تعذر العثور على جدول السطور.</div>`;
                         } else {
-                            // استنساخ الجدول
                             const clone = table.cloneNode(true);
-
-                            // إزالة أي أزرار داخل الجدول (مسح/تعديل)
                             clone.querySelectorAll("button, a").forEach(x => x.remove());
-
                             linesWrap.appendChild(clone);
                         }
                     }
 
-                    // =========================
-                    // (3) الإجماليات: نقرأها من IDs التي عندك
-                    // =========================
-                    const totalsWrap = document.getElementById("piPrintTotalsWrap");
+                    const totalsWrap = el("piPrintTotalsWrap");
                     if (!totalsWrap) return false;
-
-                    const totalLines = document.getElementById("TotalLinesValue")?.textContent?.trim() || "0";
-                    const totalItems = document.getElementById("TotalItemsValue")?.textContent?.trim() || "0";
-                    const totalQty = document.getElementById("TotalQtyValue")?.textContent?.trim() || "0";
-                    const totalRetail = document.getElementById("TotalRetailValue")?.textContent?.trim() || "0";
-                    const totalAfterDiscount = document.getElementById("TotalAfterDiscountValue")?.textContent?.trim() || "0";
-                    const tax = (document.getElementById("TaxAmountInput")?.value || "").trim() || "0";
-                    const totalAfterDiscountAndTax = document.getElementById("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
-                    const netTotal = document.getElementById("NetTotalValue")?.textContent?.trim() || "0";
-
-                    totalsWrap.innerHTML = `
-                        <table>
-                            <thead><tr><th colspan="4">الإجماليات</th></tr></thead>
-                            <tbody>
-                                <tr>
-                                    <td>عدد السطور</td><td><strong>${totalLines}</strong></td>
-                                    <td>عدد الأصناف</td><td><strong>${totalItems}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>إجمالي الكمية</td><td><strong>${totalQty}</strong></td>
-                                    <td>إجمالي سعر الجمهور</td><td><strong>${totalRetail}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>الإجمالي بعد الخصم</td><td><strong>${totalAfterDiscount}</strong></td>
-                                    <td>قيمة الضريبة</td><td><strong>${tax}</strong></td>
-                                </tr>
-                                <tr>
-                                    <td>الإجمالي بعد الخصم والضريبة</td><td><strong>${totalAfterDiscountAndTax}</strong></td>
-                                    <td>الصافي النهائي</td><td><strong>${netTotal}</strong></td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    `;
-
+                    const totalLines = el("TotalLinesValue")?.textContent?.trim() || "0";
+                    const totalItems = el("TotalItemsValue")?.textContent?.trim() || "0";
+                    const totalQty = el("TotalQtyValue")?.textContent?.trim() || "0";
+                    const totalRetail = el("TotalRetailValue")?.textContent?.trim() || "0";
+                    const totalAfterDiscount = el("TotalAfterDiscountValue")?.textContent?.trim() || "0";
+                    const tax = (el("TaxAmountInput")?.value || "").trim() || "0";
+                    const totalAfterDiscountAndTax = el("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
+                    const netTotal = el("NetTotalValue")?.textContent?.trim() || "0";
+                    totalsWrap.innerHTML = `<table><thead><tr><th colspan="4">الإجماليات</th></tr></thead><tbody>
+                        <tr><td>عدد السطور</td><td><strong>${totalLines}</strong></td><td>عدد الأصناف</td><td><strong>${totalItems}</strong></td></tr>
+                        <tr><td>إجمالي الكمية</td><td><strong>${totalQty}</strong></td><td>إجمالي سعر الجمهور</td><td><strong>${totalRetail}</strong></td></tr>
+                        <tr><td>الإجمالي بعد الخصم</td><td><strong>${totalAfterDiscount}</strong></td><td>قيمة الضريبة</td><td><strong>${tax}</strong></td></tr>
+                        <tr><td>الإجمالي بعد الخصم والضريبة</td><td><strong>${totalAfterDiscountAndTax}</strong></td><td>الصافي النهائي</td><td><strong>${netTotal}</strong></td></tr>
+                    </tbody></table>`;
                     return true;
                 }
 
-                btnPrint.addEventListener("click", function () {
-
-                    // ✅ اقرأ رقم الفاتورة وقت الضغط
+                function doPrint(mode) {
                     const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
-
                     if (invoiceId <= 0) {
-                        if (msg) {
-                            msg.textContent = "⚠️ لا يمكن طباعة فاتورة قبل حفظها.";
-                            msg.className = "small mt-2 text-warning";
-                        }
+                        if (msg) { msg.textContent = "⚠️ لا يمكن طباعة فاتورة قبل حفظها."; msg.className = "small mt-2 text-warning"; }
                         return;
                     }
-
-                    // ✅ شرط البرنامج: لا طباعة إلا بعد الترحيل
                     if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
-                        if (msg) {
-                            msg.textContent = "❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة).";
-                            msg.className = "small mt-2 text-danger";
-                        }
+                        if (msg) { msg.textContent = "❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة)."; msg.className = "small mt-2 text-danger"; }
                         document.getElementById("btnPostInvoice")?.focus();
                         return;
                     }
-
-                    // منع تكرار الطباعة
                     if (printing) return;
                     printing = true;
 
-                    // ✅ تجهيز منطقة الطباعة
-                    const ok = prepareSalesInvoicePrint();
-                    if (!ok) {
+                    if (!prepareSalesInvoicePrint()) {
                         printing = false;
-                        if (msg) {
-                            msg.textContent = "تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.";
-                            msg.className = "small mt-2 text-danger";
-                        }
+                        if (msg) { msg.textContent = "تعذر تجهيز الطباعة."; msg.className = "small mt-2 text-danger"; }
                         return;
                     }
 
-                                // =========================
-                        // (ERP ثابت) تجهيز بيانات الهيدر داخل منطقة الطباعة قبل التنفيذ
-                        // =========================
+                    const wrapper = document.getElementById("piPrintWrapper");
+                    const printArea = document.getElementById("piPrintArea");
+                    if (!wrapper || !printArea) { printing = false; return; }
 
-                        // متغير: اسم العميل من نفس Input في الهيدر
-                        const supplierName = (document.getElementById("CustomerNameInput")?.value || "").trim();
+                    wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
+                    wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
 
-                        // متغير: تاريخ الفاتورة من نفس Input في الهيدر
-                        const invoiceDate = (document.getElementById("InvoiceDateDisplay")?.value || "").trim();
-
-                        // دالة صغيرة: تكتب نص في عنصر طباعة لو موجود
-                        function setPrintText(id, text) {
-                            const el = document.getElementById(id);
-                            if (el) el.textContent = text || "";
+                    if (mode === 2 || mode === 3) {
+                        const copies = mode === 2 ? 2 : 3;
+                        for (let i = 1; i < copies; i++) {
+                            const clone = printArea.cloneNode(true);
+                            clone.id = "";
+                            clone.classList.add("pi-print-copy");
+                            wrapper.appendChild(clone);
                         }
+                        wrapper.classList.add("print-mode-" + mode);
+                        landscapeStyleEl = document.createElement("style");
+                        landscapeStyleEl.id = "si-print-landscape";
+                        landscapeStyleEl.textContent = "@@media print { @@page { size: landscape; } }";
+                        document.head.appendChild(landscapeStyleEl);
+                    } else {
+                        wrapper.classList.add("print-mode-1");
+                    }
 
-                        // ✅ املأ القيم داخل الطباعة
-                        setPrintText("piPrintSupplier", supplierName);
-                        setPrintText("piPrintInvoiceDate", invoiceDate);
-
-
-                    // ✅ اطبع مرة واحدة
                     setTimeout(() => window.print(), 50);
+                }
+
+                document.querySelectorAll('[data-print-mode]').forEach(item => {
+                    item.addEventListener("click", function (e) {
+                        e.preventDefault();
+                        const mode = parseInt(this.getAttribute("data-print-mode") || "1", 10);
+                        doPrint(mode);
+                    });
                 });
 
-                // بعد إغلاق نافذة الطباعة
                 window.addEventListener("afterprint", function () {
                     printing = false;
+                    if (landscapeStyleEl && landscapeStyleEl.parentNode) {
+                        landscapeStyleEl.remove();
+                        landscapeStyleEl = null;
+                    }
+                    const wrapper = document.getElementById("piPrintWrapper");
+                    if (wrapper) {
+                        wrapper.classList.remove("print-mode-2", "print-mode-3");
+                        wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
+                    }
                 });
             });
 

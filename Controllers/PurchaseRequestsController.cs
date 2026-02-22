@@ -411,6 +411,7 @@ private async Task PopulateDropDownsAsync(
         // =========================================================
         var customers = await _context.Customers
             .AsNoTracking()
+            .Where(c => c.IsActive == true)
             .Include(c => c.Governorate)
             .Include(c => c.District)
             .Include(c => c.Area)

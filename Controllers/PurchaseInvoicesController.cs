@@ -330,6 +330,7 @@ namespace ERP.Controllers
             // 1) تحميل كل العملاء/الموردين من جدول Customers
             var customers = await _context.Customers
                 .AsNoTracking()
+                .Where(c => c.IsActive == true)
                 .Include(c => c.Governorate)
                 .Include(c => c.District)
                 .Include(c => c.Area)

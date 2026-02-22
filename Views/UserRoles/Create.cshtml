@@ -1,4 +1,4 @@
-﻿@model ERP.Models.UserRole     
+@model ERP.Models.UserRole     
                                                 @* موديل ربط المستخدم بالأدوار *@
 
 @{
@@ -50,9 +50,13 @@
                        class="form-check-input ms-2"
                        id="IsPrimary" />
                 <label asp-for="IsPrimary"
-                       class="form-check-label">
-                    @* اسم الخاصية من الموديل *@
+                       class="form-check-label"
+                       title="عندما يكون للمستخدم أكثر من دور، الدور الافتراضي يُستخدم لتحديد الصلاحيات الأساسية أو العرض الافتراضي">
+                    دور افتراضي؟
                 </label>
+                <div class="form-text small text-muted">
+                    عندما يكون للمستخدم أكثر من دور، يُستخدم الدور الافتراضي كأساس عند الالتباس.
+                </div>
             </div>
 
             @* ✅ هنا هنظهر تفاصيل صلاحيات الدور المختار *@
@@ -94,39 +98,133 @@
     }
 
     <script>
-        // متغير: رابط الأكشن الذي يعيد بارشيال صلاحيات الدور
-        const rolePermsUrl = '@Url.Action("GetRolePermissionsPreview", "UserRoles")';
+        const rolePermsUrl = '@Url.Action("GetRolePermissionsEditable", "UserRoles")';
 
         document.addEventListener("DOMContentLoaded", function () {
-            // متغير: كومبو اختيار الدور
             const roleSelect = document.getElementById("RoleId");
-            // متغير: الصندوق الذي سيحتوي جدول الصلاحيات
             const box = document.getElementById("role-permissions-box");
-
             if (!roleSelect || !box) return;
 
-            // حدث تغيير الدور
-            roleSelect.addEventListener("change", function () {
-                const roleId = this.value;
-
-                // لو لم يتم اختيار دور → نص افتراضي
+            function loadPermissions() {
+                const roleId = roleSelect.value;
                 if (!roleId) {
-                    box.innerHTML = "اختر دوراً من القائمة بالأعلى لعرض صلاحياته هنا.";
+                    box.innerHTML = "اختر دوراً من القائمة لعرض صلاحياته وتعديلها.";
                     return;
                 }
-
-                // استدعاء الأكشن بالـ fetch لجلب البارشيال
                 fetch(rolePermsUrl + "?roleId=" + roleId)
                     .then(r => r.text())
                     .then(html => {
-                        // وضع HTML العائد داخل الصندوق
                         box.innerHTML = html;
+                        initPermTable();
                     })
                     .catch(err => {
                         console.error(err);
-                        box.innerHTML = "حدث خطأ أثناء تحميل صلاحيات هذا الدور.";
+                        box.innerHTML = "حدث خطأ أثناء تحميل الصلاحيات.";
                     });
-            });
+            }
+
+            function initPermTable() {
+                const searchInput = document.getElementById("permSearchInput");
+                const chkAll = document.getElementById("chkAllPerms");
+                const rows = box.querySelectorAll("#permEditableTable tbody tr");
+
+                if (searchInput) {
+                    searchInput.value = "";
+                    searchInput.oninput = filterRows;
+                }
+                function filterRows() {
+                    const term = (searchInput?.value || "").trim().toLowerCase();
+                    rows.forEach(tr => {
+                        const isChild = tr.classList.contains("perm-child-row");
+                        const search = (tr.dataset.search || "").toLowerCase();
+                        const matchSearch = !term || search.includes(term);
+                        if (isChild) {
+                            const parent = tr.dataset.parent ? box.querySelector("#" + tr.dataset.parent) : null;
+                            const parentCollapsed = parent?.classList.contains("perm-collapsed");
+                            const parentMatches = parent && (parent.dataset.search || "").toLowerCase().includes(term);
+                            if (term && parentMatches && parentCollapsed) {
+                                parent.classList.remove("perm-collapsed");
+                                parent.querySelector(".perm-expand").textContent = "−";
+                                parent.querySelector(".perm-expand").title = "إغلاق الشجرة";
+                            }
+                            const show = (matchSearch || parentMatches) && !parent?.classList.contains("perm-collapsed");
+                            tr.style.display = show ? "" : "none";
+                        } else {
+                            const children = box.querySelectorAll(`tr.perm-child-row[data-parent="${tr.id}"]`);
+                            const anyChildMatches = !term || Array.from(children).some(ch => (ch.dataset.search || "").toLowerCase().includes(term));
+                            tr.style.display = (matchSearch || anyChildMatches) ? "" : "none";
+                        }
+                    });
+                }
+
+                box.querySelectorAll(".perm-expand").forEach(btn => {
+                    btn.onclick = function () {
+                        const modRow = this.closest("tr");
+                        const modId = modRow?.id;
+                        const collapsed = modRow?.classList.toggle("perm-collapsed");
+                        const children = modId ? box.querySelectorAll(`tr[data-parent="${modId}"]`) : [];
+                        children.forEach(ch => { ch.style.display = collapsed ? "none" : ""; });
+                        this.textContent = collapsed ? "+" : "−";
+                        this.title = collapsed ? "فتح الشجرة" : "إغلاق الشجرة";
+                    };
+                });
+
+                box.querySelectorAll(".perm-module-cb").forEach(cb => {
+                    cb.onchange = function () {
+                        const mod = this.dataset.module;
+                        const children = box.querySelectorAll(`tr.perm-child-row[data-module="${mod}"]`);
+                        children.forEach(tr => {
+                            const chCb = tr.querySelector(".perm-cb");
+                            if (chCb) { chCb.checked = this.checked; updateStatus(chCb); }
+                        });
+                        updateModuleStatus(this.closest("tr"));
+                    };
+                });
+
+                if (chkAll) {
+                    chkAll.onchange = function () {
+                        box.querySelectorAll(".perm-cb").forEach(cb => {
+                            if (cb.closest("tr")?.style.display !== "none") {
+                                cb.checked = chkAll.checked;
+                                updateStatus(cb);
+                            }
+                        });
+                        box.querySelectorAll(".perm-module-row").forEach(modRow => {
+                            if (modRow.style.display !== "none") updateModuleStatus(modRow);
+                        });
+                    };
+                }
+                box.querySelectorAll(".perm-cb").forEach(cb => {
+                    cb.onchange = function () {
+                        updateStatus(this);
+                        const modRow = this.closest("tbody")?.querySelector(`tr.perm-module-row[data-module="${this.closest("tr")?.dataset.module}"]`);
+                        if (modRow) updateModuleStatus(modRow);
+                    };
+                });
+            }
+
+            function updateModuleStatus(modRow) {
+                if (!modRow) return;
+                const modId = modRow.id;
+                const children = box.querySelectorAll(`tr.perm-child-row[data-parent="${modId}"] .perm-cb`);
+                const allChecked = children.length > 0 && Array.from(children).every(c => c.checked);
+                const modCb = modRow.querySelector(".perm-module-cb");
+                const span = modRow.querySelector(".perm-module-status");
+                if (modCb) modCb.checked = allChecked;
+                if (span) { span.textContent = allChecked ? "✔" : "✖"; span.className = "perm-module-status " + (allChecked ? "text-success" : "text-danger"); }
+            }
+
+            function updateStatus(cb) {
+                const tr = cb.closest("tr");
+                if (!tr) return;
+                const span = tr.querySelector(".perm-status");
+                if (span) {
+                    span.textContent = cb.checked ? "✔" : "✖";
+                    span.className = "perm-status " + (cb.checked ? "text-success" : "text-danger");
+                }
+            }
+
+            roleSelect.addEventListener("change", loadPermissions);
         });
     </script>
 }

@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Customer
+@model ERP.Models.Customer
 
 @{
     ViewData["Title"] = "تعديل بيانات عميل";
@@ -178,9 +178,9 @@
                 <span asp-validation-for="CreditLimit" class="text-danger"></span>
             </div>
             <div class="col-md-4 mb-3">
-                <div class="form-check mt-4">
-                    <input asp-for="IsActive" class="form-check-input" />
-                    <label asp-for="IsActive" class="form-check-label"></label>
+                <div class="form-check mt-4" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: nowrap;">
+                    <label asp-for="IsActive" class="form-check-label mb-0" for="IsActive" style="order: 1;">نشط؟</label>
+                    <input asp-for="IsActive" class="form-check-input flex-shrink-0" id="IsActive" style="order: 2;" />
                 </div>
             </div>
             <div class="col-md-4 mb-3">

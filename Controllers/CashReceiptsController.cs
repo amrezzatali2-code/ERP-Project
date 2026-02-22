@@ -49,6 +49,7 @@ namespace ERP.Controllers
             // قائمة العملاء / الأطراف مع AccountId في data attribute
             var customers = await _context.Customers
                 .AsNoTracking()
+                .Where(c => c.IsActive == true)
                 .Include(c => c.Account)
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
@@ -115,6 +116,7 @@ namespace ERP.Controllers
             ViewData["CustomerId"] = new SelectList(
                 _context.Customers
                         .AsNoTracking()
+                        .Where(c => c.IsActive == true)
                         .OrderBy(c => c.CustomerName),
                 "CustomerId",
                 "CustomerName",
@@ -442,6 +444,13 @@ namespace ERP.Controllers
             if (cashReceipt.Amount <= 0)
             {
                 ModelState.AddModelError(nameof(CashReceipt.Amount), "يجب إدخال مبلغ أكبر من الصفر.");
+            }
+
+            if (cashReceipt.CustomerId.HasValue && cashReceipt.CustomerId.Value > 0)
+            {
+                var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == cashReceipt.CustomerId.Value);
+                if (cust != null && !cust.IsActive)
+                    ModelState.AddModelError(nameof(CashReceipt.CustomerId), "لا يمكن التعامل مع عميل غير نشط. يرجى تفعيل العميل أولاً.");
             }
             
             if (ModelState.IsValid)

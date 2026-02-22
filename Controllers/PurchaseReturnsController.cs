@@ -44,6 +44,7 @@ namespace ERP.Controllers
             // قائمة الموردين للأوتوكومبليت (datalist)
             // هنستخدم نفس الأسماء اللى في الـ View: Id, Name, UserName, Phone, Address
             ViewBag.Customers = await _context.Customers
+                .Where(c => c.IsActive == true)
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
                 {

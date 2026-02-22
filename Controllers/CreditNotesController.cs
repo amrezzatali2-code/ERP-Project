@@ -48,6 +48,7 @@ namespace ERP.Controllers
             ViewData["CustomerId"] = new SelectList(
                 _context.Customers
                         .AsNoTracking()
+                        .Where(c => c.IsActive == true)
                         .OrderBy(c => c.CustomerName),
                 "CustomerId",
                 "CustomerName",

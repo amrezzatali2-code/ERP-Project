@@ -39,7 +39,7 @@ namespace ERP.Controllers
         private void PopulateLookups(int? customerId = null, int? accountId = null, int? offsetAccountId = null)
         {
             ViewData["CustomerId"] = new SelectList(
-                _context.Customers.AsNoTracking().OrderBy(c => c.CustomerName),
+                _context.Customers.AsNoTracking().Where(c => c.IsActive == true).OrderBy(c => c.CustomerName),
                 "CustomerId", "CustomerName", customerId);
             ViewData["AccountId"] = new SelectList(
                 _context.Accounts.AsNoTracking().OrderBy(a => a.AccountName),
