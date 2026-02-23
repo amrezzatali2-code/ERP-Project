@@ -68,32 +68,65 @@ namespace ERP.Controllers
                     q = q.Where(x => x.CreatedAt <= toDate.Value);
             }
 
-            // 4) الحقول النصية للبحث
+            // 4) بحث مخصص لحقول التاريخ والحالة (قبل ApplySearchSort)
+            string? searchForSort = search;
+            string? searchByForSort = searchBy;
+            if (!string.IsNullOrWhiteSpace(search) && !string.IsNullOrWhiteSpace(searchBy))
+            {
+                var sb = searchBy.Trim().ToLowerInvariant();
+                var text = search!.Trim();
+
+                if (sb == "active")
+                {
+                    if (text.Contains("نعم") || text.Contains("yes") || text.Equals("1", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => x.IsActive);
+                    else if (text.Contains("لا") || text.Contains("no") || text.Equals("0", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => !x.IsActive);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "created" && DateTime.TryParse(text, out var dtCreated))
+                {
+                    q = q.Where(x => x.CreatedAt.Date == dtCreated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "updated" && DateTime.TryParse(text, out var dtUpdated))
+                {
+                    q = q.Where(x => x.UpdatedAt != null && x.UpdatedAt.Value.Date == dtUpdated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+            }
+
+            // 5) الحقول النصية للبحث (active للبحث في الكل فقط؛ البحث المخصص أعلاه يتولى searchBy=active)
             var stringFields = new Dictionary<string, Expression<Func<Policy, string?>>>
             {
-                ["name"] = x => x.Name!,          // اسم السياسة
-                ["description"] = x => x.Description!    // الوصف
+                ["name"] = x => x.Name!,
+                ["description"] = x => x.Description ?? string.Empty,
+                ["active"] = x => x.IsActive ? "نعم" : "لا"
             };
 
-            // 5) الحقول الرقمية للبحث
+            // 6) الحقول الرقمية للبحث
             var intFields = new Dictionary<string, Expression<Func<Policy, int>>>
             {
-                ["id"] = x => x.PolicyId                 // كود السياسة
+                ["id"] = x => x.PolicyId
             };
 
-            // 6) حقول الترتيب — نفس أسماء الأعمدة في الواجهة
+            // 7) حقول الترتيب — كل أعمدة الجدول
             var orderFields = new Dictionary<string, Expression<Func<Policy, object>>>
             {
                 ["id"] = x => x.PolicyId,
                 ["name"] = x => x.Name!,
+                ["description"] = x => x.Description ?? string.Empty,
+                ["active"] = x => x.IsActive,
                 ["created"] = x => x.CreatedAt,
-                ["updated"] = x => x.UpdatedAt ?? x.CreatedAt,
-                ["active"] = x => x.IsActive
+                ["updated"] = x => x.UpdatedAt ?? x.CreatedAt
             };
 
-            // 7) تطبيق البحث + الترتيب عن طريق الإكستنشن الموحّد
+            // 8) تطبيق البحث + الترتيب عن طريق الإكستنشن الموحّد
             q = q.ApplySearchSort(
-                search, searchBy,
+                searchForSort, searchByForSort,
                 sort, dir,
                 stringFields, intFields, orderFields,
                 defaultSearchBy: "name",

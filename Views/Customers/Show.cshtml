@@ -45,10 +45,9 @@
 }
 
 <style>
-    /* تحسينات التصميم لشاشة بدون سكرول */
+    /* تحسينات التصميم: استغلال المساحة وتصميم موحد */
     .customer-dashboard {
-        max-height: calc(100vh - 120px);
-        overflow: hidden;
+        min-height: calc(100vh - 120px);
         display: flex;
         flex-direction: column;
     }
@@ -60,8 +59,9 @@
     
     .dashboard-content {
         flex: 1;
-        overflow-y: auto;
-        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
     }
     
     .compact-card {
@@ -104,16 +104,93 @@
         padding: 0.25rem 0.5rem;
     }
 
-    /* بطاقات الملخص: صف واحد، الرصيد الحالي في المنتصف، يبدأ من اليمين */
+    /* أزرار حجم التعامل: خلفية بيضاء وحدود ملونة لكل الأزرار */
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn {
+        background-color: #fff !important;
+        border-width: 1.5px !important;
+        border-style: solid !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-primary {
+        color: #0d6efd !important;
+        border-color: #0d6efd !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-primary:hover {
+        background-color: #0d6efd !important;
+        color: #fff !important;
+        border-color: #0d6efd !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-secondary {
+        color: #6c757d !important;
+        border-color: #6c757d !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-secondary:hover {
+        background-color: #6c757d !important;
+        color: #fff !important;
+        border-color: #6c757d !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-success {
+        color: #198754 !important;
+        border-color: #198754 !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-success:hover {
+        background-color: #198754 !important;
+        color: #fff !important;
+        border-color: #198754 !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-danger {
+        color: #dc3545 !important;
+        border-color: #dc3545 !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-danger:hover {
+        background-color: #dc3545 !important;
+        color: #fff !important;
+        border-color: #dc3545 !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-warning {
+        color: #ffc107 !important;
+        border-color: #ffc107 !important;
+    }
+    .customer-dashboard .erp-list-filter-bar .customer-volume-btn.btn-outline-warning:hover {
+        background-color: #ffc107 !important;
+        color: #000 !important;
+        border-color: #ffc107 !important;
+    }
+
+    /* بطاقات الملخص: في منتصف الشاشة، كلها نفس المقاس */
     .customer-summary-cards {
         display: flex;
         flex-wrap: nowrap;
         justify-content: center;
         align-items: stretch;
         direction: rtl;
+        gap: 0.5rem;
     }
     .customer-summary-cards .customer-stat-card {
-        flex: 0 0 auto;
+        flex: 0 0 130px;
+        min-width: 130px;
+        max-width: 130px;
+    }
+    .customer-summary-cards .customer-stat-card .card {
+        width: 100%;
+        min-width: 130px;
+    }
+    .customer-summary-cards .compact-label { font-size: 0.75rem !important; }
+    .customer-summary-cards .compact-stat { font-size: 1.05rem !important; }
+
+    /* بطاقة الرصيد الحالي: حدود مميزة وأرقام واضحة */
+    .customer-balance-card {
+        border: 2px solid #0d6efd !important;
+        box-shadow: 0 2px 8px rgba(13, 110, 253, 0.25) !important;
+        background: linear-gradient(to bottom, #f8fafc 0%, #fff 100%) !important;
+    }
+    .customer-balance-value {
+        font-size: 1.15rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.02em;
+    }
+    .customer-balance-label {
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
     }
     
     /* ✅ إصلاح عرض التبويبات مع Flexbox */
@@ -153,57 +230,61 @@
 <div class="container-fluid customer-dashboard" dir="rtl">
 
     @* =====================================================
-       1) شريط اختيار العميل + فترة التاريخ (مدمج ومضغوط)
+       1) شريط اختيار العميل + فترة التاريخ (تصميم موحد مثل Index)
        ===================================================== *@
     <div class="dashboard-header">
-        <div class="card compact-card shadow-sm mb-2">
-            <div class="card-body p-2">
-                <form id="customerSearchForm"
-                      method="get"
-                      asp-action="Show"
-                      asp-controller="Customers"
-                      class="row g-2 align-items-end">
+        <div class="erp-list-filter-bar d-print-none mt-2">
+            <form id="customerSearchForm"
+                  method="get"
+                  asp-action="Show"
+                  asp-controller="Customers"
+                  class="row g-3 align-items-end">
 
-                    <input type="hidden" id="partySearchId" name="id" />
+                <input type="hidden" id="partySearchId" name="id" />
 
-                    <div class="col-lg-4 col-md-4">
-                        <label class="form-label compact-label mb-1">بحث بالكود أو الاسم</label>
-                        <div class="position-relative">
-                            <input id="partySearchInput"
-                                   type="text"
-                                   class="form-control form-control-sm"
-                                   placeholder="اكتب جزء من اسم العميل أو الكود..." />
-                            <div id="partySuggestions"
-                                 class="list-group position-absolute w-100 shadow-sm"
-                                 style="z-index: 1050; max-height: 200px; overflow-y: auto; display: none;">
-                            </div>
+                <div class="col-12 col-lg-4 erp-filter-section">
+                    <label class="form-label">بحث بالكود أو الاسم</label>
+                    <div class="position-relative">
+                        <input id="partySearchInput"
+                               type="text"
+                               class="form-control erp-filter-input"
+                               placeholder="اكتب جزء من اسم العميل أو الكود..." />
+                        <div id="partySuggestions"
+                             class="list-group position-absolute w-100 shadow-sm"
+                             style="z-index: 1050; max-height: 200px; overflow-y: auto; display: none;">
                         </div>
                     </div>
+                </div>
 
-                    <div class="col-lg-2 col-md-3">
-                        <label class="form-label compact-label mb-1">من تاريخ</label>
-                        <input type="date"
-                               name="fromDate"
-                               class="form-control form-control-sm"
-                               value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                    </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date"
+                           name="fromDate"
+                           dir="ltr"
+                           class="form-control erp-filter-input"
+                           placeholder="yyyy-mm-dd"
+                           title="سنة-شهر-يوم (مثال: 2026-02-21)"
+                           value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
 
-                    <div class="col-lg-2 col-md-3">
-                        <label class="form-label compact-label mb-1">إلى تاريخ</label>
-                        <input type="date"
-                               name="toDate"
-                               class="form-control form-control-sm"
-                               value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                    </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date"
+                           name="toDate"
+                           dir="ltr"
+                           class="form-control erp-filter-input"
+                           placeholder="yyyy-mm-dd"
+                           title="سنة-شهر-يوم (مثال: 2026-02-21)"
+                           value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
 
-                    <div class="col-lg-2 col-md-2">
-                        <label class="form-label compact-label mb-1 d-none d-md-block">&nbsp;</label>
-                        <button type="submit" class="btn btn-primary btn-sm w-100">
-                            عرض
-                        </button>
-                    </div>
-                </form>
-            </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label d-none d-md-block" style="visibility:hidden">عرض</label>
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm w-100">
+                        عرض
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -225,7 +306,7 @@
 
         if (currentBalance > 0)
         {
-            balanceText = "مدين (مطلوب سداده لنا)";
+            balanceText = "مدين";
             balanceCss = "text-danger";
         }
         else if (currentBalance < 0)
@@ -235,72 +316,53 @@
         }
         else
         {
-            balanceText = "لا توجد مديونية";
+            balanceText = "صفر";
             balanceCss = "text-muted";
         }
 
     <div class="dashboard-content">
         @* =====================================================
-           3) معلومات العميل الأساسية (مدمجة في صف واحد)
+           3) الاسم والأزرار فقط — الاسم أكبر، الأزرار في سطر واحد
            ===================================================== *@
-        <div class="card compact-card shadow-sm mb-2">
-            <div class="card-body p-2">
-                <div class="row g-2 align-items-center">
-                    <div class="col-lg-3 col-md-4">
-                        <h5 class="mb-0 customer-info-compact">@Model.CustomerName</h5>
-                        <small class="text-muted">كود: @Model.CustomerId | @(Model.PartyCategory ?? "غير محدد")</small>
-                    </div>
-                    <div class="col-lg-3 col-md-4 customer-info-compact">
-                        <div><strong>هاتف:</strong> @(string.IsNullOrWhiteSpace(Model.Phone1) ? "-" : Model.Phone1)</div>
-                        <div><strong>عنوان:</strong> @(string.IsNullOrWhiteSpace(Model.Address) ? "غير محدد" : (Model.Address.Length > 40 ? Model.Address.Substring(0, 40) + "..." : Model.Address))</div>
-                    </div>
-                    <div class="col-lg-3 col-md-4 customer-info-compact">
-                        <div><strong>حساب:</strong> @(Model.Account != null ? $"{Model.Account.AccountCode} - {Model.Account.AccountName}" : "بدون ربط")</div>
-                        <div><strong>آخر تعديل:</strong> @Model.UpdatedAt.ToString("yyyy/MM/dd HH:mm")</div>
-                    </div>
-                    <div class="col-lg-3 col-md-12">
-                        <div class="d-flex flex-wrap gap-1">
-                            <a asp-action="Edit" asp-route-id="@Model.CustomerId" 
-                               class="btn btn-outline-secondary btn-sm action-btn-compact app-menu-link"
-                               data-tab-id="customer-edit-tab"
-                               data-tab-title="تعديل عميل">✏️ تعديل</a>
-                            <a asp-controller="CashReceipts" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
-                               class="btn btn-success btn-sm action-btn-compact app-menu-link"
-                               data-tab-id="cash-receipt-create-tab"
-                               data-tab-title="إضافة إذن استلام نقدية">💰 استلام</a>
-                            <a asp-controller="CashPayments" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
-                               class="btn btn-danger btn-sm action-btn-compact app-menu-link"
-                               data-tab-id="cash-payment-create-tab"
-                               data-tab-title="إضافة إذن دفع نقدية">💸 دفع</a>
-                            <a asp-controller="CustomerLedger" asp-action="Index" asp-route-customerId="@Model.CustomerId" class="btn btn-outline-info btn-sm action-btn-compact">📊 كشف حساب</a>
-                            <a asp-controller="DebitNotes" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
-                               class="btn btn-outline-warning btn-sm action-btn-compact app-menu-link"
-                               data-tab-id="debit-note-create-tab"
-                               data-tab-title="إشعار خصم">% خصم</a>
-                            <a asp-controller="CreditNotes" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
-                               class="btn btn-outline-success btn-sm action-btn-compact app-menu-link"
-                               data-tab-id="credit-note-create-tab"
-                               data-tab-title="إشعار إضافة">+ إضافة</a>
-                        </div>
-                    </div>
+        <div class="erp-list-filter-bar mb-2">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                <h4 class="mb-0 fw-bold" style="font-size: 1.4rem;">@Model.CustomerName</h4>
+                <div class="d-flex flex-wrap gap-2 flex-nowrap">
+                    <a asp-controller="CustomerLedger" asp-action="Index" asp-route-customerId="@Model.CustomerId" 
+                       class="btn btn-erp btn-outline-primary btn-erp-sm app-menu-link customer-volume-btn"
+                       data-tab-id="customer-ledger-tab"
+                       data-tab-title="كشف حساب عميل">📊 كشف حساب</a>
+                    <a asp-action="Edit" asp-route-id="@Model.CustomerId" 
+                       class="btn btn-erp btn-outline-secondary btn-erp-sm app-menu-link customer-volume-btn"
+                       data-tab-id="customer-edit-tab"
+                       data-tab-title="تعديل عميل">✏️ تعديل</a>
+                    <a asp-controller="CashReceipts" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                       class="btn btn-erp btn-outline-success btn-erp-sm app-menu-link customer-volume-btn"
+                       data-tab-id="cash-receipt-create-tab"
+                       data-tab-title="إضافة إذن استلام نقدية">💰 استلام</a>
+                    <a asp-controller="CashPayments" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                       class="btn btn-erp btn-outline-danger btn-erp-sm app-menu-link customer-volume-btn"
+                       data-tab-id="cash-payment-create-tab"
+                       data-tab-title="إضافة إذن دفع نقدية">💸 دفع</a>
+                    <a asp-controller="DebitNotes" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                       class="btn btn-erp btn-outline-warning btn-erp-sm app-menu-link customer-volume-btn"
+                       data-tab-id="debit-note-create-tab"
+                       data-tab-title="إشعار خصم">اشعار خصم</a>
+                    <a asp-controller="CreditNotes" asp-action="Create" asp-route-customerId="@Model.CustomerId" 
+                       class="btn btn-erp btn-outline-success btn-erp-sm app-menu-link customer-volume-btn"
+                       data-tab-id="credit-note-create-tab"
+                       data-tab-title="إشعار إضافة">اشعار اضافة</a>
                 </div>
             </div>
         </div>
 
         @* =====================================================
-           4) بطاقات الملخص الإجمالية (صف واحد، الرصيد الحالي في المنتصف)
+           4) بطاقات الملخص: المبيعات أولاً من اليمين، الرصيد الحالي في المنتصف بنفس الحجم
+           ترتيب RTL: أول عنصر في HTML = أقصى اليمين
            ===================================================== *@
         <div class="row g-1 mb-2 flex-nowrap customer-summary-cards" style="overflow-x: auto;">
             <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm" style="min-width: 85px;">
-                    <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">عدد الفواتير</div>
-                        <div class="compact-stat" style="font-size: 0.95rem;">@invoiceCount</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
                      onclick="window.location.href='@Url.Action("Index", "SalesInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">المبيعات</div>
@@ -309,7 +371,7 @@
                 </div>
             </div>
             <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
                      onclick="window.location.href='@Url.Action("Index", "PurchaseInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">المشتريات</div>
@@ -318,7 +380,7 @@
                 </div>
             </div>
             <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
                      onclick="window.location.href='@Url.Action("Index", "SalesReturns", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات البيع</div>
@@ -327,7 +389,7 @@
                 </div>
             </div>
             <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="min-width: 85px; cursor: pointer;"
+                <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
                      onclick="window.location.href='@Url.Action("Index", "PurchaseReturns", new { searchBy = "customerId", search = Model.CustomerId.ToString() })'">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">مرتجعات الشراء</div>
@@ -335,17 +397,25 @@
                     </div>
                 </div>
             </div>
-            <div class="col-auto customer-stat-card" style="flex: 0 0 auto;">
-                <div class="card compact-card text-center shadow-sm" style="min-width: 85px; border: 3px solid #ff9800 !important; box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3) !important;">
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm customer-balance-card">
                     <div class="card-body p-1">
-                        <div class="compact-label text-muted" style="font-size: 0.65rem;">الرصيد الحالي</div>
-                        <div class="compact-stat @balanceCss" style="font-size: 0.95rem;">@currentBalance.ToString("N2")</div>
-                        <small class="@balanceCss" style="font-size: 0.6rem;">@balanceText</small>
+                        <div class="compact-label text-muted">الرصيد الحالي</div>
+                        <div class="compact-stat fw-bold @balanceCss customer-balance-value">@currentBalance.ToString("N2")</div>
+                        <small class="@balanceCss fw-semibold customer-balance-label">@balanceText</small>
                     </div>
                 </div>
             </div>
             <div class="col-auto customer-stat-card">
-                <div class="card compact-card text-center shadow-sm" style="min-width: 85px;">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">عدد الفواتير</div>
+                        <div class="compact-stat" style="font-size: 0.95rem;">@invoiceCount</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">آخر عملية</div>
                         <div class="compact-stat" style="font-size: 0.85rem;">@(lastTransDate?.ToString("yyyy/MM/dd") ?? "-")</div>
@@ -355,12 +425,12 @@
         </div>
 
         @* =====================================================
-           5) التبويبات والجداول (مدمجة ومضغوطة)
+           5) التبويبات والجداول — استغلال المساحة، التبويبات تبدأ من اليمين
            ===================================================== *@
-        <div class="card compact-card shadow-sm mb-2" style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
-            <div class="card-header p-2" style="flex-shrink: 0;">
-                <div class="d-flex justify-content-end align-items-center" style="direction: rtl;">
-                    <div style="overflow-x: auto; white-space: nowrap;">
+        <div class="erp-list-filter-bar mb-2 flex-grow-1 d-flex flex-column" style="min-height: 280px;">
+            <div class="p-2 w-100" style="flex-shrink: 0;">
+                <div class="d-flex justify-content-start align-items-center w-100" style="direction: rtl;">
+                    <div class="overflow-x-auto" style="white-space: nowrap; max-width: 100%;">
                         <ul class="nav nav-pills nav-sm flex-nowrap" id="customerMovementTabs" role="tablist" style="direction: rtl;">
                             <li class="nav-item"><button class="nav-link active nav-tabs-compact" id="tab-sales-link" data-bs-toggle="tab" data-bs-target="#tab-sales">المبيعات</button></li>
                             <li class="nav-item"><button class="nav-link nav-tabs-compact" data-bs-toggle="tab" data-bs-target="#tab-salesReturns">مرتجعات البيع</button></li>
@@ -377,12 +447,12 @@
                 </div>
             </div>
 
-            <div class="card-body p-2" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0;">
+            <div class="p-2 flex-grow-1" style="overflow: hidden; display: flex; flex-direction: column; min-height: 0;">
                 <div class="tab-content h-100" id="customerMovementTabsContent" style="overflow: hidden; display: flex; flex-direction: column;">
                     @* --- تبويب: المبيعات (الافتراضي) --- *@
                     <div class="tab-pane fade h-100" id="tab-agg" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
-                            <table class="table table-sm table-striped table-compact table-hover mb-0">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact table-hover mb-0 w-100">
                                 <thead class="table-light sticky-top">
                                     <tr>
                                         <th>التاريخ</th>
@@ -407,8 +477,8 @@
 
                     @* --- باقي التبويبات (بنفس التصميم المضغوط) --- *@
                     <div class="tab-pane fade show active h-100" id="tab-sales" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
-                            <table class="table table-sm table-striped table-compact mb-0">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
+                            <table class="table table-sm table-striped table-compact mb-0 w-100">
                                 <thead class="table-light sticky-top">
                                     <tr>
                                         <th>رقم الفاتورة</th>
@@ -455,7 +525,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-salesReturns" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -499,7 +569,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-purchases" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -543,7 +613,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-purchaseReturns" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -587,7 +657,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-orders" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -606,7 +676,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-receipts" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -648,7 +718,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-payments" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -690,7 +760,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-debitNotes" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -731,7 +801,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-creditNotes" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>
@@ -772,7 +842,7 @@
                     </div>
 
                     <div class="tab-pane fade h-100" id="tab-settlements" role="tabpanel" style="display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
-                        <div class="table-responsive" style="flex: 1; overflow-y: auto; min-height: 0;">
+                        <div class="table-responsive w-100" style="flex: 1; overflow-y: auto; min-height: 0;">
                             <table class="table table-sm table-striped table-compact mb-0">
                                 <thead class="table-light sticky-top">
                                     <tr>

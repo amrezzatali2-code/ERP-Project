@@ -67,6 +67,8 @@ namespace ERP.Controllers
       string? numField = null,           // متغير: حقل الرقم (id | price)
       decimal? fromNum = null,           // متغير: رقم من
       decimal? toNum = null,             // متغير: رقم إلى
+      int? codeFrom = null,              // متغير: توافق مع الواجهة (يُستخدم كـ fromNum عند numField=id)
+      int? codeTo = null,                // متغير: توافق مع الواجهة (يُستخدم كـ toNum عند numField=id)
 
       // ✅ فلاتر متراكبة جديدة
       int? filterProductGroupId = null,  // متغير: فلتر حسب مجموعة الصنف (ProductGroup)
@@ -271,6 +273,10 @@ namespace ERP.Controllers
             // =========================================================
             var nf = (numField ?? "").Trim().ToLowerInvariant(); // متغير: حقل الرقم
 
+            // توافق مع codeFrom/codeTo من الواجهة
+            if (!fromNum.HasValue && codeFrom.HasValue) { fromNum = codeFrom.Value; nf = string.IsNullOrEmpty(nf) ? "id" : nf; }
+            if (!toNum.HasValue && codeTo.HasValue) { toNum = codeTo.Value; nf = string.IsNullOrEmpty(nf) ? "id" : nf; }
+
             // لو من > إلى نبدّلهم
             if (fromNum.HasValue && toNum.HasValue && fromNum.Value > toNum.Value)
             {
@@ -340,11 +346,17 @@ namespace ERP.Controllers
                 "name" => desc ? q.OrderByDescending(p => p.ProdName) : q.OrderBy(p => p.ProdName),
                 "price" => desc ? q.OrderByDescending(p => p.PriceRetail) : q.OrderBy(p => p.PriceRetail),
                 "category" => desc ? q.OrderByDescending(p => p.ProductGroup!.Name) : q.OrderBy(p => p.ProductGroup!.Name),
+                "productgroup" => desc ? q.OrderByDescending(p => p.ProductGroup != null ? (p.ProductGroup.Name ?? "") : "") : q.OrderBy(p => p.ProductGroup != null ? (p.ProductGroup.Name ?? "") : ""),
+                "bonusgroup" => desc ? q.OrderByDescending(p => p.ProductBonusGroup != null ? (p.ProductBonusGroup.Name ?? "") : "") : q.OrderBy(p => p.ProductBonusGroup != null ? (p.ProductBonusGroup.Name ?? "") : ""),
                 "comp" => desc ? q.OrderByDescending(p => p.Company) : q.OrderBy(p => p.Company),
                 "created" => desc ? q.OrderByDescending(p => p.CreatedAt) : q.OrderBy(p => p.CreatedAt),
-                "updated" => desc ? q.OrderByDescending(p => p.UpdatedAt) : q.OrderBy(p => p.UpdatedAt),
+                "updated" or "modified" => desc ? q.OrderByDescending(p => p.UpdatedAt) : q.OrderBy(p => p.UpdatedAt),
                 "imported" => desc ? q.OrderByDescending(p => p.Imported) : q.OrderBy(p => p.Imported),
-                "active" => desc ? q.OrderByDescending(p => p.IsActive) : q.OrderBy(p => p.IsActive),
+                "active" or "isactive" => desc ? q.OrderByDescending(p => p.IsActive) : q.OrderBy(p => p.IsActive),
+                "hasquota" => desc ? q.OrderByDescending(p => p.HasQuota) : q.OrderBy(p => p.HasQuota),
+                "quotaquantity" => desc ? q.OrderByDescending(p => p.QuotaQuantity ?? 0) : q.OrderBy(p => p.QuotaQuantity ?? 0),
+                "lastprice" => desc ? q.OrderByDescending(p => p.LastPriceChangeDate) : q.OrderBy(p => p.LastPriceChangeDate),
+                "descshort" => desc ? q.OrderByDescending(p => p.Description) : q.OrderBy(p => p.Description),
                 _ => desc ? q.OrderByDescending(p => p.ProdName) : q.OrderBy(p => p.ProdName)
             };
 
@@ -379,6 +391,8 @@ namespace ERP.Controllers
             ViewBag.NumField = nf;
             ViewBag.FromNum = fromNum;
             ViewBag.ToNum = toNum;
+            ViewBag.CodeFrom = fromNum.HasValue && nf == "id" ? (int)fromNum.Value : (int?)null;
+            ViewBag.CodeTo = toNum.HasValue && nf == "id" ? (int)toNum.Value : (int?)null;
 
             // ✅ فلاتر متراكبة: تحميل قوائم للـ dropdowns
             var productGroups = await _db.ProductGroups
@@ -1295,8 +1309,14 @@ namespace ERP.Controllers
             ViewBag.YearlySummary = Array.Empty<object>();     // ملخص حسب السنوات
             ViewBag.WarehouseSummary = Array.Empty<object>();  // ملخص حسب المخازن
 
-            // ===== 5) تحميل قائمة الأصناف للأوتوكومبليت (datalist) - دائماً حتى يعمل datalist =====
+            // ===== 5) تحميل قائمة الأصناف للأوتوكومبليت (مثل حجم التعامل) =====
             await LoadProductsForAutoCompleteAsync();
+            var productsForJson = await _db.Products
+                .AsNoTracking()
+                .OrderBy(p => p.ProdName)
+                .Select(p => new { id = p.ProdId, code = p.ProdId.ToString(), name = p.ProdName ?? "" })
+                .ToListAsync();
+            ViewBag.ProductsJson = System.Text.Json.JsonSerializer.Serialize(productsForJson);
 
             // ===== 6) لو لسه ما اخترناش صنف → رجّع الشاشة من غير بيانات =====
             if (finalProdId == null)

@@ -225,7 +225,7 @@
                             </td>
 
                             <td data-col="id">@r.Id</td>
-                            <td data-col="user">@r.User?.UserName</td>
+                            <td data-col="user">@(r.User?.DisplayName ?? r.User?.UserName ?? "")</td>
                             <td data-col="action">@r.ActionType</td>
                             <td data-col="entity">@r.EntityName</td>
                             <td data-col="entityId">@r.EntityId</td>

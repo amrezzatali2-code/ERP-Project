@@ -113,7 +113,7 @@
             border-radius: 0;
         }
 
-        /* الكروت الرئيسية — radius مثل فاتورة المشتريات */
+        /* الكروت الرئيسية — شكل حجم التعامل: حدود خفيفة وظل ناعم */
         .invoice-header-card,
         .invoice-details-card,
         .invoice-lines-card,
@@ -122,6 +122,9 @@
         .invoice-product-card {
             border-radius: 1rem;
             overflow: hidden;
+            background: #ffffff !important;
+            border: 1px solid rgba(13, 110, 253, 0.12) !important;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
         }
 
 
@@ -149,13 +152,6 @@
             padding: 0.55rem 1rem;
         }
 
-        /* إخفاء حدود وظل كروت بيانات الصنف وإضافة صنف — الخط الملون يكفي */
-        .invoice-product-card,
-        .invoice-Add-card {
-            border: none !important;
-            box-shadow: none !important;
-        }
-
         /* صف إضافة الصنف — كل الحقول في صف واحد */
         .invoice-Add-card .row.flex-nowrap {
             flex-wrap: nowrap;
@@ -179,21 +175,60 @@
             max-width: 90px;
         }
 
-        /* جدول تشغيلات الصنف — أصغر وأكثر تنظيمًا */
+        /* جدول تشغيلات الصنف — شكل محسّن مثل حجم التعامل */
         .invoice-product-card .invoice-batch-table-wrap {
             max-width: 480px;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            border: 1px solid rgba(13, 110, 253, 0.15);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
         }
         .invoice-product-card .invoice-batch-table {
             font-size: 0.8rem;
+            margin-bottom: 0 !important;
         }
-        .invoice-product-card .invoice-batch-table th,
+        .invoice-product-card .invoice-batch-table thead th {
+            background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+            color: #374151;
+            font-weight: 600;
+            padding: 0.35rem 0.5rem;
+            border-bottom: 1px solid rgba(13, 110, 253, 0.2);
+        }
         .invoice-product-card .invoice-batch-table td {
-            padding: 0.25rem 0.35rem;
+            padding: 0.3rem 0.5rem;
+        }
+        .invoice-product-card .invoice-batch-table tbody tr:hover {
+            background-color: rgba(13, 110, 253, 0.04) !important;
+        }
+        .invoice-product-card .invoice-batch-table tbody tr.table-success {
+            background-color: #d1e7dd !important; /* لون الصف المحدد (FEFO) */
         }
 
         .invoice-status-badge {
             font-size: 0.8rem;
             padding: 0.3rem 0.7rem;
+        }
+
+        /* زر الإضافة — خلفية بيضاء وحدود زرقاء (مثل حجم التعامل) */
+        #btnAddInvoiceLine {
+            background-color: #fff !important;
+            color: #0d6efd !important;
+            border: 1.5px solid #0d6efd !important;
+        }
+        #btnAddInvoiceLine:hover {
+            background-color: #0d6efd !important;
+            color: #fff !important;
+        }
+
+        /* أزرار المسح داخل السطور — خلفية بيضاء وحدود حمراء */
+        .btnRemoveLineFromInvoice {
+            background-color: #fff !important;
+            color: #dc3545 !important;
+            border: 1.5px solid #dc3545 !important;
+        }
+        .btnRemoveLineFromInvoice:hover {
+            background-color: #dc3545 !important;
+            color: #fff !important;
         }
 
         .badge-status-draft {
@@ -671,6 +706,7 @@
                                                 {
                                                     <option value="@c.Name"
                                                             data-id="@c.Id"
+                                                            data-is-active="@(c.IsActive ? "1" : "0")"
                                                             data-phone="@c.Phone"
                                                             data-address="@c.Address"
                                                             data-gov="@c.Gov"
@@ -683,6 +719,7 @@
                                                 }
                                             }
                                         </datalist>
+                                        <div id="customerSuspendedMsg" class="small text-danger mt-1 d-none">⚠️ العميل موقوف — لا يمكن حفظ الفاتورة.</div>
                                     </div>
 
                                     <div class="col-lg-1 col-md-2">
@@ -1328,6 +1365,12 @@
                         if (policyIdBox)   policyIdBox.value   = '';
                         if (policyTextBox) policyTextBox.value = '';
 
+                        // إخفاء رسالة العميل الموقوف وتفعيل زر الحفظ
+                        const suspendedMsg = document.getElementById('customerSuspendedMsg');
+                        const saveBtn = document.getElementById('btnSaveInvoiceHeader');
+                        if (suspendedMsg) suspendedMsg.classList.add('d-none');
+                        if (saveBtn) saveBtn.disabled = false;
+
                         return;
                     }
 
@@ -1367,6 +1410,13 @@
             if (policyTextBox) {
                 policyTextBox.value = (policyName || '').trim(); // عرض اسم السياسة فقط
             }
+
+                    // ✅ العميل الموقوف: إظهار الرسالة ومنع الحفظ
+                    const isActive = (opt.getAttribute('data-is-active') || '1') === '1';
+                    const suspendedMsg = document.getElementById('customerSuspendedMsg');
+                    const saveBtn = document.getElementById('btnSaveInvoiceHeader');
+                    if (suspendedMsg) suspendedMsg.classList.toggle('d-none', isActive);
+                    if (saveBtn) saveBtn.disabled = !isActive;
 
                 }
 

@@ -1,4 +1,4 @@
-﻿@* Views/Policies/Index.cshtml — قائمة السياسات بنفس نموذج فواتير المبيعات *@
+@* Views/Policies/Index.cshtml — قائمة السياسات بنفس نموذج فواتير المبيعات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.Policy>
@@ -102,239 +102,109 @@
         </div>
     }
 
-    @* ===== الكارت العلوي: بحث + فلتر كود + أزرار التحكم ===== *@
-    <div class="card mb-3 d-print-none">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
+    @* ===== شريط الفلاتر الموحد: بحث + فلتر كود + أزرار التحكم (بنفس تصميم سجل الحركات) ===== *@
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
-                @* العمود الأول: البحث *@
-                <div class="col-lg-4">
-                    <form method="get"
-                          action="@Url.Action(action, controller)"
-                          class="row g-2 align-items-end">
-
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">بحث</label>
-                        </div>
-
-                        <div class="col-sm-4">
-                            <input type="text"
-                                   name="search"
-                                   class="form-control form-control-sm"
-                                   placeholder="اكتب نص البحث..."
-                                   value="@search" />
-                        </div>
-
-                        <div class="col-sm-4">
-                            <select name="searchBy"
-                                    class="form-select form-select-sm">
-                                <option value="name"
-                                       @Html.Raw(searchBy == "name" ? " selected" : "")>
-                                    اسم السياسة
-                                </option>
-                                <option value="id"
-                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
-                                    كود السياسة
-                                </option>
-                                <option value="description"
-                                       @Html.Raw(searchBy == "description" ? " selected" : "")>
-                                    الوصف
-                                </option>
-                            </select>
-                        </div>
-
-                        @* الحفاظ على باقي الفلاتر *@
-                        <input type="hidden" name="sort" value="@sort" />
-                        <input type="hidden" name="dir" value="@dir" />
-                        <input type="hidden" name="page" value="1" />
-                        <input type="hidden" name="pageSize" value="@ps" />
-                        <input type="hidden" name="dateField" value="@dateField" />
-                        <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
-                        @if (Model.FromDate.HasValue)
-                        {
-                            <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" />
-                        }
-                        @if (Model.ToDate.HasValue)
-                        {
-                            <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
-                        }
-                        @if (fromCode.HasValue)
-                        {
-                            <input type="hidden" name="fromCode" value="@fromCode" />
-                        }
-                        @if (toCode.HasValue)
-                        {
-                            <input type="hidden" name="toCode" value="@toCode" />
-                        }
-
-                        <div class="col-auto mt-1">
-                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">
-                                بحث
-                            </button>
-                        </div>
-                        <div class="col-auto mt-1">
-                            <a class="btn btn-erp btn-erp-ghost btn-erp-sm"
-                               href="@Url.Action(action, controller)">
-                                إلغاء
-                            </a>
-                        </div>
-                    </form>
-                </div>
-
-                @* العمود الثاني: فلتر كود من/إلى (كود السياسة) *@
-                <div class="col-lg-4">
-                    <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="fw-semibold">من كود</span>
-                        <input id="policyCodeFromInput"
-                               type="number"
-                               class="form-control form-control-sm"
-                               style="width:110px"
-                               value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
-
-                        <span class="fw-semibold">إلى كود</span>
-                        <input id="policyCodeToInput"
-                               type="number"
-                               class="form-control form-control-sm"
-                               style="width:110px"
-                               value="@(ViewBag.CodeTo?.ToString() ?? "")" />
-
-                        <button type="button"
-                                id="btnApplyPolicyCodeFilter"
-                                class="btn btn-erp btn-erp-primary btn-erp-sm">
-                            تطبيق فلتر الكود
-                        </button>
-
-                        <button type="button"
-                                id="btnClearPolicyCodeFilter"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm">
-                            مسح
-                        </button>
+            @* --- القسم الأول: البحث العام --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                    <label class="form-label w-100 text-center">بحث في السياسات</label>
+                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
+                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
+                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
+                            <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود السياسة</option>
+                            <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم السياسة</option>
+                            <option value="description"@Html.Raw(searchBy == "description" ? " selected" : "")>الوصف</option>
+                            <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>مفعّلة؟</option>
+                            <option value="created"@Html.Raw(searchBy == "created" ? " selected" : "")>تاريخ الإنشاء</option>
+                            <option value="updated"@Html.Raw(searchBy == "updated" ? " selected" : "")>آخر تعديل</option>
+                        </select>
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">بحث</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
+                    <input type="hidden" name="page" value="1" />
+                    <input type="hidden" name="pageSize" value="@ps" />
+                    <input type="hidden" name="dateField" value="@dateField" />
+                    <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
+                    @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
+                    @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
+                    @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                    @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                </form>
+            </div>
+
+            @* --- القسم الثاني: فلتر الكود --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label w-100 text-center">فلتر الكود</label>
+                <div class="erp-list-code-filter justify-content-center">
+                    <input id="codeFromInput" type="number" class="form-control erp-filter-input" placeholder="من" value="@(fromCode?.ToString() ?? "")" />
+                    <input id="codeToInput" type="number" class="form-control erp-filter-input" placeholder="إلى" value="@(toCode?.ToString() ?? "")" />
+                    <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                    <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
                 </div>
+            </div>
 
-                @* العمود الثالث: أزرار الإضافة / الفلاتر / الحذف / الطباعة / التصدير *@
-                <div class="col-lg-4">
-                    <div class="erp-toolbar justify-content-lg-end">
+            @* --- القسم الثالث: أزرار التحكم (صفّين) --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
+                <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
 
-                        @* فلترة بالتاريخ/الوقت *@
-                        <button type="button"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                data-bs-toggle="modal"
-                                data-bs-target="#policyDateFilterModal">
-                            فلترة بالتاريخ/الوقت
-                        </button>
-
-                        @* اختيار الأعمدة *@
-                        <button type="button"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                data-bs-toggle="modal"
-                                data-bs-target="#columnsModalPolicies">
-                            اختيار الأعمدة
-                        </button>
-
-                        @* حذف المحدد *@
-                        <form id="bulkDeleteForm"
-                              asp-action="BulkDelete"
-                              method="post"
-                              class="d-inline">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="selectedIds" id="selectedIdsInput" />
-                            <button type="button"
-                                    id="btnDeleteSelectedPolicies"
-                                    class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                حذف السياسات المحددة
-                            </button>
-                        </form>
-
-
-                        @* حذف كل السياسات (حسب الفلاتر) *@
-                        <form id="deleteAllPoliciesForm"
-                              asp-action="DeleteAll"
-                              method="post"
-                              class="d-inline">
-                            @Html.AntiForgeryToken()
-
+                    @* الصف الأول *@
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                        <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">إضافة سياسة جديدة</a>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#policyDateFilterModal">فلترة بالتاريخ/الوقت</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalPolicies">اختيار الأعمدة</button>
+                        <button type="button" id="btnPrintPolicies" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <div class="dropdown d-inline">
+                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
+                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
+                                <li><button type="button" class="dropdown-item text-danger" id="btnBulkDelete">حذف المحدد</button></li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
+                            </ul>
+                        </div>
+                        <form method="get" asp-action="Export" asp-controller="Policies" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
-                            <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
-                            <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
+                            <input type="hidden" name="dateField" value="@dateField" />
                             <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
-                            @if (Model.FromDate.HasValue)
-                            {
-                                <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" />
-                            }
-                            @if (Model.ToDate.HasValue)
-                            {
-                                <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
-                            }
-
-                            <button type="button"
-                                    id="btnDeleteAllPolicies"
-                                    class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                حذف الكل (حسب الفلاتر)
-                            </button>
-                        </form>
-
-                        @* طباعة *@
-                        <button type="button"
-                                id="btnPrintPolicies"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm">
-                            🖨️ طباعة
-                        </button>
-
-                        @* تصدير *@
-                        <form method="get"
-                              asp-action="Export"
-                              asp-controller="Policies"
-                              class="d-flex flex-wrap gap-2 align-items-center">
-
-                            <input type="hidden" name="search" value="@search" />
-                            <input type="hidden" name="searchBy" value="@searchBy" />
-                            <input type="hidden" name="sort" value="@sort" />
-                            <input type="hidden" name="dir" value="@dir" />
-                            <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
-                            @if (Model.FromDate.HasValue)
-                            {
-                                <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" />
-                            }
-                            @if (Model.ToDate.HasValue)
-                            {
-                                <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
-                            }
-                            @if (ViewBag.CodeFrom != null)
-                            {
-                                <input type="hidden" name="fromCode" value="@ViewBag.CodeFrom" />
-                            }
-                            @if (ViewBag.CodeTo != null)
-                            {
-                                <input type="hidden" name="toCode" value="@ViewBag.CodeTo" />
-                            }
-
-                            <select name="format"
-                                    class="form-select form-select-sm"
-                                    style="width:95px">
+                            @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
+                            @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
+                            @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                            @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                            <select name="format" class="form-select form-select-arrow erp-filter-input erp-export-format-select" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
                             </select>
-
-                            <button type="submit"
-                                    class="btn btn-erp btn-erp-success btn-erp-sm">
-                                تصدير
-                            </button>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
-
-                        @* إضافة سياسة جديدة *@
-                        <a class="btn btn-erp btn-erp-success btn-erp-sm"
-                           asp-action="Create">
-                            إضافة سياسة جديدة
-                        </a>
-
                     </div>
-                </div>
 
+                    <form id="formBulkDelete" asp-action="BulkDelete" asp-controller="Policies" method="post" class="d-none">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="selectedIds" id="selectedIdsInput" />
+                    </form>
+                    <form id="formDeleteAll" asp-action="DeleteAll" asp-controller="Policies" method="post" class="d-none">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="search" value="@search" />
+                        <input type="hidden" name="searchBy" value="@searchBy" />
+                        <input type="hidden" name="sort" value="@sort" />
+                        <input type="hidden" name="dir" value="@dir" />
+                        <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
+                        <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
+                        <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
+                        @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
+                        @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
+                    </form>
+                </div>
             </div>
+
         </div>
     </div>
 
@@ -345,15 +215,15 @@
                 <tr>
                     @* اختيار الصف *@
                     <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
-                        <input type="checkbox" id="chkAllPolicies" />
+                        <input type="checkbox" id="selectAll" class="form-check-input" />
                     </th>
 
                     <th data-col="id">@sortLink("id", "كود السياسة")</th>
                     <th data-col="name">@sortLink("name", "اسم السياسة")</th>
-                    <th data-col="description">الوصف</th>
-                    <th data-col="active">مفعّلة؟</th>
+                    <th data-col="description">@sortLink("description", "الوصف")</th>
+                    <th data-col="active">@sortLink("active", "مفعّلة؟")</th>
                     <th data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
-                    <th data-col="updated">آخر تعديل</th>
+                    <th data-col="updated">@sortLink("updated", "آخر تعديل")</th>
 
                     <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:220px;">
                     </th>
@@ -375,8 +245,7 @@
                         <tr>
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
-                                       class="row-select-policy"
-                                       name="selectedIds"
+                                       class="form-check-input row-select"
                                        value="@p.PolicyId" />
                             </td>
 
@@ -436,7 +305,7 @@
             <input type="hidden" name="searchBy" value="@searchBy" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
-            <input type="hidden" name="page" value="1" />
+            <input type="hidden" name="page" id="PageInput" value="1" />
             <input type="hidden" name="dateField" value="@dateField" />
             <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
             @if (Model.FromDate.HasValue)
@@ -459,7 +328,7 @@
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize"
                     class="form-select form-select-sm"
-                    onchange="this.form.submit()">
+                    onchange="document.getElementById('PageInput').value = 1; this.form.submit();">
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
@@ -613,59 +482,32 @@
 
 @section Scripts {
     <script>
-        // ===== طباعة جدول السياسات =====
-        document.getElementById("btnPrintPolicies")?.addEventListener("click", function () {
-            window.print();
-        });
+        document.getElementById("btnPrintPolicies")?.addEventListener("click", function () { window.print(); });
 
-        // ===== تحديد الصفوف / حذف المحدد / حذف الكل =====
+        // تحديد الكل + الحذف الجماعي + حذف الكل
         (function () {
-            const table = document.getElementById("policiesTable");
-            if (!table) return;
-
-            const chkAll = document.getElementById("chkAllPolicies");
-            const rowChecks = () => table.querySelectorAll("tbody .row-select-policy");
-
-            chkAll?.addEventListener("change", function () {
-                rowChecks().forEach(cb => cb.checked = chkAll.checked);
-            });
-
-            table.addEventListener("change", function (e) {
-                const target = e.target;
-                if (target && target.classList.contains("row-select-policy")) {
-                    if (!target.checked && chkAll) chkAll.checked = false;
-                }
-            });
-
-            const btnDeleteSelected = document.getElementById("btnDeleteSelectedPolicies");
-            const bulkForm = document.getElementById("bulkDeleteForm");
-
-            btnDeleteSelected?.addEventListener("click", function () {
-                const ids = Array.from(rowChecks())
-                    .filter(cb => cb.checked)
-                    .map(cb => cb.value);
-
-                if (ids.length === 0) {
-                    alert("من فضلك اختر على الأقل سياسة واحدة للحذف.");
-                    return;
-                }
-
+            const selectAll = document.getElementById("selectAll");
+            const bulkBtn = document.getElementById("btnBulkDelete");
+            const bulkForm = document.getElementById("formBulkDelete");
+            const deleteAllBtn = document.getElementById("btnDeleteAll");
+            const deleteAllForm = document.getElementById("formDeleteAll");
+            const selectedIdsInput = document.getElementById("selectedIdsInput");
+            function getRowCheckboxes() { return Array.from(document.querySelectorAll(".row-select")); }
+            selectAll?.addEventListener("change", function () { getRowCheckboxes().forEach(cb => cb.checked = this.checked); });
+            bulkBtn?.addEventListener("click", function () {
+                const checks = getRowCheckboxes().filter(cb => cb.checked);
+                if (checks.length === 0) { alert("من فضلك اختر على الأقل سياسة واحدة للحذف."); return; }
                 if (!confirm("هل أنت متأكد من حذف السياسات المحددة؟")) return;
-
-                // لا نحتاج hidden؛ الحقول checked سترسل كمصفوفة selectedIds[]
-                bulkForm.submit();
+                if (selectedIdsInput) selectedIdsInput.value = checks.map(cb => cb.value).join(",");
+                bulkForm?.submit();
             });
-
-            const btnDeleteAll = document.getElementById("btnDeleteAllPolicies");
-            const deleteAllForm = document.getElementById("deleteAllPoliciesForm");
-
-            btnDeleteAll?.addEventListener("click", function () {
-                if (!confirm("تحذير: سيتم حذف جميع السياسات المطابقة للفلاتر الحالية. هل أنت متأكد؟")) return;
-                deleteAllForm.submit();
+            deleteAllBtn?.addEventListener("click", function () {
+                if (!confirm("تحذير: سيتم حذف جميع السياسات المطابقة للفلاتر. هل أنت متأكد؟")) return;
+                deleteAllForm?.submit();
             });
         })();
 
-        // ===== اختيار الأعمدة + حفظها في localStorage =====
+        // اختيار الأعمدة + حفظها في localStorage
         (function () {
             const table = document.getElementById("policiesTable");
             if (!table) return;
@@ -747,36 +589,67 @@
                 });
         })();
 
-        // ===== فلتر الكود من/إلى (كود السياسة) =====
+        // فلتر الكود من/إلى
         (function () {
-            const btnApply = document.getElementById("btnApplyPolicyCodeFilter");
-            const btnClear = document.getElementById("btnClearPolicyCodeFilter");
-            const fromInp  = document.getElementById("policyCodeFromInput");
-            const toInp    = document.getElementById("policyCodeToInput");
+            const btnApply = document.getElementById("btnApplyCodeFilter");
+            const btnClear = document.getElementById("btnClearCodeFilter");
+            const fromInp = document.getElementById("codeFromInput");
+            const toInp = document.getElementById("codeToInput");
 
             function buildUrl(codeFrom, codeTo) {
                 const url = new URL(window.location.href);
                 if (codeFrom) url.searchParams.set("fromCode", codeFrom);
-                else          url.searchParams.delete("fromCode");
-
-                if (codeTo)   url.searchParams.set("toCode", codeTo);
-                else          url.searchParams.delete("toCode");
-
+                else url.searchParams.delete("fromCode");
+                if (codeTo) url.searchParams.set("toCode", codeTo);
+                else url.searchParams.delete("toCode");
                 url.searchParams.set("page", "1");
                 return url.toString();
             }
 
             btnApply?.addEventListener("click", function () {
-                const cf = fromInp.value.trim();
-                const ct = toInp.value.trim();
+                const cf = fromInp?.value.trim() ?? "";
+                const ct = toInp?.value.trim() ?? "";
                 window.location.href = buildUrl(cf, ct);
             });
 
             btnClear?.addEventListener("click", function () {
-                fromInp.value = "";
-                toInp.value   = "";
+                if (fromInp) fromInp.value = "";
+                if (toInp) toInp.value = "";
                 window.location.href = buildUrl("", "");
             });
         })();
+
+        // تكبير/تصغير عرض الأعمدة (بنفس نظام سجل الحركات)
+        document.addEventListener("DOMContentLoaded", function () {
+            var wrapper = document.querySelector(".erp-table-wrapper");
+            if (!wrapper) return;
+            var table = wrapper.querySelector("table.erp-table");
+            if (!table) return;
+            var ths = table.querySelectorAll("thead th");
+            ths.forEach(function (th) {
+                th.style.position = "relative";
+                var handle = document.createElement("div");
+                handle.className = "erp-col-resize-handle";
+                th.appendChild(handle);
+                var startX, startWidth;
+                handle.addEventListener("mousedown", function (e) {
+                    e.preventDefault();
+                    startX = e.pageX;
+                    startWidth = th.offsetWidth;
+                    function onMouseMove(eMove) {
+                        var diffX = eMove.pageX - startX;
+                        var newWidth = startWidth + diffX;
+                        if (newWidth < 50) newWidth = 50;
+                        th.style.width = newWidth + "px";
+                    }
+                    function onMouseUp() {
+                        document.removeEventListener("mousemove", onMouseMove);
+                        document.removeEventListener("mouseup", onMouseUp);
+                    }
+                    document.addEventListener("mousemove", onMouseMove);
+                    document.addEventListener("mouseup", onMouseUp);
+                });
+            });
+        });
     </script>
 }

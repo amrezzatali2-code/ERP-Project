@@ -68,227 +68,99 @@
     };
 }
 
-<div dir="rtl" class="container-fluid" style="padding: 1rem;">
-    @* عنوان الصفحة *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">
-            عدد الأصناف: @(reportData.Any() ? totalCount : 0)
-        </small>
-    </div>
-
-    @* ===== كروت الفلاتر ===== *@
-    <div class="card mb-3 d-print-none">
-        <div class="card-body">
-            <form method="get" asp-action="ProductBalances" asp-controller="Reports" id="filtersForm">
-                <div class="row g-3 align-items-end">
-                    @* كارت البحث *@
-                    <div class="col-lg-3 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">🔍 بحث</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="text"
-                                       name="search"
-                                       list="productsList"
-                                       class="form-control"
-                                       placeholder="اكتب اسم الصنف أو جزء منه..."
-                                       autocomplete="off"
-                                       value="@search" />
-                                <datalist id="productsList">
-                                    @if (ViewBag.ProductsAuto != null)
-                                    {
-                                        foreach (var p in ViewBag.ProductsAuto)
-                                        {
-                                            <option value="@p.Name"
-                                                    data-id="@p.Id"
-                                                    data-code="@p.Id"
-                                                    data-generic="@p.GenericName"
-                                                    data-company="@p.Company"
-                                                    data-price="@p.PriceRetail"
-                                                    data-hasquota="@(p.HasQuota ? "true" : "false")">
-                                            </option>
-                                        }
-                                    }
-                                </datalist>
-                            </div>
-                        </div>
+<div dir="rtl" class="container-fluid">
+    @* ===== شريط الفلاتر الموحد (هادئ للعين) ===== *@
+    <div class="erp-list-filter-bar d-print-none mt-2 product-balances-report">
+        <form method="get" asp-action="ProductBalances" asp-controller="Reports" id="filtersForm">
+            <div class="row g-3 align-items-end">
+                <input type="hidden" name="loadReport" value="true" />
+                <div class="col-12 col-lg-3 erp-filter-section">
+                    <label class="form-label">بحث</label>
+                    <input type="text"
+                           name="search"
+                           list="productsList"
+                           class="form-control erp-filter-input"
+                           placeholder="اكتب اسم الصنف أو جزء منه..."
+                           autocomplete="off"
+                           value="@search" />
+                    <datalist id="productsList">
+                        @if (ViewBag.ProductsAuto != null)
+                        {
+                            foreach (var p in ViewBag.ProductsAuto)
+                            {
+                                <option value="@p.Name" data-id="@p.Id" data-code="@p.Id" data-generic="@p.GenericName" data-company="@p.Company" data-price="@p.PriceRetail" data-hasquota="@(p.HasQuota ? "true" : "false")"></option>
+                            }
+                        }
+                    </datalist>
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">الفئة</label>
+                    <select name="categoryId" class="form-select erp-filter-input">
+                        <option value="">الكل</option>
+                        @foreach (var cat in categories)
+                        {
+                            <option value="@cat.Value" @(categoryId?.ToString() == cat.Value ? "selected" : null)>@cat.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">المخزن</label>
+                    <select name="warehouseId" class="form-select erp-filter-input">
+                        <option value="">الكل</option>
+                        @foreach (var wh in warehouses)
+                        {
+                            <option value="@wh.Value" @(warehouseId?.ToString() == wh.Value ? "selected" : null)>@wh.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="fromDate" dir="ltr" class="form-control erp-filter-input" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="toDate" dir="ltr" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">خيارات</label>
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
+                        <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
                     </div>
-
-                    @* كارت الفئة *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📂 الفئة</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <select name="categoryId" class="form-select">
-                                    <option value="">الكل</option>
-                                    @foreach (var cat in categories)
-                                    {
-                                        @if (categoryId?.ToString() == cat.Value)
-                                        {
-                                            <option value="@cat.Value" selected>@cat.Text</option>
-                                        }
-                                        else
-                                        {
-                                            <option value="@cat.Value">@cat.Text</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت المخزن *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">🏪 المخزن</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <select name="warehouseId" class="form-select">
-                                    <option value="">الكل</option>
-                                    @foreach (var wh in warehouses)
-                                    {
-                                        @if (warehouseId?.ToString() == wh.Value)
-                                        {
-                                            <option value="@wh.Value" selected>@wh.Text</option>
-                                        }
-                                        else
-                                        {
-                                            <option value="@wh.Value">@wh.Text</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت تاريخ من *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📅 من تاريخ</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="date"
-                                       name="fromDate"
-                                       class="form-control"
-                                       value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت تاريخ إلى *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📅 إلى تاريخ</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="date"
-                                       name="toDate"
-                                       class="form-control"
-                                       value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت الإعدادات *@
-                    <div class="col-lg-1 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">⚙️ خيارات</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <div class="form-check">
-                                    <input class="form-check-input" 
-                                           type="checkbox" 
-                                           name="includeZeroQty" 
-                                           value="true" 
-                                           id="includeZeroQty"
-                                           @(includeZeroQty ? "checked" : "") />
-                                    <label class="form-check-label small" for="includeZeroQty">
-                                        عرض الصفر
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* أزرار التفعيل *@
-                    <div class="col-lg-auto d-flex gap-2 align-items-end">
-                        <input type="hidden" name="loadReport" value="true" />
-                        <button type="submit" class="btn btn-primary">
+                </div>
+                <div class="col-12 col-lg-auto erp-filter-section">
+                    <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
+                    <div class="d-flex flex-nowrap gap-2 product-balances-btns">
+                        <button type="submit" class="btn btn-erp btn-erp-sm product-balances-btn product-balances-btn-primary">
                             <span>📊</span> تجميع التقرير
                         </button>
-                        <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-secondary btn-sm">
+                        <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-sm text-decoration-none product-balances-btn product-balances-btn-secondary">
                             <span>🔄</span> إعادة تعيين
                         </a>
                         @if (reportData.Any())
                         {
-                            <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, warehouseId, fromDate, toDate, includeZeroQty, sortBy, sortDir })" 
-                               class="btn btn-success btn-sm">
+                            <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, warehouseId, fromDate, toDate, includeZeroQty, sortBy, sortDir })"
+                               class="btn btn-erp btn-erp-sm text-decoration-none product-balances-btn product-balances-btn-success">
                                 <span>📥</span> تصدير Excel
                             </a>
                         }
-                        @if (reportData.Any() && totalPages > 1)
-                        {
-                            <div class="d-flex align-items-center gap-2">
-                                <label class="form-label mb-0 small">حجم الصفحة:</label>
-                                <select name="pageSize" 
-                                        class="form-select form-select-sm" 
-                                        style="width: auto;"
-                                        onchange="this.form.submit()">
-                                    @if (pageSize == 200)
-                                    {
-                                        <option value="200" selected>200</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="200">200</option>
-                                    }
-                                    @if (pageSize == 500)
-                                    {
-                                        <option value="500" selected>500</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="500">500</option>
-                                    }
-                                    @if (pageSize == 1000)
-                                    {
-                                        <option value="1000" selected>1000</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="1000">1000</option>
-                                    }
-                                    @if (pageSize == 5000)
-                                    {
-                                        <option value="5000" selected>5000</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="5000">5000</option>
-                                    }
-                                    @if (pageSize == totalCount || pageSize <= 0 || (totalCount > 0 && pageSize >= totalCount))
-                                    {
-                                        <option value="0" selected>الكل</option>
-                                    }
-                                    else
-                                    {
-                                        <option value="0">الكل</option>
-                                    }
-                                </select>
-                            </div>
-                        }
                     </div>
                 </div>
-            </form>
-        </div>
+                @if (reportData.Any() && totalPages > 1)
+                {
+                    <div class="col-12 col-lg-2 erp-filter-section">
+                        <label class="form-label">حجم الصفحة</label>
+                        <select name="pageSize" class="form-select erp-filter-input" onchange="this.form.submit()">
+                            <option value="200" @(pageSize == 200 ? "selected" : "")>200</option>
+                            <option value="500" @(pageSize == 500 ? "selected" : "")>500</option>
+                            <option value="1000" @(pageSize == 1000 ? "selected" : "")>1000</option>
+                            <option value="5000" @(pageSize == 5000 ? "selected" : "")>5000</option>
+                            <option value="0" @(pageSize == 0 || pageSize >= totalCount ? "selected" : "")>الكل</option>
+                        </select>
+                    </div>
+                }
+            </div>
+        </form>
     </div>
 
     @* ===== Pagination Info ===== *@
@@ -307,10 +179,9 @@
     @* ===== جدول البيانات ===== *@
     @if (reportData.Any())
     {
-        <div class="card shadow-sm">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped table-hover mb-0">
+        <div class="erp-table-wrapper mt-3 product-balances-table">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0 erp-table">
                         <thead class="table-light sticky-top">
                             <tr>
                                 <th style="min-width: 80px;">
@@ -369,13 +240,12 @@
                                 <td class="text-end"><strong>@totalPriceRetail.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalUnitCost.ToString("N2")</strong></td>
                                 <td class="text-end">
-                                    <strong class="text-primary" style="font-size: 1.1rem;">@totalCost.ToString("N2")</strong>
+                                    <strong class="product-balances-total-value">@totalCost.ToString("N2")</strong>
                                 </td>
                             </tr>
                         </tfoot>
                     </table>
                 </div>
-            </div>
         </div>
 
         @* ===== Pagination Controls ===== *@
@@ -412,27 +282,60 @@
 
 @section Styles {
     <style>
-        datalist {
-            display: none;
+        datalist { display: none; }
+
+        /* ألوان هادئة للعين — أزرار بخلفية بيضاء وحدود باهتة */
+        .product-balances-report .product-balances-btn {
+            background-color: #fff !important;
+            border-width: 1.5px !important;
+            border-style: solid !important;
+        }
+        .product-balances-btn-primary {
+            color: #5b6b7a !important;
+            border-color: #94a3b8 !important;
+        }
+        .product-balances-btn-primary:hover {
+            background-color: #f1f5f9 !important;
+            color: #475569 !important;
+            border-color: #64748b !important;
+        }
+        .product-balances-btn-secondary {
+            color: #64748b !important;
+            border-color: #cbd5e1 !important;
+        }
+        .product-balances-btn-secondary:hover {
+            background-color: #f8fafc !important;
+            color: #475569 !important;
+        }
+        .product-balances-btn-success {
+            color: #4d7c5a !important;
+            border-color: #86efac !important;
+        }
+        .product-balances-btn-success:hover {
+            background-color: #f0fdf4 !important;
+            color: #166534 !important;
         }
 
-        .table thead th {
-            border-bottom: 2px solid #dee2e6;
+        /* جدول — ألوان هادئة */
+        .product-balances-table .erp-table thead th {
+            background-color: #f1f5f9 !important;
+            color: #475569;
+            border-bottom: 1px solid #e2e8f0;
             font-weight: 600;
-            background-color: #f8f9fa !important;
         }
-        .table tfoot {
-            background-color: #e9ecef !important;
+        .product-balances-table .erp-table tfoot {
+            background-color: #f8fafc !important;
+            border-top: 1px solid #e2e8f0;
         }
-        .card-header {
-            font-size: 0.9rem;
+        .product-balances-table .erp-table tbody tr:hover {
+            background-color: #f8fafc !important;
         }
-        .table tbody tr:hover {
-            background-color: #f5f5f5;
+        /* المجموع الإجمالي — لون هادئ بدل الأزرق القوي */
+        .product-balances-total-value {
+            font-size: 1.05rem;
+            color: #475569 !important;
         }
-        a.text-decoration-none:hover {
-            text-decoration: underline !important;
-        }
+        a.text-decoration-none:hover { text-decoration: underline !important; }
     </style>
 }
 

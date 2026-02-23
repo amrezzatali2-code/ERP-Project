@@ -1052,10 +1052,25 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.CustomerCode).ToList()
                         : reportData.OrderBy(r => r.CustomerCode).ToList();
                     break;
+                case "category":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.PartyCategory ?? "").ToList()
+                        : reportData.OrderBy(r => r.PartyCategory ?? "").ToList();
+                    break;
+                case "phone":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.Phone1 ?? "").ToList()
+                        : reportData.OrderBy(r => r.Phone1 ?? "").ToList();
+                    break;
                 case "balance":
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.CurrentBalance).ToList()
                         : reportData.OrderBy(r => r.CurrentBalance).ToList();
+                    break;
+                case "creditlimit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.CreditLimit).ToList()
+                        : reportData.OrderBy(r => r.CreditLimit).ToList();
                     break;
                 case "sales":
                     reportData = isDesc
@@ -1071,6 +1086,11 @@ namespace ERP.Controllers
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.TotalReturns).ToList()
                         : reportData.OrderBy(r => r.TotalReturns).ToList();
+                    break;
+                case "availablecredit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.AvailableCredit).ToList()
+                        : reportData.OrderBy(r => r.AvailableCredit).ToList();
                     break;
                 default: // "name"
                     reportData = isDesc
@@ -1369,10 +1389,25 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.CustomerCode).ToList()
                         : reportData.OrderBy(r => r.CustomerCode).ToList();
                     break;
+                case "category":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.PartyCategory ?? "").ToList()
+                        : reportData.OrderBy(r => r.PartyCategory ?? "").ToList();
+                    break;
+                case "phone":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.Phone1 ?? "").ToList()
+                        : reportData.OrderBy(r => r.Phone1 ?? "").ToList();
+                    break;
                 case "balance":
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.CurrentBalance).ToList()
                         : reportData.OrderBy(r => r.CurrentBalance).ToList();
+                    break;
+                case "creditlimit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.CreditLimit).ToList()
+                        : reportData.OrderBy(r => r.CreditLimit).ToList();
                     break;
                 case "sales":
                     reportData = isDesc
@@ -1388,6 +1423,11 @@ namespace ERP.Controllers
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.TotalReturns).ToList()
                         : reportData.OrderBy(r => r.TotalReturns).ToList();
+                    break;
+                case "availablecredit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.AvailableCredit).ToList()
+                        : reportData.OrderBy(r => r.AvailableCredit).ToList();
                     break;
                 default: // "name"
                     reportData = isDesc

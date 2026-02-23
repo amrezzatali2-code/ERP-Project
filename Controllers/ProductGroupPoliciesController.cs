@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;                      // متغيرات Excel (ClosedXML)
+using ClosedXML.Excel;                      // متغيرات Excel (ClosedXML)
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Infrastructure;                   // كلاس PagedResult + ApplySearchSort
 using ERP.Models;                           // الموديل ProductGroupPolicy
@@ -118,14 +118,40 @@ namespace ERP.Controllers
                     q = q.Where(x => x.CreatedAt <= toDate.Value);
             }
 
-            // 4) الحقول النصية للبحث (مثلاً حالة القاعدة Active/Inactive)
-            var stringFields =
-                new Dictionary<string, Expression<Func<ProductGroupPolicy, string?>>>()
+            // 4) بحث مخصص لـ active و created
+            string? searchForSort = search;
+            string? searchByForSort = searchBy;
+            if (!string.IsNullOrWhiteSpace(search) && !string.IsNullOrWhiteSpace(searchBy))
+            {
+                var sb = searchBy.Trim().ToLowerInvariant();
+                var text = search!.Trim();
+
+                if (sb == "active")
                 {
-                    ["status"] = x => x.IsActive ? "active" : "inactive"
+                    if (text.Contains("نعم") || text.Contains("yes") || text.Equals("1", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => x.IsActive);
+                    else if (text.Contains("لا") || text.Contains("no") || text.Equals("0", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => !x.IsActive);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "created" && DateTime.TryParse(text, out var dtCreated))
+                {
+                    q = q.Where(x => x.CreatedAt.Date == dtCreated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+            }
+
+            // 5) الحقول النصية للبحث
+            var stringFields =
+                new Dictionary<string, Expression<Func<ProductGroupPolicy, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["status"] = x => x.IsActive ? "active" : "inactive",
+                    ["active"] = x => x.IsActive ? "نعم" : "لا"
                 };
 
-            // 5) الحقول العددية للبحث (نص البحث رقم)
+            // 6) الحقول العددية للبحث (نص البحث رقم)
             var intFields =
                 new Dictionary<string, Expression<Func<ProductGroupPolicy, int>>>()
                 {
@@ -135,7 +161,7 @@ namespace ERP.Controllers
                     ["warehouse"] = x => x.WarehouseId     // كود المخزن
                 };
 
-            // 6) حقول الترتيب في رأس الجدول
+            // 7) حقول الترتيب في رأس الجدول
             var orderFields =
                 new Dictionary<string, Expression<Func<ProductGroupPolicy, object>>>()
                 {
@@ -147,10 +173,10 @@ namespace ERP.Controllers
                     ["created"] = x => x.CreatedAt
                 };
 
-            // 7) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
+            // 8) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
             q = q.ApplySearchSort(
-                search,                    // نص البحث
-                searchBy,                  // نوع البحث
+                searchForSort,             // نص البحث
+                searchByForSort,           // نوع البحث
                 sort,                      // عمود الترتيب
                 dir,                       // اتجاه الترتيب asc/desc
                 stringFields,

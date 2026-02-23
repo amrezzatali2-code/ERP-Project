@@ -63,35 +63,67 @@ namespace ERP.Controllers
                     q = q.Where(x => x.CreatedAt <= toDate.Value);
             }
 
-            // 4) الحقول النصية للبحث
-            var stringFields =
-                new Dictionary<string, Expression<Func<ProductGroup, string?>>>()
+            // 4) بحث مخصص لـ active و created
+            string? searchForSort = search;
+            string? searchByForSort = searchBy;
+            if (!string.IsNullOrWhiteSpace(search) && !string.IsNullOrWhiteSpace(searchBy))
+            {
+                var sb = searchBy.Trim().ToLowerInvariant();
+                var text = search!.Trim();
+                if (sb == "active")
                 {
-                    ["name"] = x => x.Name,          // البحث باسم المجموعة
-                    ["desc"] = x => x.Description    // البحث في الوصف
+                    if (text.Contains("نعم") || text.Contains("yes") || text.Equals("1", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => x.IsActive);
+                    else if (text.Contains("لا") || text.Contains("no") || text.Equals("0", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => !x.IsActive);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "created" && DateTime.TryParse(text, out var dtCreated))
+                {
+                    q = q.Where(x => x.CreatedAt.Date == dtCreated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "updated" && DateTime.TryParse(text, out var dtUpdated))
+                {
+                    q = q.Where(x => x.UpdatedAt != null && x.UpdatedAt.Value.Date == dtUpdated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+            }
+
+            // 5) الحقول النصية للبحث
+            var stringFields =
+                new Dictionary<string, Expression<Func<ProductGroup, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["name"] = x => x.Name ?? string.Empty,
+                    ["desc"] = x => x.Description ?? string.Empty,
+                    ["active"] = x => x.IsActive ? "نعم" : "لا"
                 };
 
-            // 5) الحقول العددية للبحث
+            // 6) الحقول العددية للبحث
             var intFields =
                 new Dictionary<string, Expression<Func<ProductGroup, int>>>()
                 {
-                    ["id"] = x => x.ProductGroupId   // البحث بالكود
+                    ["id"] = x => x.ProductGroupId
                 };
 
-            // 6) حقول الترتيب
+            // 7) حقول الترتيب
             var orderFields =
                 new Dictionary<string, Expression<Func<ProductGroup, object>>>()
                 {
                     ["id"] = x => x.ProductGroupId,
-                    ["name"] = x => x.Name,
+                    ["name"] = x => x.Name ?? string.Empty,
                     ["active"] = x => x.IsActive,
-                    ["created"] = x => x.CreatedAt
+                    ["created"] = x => x.CreatedAt,
+                    ["updated"] = x => x.UpdatedAt ?? x.CreatedAt
                 };
 
-            // 7) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
+            // 8) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
             q = q.ApplySearchSort(
-                search,
-                searchBy,
+                searchForSort,
+                searchByForSort,
                 sort,
                 dir,
                 stringFields,
@@ -160,15 +192,17 @@ namespace ERP.Controllers
             string? searchBy,
             string? sort,
             string? dir,
-            int? codeFrom,
-            int? codeTo,
+            int? fromCode = null,
+            int? toCode = null,
+            int? codeFrom = null,
+            int? codeTo = null,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? format = "excel")
         {
-            int? fromCode = codeFrom;
-            int? toCode = codeTo;
+            if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
+            if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
 
             var q = BuildGroupsQuery(
                 search,

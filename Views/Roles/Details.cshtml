@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Role
+@model ERP.Models.Role
 
 @{
     ViewData["Title"] = "عرض تفاصيل الدور";
@@ -64,7 +64,7 @@
                     @foreach (var ur in Model.UserRoles)
                     {
                         <li class="list-group-item">
-                            @ur.User?.UserName
+                            @(ur.User?.DisplayName ?? ur.User?.UserName ?? "")
                         </li>
                     }
                 </ul>

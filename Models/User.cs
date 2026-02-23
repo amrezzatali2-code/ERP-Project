@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;                    // القوائم List
 using System.ComponentModel.DataAnnotations;        // الخصائص مثل Required, StringLength
 using System.ComponentModel.DataAnnotations.Schema; // DatabaseGenerated / ForeignKey
@@ -20,13 +20,13 @@ namespace ERP.Models
 
         [Required]
         [StringLength(50)]
-        [Display(Name = "اسم الدخول")]
-        public string UserName { get; set; } = string.Empty; // متغير: اسم الدخول (Login)
+        [Display(Name = "الاسم")]
+        public string UserName { get; set; } = string.Empty; // متغير: الاسم (للدخول وللعرض)
 
         
         [StringLength(150)]
         [Display(Name = "الاسم المعروض")]
-        public string DisplayName { get; set; } = string.Empty; // متغير: اسم الموظف كما يظهر في التقارير
+        public string DisplayName { get; set; } = string.Empty; // متغير: يُنسخ من UserName تلقائياً (للتوافق مع التقارير)
 
         [Required]
         [StringLength(256)]

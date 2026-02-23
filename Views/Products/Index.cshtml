@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Product>
@@ -37,6 +37,8 @@
     int? filterProductGroupId = ViewBag.FilterProductGroupId as int?;
     string? filterCompany = ViewBag.FilterCompany as string;
     string? filterImported = ViewBag.FilterImported as string;
+    int? codeFrom = ViewBag.CodeFrom as int?;
+    int? codeTo = ViewBag.CodeTo as int?;
 
     // دالة توليد لينك مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
@@ -52,7 +54,9 @@
         toDate,
         filterProductGroupId,
         filterCompany,
-        filterImported
+        filterImported,
+        codeFrom,
+        codeTo
     })!;
 
     // دالة إنشاء لينك الترتيب مع السهم
@@ -74,7 +78,9 @@
             toDate,
             filterProductGroupId,
             filterCompany,
-            filterImported
+            filterImported,
+            codeFrom,
+            codeTo
         }) ?? "#";
 
         string icon = "⇅";
@@ -88,423 +94,149 @@
 }
 <div dir="rtl" class="container-fluid">
 
-    @* عنوان الصفحة + إجمالي الأصناف *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
+    @* ===== شريط الفلاتر الموحد (مثل العملاء) ===== *@
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
-        <small class="text-muted d-none d-md-inline">
-            إجمالي الأصناف: @total
-        </small>
-    </div>
-
-    @* ===== تصميم البحث الجديد (هادئ ومريح) ===== *@
-    <div class="row g-3 mb-3 d-print-none">
-        
-        <div class="col-xxl-10 col-12">
-            <form id="productsFiltersForm"
-                  method="get"
-                  action="@Url.Action(action, controller)">
-                
-                @* كارت رئيسي هادئ *@
-                <div class="card border-0 shadow-sm" style="background: #fafbfc; border-radius: 12px;">
-                    <div class="card-body p-4">
-                        
-                        @* ===== صناديق البحث النصي المتتالية ===== *@
-                        <div class="mb-4">
-                            <label class="form-label text-muted small mb-3">البحث النصي</label>
-                            
-                            @* صندوق البحث 1 (الرئيسي) *@
-                            <div class="mb-2">
-                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important;">
-                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.85rem; padding: 0.4rem 0.5rem;">🔍</span>
-                                    <input type="text"
-                                           id="search1"
-                                           class="form-control border-0 bg-transparent"
-                                           style="font-size: 0.85rem; padding: 0.4rem 0.5rem;"
-                                           placeholder="بحث رئيسي: اسم، كود، باركود، شركة..."
-                                           value="@search" />
-                                    <select id="searchBy1"
-                                            class="form-select border-0 bg-transparent"
-                                            style="font-size: 0.85rem; max-width: 130px; border-left: 1px solid #e1e5e9 !important; padding: 0.4rem 0.5rem;">
-                                        <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
-                                        <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم الصنف</option>
-                                        <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود الصنف</option>
-                                        <option value="barcode"@Html.Raw(searchBy == "barcode" ? " selected" : "")>الباركود</option>
-                                        <option value="generic"@Html.Raw(searchBy == "generic" ? " selected" : "")>الاسم العلمي</option>
-                                        <option value="company"@Html.Raw(searchBy == "company" ? " selected" : "")>الشركة</option>
-                                        <option value="category"@Html.Raw(searchBy == "category" ? " selected" : "")>الفئة</option>
-                                        <option value="productGroup"@Html.Raw(searchBy == "productGroup" ? " selected" : "")>مجموعة الصنف</option>
-                                        <option value="bonusGroup"@Html.Raw(searchBy == "bonusGroup" ? " selected" : "")>مجموعة البونص</option>
-                                        <option value="price"@Html.Raw(searchBy == "price" ? " selected" : "")>سعر الجمهور</option>
-                                        <option value="imported"@Html.Raw(searchBy == "imported" ? " selected" : "")>محلي/مستورد</option>
-                                        <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>الحالة</option>
-                                        <option value="created"@Html.Raw(searchBy == "created" ? " selected" : "")>تاريخ الإنشاء</option>
-                                        <option value="modified"@Html.Raw(searchBy == "modified" ? " selected" : "")>آخر تعديل</option>
-                                        <option value="lastprice"@Html.Raw(searchBy == "lastprice" ? " selected" : "")>آخر تغيير سعر</option>
-                                        <option value="hasQuota"@Html.Raw(searchBy == "hasQuota" ? " selected" : "")>له كوتة؟</option>
-                                        <option value="quotaQuantity"@Html.Raw(searchBy == "quotaQuantity" ? " selected" : "")>كمية الكوتة</option>
-                                        <option value="descShort"@Html.Raw(searchBy == "descShort" ? " selected" : "")>الوصف المختصر</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            @* صندوق البحث 2 *@
-                            <div class="mb-2">
-                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important; font-size: 0.75rem; height: 28px;">
-                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.7rem; padding: 0.2rem 0.35rem;">🔍</span>
-                                    <input type="text"
-                                           id="search2"
-                                           class="form-control border-0 bg-transparent"
-                                           style="font-size: 0.75rem; padding: 0.2rem 0.35rem; height: 28px;"
-                                           placeholder="بحث إضافي 1..." />
-                                    <select id="searchBy2"
-                                            class="form-select border-0 bg-transparent"
-                                            style="font-size: 0.7rem; max-width: 110px; border-left: 1px solid #e1e5e9 !important; padding: 0.2rem 0.35rem; height: 28px;">
-                                        <option value="all">الكل</option>
-                                        <option value="name">اسم الصنف</option>
-                                        <option value="id">كود الصنف</option>
-                                        <option value="barcode">الباركود</option>
-                                        <option value="generic">الاسم العلمي</option>
-                                        <option value="company">الشركة</option>
-                                        <option value="category">الفئة</option>
-                                        <option value="productGroup">مجموعة الصنف</option>
-                                        <option value="bonusGroup">مجموعة البونص</option>
-                                        <option value="price">سعر الجمهور</option>
-                                        <option value="imported">محلي/مستورد</option>
-                                        <option value="active">الحالة</option>
-                                        <option value="created">تاريخ الإنشاء</option>
-                                        <option value="modified">آخر تعديل</option>
-                                        <option value="lastprice">آخر تغيير سعر</option>
-                                        <option value="hasQuota">له كوتة؟</option>
-                                        <option value="quotaQuantity">كمية الكوتة</option>
-                                        <option value="descShort">الوصف المختصر</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            @* صندوق البحث 3 *@
-                            <div class="mb-2">
-                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important;">
-                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.85rem; padding: 0.4rem 0.5rem;">🔍</span>
-                                    <input type="text"
-                                           id="search3"
-                                           class="form-control border-0 bg-transparent"
-                                           style="font-size: 0.85rem; padding: 0.4rem 0.5rem;"
-                                           placeholder="بحث إضافي 2..." />
-                                    <select id="searchBy3"
-                                            class="form-select border-0 bg-transparent"
-                                            style="font-size: 0.85rem; max-width: 130px; border-left: 1px solid #e1e5e9 !important; padding: 0.4rem 0.5rem;">
-                                        <option value="all">الكل</option>
-                                        <option value="name">اسم الصنف</option>
-                                        <option value="id">كود الصنف</option>
-                                        <option value="barcode">الباركود</option>
-                                        <option value="generic">الاسم العلمي</option>
-                                        <option value="company">الشركة</option>
-                                        <option value="category">الفئة</option>
-                                        <option value="productGroup">مجموعة الصنف</option>
-                                        <option value="bonusGroup">مجموعة البونص</option>
-                                        <option value="price">سعر الجمهور</option>
-                                        <option value="imported">محلي/مستورد</option>
-                                        <option value="active">الحالة</option>
-                                        <option value="created">تاريخ الإنشاء</option>
-                                        <option value="modified">آخر تعديل</option>
-                                        <option value="lastprice">آخر تغيير سعر</option>
-                                        <option value="hasQuota">له كوتة؟</option>
-                                        <option value="quotaQuantity">كمية الكوتة</option>
-                                        <option value="descShort">الوصف المختصر</option>
-                                    </select>
-                                </div>
-                            </div>
-                            
-                            @* صندوق البحث 4 *@
-                            <div class="mb-3">
-                                <div class="input-group border rounded" style="background: white; border-color: #e1e5e9 !important;">
-                                    <span class="input-group-text bg-transparent border-0 text-muted" style="font-size: 0.85rem; padding: 0.4rem 0.5rem;">🔍</span>
-                                    <input type="text"
-                                           id="search4"
-                                           class="form-control border-0 bg-transparent"
-                                           style="font-size: 0.85rem; padding: 0.4rem 0.5rem;"
-                                           placeholder="بحث إضافي 3..." />
-                                    <select id="searchBy4"
-                                            class="form-select border-0 bg-transparent"
-                                            style="font-size: 0.85rem; max-width: 130px; border-left: 1px solid #e1e5e9 !important; padding: 0.4rem 0.5rem;">
-                                        <option value="all">الكل</option>
-                                        <option value="name">اسم الصنف</option>
-                                        <option value="id">كود الصنف</option>
-                                        <option value="barcode">الباركود</option>
-                                        <option value="generic">الاسم العلمي</option>
-                                        <option value="company">الشركة</option>
-                                        <option value="category">الفئة</option>
-                                        <option value="productGroup">مجموعة الصنف</option>
-                                        <option value="bonusGroup">مجموعة البونص</option>
-                                        <option value="price">سعر الجمهور</option>
-                                        <option value="imported">محلي/مستورد</option>
-                                        <option value="active">الحالة</option>
-                                        <option value="created">تاريخ الإنشاء</option>
-                                        <option value="modified">آخر تعديل</option>
-                                        <option value="lastprice">آخر تغيير سعر</option>
-                                        <option value="hasQuota">له كوتة؟</option>
-                                        <option value="quotaQuantity">كمية الكوتة</option>
-                                        <option value="descShort">الوصف المختصر</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        @* ===== الفلاتر الإضافية في صف واحد (متناسقة مع الأزرار) ===== *@
-                        <div class="row g-2 mb-3">
-                            <div class="col-md-3">
-                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">الفئة</label>
-                                <select name="filterProductGroupId"
-                                        id="filterProductGroupId"
-                                        class="form-select border rounded"
-                                        style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;">
-                                    <option value="">-- جميع الفئات --</option>
-                                    @if (ViewBag.ProductGroups != null)
-                                    {
-                                        @foreach (var pg in (SelectList)ViewBag.ProductGroups)
-                                        {
-                                            <option value="@pg.Value"@Html.Raw(pg.Selected ? " selected" : "")>@pg.Text</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                            
-                            <div class="col-md-3">
-                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">الشركة</label>
-                                <input type="text"
-                                       name="filterCompany"
-                                       id="filterCompany"
-                                       class="form-control border rounded"
-                                       style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;"
-                                       list="companiesList"
-                                       placeholder="ابحث عن الشركة..."
-                                       value="@filterCompany" />
-                                <datalist id="companiesList">
-                                    @if (ViewBag.Companies != null)
-                                    {
-                                        @foreach (var comp in (List<string>)ViewBag.Companies)
-                                        {
-                                            <option value="@comp">@comp</option>
-                                        }
-                                    }
-                                </datalist>
-                            </div>
-                            
-                            <div class="col-md-3">
-                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">المنشأ</label>
-                                <select name="filterImported"
-                                        id="filterImported"
-                                        class="form-select border rounded"
-                                        style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;">
-                                    <option value="">-- الكل --</option>
-                                    <option value="محلي"@Html.Raw(filterImported == "محلي" ? " selected" : "")>محلي</option>
-                                    <option value="مستورد"@Html.Raw(filterImported == "مستورد" ? " selected" : "")>مستورد</option>
-                                </select>
-                            </div>
-                            
-                            <div class="col-md-3">
-                                <label class="form-label text-muted small mb-1" style="font-size: 0.8rem;">فلترة بالأكواد</label>
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <input type="number"
-                                               id="codeFromCard"
-                                               class="form-control border rounded"
-                                               style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;"
-                                               placeholder="من كود"
-                                               value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
-                                    </div>
-                                    <div class="col-6">
-                                        <input type="number"
-                                               id="codeToCard"
-                                               class="form-control border rounded"
-                                               style="background: white; border-color: #e1e5e9 !important; font-size: 0.85rem; padding: 0.4rem 0.5rem;"
-                                               placeholder="إلى كود"
-                                               value="@(ViewBag.CodeTo?.ToString() ?? "")" />
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        @* ===== أزرار بيضاء مع أيقونات ===== *@
-                        <div class="d-flex justify-content-end gap-2 pt-3 border-top" style="border-color: #e1e5e9 !important;">
-                            <button type="submit"
-                                    id="btnSearchAllFilters"
-                                    class="btn btn-sm rounded"
-                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 1rem;">
-                                🔍 بحث
-                            </button>
-                            <a href="@Url.Action(action, controller)"
-                               class="btn btn-sm rounded"
-                               style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 1rem;">
-                                ✖️ إلغاء
-                            </a>
-                        </div>
+            @* --- القسم الأول: البحث العام --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                    <label class="form-label w-100 text-center">بحث في الأصناف</label>
+                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
+                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
+                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
+                            <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم الصنف</option>
+                            <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود الصنف</option>
+                            <option value="code"@Html.Raw(searchBy == "code" ? " selected" : "")>الباركود</option>
+                            <option value="gen"@Html.Raw(searchBy == "gen" ? " selected" : "")>الاسم العلمي</option>
+                            <option value="comp"@Html.Raw(searchBy == "comp" ? " selected" : "")>الشركة</option>
+                            <option value="category"@Html.Raw(searchBy == "category" ? " selected" : "")>الفئة</option>
+                            <option value="price"@Html.Raw(searchBy == "price" ? " selected" : "")>سعر الجمهور</option>
+                            <option value="imported"@Html.Raw(searchBy == "imported" ? " selected" : "")>محلي/مستورد</option>
+                            <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>نشط/موقوف</option>
+                            <option value="updated"@Html.Raw(searchBy == "updated" ? " selected" : "")>آخر تعديل</option>
+                        </select>
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">بحث</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
+                    <input type="hidden" name="page" value="1" />
+                    <input type="hidden" name="pageSize" value="@ps" />
+                    <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
+                    @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+                    @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+                    @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+                    @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
+                    @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
+                </form>
+            </div>
+
+            @* --- القسم الثاني: فلتر الكود + فلاتر إضافية --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label w-100 text-center">فلتر الكود</label>
+                <div class="erp-list-code-filter justify-content-center">
+                    <input id="codeFromInput" type="number" class="form-control erp-filter-input" placeholder="من" value="@(codeFrom?.ToString() ?? "")" />
+                    <input id="codeToInput" type="number" class="form-control erp-filter-input" placeholder="إلى" value="@(codeTo?.ToString() ?? "")" />
+                    <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                    <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
                 </div>
-                
-                @* ===== الهيدن المشتركة للفورم ===== *@
-                <input type="hidden" name="search" id="mainSearch" value="@search" />
-                <input type="hidden" name="searchBy" id="mainSearchBy" value="@searchBy" />
-                <input type="hidden" name="codeFrom" id="mainCodeFrom" value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
-                <input type="hidden" name="codeTo" id="mainCodeTo" value="@(ViewBag.CodeTo?.ToString() ?? "")" />
-                <input type="hidden" name="sort" value="@sort" />
-                <input type="hidden" name="dir" value="@dir" />
-                <input type="hidden" name="page" value="1" />
-                <input type="hidden" name="pageSize" value="@ps" />
-                <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-                @if (fromDate.HasValue)
-                {
-                    <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
-                }
-                @if (toDate.HasValue)
-                {
-                    <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
-                }
-            </form>
-        </div>
-
-        @* ==========================================================
-           ثانياً: كارت إجراءات الأصناف (الأزرار - شفافة وصغيرة)
-           ========================================================== *@
-        <div class="col-xxl-2 col-lg-4 col-md-6 col-12">
-            <div class="card border-0 shadow-sm h-100" style="background: #fafbfc; border-radius: 12px;">
-                <div class="card-header bg-transparent border-bottom py-2" style="border-color: #e1e5e9 !important;">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="fw-semibold text-muted" style="font-size: 0.95rem;">إجراءات الأصناف</span>
-                    </div>
+                <div class="d-flex flex-wrap gap-2 mt-2 justify-content-center w-100">
+                    <select name="filterProductGroupId" id="filterProductGroupId" class="form-select erp-filter-input" style="max-width:140px" form="productsSearchForm">
+                        <option value="">جميع الفئات</option>
+                        @if (ViewBag.ProductGroups != null)
+                        {
+                            @foreach (var pg in (SelectList)ViewBag.ProductGroups)
+                            {
+                                <option value="@pg.Value"@Html.Raw(pg.Selected ? " selected" : "")>@pg.Text</option>
+                            }
+                        }
+                    </select>
+                    <input type="text" name="filterCompany" id="filterCompany" class="form-control erp-filter-input" list="companiesList" placeholder="الشركة" value="@filterCompany" style="max-width:120px" form="productsSearchForm" />
+                    <datalist id="companiesList">
+                        @if (ViewBag.Companies != null)
+                        {
+                            @foreach (var comp in (List<string>)ViewBag.Companies)
+                            {
+                                <option value="@comp">@comp</option>
+                            }
+                        }
+                    </datalist>
+                    <select name="filterImported" id="filterImported" class="form-select erp-filter-input" style="max-width:100px" form="productsSearchForm">
+                        <option value="">الكل</option>
+                        <option value="محلي"@Html.Raw(filterImported == "محلي" ? " selected" : "")>محلي</option>
+                        <option value="مستورد"@Html.Raw(filterImported == "مستورد" ? " selected" : "")>مستورد</option>
+                    </select>
                 </div>
+            </div>
 
-                <div class="card-body py-3">
-                    <div class="d-grid gap-2">
-
-                        @* إضافة صنف جديد *@
-                        <a class="btn btn-sm rounded text-start"
-                           style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;"
-                           asp-action="Create">
-                            <span style="color: #667eea; margin-left: 0.5rem;">➕</span>إضافة صنف جديد
-                        </a>
-
-                        @* فلترة بالتاريخ/الوقت *@
-                        <button type="button"
-                                class="btn btn-sm rounded text-start"
-                                style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;"
-                                data-bs-toggle="modal"
-                                data-bs-target="#dateFilterModal">
-                            <span style="color: #667eea; margin-left: 0.5rem;">📅</span>فلترة بالتاريخ/الوقت
-                        </button>
-
-                        @* اختيار الأعمدة *@
-                        <button type="button"
-                                class="btn btn-sm rounded text-start"
-                                style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;"
-                                data-bs-toggle="modal"
-                                data-bs-target="#columnsModalProducts">
-                            <span style="color: #667eea; margin-left: 0.5rem;">⚙️</span>اختيار الأعمدة
-                        </button>
-
-                        @* فورم حذف المحدد *@
-                        <form id="bulkDeleteForm"
-                              asp-action="BulkDelete"
-                              method="post"
-                              class="d-grid">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="selectedIds" id="selectedIdsInput" />
-                            <button type="button"
-                                    id="btnDeleteSelected"
-                                    class="btn btn-sm rounded text-start"
-                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
-                                <span style="color: #dc3545; margin-left: 0.5rem;">🗑️</span>حذف المحدد
-                            </button>
-                        </form>
-
-                        @* فورم حذف جميع الأصناف *@
-                        <form id="deleteAllForm"
-                              asp-action="DeleteAll"
-                              method="post"
-                              class="d-grid">
-                            @Html.AntiForgeryToken()
-                            <button type="button"
-                                    id="btnDeleteAll"
-                                    class="btn btn-sm rounded text-start"
-                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
-                                <span style="color: #dc3545; margin-left: 0.5rem;">🗑️</span>حذف جميع الأصناف
-                            </button>
-                        </form>
-
-                        @* زر طباعة *@
-                        <button type="button"
-                                id="btnPrint"
-                                class="btn btn-sm rounded text-start"
-                                style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
-                            <span style="color: #667eea; margin-left: 0.5rem;">🖨️</span>طباعة
-                        </button>
-
-                        @* فورم التصدير *@
-                        <form method="get"
-                              asp-action="Export"
-                              asp-controller="Products"
-                              class="d-flex flex-wrap gap-1 align-items-center mt-1">
-
+            @* --- القسم الثالث: أزرار التحكم --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
+                <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                        <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">إضافة صنف</a>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalProducts">اختيار الأعمدة</button>
+                        <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <div class="dropdown d-inline">
+                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
+                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
+                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteSelected">حذف المحدد</button></li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
+                            </ul>
+                        </div>
+                        <form method="get" asp-action="Export" asp-controller="Products" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-                            @if (fromDate.HasValue)
-                            {
-                                <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
-                            }
-                            @if (toDate.HasValue)
-                            {
-                                <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
-                            }
-
-                            @* ✅ الفلاتر المتراكبة *@
-                            @if (filterProductGroupId.HasValue)
-                            {
-                                <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" />
-                            }
-                            @if (!string.IsNullOrWhiteSpace(filterCompany))
-                            {
-                                <input type="hidden" name="filterCompany" value="@filterCompany" />
-                            }
-                            @if (!string.IsNullOrWhiteSpace(filterImported))
-                            {
-                                <input type="hidden" name="filterImported" value="@filterImported" />
-                            }
-
-                            @if (ViewBag.CodeFrom != null)
-                            {
-                                <input type="hidden" name="codeFrom" value="@ViewBag.CodeFrom" />
-                            }
-                            @if (ViewBag.CodeTo != null)
-                            {
-                                <input type="hidden" name="codeTo" value="@ViewBag.CodeTo" />
-                            }
-
-                            <select name="format"
-                                    class="form-select"
-                                    style="width:95px;font-size:.9rem;">
+                            @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+                            @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+                            @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+                            @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
+                            @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
+                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
                             </select>
-
-                            <button type="submit"
-                                    class="btn btn-sm rounded flex-grow-1 text-start"
-                                    style="background: white; color: #495057; border: 1px solid #e1e5e9; font-size: 0.85rem; padding: 0.4rem 0.75rem;">
-                                <span style="color: #28a745; margin-left: 0.5rem;">📊</span>تصدير
-                            </button>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
-
                     </div>
+                    <form id="bulkDeleteForm" asp-action="BulkDelete" asp-controller="Products" method="post" class="d-none">
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="selectedIds" id="selectedIdsInput" />
+                    </form>
+                    <form id="deleteAllForm" asp-action="DeleteAll" asp-controller="Products" method="post" class="d-none">
+                        @Html.AntiForgeryToken()
+                    </form>
                 </div>
             </div>
+
         </div>
+    </div>
 
-    </div> @* نهاية صف الكروت *@
-
-</div> @* نهاية الـ container-fluid *@
+    @* فورم للفلاتر الإضافية (ProductGroup, Company, Imported) - يُستخدم عند تغيير الفلاتر *@
+    <form id="productsSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
+        <input type="hidden" name="search" value="@search" />
+        <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="sort" value="@sort" />
+        <input type="hidden" name="dir" value="@dir" />
+        <input type="hidden" name="page" value="1" />
+        <input type="hidden" name="pageSize" value="@ps" />
+        <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
+        @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+        @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+        @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
+        @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
+    </form>
 
     @* ===== جدول الأصناف (هو الذى يتطبع) - مع هيدر ثابت ===== *@
     <div class="erp-table-wrapper mt-3 erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto;">
@@ -526,8 +258,8 @@
                     <th data-col="category">@sortLink("category", "الفئة")</th>
 
                     @* 🔹 مجموعة الصنف + مجموعة البونص *@
-                    <th data-col="productGroup">مجموعة الصنف</th>
-                    <th data-col="bonusGroup">مجموعة البونص</th>
+                    <th data-col="productGroup">@sortLink("productgroup", "مجموعة الصنف")</th>
+                    <th data-col="bonusGroup">@sortLink("bonusgroup", "مجموعة البونص")</th>
 
                     <th data-col="company">@sortLink("comp", "الشركة")</th>
                     <th class="text-end" data-col="price">@sortLink("price", "سعر الجمهور")</th>
@@ -538,10 +270,10 @@
                     <th style="width:150px;" data-col="lastprice">@sortLink("updated", "آخر تغيير سعر")</th>
 
                     @* 🔹 أعمدة الكوتة *@
-                    <th data-col="hasQuota">له كوتة؟</th>
-                    <th data-col="quotaQuantity">كمية الكوتة</th>
+                    <th data-col="hasQuota">@sortLink("hasquota", "له كوتة؟")</th>
+                    <th data-col="quotaQuantity">@sortLink("quotaquantity", "كمية الكوتة")</th>
 
-                    <th data-col="descShort">الوصف المختصر</th>
+                    <th data-col="descShort">@sortLink("descshort", "الوصف المختصر")</th>
 
                     <th class="text-nowrap no-print"
                         style="width:220px;"
@@ -665,14 +397,13 @@
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
             <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-            @if (fromDate.HasValue)
-            {
-                <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
-            }
-            @if (toDate.HasValue)
-            {
-                <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
-            }
+            @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+            @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+            @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
+            @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+            @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
+            @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize"
@@ -739,6 +470,11 @@
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
                     <input type="hidden" name="pageSize" value="@ps" />
+                    @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+                    @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
+                    @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
 
                     <div class="mb-3">
                         <div class="form-check d-flex align-items-center">
@@ -987,66 +723,99 @@
         // =========================
         // كروت البحث + فلتر الأكواد (واجهة جديدة)
         // =========================
+        // فلتر الكود من/إلى (مثل العملاء)
+        // =========================
         (function () {
-            const form = document.getElementById("productsFiltersForm"); // متغير: فورم كروت الفلاتر بالأعلى
-            if (!form) return;
+            const btnApply = document.getElementById("btnApplyCodeFilter");
+            const btnClear = document.getElementById("btnClearCodeFilter");
+            const fromInp  = document.getElementById("codeFromInput");
+            const toInp    = document.getElementById("codeToInput");
+            const filterPg = document.getElementById("filterProductGroupId");
+            const filterComp = document.getElementById("filterCompany");
+            const filterImp = document.getElementById("filterImported");
 
-            // الهيدن الأساسية التى يعتمد عليها الكونترولر (search / searchBy / codeFrom / codeTo)
-            const mainSearch   = form.querySelector("#mainSearch");      // متغير: هيدن نص البحث
-            const mainSearchBy = form.querySelector("#mainSearchBy");    // متغير: هيدن عمود البحث
-            const mainCodeFrom = form.querySelector("#mainCodeFrom");    // متغير: هيدن من كود
-            const mainCodeTo   = form.querySelector("#mainCodeTo");      // متغير: هيدن إلى كود
-
-            // --- زر البحث الرئيسي + البحث من الصناديق المتعددة ---
-            const btnSearchMain = form.querySelector("#btnSearchAllFilters");
-            if (btnSearchMain) {
-                btnSearchMain.addEventListener("click", function () {
-                    // البحث الرئيسي (صندوق 1) له الأولوية
-                    const txt = form.querySelector("#search1");
-                    const sel = form.querySelector("#searchBy1");
-                    
-                    if (txt && sel && mainSearch && mainSearchBy) {
-                        mainSearch.value   = txt.value || "";
-                        mainSearchBy.value = sel.value || "all";
-                    }
-                    
-                    // تحديث فلترة الأكواد
-                    const codeFromCard = form.querySelector("#codeFromCard");
-                    const codeToCard   = form.querySelector("#codeToCard");
-                    if (codeFromCard && mainCodeFrom) mainCodeFrom.value = codeFromCard.value || "";
-                    if (codeToCard   && mainCodeTo)   mainCodeTo.value   = codeToCard.value   || "";
-                });
+            function buildUrl(codeFrom, codeTo) {
+                const url = new URL(window.location.href);
+                if (codeFrom) url.searchParams.set("codeFrom", codeFrom);
+                else          url.searchParams.delete("codeFrom");
+                if (codeTo)   url.searchParams.set("codeTo", codeTo);
+                else          url.searchParams.delete("codeTo");
+                if (filterPg?.value) url.searchParams.set("filterProductGroupId", filterPg.value);
+                if (filterComp?.value) url.searchParams.set("filterCompany", filterComp.value);
+                if (filterImp?.value) url.searchParams.set("filterImported", filterImp.value);
+                url.searchParams.set("page", "1");
+                return url.toString();
             }
-            
-            // --- أزرار البحث الإضافية (2، 3، 4) - كل واحد يبني على السابق ---
-            const searchBoxes = [
-                { search: "#search2", searchBy: "#searchBy2", card: "2" },
-                { search: "#search3", searchBy: "#searchBy3", card: "3" },
-                { search: "#search4", searchBy: "#searchBy4", card: "4" }
-            ];
-            
-            searchBoxes.forEach((box, index) => {
-                const searchInput = form.querySelector(box.search);
-                const searchSelect = form.querySelector(box.searchBy);
-                
-                if (searchInput && searchSelect) {
-                    // عند Enter في أي صندوق بحث
-                    searchInput.addEventListener("keypress", function (e) {
-                        if (e.key === "Enter") {
-                            e.preventDefault();
-                            // نأخذ قيمة هذا الصندوق ونضعها في البحث الرئيسي
-                            if (mainSearch && mainSearchBy && this.value.trim()) {
-                                mainSearch.value = this.value.trim();
-                                mainSearchBy.value = searchSelect.value || "all";
-                                form.submit();
-                            }
-                        }
-                    });
-                }
+
+            btnApply?.addEventListener("click", function () {
+                const cf = fromInp?.value?.trim() || "";
+                const ct = toInp?.value?.trim() || "";
+                window.location.href = buildUrl(cf, ct);
             });
 
-            // ✅ التصميم الجديد: كل شيء يعمل من زر "بحث" الواحد (#btnSearchAllFilters)
+            btnClear?.addEventListener("click", function () {
+                if (fromInp) fromInp.value = "";
+                if (toInp) toInp.value = "";
+                window.location.href = buildUrl("", "");
+            });
+
+            [filterPg, filterComp, filterImp].forEach(el => {
+                el?.addEventListener("change", function () {
+                    const form = document.getElementById("productsSearchForm");
+                    if (form) {
+                        const cf = fromInp?.value?.trim() || "";
+                        const ct = toInp?.value?.trim() || "";
+                        const url = new URL(form.action);
+                        url.searchParams.set("search", form.querySelector('[name="search"]')?.value || "");
+                        url.searchParams.set("searchBy", form.querySelector('[name="searchBy"]')?.value || "all");
+                        url.searchParams.set("sort", form.querySelector('[name="sort"]')?.value || "name");
+                        url.searchParams.set("dir", form.querySelector('[name="dir"]')?.value || "asc");
+                        if (cf) url.searchParams.set("codeFrom", cf);
+                        if (ct) url.searchParams.set("codeTo", ct);
+                        if (filterPg?.value) url.searchParams.set("filterProductGroupId", filterPg.value);
+                        if (filterComp?.value) url.searchParams.set("filterCompany", filterComp.value);
+                        if (filterImp?.value) url.searchParams.set("filterImported", filterImp.value);
+                        window.location.href = url.toString();
+                    }
+                });
+            });
         })();
+
+        // =========================
+        // توسيع/تصغير عرض الأعمدة (نفس نظام المحافظات/مجموعات الأصناف)
+        // =========================
+        document.addEventListener("DOMContentLoaded", function () {
+            var wrapper = document.querySelector(".erp-table-wrapper");
+            if (!wrapper) return;
+            var table = wrapper.querySelector("table.erp-table");
+            if (!table) return;
+            var ths = table.querySelectorAll("thead th");
+            ths.forEach(function (th) {
+                th.style.position = "relative";
+                var handle = document.createElement("div");
+                handle.className = "erp-col-resize-handle";
+                th.appendChild(handle);
+                var startX, startWidth;
+                handle.addEventListener("mousedown", function (e) {
+                    e.preventDefault();
+                    startX = e.pageX;
+                    startWidth = th.offsetWidth;
+                    function onMouseMove(eMove) {
+                        var diffX = eMove.pageX - startX;
+                        var newWidth = startWidth + diffX;
+                        if (newWidth < 50) newWidth = 50;
+                        th.style.width = newWidth + "px";
+                        th.style.minWidth = newWidth + "px";
+                    }
+                    function onMouseUp() {
+                        document.removeEventListener("mousemove", onMouseMove);
+                        document.removeEventListener("mouseup", onMouseUp);
+                    }
+                    document.addEventListener("mousemove", onMouseMove);
+                    document.addEventListener("mouseup", onMouseUp);
+                });
+            });
+        });
     </script>
 }
 

@@ -81,36 +81,62 @@ namespace ERP.Controllers
                     q = q.Where(x => x.CreatedAt <= toDate.Value);
             }
 
-            // 4) الحقول النصية للبحث
-            // الموديل الحالي لا يحتوي على نصوص، لكن نمرر قاموس فاضي لتوافق ApplySearchSort
+            // 4) بحث مخصص لـ created و profit و maxdisc
+            string? searchForSort = search;
+            string? searchByForSort = searchBy;
+            if (!string.IsNullOrWhiteSpace(search) && !string.IsNullOrWhiteSpace(searchBy))
+            {
+                var sb = searchBy.Trim().ToLowerInvariant();
+                var text = search!.Trim();
+                if (sb == "created" && DateTime.TryParse(text, out var dtCreated))
+                {
+                    q = q.Where(x => x.CreatedAt.Date == dtCreated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "profit" && decimal.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var profitVal))
+                {
+                    q = q.Where(x => x.ProfitPercent == profitVal);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "maxdisc" && decimal.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var maxVal))
+                {
+                    q = q.Where(x => x.MaxDiscountToCustomer.HasValue && x.MaxDiscountToCustomer.Value == maxVal);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+            }
+
+            // 5) الحقول النصية (فارغ - الموديل عددي فقط)
             var stringFields =
                 new Dictionary<string, Expression<Func<WarehousePolicyRule, string?>>>();
 
-            // 5) الحقول العددية للبحث (صندوق البحث يحتوي رقم)
+            // 6) الحقول العددية للبحث
             var intFields =
                 new Dictionary<string, Expression<Func<WarehousePolicyRule, int>>>()
                 {
-                    ["id"] = x => x.Id,           // كود القاعدة
-                    ["warehouse"] = x => x.WarehouseId,  // كود المخزن
-                    ["policy"] = x => x.PolicyId      // كود السياسة
+                    ["id"] = x => x.Id,
+                    ["warehouse"] = x => x.WarehouseId,
+                    ["policy"] = x => x.PolicyId
                 };
 
-            // 6) حقول الترتيب في رأس الجدول
+            // 7) حقول الترتيب
             var orderFields =
                 new Dictionary<string, Expression<Func<WarehousePolicyRule, object>>>()
                 {
-                    ["id"] = x => x.Id,                             // الترتيب بالكود
+                    ["id"] = x => x.Id,
                     ["warehouse"] = x => x.WarehouseId,
                     ["policy"] = x => x.PolicyId,
-                    ["profit"] = x => x.ProfitPercent,                  // نسبة الربح
-                    ["maxdisc"] = x => x.MaxDiscountToCustomer ?? 0m,    // أقصى خصم
+                    ["profit"] = x => x.ProfitPercent,
+                    ["maxdisc"] = x => x.MaxDiscountToCustomer ?? 0m,
                     ["created"] = x => x.CreatedAt
                 };
 
-            // 7) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
+            // 8) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
             q = q.ApplySearchSort(
-                search,                    // نص البحث
-                searchBy,                  // الحقل المختار للبحث
+                searchForSort,
+                searchByForSort,
                 sort,                      // اسم العمود للترتيب
                 dir,                       // asc / desc
                 stringFields,
@@ -275,17 +301,22 @@ namespace ERP.Controllers
         [HttpGet]
         // تصدير قواعد سياسات المخازن
         public async Task<IActionResult> Export(
-    string? search,
-    string? searchBy,
-    string? sort,
-    string? dir,
-    bool useDateRange = false,
-    DateTime? fromDate = null,
-    DateTime? toDate = null,
-    int? fromCode = null,
-    int? toCode = null,
-    string format = "excel")
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            int? fromCode = null,
+            int? toCode = null,
+            int? codeFrom = null,
+            int? codeTo = null,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string format = "excel")
         {
+            if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
+            if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
+
             // 1) بناء الاستعلام بنفس فلاتر الواجهة
             // BuildRulesQuery موجودة عندك بالفعل في الكنترولر
             var query = BuildRulesQuery(

@@ -1,4 +1,4 @@
-﻿using System;                                        // متغيرات التاريخ DateTime
+using System;                                        // متغيرات التاريخ DateTime
 using System.Collections.Generic;                    // Dictionary, List
 using System.Linq;                                   // أوامر LINQ
 using System.Linq.Expressions;                       // Expressions
@@ -61,38 +61,74 @@ namespace ERP.Controllers
                     q = q.Where(x => x.CreatedAt <= toDate.Value);
             }
 
-            // 4) الحقول النصية للبحث
-            var stringFields =
-                new Dictionary<string, Expression<Func<ProductBonusGroup, string?>>>()
+            // 4) بحث مخصص لـ active و created و updated
+            string? searchForSort = search;
+            string? searchByForSort = searchBy;
+            if (!string.IsNullOrWhiteSpace(search) && !string.IsNullOrWhiteSpace(searchBy))
+            {
+                var sb = searchBy.Trim().ToLowerInvariant();
+                var text = search!.Trim();
+                if (sb == "active")
                 {
-                    ["name"] = x => x.Name,                           // اسم المجموعة
-                    ["status"] = x => x.IsActive ? "active" : "inactive",
-                    ["desc"] = x => x.Description ?? ""              // الوصف
+                    if (text.Contains("نعم") || text.Contains("yes") || text.Equals("1", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => x.IsActive);
+                    else if (text.Contains("لا") || text.Contains("no") || text.Equals("0", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(x => !x.IsActive);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "created" && DateTime.TryParse(text, out var dtCreated))
+                {
+                    q = q.Where(x => x.CreatedAt.Date == dtCreated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "updated" && DateTime.TryParse(text, out var dtUpdated))
+                {
+                    q = q.Where(x => x.UpdatedAt != null && x.UpdatedAt.Value.Date == dtUpdated.Date);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+                else if (sb == "bonus" && decimal.TryParse(text, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var bonusVal))
+                {
+                    q = q.Where(x => x.BonusAmount == bonusVal);
+                    searchForSort = null;
+                    searchByForSort = null;
+                }
+            }
+
+            // 5) الحقول النصية للبحث
+            var stringFields =
+                new Dictionary<string, Expression<Func<ProductBonusGroup, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["name"] = x => x.Name ?? string.Empty,
+                    ["desc"] = x => x.Description ?? string.Empty,
+                    ["active"] = x => x.IsActive ? "نعم" : "لا"
                 };
 
-            // 5) الحقول العددية للبحث (لو نص البحث رقم)
+            // 6) الحقول العددية للبحث
             var intFields =
                 new Dictionary<string, Expression<Func<ProductBonusGroup, int>>>()
                 {
-                    ["id"] = x => x.ProductBonusGroupId               // كود المجموعة
+                    ["id"] = x => x.ProductBonusGroupId
                 };
 
-            // 6) حقول الترتيب في رأس الجدول
+            // 7) حقول الترتيب
             var orderFields =
                 new Dictionary<string, Expression<Func<ProductBonusGroup, object>>>()
                 {
                     ["id"] = x => x.ProductBonusGroupId,
-                    ["name"] = x => x.Name,
+                    ["name"] = x => x.Name ?? string.Empty,
                     ["bonus"] = x => x.BonusAmount,
                     ["active"] = x => x.IsActive,
                     ["created"] = x => x.CreatedAt,
                     ["updated"] = x => x.UpdatedAt ?? x.CreatedAt
                 };
 
-            // 7) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
+            // 8) تطبيق البحث + الترتيب باستخدام الإكستنشن الموحد
             q = q.ApplySearchSort(
-                search,                    // نص البحث
-                searchBy,                  // نوع البحث
+                searchForSort,
+                searchByForSort,
                 sort,                      // عمود الترتيب
                 dir,                       // اتجاه الترتيب asc/desc
                 stringFields,
@@ -166,15 +202,17 @@ namespace ERP.Controllers
             string? searchBy,
             string? sort,
             string? dir,
-            int? codeFrom,
-            int? codeTo,
+            int? fromCode = null,
+            int? toCode = null,
+            int? codeFrom = null,
+            int? codeTo = null,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            string? format = "excel")   // excel | csv (الاتنين CSV حالياً)
+            string? format = "excel")
         {
-            int? fromCode = codeFrom;
-            int? toCode = codeTo;
+            if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
+            if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
 
             var q = BuildBonusGroupsQuery(
                 search,

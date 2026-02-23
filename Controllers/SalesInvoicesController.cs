@@ -57,9 +57,9 @@ namespace ERP.Controllers
             // =========================================================
             // (1) تحميل كل العملاء من جدول Customers + بياناتهم + سياسة العميل
             // =========================================================
+            // ✅ عرض كل العملاء (نشطين وموقوفين) — العميل الموقوف يظهر مع رسالة تمنع الحفظ
             var customers = await _context.Customers
       .AsNoTracking()
-      .Where(c => c.IsActive == true) // ✅ عرض العملاء النشطين فقط
       .Include(c => c.Governorate)
       .Include(c => c.District)
       .Include(c => c.Area)
@@ -84,7 +84,9 @@ namespace ERP.Controllers
 
           // ✅ جديد: سياسة العميل
           PolicyId = c.PolicyId,                           // كود السياسة (nullable)
-          PolicyName = c.Policy != null ? c.Policy.Name : "" // اسم السياسة من Policy.Name
+          PolicyName = c.Policy != null ? c.Policy.Name : "", // اسم السياسة من Policy.Name
+
+          IsActive = c.IsActive                            // ✅ للتحقق عند الحفظ: العميل الموقوف يمنع الحفظ
       })
       .ToListAsync();
 
@@ -143,7 +145,20 @@ namespace ERP.Controllers
             return "System";
         }
 
-
+        /// <summary>
+        /// حدود اليوم التجاري: من 7 صباحاً إلى 7 صباحاً اليوم التالي.
+        /// مثال: لو الساعة 6 شباط 10:00 → اليوم من 6 شباط 7:00 إلى 7 شباط 6:59:59.
+        /// لو الساعة 6 شباط 5:00 → اليوم من 5 شباط 7:00 إلى 6 شباط 6:59:59.
+        /// </summary>
+        private static (DateTime Start, DateTime End) GetCommercialDayBounds(DateTime dt)
+        {
+            var sevenAm = TimeSpan.FromHours(7);
+            DateTime dayStart = dt.TimeOfDay >= sevenAm
+                ? dt.Date.Add(sevenAm)
+                : dt.Date.AddDays(-1).Add(sevenAm);
+            DateTime dayEnd = dayStart.AddDays(1);
+            return (dayStart, dayEnd);
+        }
 
 
 
@@ -431,12 +446,28 @@ namespace ERP.Controllers
                 .Where(p => p.ProdId == prodId)
                 .Select(p => new
                 {
-                    hasQuota = p.HasQuota // متغير: هل عليه كوتة؟
+                    hasQuota = p.HasQuota,
+                    quotaQuantity = p.QuotaQuantity
                 })
                 .FirstOrDefaultAsync();
 
             if (prodInfo == null)
                 return Json(new { ok = false, message = "الصنف غير موجود." });
+
+            // نص الكوتة المعروض (مع مضاعفة العميل إن وُجدت)
+            string quotaText = "بدون كوتة";
+            int baseQuota = prodInfo.quotaQuantity ?? 0;
+            if (prodInfo.hasQuota && baseQuota > 0 && customerId > 0)
+            {
+                var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == customerId);
+                int mult = (cust != null && cust.IsQuotaMultiplierEnabled && cust.QuotaMultiplier > 0) ? cust.QuotaMultiplier : 1;
+                int effective = baseQuota * mult;
+                quotaText = effective == baseQuota ? $"{baseQuota} علبة" : $"{baseQuota} × {mult} = {effective} علبة";
+            }
+            else if (prodInfo.hasQuota && baseQuota > 0)
+            {
+                quotaText = $"{baseQuota} علبة";
+            }
 
             // =========================
             // (3) كميات لحظية من StockBatches
@@ -566,6 +597,7 @@ namespace ERP.Controllers
                 qtyCurrentWarehouse,
                 qtyAllWarehouses,
                 hasQuota = prodInfo.hasQuota,
+                quotaText,
                 weightedDiscount,
                 saleDisc1,
 
@@ -704,6 +736,46 @@ namespace ERP.Controllers
 
                 if (product == null)
                     return BadRequest(new { ok = false, message = "الصنف غير موجود." });
+
+                // =========================
+                // 3.1) التحقق من الكوتة — يوم تجاري (7 صباحاً إلى 7 صباحاً التالي)
+                // - الصنف له كوتة (HasQuota + QuotaQuantity)
+                // - العميل بدون مضاعفة: كوتة الصنف فقط. مع مضاعفة: كوتة × QuotaMultiplier
+                // =========================
+                if (product.HasQuota && product.QuotaQuantity.HasValue && product.QuotaQuantity.Value > 0 && invoice.CustomerId > 0)
+                {
+                    var customer = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
+                    int multiplier = (customer != null && customer.IsQuotaMultiplierEnabled && customer.QuotaMultiplier > 0)
+                        ? customer.QuotaMultiplier
+                        : 1;
+                    int effectiveQuota = product.QuotaQuantity.Value * multiplier;
+
+                    // حدود اليوم التجاري: من 7 صباحاً إلى 7 صباحاً اليوم التالي (أو 6:59:59)
+                    var invDt = invoice.SIDate.Date.Add(invoice.SITime);
+                    var (dayStart, dayEnd) = GetCommercialDayBounds(invDt);
+
+                    // مجموع الكميات المباعة لهذا العميل من هذا الصنف في اليوم التجاري الحالي
+                    var alreadySold = await _context.SalesInvoiceLines
+                        .AsNoTracking()
+                        .Where(l => l.ProdId == dto.prodId)
+                        .Join(_context.SalesInvoices.AsNoTracking(),
+                            line => line.SIId,
+                            inv => inv.SIId,
+                            (line, inv) => new { line, inv })
+                        .Where(x => x.inv.CustomerId == invoice.CustomerId)
+                        .Where(x => x.inv.SIDate.Date.Add(x.inv.SITime) >= dayStart && x.inv.SIDate.Date.Add(x.inv.SITime) < dayEnd)
+                        .SumAsync(x => x.line.Qty);
+
+                    if (alreadySold + dto.qty > effectiveQuota)
+                    {
+                        await tx.RollbackAsync();
+                        return BadRequest(new
+                        {
+                            ok = false,
+                            message = $"تجاوزت كوتة الصنف. المسموح لهذا العميل في اليوم التجاري: {effectiveQuota} علبة. تم بيع {alreadySold} علبة. المتبقي: {effectiveQuota - alreadySold} علبة."
+                        });
+                    }
+                }
 
                 // =========================
                 // 4) تجهيز قائمة التشغيلات التي سنسحب منها (Auto Split)
@@ -2526,6 +2598,16 @@ namespace ERP.Controllers
                 ModelState.AddModelError(
                     nameof(SalesInvoice.HeaderDiscountPercent),
                     "نسبة خصم الهيدر يجب أن تكون بين 0 و 100.");
+            }
+
+            // ✅ التحقق من أن العميل نشط (لو تم استخدام Create POST)
+            if (invoice.CustomerId > 0)
+            {
+                var customer = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
+                if (customer != null && !customer.IsActive)
+                {
+                    ModelState.AddModelError(nameof(SalesInvoice.CustomerId), "العميل موقوف ولا يمكن حفظ الفاتورة.");
+                }
             }
 
             // لو فيه أخطاء تحقق نرجع لنفس الشاشة (Show)

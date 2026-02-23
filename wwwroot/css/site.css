@@ -698,3 +698,89 @@ body {
     }
 
 }
+
+/* ================== فاتورة المبيعات — شكل حجم التعامل (radius للبوكسات) ================== */
+.invoice-page .invoice-header-card,
+.invoice-page .invoice-details-card,
+.invoice-page .invoice-lines-card,
+.invoice-page .invoice-totals-card,
+.invoice-page .invoice-Add-card,
+.invoice-page .invoice-product-card {
+    border-radius: 1rem;
+    overflow: hidden;
+    background: #ffffff !important;
+    border: 1px solid rgba(13, 110, 253, 0.12) !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* حقول الإدخال والقوائم — radius مثل حجم التعامل */
+.invoice-page .form-control,
+.invoice-page .form-select {
+    border-radius: 0.5rem !important;
+}
+
+/* جدول السطور — radius */
+.invoice-page .invoice-lines-container .erp-table-wrapper,
+.invoice-page .erp-table-wrapper {
+    border-radius: 0.5rem !important;
+    overflow: hidden;
+}
+
+.invoice-page .invoice-product-card .invoice-batch-table-wrap {
+    max-width: 480px;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    border: 1px solid rgba(13, 110, 253, 0.15);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+
+.invoice-page .invoice-product-card .invoice-batch-table thead th {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%) !important;
+    color: #374151;
+    font-weight: 600;
+    padding: 0.35rem 0.5rem;
+    border-bottom: 1px solid rgba(13, 110, 253, 0.2);
+}
+
+.invoice-page .invoice-product-card .invoice-batch-table tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.04) !important;
+}
+
+.invoice-page .invoice-product-card .invoice-batch-table tbody tr.table-success {
+    background-color: #d1e7dd !important;
+}
+
+.invoice-page #btnAddInvoiceLine {
+    background-color: #fff !important;
+    color: #0d6efd !important;
+    border: 1.5px solid #0d6efd !important;
+    border-radius: 0.5rem !important;
+}
+
+.invoice-page #btnAddInvoiceLine:hover {
+    background-color: #0d6efd !important;
+    color: #fff !important;
+}
+
+.invoice-page .btnRemoveLineFromInvoice {
+    background-color: #fff !important;
+    color: #dc3545 !important;
+    border: 1.5px solid #dc3545 !important;
+    border-radius: 0.5rem !important;
+}
+
+/* بطاقات الملخص (الإجماليات) — radius */
+.invoice-page .invoice-summary-badge,
+.invoice-page .invoice-totals-card .badge {
+    border-radius: 0.5rem !important;
+}
+
+.invoice-page .btnRemoveLineFromInvoice:hover {
+    background-color: #dc3545 !important;
+    color: #fff !important;
+}
+
+/* كارت الأزرار الجانبية — radius */
+.invoice-page .invoice-side-card {
+    border-radius: 1rem !important;
+}

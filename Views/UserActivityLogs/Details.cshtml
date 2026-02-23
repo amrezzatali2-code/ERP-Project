@@ -1,4 +1,4 @@
-﻿@model ERP.Models.UserActivityLog
+@model ERP.Models.UserActivityLog
 
 @{
     ViewData["Title"] = "تفاصيل سجل النشاط";
@@ -15,7 +15,7 @@
                 <dd class="col-sm-9">@Model.Id</dd>
 
                 <dt class="col-sm-3">المستخدم</dt>
-                <dd class="col-sm-9">@Model.User?.UserName</dd>
+                <dd class="col-sm-9">@(Model.User?.DisplayName ?? Model.User?.UserName ?? "")</dd>
 
                 <dt class="col-sm-3">نوع العملية</dt>
                 <dd class="col-sm-9">@Model.ActionType</dd>
