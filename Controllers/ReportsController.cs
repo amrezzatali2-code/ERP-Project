@@ -328,6 +328,8 @@ namespace ERP.Controllers
         public async Task<IActionResult> ProductBalances(
             string? search,
             int? categoryId,
+            int? productGroupId,
+            bool? hasBonus,
             int? warehouseId,
             DateTime? fromDate,
             DateTime? toDate,
@@ -361,8 +363,20 @@ namespace ERP.Controllers
                 })
                 .ToListAsync();
 
+            var productGroups = await _context.ProductGroups
+                .AsNoTracking()
+                .Where(g => g.IsActive)
+                .OrderBy(g => g.Name)
+                .Select(g => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
+                {
+                    Value = g.ProductGroupId.ToString(),
+                    Text = g.Name ?? ""
+                })
+                .ToListAsync();
+
             ViewBag.Categories = categories;
             ViewBag.Warehouses = warehouses;
+            ViewBag.ProductGroups = productGroups;
 
             // =========================================================
             // 1.1) تحميل قائمة الأصناف للأوتوكومبليت (datalist)
@@ -387,6 +401,8 @@ namespace ERP.Controllers
             // =========================================================
             ViewBag.Search = search ?? "";
             ViewBag.CategoryId = categoryId;
+            ViewBag.ProductGroupId = productGroupId;
+            ViewBag.HasBonus = hasBonus;
             ViewBag.WarehouseId = warehouseId;
             ViewBag.FromDate = fromDate;
             ViewBag.ToDate = toDate;
@@ -432,6 +448,8 @@ namespace ERP.Controllers
             var productsQuery = _context.Products
                 .AsNoTracking()
                 .Include(p => p.Category)
+                .Include(p => p.ProductGroup)
+                .Include(p => p.ProductBonusGroup)
                 .AsQueryable();
 
             // فلتر البحث (اسم الصنف أو الكود)
@@ -448,6 +466,18 @@ namespace ERP.Controllers
             if (categoryId.HasValue && categoryId.Value > 0)
             {
                 productsQuery = productsQuery.Where(p => p.CategoryId == categoryId.Value);
+            }
+
+            // فلتر مجموعة الصنف
+            if (productGroupId.HasValue && productGroupId.Value > 0)
+            {
+                productsQuery = productsQuery.Where(p => p.ProductGroupId == productGroupId.Value);
+            }
+
+            // فلتر أصناف عليها بونص
+            if (hasBonus == true)
+            {
+                productsQuery = productsQuery.Where(p => p.ProductBonusGroupId != null);
             }
 
             // فلتر الأصناف النشطة فقط (افتراضي)
@@ -476,6 +506,8 @@ namespace ERP.Controllers
                     p.ProdId,
                     p.ProdName,
                     CategoryName = p.Category != null ? p.Category.CategoryName : "",
+                    ProductGroupName = p.ProductGroup != null ? p.ProductGroup.Name : "",
+                    ProductBonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : "",
                     p.PriceRetail
                 })
                 .ToDictionaryAsync(p => p.ProdId);
@@ -613,6 +645,8 @@ namespace ERP.Controllers
                     ProdCode = prodId.ToString(),
                     ProdName = product.ProdName ?? "",
                     CategoryName = product.CategoryName ?? "",
+                    ProductGroupName = product.ProductGroupName ?? "",
+                    ProductBonusGroupName = product.ProductBonusGroupName ?? "",
                     CurrentQty = currentQty,
                     WeightedDiscount = weightedDiscount,
                     SalesQty = salesQty,
@@ -699,6 +733,92 @@ namespace ERP.Controllers
             ViewBag.TotalSalesQty = totalSalesQty;
             ViewBag.TotalUnitCost = totalUnitCost;
             ViewBag.TotalCost = totalCostSum;
+
+            return View();
+        }
+
+        // =========================================================
+        // تقرير: مبيعات أصناف البونص لكل مستخدم
+        // يجمع مبيعات كل صنف من أصناف البونص لكل مستخدم ويعرض إجمالي المبيعات وقيمة البونص
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> BonusReport(
+            DateTime? fromDate,
+            DateTime? toDate,
+            int? warehouseId,
+            bool loadReport = false)
+        {
+            ViewBag.FromDate = fromDate;
+            ViewBag.ToDate = toDate;
+            ViewBag.WarehouseId = warehouseId;
+
+            var warehouses = await _context.Warehouses
+                .AsNoTracking()
+                .OrderBy(w => w.WarehouseName)
+                .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem
+                {
+                    Value = w.WarehouseId.ToString(),
+                    Text = w.WarehouseName
+                })
+                .ToListAsync();
+            ViewBag.Warehouses = warehouses;
+
+            if (!loadReport)
+            {
+                ViewBag.ReportData = new List<BonusReportDto>();
+                return View();
+            }
+
+            var today = DateTime.Today;
+            if (!fromDate.HasValue && !toDate.HasValue)
+            {
+                fromDate = new DateTime(today.Year, today.Month, 1);
+                toDate = today;
+                ViewBag.FromDate = fromDate;
+                ViewBag.ToDate = toDate;
+            }
+
+            var from = fromDate?.Date ?? DateTime.MinValue;
+            var to = (toDate?.Date ?? DateTime.MaxValue).AddDays(1);
+
+            var query = _context.SalesInvoiceLines
+                .AsNoTracking()
+                .Include(sil => sil.SalesInvoice)
+                .Include(sil => sil.Product)
+                    .ThenInclude(p => p!.ProductBonusGroup)
+                .Where(sil =>
+                    sil.SalesInvoice != null &&
+                    sil.SalesInvoice.IsPosted &&
+                    sil.Product != null &&
+                    sil.Product.ProductBonusGroupId != null);
+
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                query = query.Where(sil => sil.SalesInvoice!.WarehouseId == warehouseId.Value);
+            }
+
+            query = query.Where(sil => sil.SalesInvoice!.SIDate >= from && sil.SalesInvoice.SIDate < to);
+
+            var grouped = await query
+                .GroupBy(sil => new { UserName = sil.SalesInvoice!.CreatedBy ?? "", ProdId = sil.ProdId })
+                .Select(g => new BonusReportDto
+                {
+                    UserName = g.Key.UserName,
+                    ProdName = g.Max(sil => sil.Product != null ? (sil.Product.ProdName ?? "") : ""),
+                    ProductBonusGroupName = g.Max(sil => sil.Product != null && sil.Product.ProductBonusGroup != null ? sil.Product.ProductBonusGroup.Name : ""),
+                    BonusAmountPerUnit = g.Max(sil => sil.Product != null && sil.Product.ProductBonusGroup != null ? sil.Product.ProductBonusGroup.BonusAmount : 0m),
+                    TotalQty = g.Sum(sil => sil.Qty),
+                    TotalSalesValue = g.Sum(sil => sil.LineNetTotal),
+                    TotalBonusAmount = g.Sum(sil => sil.Qty * (sil.Product != null && sil.Product.ProductBonusGroup != null ? sil.Product.ProductBonusGroup.BonusAmount : 0m))
+                })
+                .OrderBy(x => x.UserName)
+                .ThenByDescending(x => x.TotalSalesValue)
+                .ToListAsync();
+
+            ViewBag.ReportData = grouped;
+            ViewBag.TotalSalesValue = grouped.Sum(x => x.TotalSalesValue);
+            ViewBag.TotalBonusAmount = grouped.Sum(x => x.TotalBonusAmount);
+            ViewBag.TotalQty = grouped.Sum(x => x.TotalQty);
 
             return View();
         }
@@ -1494,6 +1614,8 @@ namespace ERP.Controllers
         public async Task<IActionResult> ExportProductBalances(
             string? search,
             int? categoryId,
+            int? productGroupId,
+            bool? hasBonus,
             int? warehouseId,
             DateTime? fromDate,
             DateTime? toDate,
@@ -1520,6 +1642,8 @@ namespace ERP.Controllers
             var productsQuery = _context.Products
                 .AsNoTracking()
                 .Include(p => p.Category)
+                .Include(p => p.ProductGroup)
+                .Include(p => p.ProductBonusGroup)
                 .AsQueryable();
 
             if (!string.IsNullOrWhiteSpace(search))
@@ -1534,6 +1658,16 @@ namespace ERP.Controllers
             if (categoryId.HasValue && categoryId.Value > 0)
             {
                 productsQuery = productsQuery.Where(p => p.CategoryId == categoryId.Value);
+            }
+
+            if (productGroupId.HasValue && productGroupId.Value > 0)
+            {
+                productsQuery = productsQuery.Where(p => p.ProductGroupId == productGroupId.Value);
+            }
+
+            if (hasBonus == true)
+            {
+                productsQuery = productsQuery.Where(p => p.ProductBonusGroupId != null);
             }
 
             productsQuery = productsQuery.Where(p => p.IsActive == true);
@@ -1551,6 +1685,8 @@ namespace ERP.Controllers
                     p.ProdId,
                     p.ProdName,
                     CategoryName = p.Category != null ? p.Category.CategoryName : "",
+                    ProductGroupName = p.ProductGroup != null ? p.ProductGroup.Name : "",
+                    ProductBonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : "",
                     p.PriceRetail
                 })
                 .ToDictionaryAsync(p => p.ProdId);
@@ -1678,6 +1814,8 @@ namespace ERP.Controllers
                     ProdCode = prodId.ToString(),
                     ProdName = product.ProdName ?? "",
                     CategoryName = product.CategoryName ?? "",
+                    ProductGroupName = product.ProductGroupName ?? "",
+                    ProductBonusGroupName = product.ProductBonusGroupName ?? "",
                     CurrentQty = currentQty,
                     WeightedDiscount = weightedDiscount,
                     SalesQty = salesQty,
@@ -1728,14 +1866,16 @@ namespace ERP.Controllers
             worksheet.Cell(row, 1).Value = "الكود";
             worksheet.Cell(row, 2).Value = "اسم الصنف";
             worksheet.Cell(row, 3).Value = "الفئة";
-            worksheet.Cell(row, 4).Value = "الكمية الحالية";
-            worksheet.Cell(row, 5).Value = "الخصم المرجح %";
-            worksheet.Cell(row, 6).Value = "المبيعات";
-            worksheet.Cell(row, 7).Value = "سعر الجمهور";
-            worksheet.Cell(row, 8).Value = "تكلفة العلبة";
-            worksheet.Cell(row, 9).Value = "التكلفة الإجمالية";
+            worksheet.Cell(row, 4).Value = "مجموعة الصنف";
+            worksheet.Cell(row, 5).Value = "مجموعة البونص";
+            worksheet.Cell(row, 6).Value = "الكمية الحالية";
+            worksheet.Cell(row, 7).Value = "الخصم المرجح %";
+            worksheet.Cell(row, 8).Value = "المبيعات";
+            worksheet.Cell(row, 9).Value = "سعر الجمهور";
+            worksheet.Cell(row, 10).Value = "تكلفة العلبة";
+            worksheet.Cell(row, 11).Value = "التكلفة الإجمالية";
 
-            worksheet.Range(row, 1, row, 9).Style.Font.Bold = true;
+            worksheet.Range(row, 1, row, 11).Style.Font.Bold = true;
 
             // البيانات
             row = 2;
@@ -1744,12 +1884,14 @@ namespace ERP.Controllers
                 worksheet.Cell(row, 1).Value = item.ProdCode;
                 worksheet.Cell(row, 2).Value = item.ProdName;
                 worksheet.Cell(row, 3).Value = item.CategoryName;
-                worksheet.Cell(row, 4).Value = item.CurrentQty;
-                worksheet.Cell(row, 5).Value = item.WeightedDiscount;
-                worksheet.Cell(row, 6).Value = item.SalesQty;
-                worksheet.Cell(row, 7).Value = item.PriceRetail;
-                worksheet.Cell(row, 8).Value = item.UnitCost;
-                worksheet.Cell(row, 9).Value = item.TotalCost;
+                worksheet.Cell(row, 4).Value = item.ProductGroupName;
+                worksheet.Cell(row, 5).Value = item.ProductBonusGroupName;
+                worksheet.Cell(row, 6).Value = item.CurrentQty;
+                worksheet.Cell(row, 7).Value = item.WeightedDiscount;
+                worksheet.Cell(row, 8).Value = item.SalesQty;
+                worksheet.Cell(row, 9).Value = item.PriceRetail;
+                worksheet.Cell(row, 10).Value = item.UnitCost;
+                worksheet.Cell(row, 11).Value = item.TotalCost;
                 row++;
             }
 

@@ -445,11 +445,14 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _db.Batches.AsNoTracking().FirstOrDefaultAsync(b => b.BatchId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.BatchNo, existing.ProdId, existing.Expiry, existing.PriceRetailBatch }) : null;
                 model.UpdatedAt = DateTime.UtcNow;   // تحديث آخر تعديل
                 _db.Batches.Update(model);
                 await _db.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "Batch", id, $"تعديل تشغيلة: {model.BatchNo}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { model.BatchNo, model.ProdId, model.Expiry, model.PriceRetailBatch });
+                await _activityLogger.LogAsync(UserActionType.Edit, "Batch", id, $"تعديل تشغيلة: {model.BatchNo}", oldValues, newValues);
 
                 TempData["Success"] = "تم حفظ تعديلات التشغيلة بنجاح.";
                 return RedirectToAction(nameof(Index));
@@ -532,10 +535,11 @@ namespace ERP.Controllers
             var batch = await _db.Batches.FindAsync(id);
             if (batch != null)
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { batch.BatchNo, batch.ProdId, batch.Expiry });
                 _db.Batches.Remove(batch);
                 await _db.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "Batch", id, $"حذف تشغيلة: {batch?.BatchNo}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "Batch", id, $"حذف تشغيلة: {batch.BatchNo}", oldValues: oldValues);
 
                 TempData["Success"] = "تم حذف التشغيلة.";
             }

@@ -260,6 +260,8 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _context.DocumentSeries.AsNoTracking().FirstOrDefaultAsync(x => x.SeriesId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.DocType, existing.SeriesCode, existing.ResetPolicy, existing.CurrentNo }) : null;
                 // تحديث تاريخ التعديل
                 m.UpdatedAt = DateTime.Now;
 
@@ -267,7 +269,8 @@ namespace ERP.Controllers
                 _context.Update(m);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "DocumentSeries", id, $"تعديل سلسلة مستندات: {m.DocType}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { m.DocType, m.SeriesCode, m.ResetPolicy, m.CurrentNo });
+                await _activityLogger.LogAsync(UserActionType.Edit, "DocumentSeries", id, $"تعديل سلسلة مستندات: {m.DocType}", oldValues, newValues);
 
                 TempData["ok"] = "تم تعديل السلسلة بنجاح.";
             }
@@ -300,10 +303,11 @@ namespace ERP.Controllers
             var m = await _context.DocumentSeries.FirstOrDefaultAsync(x => x.SeriesId == id);
             if (m == null) return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { m.DocType, m.SeriesCode, m.ResetPolicy });
             _context.DocumentSeries.Remove(m);
             await _context.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Delete, "DocumentSeries", id, $"حذف سلسلة مستندات: {m.DocType}");
+            await _activityLogger.LogAsync(UserActionType.Delete, "DocumentSeries", id, $"حذف سلسلة مستندات: {m.DocType}", oldValues: oldValues);
 
             TempData["ok"] = "تم حذف السلسلة.";
             return RedirectToAction(nameof(Index));

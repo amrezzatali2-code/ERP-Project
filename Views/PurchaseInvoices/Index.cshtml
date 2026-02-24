@@ -1,4 +1,4 @@
-﻿@* Views/PurchaseInvoices/Index.cshtml — قائمة فواتير المشتريات بنفس نموذج فواتير المبيعات *@
+@* Views/PurchaseInvoices/Index.cshtml — قائمة فواتير المشتريات بنفس نموذج فواتير المبيعات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.PurchaseInvoice>
@@ -332,7 +332,7 @@
                     <th data-col="customerid">@sortLink("customerid", "كود المورد")</th>
                     <th data-col="customername">@sortLink("vendor", "المورد")</th>
 
-                    <th data-col="warehouseid">@sortLink("warehouse", "كود المخزن")</th>
+                    <th data-col="warehouseid">@sortLink("warehouse", "المخزن")</th>
 
                     <th data-col="refprid">@sortLink("refprid", "طلب شراء مرجعي")</th>
 

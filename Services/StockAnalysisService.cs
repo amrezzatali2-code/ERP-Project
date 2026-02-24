@@ -190,10 +190,11 @@ namespace ERP.Services
         // حساب خصم البيع النهائي قبل إضافة سطر البيع
         // المنطق:
         // 1) نحدد PolicyId للعميل (لو null => 1)
-        // 2) نبحث عن WarehousePolicyRule (WarehouseId + PolicyId) ونأخذ ProfitPercent
-        // 3) لو مفيش Rule => نرجع لـ Policy.DefaultProfitPercent
-        // 4) خصم البيع = الخصم المرجح - ProfitPercent
-        // 5) نطبق حدود الأمان (0..100) + MaxDiscountToCustomer إن وُجد
+        // 2) لو الصنف له مجموعة: نبحث عن ProductGroupPolicy (مجموعة+سياسة+مخزن) — مقدم على سياسة المخزن
+        // 3) لو مفيش قاعدة مجموعة: نبحث عن WarehousePolicyRule (WarehouseId + PolicyId)
+        // 4) لو مفيش Rule => نرجع لـ Policy.DefaultProfitPercent
+        // 5) خصم البيع = الخصم المرجح - ProfitPercent
+        // 6) نطبق MaxDiscountToCustomer إن وُجد
         // =========================================================
         public async Task<decimal> GetSaleDiscountAsync(
             int prodId,
@@ -205,14 +206,12 @@ namespace ERP.Services
             // (1) تحقق من المدخلات
             // =========================
             if (warehouseId <= 0)
-                return ClampPercent(weightedPurchaseDiscount); // تعليق: بدون مخزن لا يوجد سياسة مخزن
+                return ClampPercent(weightedPurchaseDiscount);
 
             // =========================
             // (2) تحديد PolicyId للعميل
-            // - لو العميل مش موجود أو PolicyId = null => نثبت 1
             // =========================
-            int policyId = 1; // متغير: السياسة الافتراضية (حسب اتفاقنا)
-
+            int policyId = 1;
             if (customerId > 0)
             {
                 var cPolicyId = await _context.Customers
@@ -226,67 +225,121 @@ namespace ERP.Services
             }
 
             // =========================
-            // (3) جلب Rule للمخزن+السياسة (إن وجدت)
+            // (3) جلب ProductGroupId للصنف
             // =========================
-            var rule = await _context.WarehousePolicyRules
+            var productGroupId = await _context.Products
                 .AsNoTracking()
-                .Where(r =>
-                    r.WarehouseId == warehouseId &&
-                    r.PolicyId == policyId &&
-                    r.IsActive)
-                .Select(r => new
-                {
-                    r.ProfitPercent,          // متغير: مكسب المخزن من الخصم المرجح
-                    r.MaxDiscountToCustomer   // متغير: أقصى خصم مسموح للعميل (اختياري)
-                })
+                .Where(p => p.ProdId == prodId)
+                .Select(p => (int?)p.ProductGroupId)
                 .FirstOrDefaultAsync();
 
-            // =========================
-            // (4) تحديد profitPercent
-            // - من الـ Rule لو موجود
-            // - وإلا من Policy.DefaultProfitPercent
-            // =========================
-            decimal profitPercent = 0m; // متغير: مكسب السياسة الذي سنخصمه من الخصم المرجح
+            decimal profitPercent = 0m;
+            decimal? maxDiscountToCustomer = null;
 
-            if (rule != null)
+            // =========================
+            // (4) أولوية: سياسة المجموعة — ProductGroupPolicy يعطينا PolicyId، والربح من جدول سياسات المخازن
+            // مثال: أوجمنتين Group A → سياسته رقم 10 → نذهب لسياسات المخازن (Policy 10 + المخزن) → نطبق الربح
+            // لو الصنف ليس له مجموعة → نستخدم سياسة العميل (في الخطوة 5)
+            // =========================
+            if (productGroupId.HasValue && productGroupId.Value > 0)
             {
-                profitPercent = rule.ProfitPercent;
-            }
-            else
-            {
-                // لو مفيش Rule نستخدم DefaultProfitPercent من جدول Policy
-                var policyDefaultProfit = await _context.Policies
+                // جلب PolicyId من ProductGroupPolicy للمجموعة + المخزن
+                var groupPolicy = await _context.ProductGroupPolicies
                     .AsNoTracking()
-                    .Where(p => p.PolicyId == policyId && p.IsActive)
-                    .Select(p => (decimal?)p.DefaultProfitPercent)
+                    .Where(gp =>
+                        gp.ProductGroupId == productGroupId.Value &&
+                        gp.WarehouseId == warehouseId &&
+                        gp.IsActive)
+                    .Select(gp => new { gp.PolicyId, gp.ProfitPercent, gp.MaxDiscountToCustomer })
                     .FirstOrDefaultAsync();
 
-                profitPercent = policyDefaultProfit ?? 0m;
+                // لو مفيش (مجموعة + مخزن): نجرب أي سياسة للمجموعة
+                if (groupPolicy == null)
+                {
+                    groupPolicy = await _context.ProductGroupPolicies
+                        .AsNoTracking()
+                        .Where(gp =>
+                            gp.ProductGroupId == productGroupId.Value &&
+                            gp.IsActive)
+                        .OrderByDescending(gp => gp.WarehouseId == warehouseId)
+                        .Select(gp => new { gp.PolicyId, gp.ProfitPercent, gp.MaxDiscountToCustomer })
+                        .FirstOrDefaultAsync();
+                }
+
+                if (groupPolicy != null)
+                {
+                    // الربح من جدول سياسات المخازن (WarehousePolicyRules) لهذه السياسة + المخزن
+                    var whRule = await _context.WarehousePolicyRules
+                        .AsNoTracking()
+                        .Where(w => w.WarehouseId == warehouseId && w.PolicyId == groupPolicy.PolicyId && w.IsActive)
+                        .Select(w => new { w.ProfitPercent, w.MaxDiscountToCustomer })
+                        .FirstOrDefaultAsync();
+
+                    if (whRule != null)
+                    {
+                        profitPercent = whRule.ProfitPercent;
+                        maxDiscountToCustomer = whRule.MaxDiscountToCustomer ?? groupPolicy.MaxDiscountToCustomer;
+                    }
+                    else
+                    {
+                        // لو مفيش قاعدة في سياسات المخازن: نستخدم ProfitPercent من ProductGroupPolicy أو Policy.DefaultProfitPercent
+                        if (groupPolicy.ProfitPercent > 0)
+                            profitPercent = groupPolicy.ProfitPercent;
+                        else
+                        {
+                            var defProfit = await _context.Policies
+                                .AsNoTracking()
+                                .Where(p => p.PolicyId == groupPolicy.PolicyId && p.IsActive)
+                                .Select(p => (decimal?)p.DefaultProfitPercent)
+                                .FirstOrDefaultAsync();
+                            profitPercent = defProfit ?? 0m;
+                        }
+                        maxDiscountToCustomer = groupPolicy.MaxDiscountToCustomer;
+                    }
+                }
             }
 
-            // حماية: لو profitPercent سالب
+            // =========================
+            // (5) لو مفيش قاعدة مجموعة: نستخدم سياسة المخزن
+            // =========================
+            if (profitPercent == 0 && !maxDiscountToCustomer.HasValue)
+            {
+                var rule = await _context.WarehousePolicyRules
+                    .AsNoTracking()
+                    .Where(r =>
+                        r.WarehouseId == warehouseId &&
+                        r.PolicyId == policyId &&
+                        r.IsActive)
+                    .Select(r => new { r.ProfitPercent, r.MaxDiscountToCustomer })
+                    .FirstOrDefaultAsync();
+
+                if (rule != null)
+                {
+                    profitPercent = rule.ProfitPercent;
+                    maxDiscountToCustomer = rule.MaxDiscountToCustomer;
+                }
+                else
+                {
+                    var policyDefaultProfit = await _context.Policies
+                        .AsNoTracking()
+                        .Where(p => p.PolicyId == policyId && p.IsActive)
+                        .Select(p => (decimal?)p.DefaultProfitPercent)
+                        .FirstOrDefaultAsync();
+
+                    profitPercent = policyDefaultProfit ?? 0m;
+                }
+            }
+
             if (profitPercent < 0) profitPercent = 0;
 
             // =========================
-            // (5) حساب خصم البيع النهائي
-            // خصم البيع = الخصم المرجح - مكسب السياسة
+            // (6) حساب خصم البيع وتطبيق أقصى خصم
             // =========================
             decimal saleDiscount = weightedPurchaseDiscount - profitPercent;
 
-            // =========================
-            // (6) تطبيق أقصى خصم للعميل إن وُجد
-            // - لو MaxDiscountToCustomer موجود: لا نسمح بتجاوزه
-            // =========================
-            if (rule?.MaxDiscountToCustomer.HasValue == true)
-            {
-                var maxAllowed = rule.MaxDiscountToCustomer.Value;
-                if (saleDiscount > maxAllowed)
-                    saleDiscount = maxAllowed;
-            }
+            if (maxDiscountToCustomer.HasValue && saleDiscount > maxDiscountToCustomer.Value)
+                saleDiscount = maxDiscountToCustomer.Value;
 
-            // =========================
-            // (7) حماية نهائية 0..100
-            // =========================
             return ClampPercent(saleDiscount);
         }
 
@@ -298,6 +351,69 @@ namespace ERP.Services
             if (v < 0m) return 0m;
             if (v > 100m) return 100m;
             return v;
+        }
+
+        /// <summary>
+        /// تفاصيل خصم البيع (للاستخدام في GetSalesProductInfo)
+        /// </summary>
+        public class SaleDiscountDetails
+        {
+            public decimal SaleDiscount { get; set; }
+            public int? AppliedGroupPolicyId { get; set; }   // رقم السياسة المطبقة من المجموعة (إن وُجدت)
+            public string? AppliedGroupPolicyName { get; set; } // اسم السياسة (مثل Policy 10)
+            public string? PolicySource { get; set; }         // مصدر السياسة: Group / Warehouse / Policy
+        }
+
+        public async Task<SaleDiscountDetails> GetSaleDiscountDetailsAsync(
+            int prodId,
+            int warehouseId,
+            int customerId,
+            decimal weightedPurchaseDiscount)
+        {
+            var saleDiscount = await GetSaleDiscountAsync(prodId, warehouseId, customerId, weightedPurchaseDiscount);
+
+            var productGroupId = await _context.Products
+                .AsNoTracking()
+                .Where(p => p.ProdId == prodId)
+                .Select(p => (int?)p.ProductGroupId)
+                .FirstOrDefaultAsync();
+
+            int? appliedPolicyId = null;
+            string? appliedPolicyName = null;
+
+            if (productGroupId.HasValue && productGroupId.Value > 0)
+            {
+                // نفس منطق GetSaleDiscountAsync: ProductGroupPolicy يعطينا PolicyId
+                var gpWithPolicy = await _context.ProductGroupPolicies
+                    .AsNoTracking()
+                    .Where(gp => gp.ProductGroupId == productGroupId.Value && gp.WarehouseId == warehouseId && gp.IsActive)
+                    .Select(gp => new { gp.PolicyId, PolicyName = gp.Policy != null ? gp.Policy.Name : null })
+                    .FirstOrDefaultAsync();
+
+                if (gpWithPolicy == null)
+                {
+                    gpWithPolicy = await _context.ProductGroupPolicies
+                        .AsNoTracking()
+                        .Where(gp => gp.ProductGroupId == productGroupId.Value && gp.IsActive)
+                        .OrderByDescending(gp => gp.WarehouseId == warehouseId)
+                        .Select(gp => new { gp.PolicyId, PolicyName = gp.Policy != null ? gp.Policy.Name : null })
+                        .FirstOrDefaultAsync();
+                }
+
+                if (gpWithPolicy != null)
+                {
+                    appliedPolicyId = gpWithPolicy.PolicyId;
+                    appliedPolicyName = gpWithPolicy.PolicyName ?? $"Policy {gpWithPolicy.PolicyId}";
+                }
+            }
+
+            return new SaleDiscountDetails
+            {
+                SaleDiscount = saleDiscount,
+                AppliedGroupPolicyId = appliedPolicyId,
+                AppliedGroupPolicyName = appliedPolicyName,
+                PolicySource = appliedPolicyId != null ? "Group" : "Warehouse/Policy"
+            };
         }
 
 

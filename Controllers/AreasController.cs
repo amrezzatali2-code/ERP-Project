@@ -1,3 +1,4 @@
+using ClosedXML.Excel;                              // تصدير Excel
 using ERP.Data;                                    // كائن AppDbContext
 using ERP.Infrastructure;                          // PagedResult + UserActivityLogger
 using ERP.Models;                                  // Area, UserActionType
@@ -6,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;          // SelectList و SelectListIt
 using Microsoft.EntityFrameworkCore;               // Include, AsNoTracking, ToListAsync
 using System;                                      // متغيرات التوقيت DateTime
 using System.Collections.Generic;                  // القوائم List
+using System.IO;                                  // MemoryStream للتصدير
 using System.Linq;                                 // أوامر LINQ مثل Where و OrderBy
 using System.Threading.Tasks;                      // Task و async/await
 
@@ -315,6 +317,7 @@ namespace ERP.Controllers
             if (dbItem == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { dbItem.AreaName, dbItem.GovernorateId, dbItem.DistrictId, dbItem.IsActive });
             // نسخ القيم المسموح بتعديلها
             dbItem.AreaName = area.AreaName;
             dbItem.GovernorateId = area.GovernorateId;
@@ -325,7 +328,8 @@ namespace ERP.Controllers
 
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Edit, "Area", id, $"تعديل منطقة: {dbItem.AreaName}");
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new { dbItem.AreaName, dbItem.GovernorateId, dbItem.DistrictId, dbItem.IsActive });
+            await _activityLogger.LogAsync(UserActionType.Edit, "Area", id, $"تعديل منطقة: {dbItem.AreaName}", oldValues, newValues);
 
             TempData["Ok"] = "تم تعديل المنطقة بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -359,10 +363,11 @@ namespace ERP.Controllers
             if (item == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { item.AreaName, item.GovernorateId, item.DistrictId });
             _db.Areas.Remove(item);
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Delete, "Area", id, $"حذف منطقة: {item.AreaName}");
+            await _activityLogger.LogAsync(UserActionType.Delete, "Area", id, $"حذف منطقة: {item.AreaName}", oldValues: oldValues);
 
             TempData["Ok"] = "تم حذف المنطقة بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -542,60 +547,71 @@ namespace ERP.Controllers
 
             // نحضر النتيجة كاملة بدون تقسيم صفحات
             var data = await query.ToListAsync();
+            var fmt = (format ?? "excel").Trim().ToLowerInvariant();
 
-            // ---------- تجهيز ملف CSV يمكن فتحه في Excel ----------
-
-            // دالة صغيرة للهروب من الفواصل وعلامات التنصيص
-            static string CsvEscape(string? value)
+            // ---------- CSV ----------
+            if (string.Equals(fmt, "csv", StringComparison.OrdinalIgnoreCase))
             {
-                if (string.IsNullOrEmpty(value))
-                    return "";
+                static string CsvEscape(string? value)
+                {
+                    if (string.IsNullOrEmpty(value)) return "";
+                    return "\"" + value.Replace("\"", "\"\"") + "\"";
+                }
 
-                value = value.Replace("\"", "\"\""); // " => ""
-                return $"\"{value}\"";               // نحطها بين ""
+                var lines = new List<string> { "Id,Name,District,Governorate,IsActive,CreatedAt,UpdatedAt" };
+                foreach (var a in data)
+                {
+                    lines.Add(string.Join(",",
+                        a.AreaId.ToString(),
+                        CsvEscape(a.AreaName),
+                        CsvEscape(a.District?.DistrictName),
+                        CsvEscape(a.Governorate?.GovernorateName),
+                        a.IsActive ? "نشط" : "موقوف",
+                        a.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "",
+                        a.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? ""
+                    ));
+                }
+
+                var bytes = System.Text.Encoding.UTF8.GetBytes(string.Join("\r\n", lines));
+                return File(bytes, "text/csv; charset=utf-8", $"Areas_{DateTime.Now:yyyyMMdd_HHmm}.csv");
             }
 
-            var lines = new List<string>();
+            // ---------- Excel (.xlsx) ----------
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("المناطق");
 
-            // أول سطر: عناوين الأعمدة
-            lines.Add("Id,Name,District,Governorate,IsActive,CreatedAt,UpdatedAt");
+            ws.Cell(1, 1).Value = "كود المنطقة";
+            ws.Cell(1, 2).Value = "اسم المنطقة";
+            ws.Cell(1, 3).Value = "الحي/المركز";
+            ws.Cell(1, 4).Value = "المحافظة";
+            ws.Cell(1, 5).Value = "الحالة";
+            ws.Cell(1, 6).Value = "تاريخ الإنشاء";
+            ws.Cell(1, 7).Value = "آخر تعديل";
 
-            // باقي السطور: البيانات
+            var header = ws.Range(1, 1, 1, 7);
+            header.Style.Font.Bold = true;
+            header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            int row = 2;
             foreach (var a in data)
             {
-                var line = string.Join(",",
-                    a.AreaId.ToString(),
-                    CsvEscape(a.AreaName),
-                    CsvEscape(a.District?.DistrictName),
-                    CsvEscape(a.Governorate?.GovernorateName),
-                    a.IsActive ? "نشط" : "موقوف",
-                    a.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "",
-                    a.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? ""
-                );
-
-                lines.Add(line);
+                ws.Cell(row, 1).Value = a.AreaId;
+                ws.Cell(row, 2).Value = a.AreaName ?? "";
+                ws.Cell(row, 3).Value = a.District?.DistrictName ?? "";
+                ws.Cell(row, 4).Value = a.Governorate?.GovernorateName ?? "";
+                ws.Cell(row, 5).Value = a.IsActive ? "نشط" : "موقوف";
+                ws.Cell(row, 6).Value = a.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
+                ws.Cell(row, 7).Value = a.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
+                row++;
             }
 
-            var csv = string.Join("\r\n", lines);
+            ws.Columns().AdjustToContents();
 
-            // نختار اسم ملف حسب التاريخ
-            var fileName = $"Areas_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
-            var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
-
-            // لو المستخدم اختار CSV أو Excel هنرجّع نفس الملف لكن الإكستنشن يفتح في إكسل عادي
-            if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
-            {
-                fileName = $"Areas_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
-            }
-            else
-            {
-                // نخلي الإكستنشن xls علشان يتفتح في إكسل مباشرة
-                fileName = $"Areas_{DateTime.Now:yyyyMMdd_HHmmss}.xls";
-            }
-
-            const string contentType = "text/csv";   // إكسل يقرأه بدون مشكلة
-
-            return File(bytes, contentType, fileName);
+            using var stream = new MemoryStream();
+            wb.SaveAs(stream);
+            stream.Position = 0;
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"Areas_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
         }
 
 

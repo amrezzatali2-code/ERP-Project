@@ -316,11 +316,14 @@ namespace ERP.Controllers
             {
                 try
                 {
+                    var existing = await _context.Permissions.AsNoTracking().FirstOrDefaultAsync(p => p.PermissionId == id);
+                    var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.Code, existing.NameAr, existing.Module }) : null;
                     permission.UpdatedAt = DateTime.UtcNow;   // تحديث تاريخ التعديل
                     _context.Update(permission);
                     await _context.SaveChangesAsync();
 
-                    await _activityLogger.LogAsync(UserActionType.Edit, "Permission", id, $"تعديل صلاحية: {permission.NameAr}");
+                    var newValues = System.Text.Json.JsonSerializer.Serialize(new { permission.Code, permission.NameAr, permission.Module });
+                    await _activityLogger.LogAsync(UserActionType.Edit, "Permission", id, $"تعديل صلاحية: {permission.NameAr}", oldValues, newValues);
 
                     TempData["Success"] = "تم تعديل الصلاحية بنجاح.";
                 }
@@ -371,10 +374,11 @@ namespace ERP.Controllers
             var permission = await _context.Permissions.FindAsync(id);
             if (permission != null)
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { permission.Code, permission.NameAr, permission.Module });
                 _context.Permissions.Remove(permission);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "Permission", id, $"حذف صلاحية: {permission.NameAr}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "Permission", id, $"حذف صلاحية: {permission.NameAr}", oldValues: oldValues);
 
                 TempData["Success"] = "تم حذف الصلاحية.";
             }

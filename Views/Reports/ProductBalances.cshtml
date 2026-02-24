@@ -18,6 +18,8 @@
     // الفلاتر من ViewBag
     var search = ViewBag.Search as string ?? "";
     var categoryId = ViewBag.CategoryId as int?;
+    var productGroupId = ViewBag.ProductGroupId as int?;
+    var hasBonus = ViewBag.HasBonus as bool?;
     var warehouseId = ViewBag.WarehouseId as int?;
     var fromDate = ViewBag.FromDate as DateTime?;
     var toDate = ViewBag.ToDate as DateTime?;
@@ -27,6 +29,7 @@
 
     // القوائم المنسدلة
     var categories = ViewBag.Categories as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var productGroups = ViewBag.ProductGroups as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
     var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
 
     // دالة إنشاء رابط الترتيب
@@ -36,6 +39,8 @@
         {
             search,
             categoryId,
+            productGroupId,
+            hasBonus,
             warehouseId,
             fromDate,
             toDate,
@@ -55,6 +60,8 @@
         {
             search,
             categoryId,
+            productGroupId,
+            hasBonus,
             warehouseId,
             fromDate,
             toDate,
@@ -104,6 +111,16 @@
                     </select>
                 </div>
                 <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">مجموعة الصنف</label>
+                    <select name="productGroupId" class="form-select erp-filter-input">
+                        <option value="">الكل</option>
+                        @foreach (var pg in productGroups)
+                        {
+                            <option value="@pg.Value" @(productGroupId?.ToString() == pg.Value ? "selected" : null)>@pg.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">المخزن</label>
                     <select name="warehouseId" class="form-select erp-filter-input">
                         <option value="">الكل</option>
@@ -123,9 +140,13 @@
                 </div>
                 <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">خيارات</label>
-                    <div class="form-check mb-0">
+                    <div class="form-check mb-1">
                         <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
                         <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
+                    </div>
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" name="hasBonus" value="true" id="hasBonus" @(hasBonus == true ? "checked" : "") />
+                        <label class="form-check-label small" for="hasBonus">أصناف عليها بونص فقط</label>
                     </div>
                 </div>
                 <div class="col-12 col-lg-auto erp-filter-section">
@@ -139,7 +160,7 @@
                         </a>
                         @if (reportData.Any())
                         {
-                            <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, warehouseId, fromDate, toDate, includeZeroQty, sortBy, sortDir })"
+                            <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, includeZeroQty, sortBy, sortDir })"
                                class="btn btn-erp btn-erp-sm text-decoration-none product-balances-btn product-balances-btn-success">
                                 <span>📥</span> تصدير Excel
                             </a>
@@ -195,6 +216,8 @@
                                     </a>
                                 </th>
                                 <th>الفئة</th>
+                                <th style="min-width: 120px;">مجموعة الصنف</th>
+                                <th style="min-width: 120px;">مجموعة البونص</th>
                                 <th class="text-end" style="min-width: 100px;">
                                     <a href="@sortUrl("qty", sortBy == "qty" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
                                         الكمية الحالية @if (sortBy == "qty") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
@@ -222,6 +245,8 @@
                                     <td><strong>@item.ProdCode</strong></td>
                                     <td>@item.ProdName</td>
                                     <td><small class="text-muted">@item.CategoryName</small></td>
+                                    <td><small class="text-muted">@item.ProductGroupName</small></td>
+                                    <td><small class="text-muted">@item.ProductBonusGroupName</small></td>
                                     <td class="text-end"><strong>@item.CurrentQty.ToString("N0")</strong></td>
                                     <td class="text-end">@item.WeightedDiscount.ToString("N2")%</td>
                                     <td class="text-end">@item.SalesQty.ToString("N2")</td>
@@ -233,7 +258,7 @@
                         </tbody>
                         <tfoot class="table-secondary fw-bold">
                             <tr>
-                                <td colspan="3" class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                                <td colspan="5" class="text-end"><strong>المجموع الإجمالي:</strong></td>
                                 <td class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
                                 <td></td>
                                 <td class="text-end"><strong>@totalSalesQty.ToString("N2")</strong></td>
@@ -344,24 +369,24 @@
         // ضمان إرسال includeZeroQty حتى لو كان checkbox غير مفعّل
         document.addEventListener('DOMContentLoaded', function () {
             const form = document.getElementById('filtersForm');
-            const checkbox = document.getElementById('includeZeroQty');
+            const includeZeroCb = document.getElementById('includeZeroQty');
+            const hasBonusCb = document.getElementById('hasBonus');
             
-            if (form && checkbox) {
+            if (form) {
                 form.addEventListener('submit', function (e) {
-                    // إزالة أي hidden input سابق
-                    const existingHidden = form.querySelector('input[name="includeZeroQty"][type="hidden"]');
-                    if (existingHidden) {
-                        existingHidden.remove();
-                    }
-                    
-                    // إذا كان checkbox غير مفعّل، أضف hidden input
-                    if (!checkbox.checked) {
-                        const hidden = document.createElement('input');
-                        hidden.type = 'hidden';
-                        hidden.name = 'includeZeroQty';
-                        hidden.value = 'false';
-                        form.appendChild(hidden);
-                    }
+                    [['includeZeroQty', includeZeroCb], ['hasBonus', hasBonusCb]].forEach(function (pair) {
+                        const name = pair[0];
+                        const cb = pair[1];
+                        const existingHidden = form.querySelector('input[name="' + name + '"][type="hidden"]');
+                        if (existingHidden) existingHidden.remove();
+                        if (cb && !cb.checked) {
+                            const hidden = document.createElement('input');
+                            hidden.type = 'hidden';
+                            hidden.name = name;
+                            hidden.value = name === 'hasBonus' ? '' : 'false';
+                            form.appendChild(hidden);
+                        }
+                    });
                 });
             }
         });

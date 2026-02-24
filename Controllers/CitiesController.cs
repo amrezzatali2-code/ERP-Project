@@ -192,11 +192,14 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _db.Cities.AsNoTracking().FirstOrDefaultAsync(c => c.CityId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.CityName, existing.GovernorateId }) : null;
                 model.UpdatedAt = DateTime.Now;     // تتبع التعديل (لو العمود موجود)
                 _db.Update(model);
                 await _db.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "City", id, $"تعديل مدينة: {model.CityName}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { model.CityName, model.GovernorateId });
+                await _activityLogger.LogAsync(UserActionType.Edit, "City", id, $"تعديل مدينة: {model.CityName}", oldValues, newValues);
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -233,10 +236,11 @@ namespace ERP.Controllers
             var city = await _db.Cities.FindAsync(id);
             if (city == null) return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { city.CityName, city.GovernorateId });
             _db.Cities.Remove(city);
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Delete, "City", id, $"حذف مدينة: {city.CityName}");
+            await _activityLogger.LogAsync(UserActionType.Delete, "City", id, $"حذف مدينة: {city.CityName}", oldValues: oldValues);
 
             return RedirectToAction(nameof(Index));
         }

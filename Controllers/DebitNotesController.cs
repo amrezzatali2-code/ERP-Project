@@ -555,6 +555,7 @@ namespace ERP.Controllers
             if (existing == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { existing.NoteDate, existing.CustomerId, existing.AccountId, existing.Amount });
             existing.NoteDate = input.NoteDate;
             existing.CustomerId = input.CustomerId;
             existing.AccountId = input.AccountId;
@@ -579,7 +580,8 @@ namespace ERP.Controllers
 
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "DebitNote", id, $"تعديل إشعار خصم رقم {id}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { existing.NoteDate, existing.CustomerId, existing.AccountId, existing.Amount });
+                await _activityLogger.LogAsync(UserActionType.Edit, "DebitNote", id, $"تعديل إشعار خصم رقم {id}", oldValues, newValues);
 
                 try
                 {
@@ -628,13 +630,14 @@ namespace ERP.Controllers
 
             try
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { debitNote.NoteDate, debitNote.CustomerId, debitNote.AccountId, debitNote.Amount });
                 if (debitNote.IsPosted)
                     await _ledgerPostingService.ReverseForHeaderDeleteAsync(Models.LedgerSourceType.DebitNote, id, User?.Identity?.Name ?? "System", "حذف إشعار خصم");
 
                 _context.DebitNotes.Remove(debitNote);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "DebitNote", id, $"حذف إشعار خصم رقم {id}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "DebitNote", id, $"حذف إشعار خصم رقم {id}", oldValues: oldValues);
 
                 TempData["Success"] = "تم حذف إشعار الخصم.";
             }

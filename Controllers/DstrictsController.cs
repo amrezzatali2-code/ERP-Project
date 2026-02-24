@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using System;
+using System.IO;                        // MemoryStream للتصدير
 using System.Linq;
 using System.Text;                    // علشان StringBuilder و Encoding في التصدير
 using System.Threading.Tasks;
@@ -266,6 +267,7 @@ namespace ERP.Controllers
             var dbEntity = await _db.Districts.FindAsync(id);
             if (dbEntity == null) return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { dbEntity.DistrictName, dbEntity.GovernorateId, dbEntity.DistrictType, dbEntity.IsActive });
             // تحديث الحقول القابلة للتعديل
             dbEntity.DistrictName = model.DistrictName;
             dbEntity.GovernorateId = model.GovernorateId;
@@ -276,7 +278,8 @@ namespace ERP.Controllers
 
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Edit, "District", id, $"تعديل حي/مركز: {dbEntity.DistrictName}");
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new { dbEntity.DistrictName, dbEntity.GovernorateId, dbEntity.DistrictType, dbEntity.IsActive });
+            await _activityLogger.LogAsync(UserActionType.Edit, "District", id, $"تعديل حي/مركز: {dbEntity.DistrictName}", oldValues, newValues);
 
             TempData["Ok"] = "تم تعديل البيانات بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -320,10 +323,11 @@ namespace ERP.Controllers
             var item = await _db.Districts.FindAsync(id);
             if (item == null) return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { item.DistrictName, item.GovernorateId, item.DistrictType });
             _db.Districts.Remove(item);
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Delete, "District", id, $"حذف حي/مركز: {item.DistrictName}");
+            await _activityLogger.LogAsync(UserActionType.Delete, "District", id, $"حذف حي/مركز: {item.DistrictName}", oldValues: oldValues);
 
             TempData["Ok"] = "تم حذف السجل.";
             return RedirectToAction(nameof(Index));
@@ -488,59 +492,81 @@ namespace ERP.Controllers
             };
 
             var list = await query.ToListAsync();
+            var fmt = (format ?? "excel").Trim().ToLowerInvariant();
 
-            // -------- تجهيز CSV --------
-            // دالة صغيرة لضبط النص داخل CSV (تضيف "" حوالين النص وتستبدل " بـ "")
-            string Csv(string? value)
+            // -------- CSV --------
+            if (fmt == "csv")
             {
-                if (string.IsNullOrEmpty(value))
-                    return "";
+                string Csv(string? value)
+                {
+                    if (string.IsNullOrEmpty(value)) return "";
+                    return "\"" + value.Replace("\"", "\"\"") + "\"";
+                }
 
-                return "\"" + value.Replace("\"", "\"\"") + "\"";
+                var sb = new StringBuilder();
+                sb.AppendLine("DistrictId,DistrictName,GovernorateName,DistrictType,IsActive,CreatedAt,UpdatedAt");
+
+                foreach (var d in list)
+                {
+                    var typeName = d.DistrictType == 1 ? "مركز" : d.DistrictType == 0 ? "حي" : "";
+                    var activeName = d.IsActive ? "نشط" : "موقوف";
+                    var created = d.CreatedAt.HasValue ? d.CreatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "";
+                    var updated = d.UpdatedAt.HasValue ? d.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "";
+
+                    sb.AppendLine(string.Join(",", new[]
+                    {
+                        d.DistrictId.ToString(),
+                        Csv(d.DistrictName),
+                        Csv(d.Governorate?.GovernorateName),
+                        Csv(typeName),
+                        Csv(activeName),
+                        Csv(created),
+                        Csv(updated)
+                    }));
+                }
+
+                var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+                var bytes = encoding.GetBytes(sb.ToString());
+                return File(bytes, "text/csv; charset=utf-8", $"Districts_{DateTime.Now:yyyyMMdd_HHmm}.csv");
             }
 
-            var sb = new StringBuilder();
+            // -------- Excel (.xlsx) --------
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("الأحياء والمراكز");
 
-            // العناوين
-            sb.AppendLine("DistrictId,DistrictName,GovernorateName,DistrictType,IsActive,CreatedAt,UpdatedAt");
+            ws.Cell(1, 1).Value = "كود الحي/المركز";
+            ws.Cell(1, 2).Value = "اسم الحي/المركز";
+            ws.Cell(1, 3).Value = "المحافظة";
+            ws.Cell(1, 4).Value = "النوع";
+            ws.Cell(1, 5).Value = "الحالة";
+            ws.Cell(1, 6).Value = "تاريخ الإنشاء";
+            ws.Cell(1, 7).Value = "آخر تعديل";
 
-            // الصفوف
+            var header = ws.Range(1, 1, 1, 7);
+            header.Style.Font.Bold = true;
+            header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            int row = 2;
             foreach (var d in list)
             {
-                var typeName = d.DistrictType == 1 ? "مركز" :
-                                 d.DistrictType == 0 ? "حي" : "";
-                var activeName = d.IsActive ? "نشط" : "موقوف";
-
-                var created = d.CreatedAt.HasValue
-                    ? d.CreatedAt.Value.ToString("yyyy-MM-dd HH:mm")
-                    : "";
-                var updated = d.UpdatedAt.HasValue
-                    ? d.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
-                    : "";
-
-                sb.AppendLine(string.Join(",", new[]
-                {
-            d.DistrictId.ToString(),
-            Csv(d.DistrictName),
-            Csv(d.Governorate?.GovernorateName),
-            Csv(typeName),
-            Csv(activeName),
-            Csv(created),
-            Csv(updated)
-        }));
+                var typeName = d.DistrictType == 1 ? "مركز" : d.DistrictType == 0 ? "حي" : "";
+                ws.Cell(row, 1).Value = d.DistrictId;
+                ws.Cell(row, 2).Value = d.DistrictName ?? "";
+                ws.Cell(row, 3).Value = d.Governorate?.GovernorateName ?? "";
+                ws.Cell(row, 4).Value = typeName;
+                ws.Cell(row, 5).Value = d.IsActive ? "نشط" : "موقوف";
+                ws.Cell(row, 6).Value = d.CreatedAt.HasValue ? d.CreatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "";
+                ws.Cell(row, 7).Value = d.UpdatedAt.HasValue ? d.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "";
+                row++;
             }
 
-            // نستخدم UTF-8 مع BOM علشان Excel يقرأ العربي صح
-            var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
-            var bytes = encoding.GetBytes(sb.ToString());
+            ws.Columns().AdjustToContents();
 
-            // لو المستخدم اختار csv أو excel – الاتنين هيكونوا CSV بس باسم مختلف
-            var fmt = (format ?? "excel").ToLower();
-            var fileName = fmt == "csv" ? "Districts.csv" : "Districts_Excel.csv";
-
-            const string contentType = "text/csv; charset=utf-8";
-
-            return File(bytes, contentType, fileName);
+            using var stream = new MemoryStream();
+            wb.SaveAs(stream);
+            stream.Position = 0;
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"Districts_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
         }
 
 

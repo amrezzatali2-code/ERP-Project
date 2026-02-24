@@ -412,6 +412,7 @@ namespace ERP.Controllers
             if (dbUser == null)
                 return NotFound();                    // متغير: المستخدم لم يعد موجوداً
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { dbUser.UserName, dbUser.DisplayName, dbUser.Email, dbUser.IsActive });
             // ======================================================
             // 4) تحديث خصائص المستخدم
             // ======================================================
@@ -436,7 +437,8 @@ namespace ERP.Controllers
             // ======================================================
             await _context.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Edit, "User", model.UserId, $"تعديل مستخدم: {model.UserName}");
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new { dbUser.UserName, dbUser.DisplayName, dbUser.Email, dbUser.IsActive });
+            await _activityLogger.LogAsync(UserActionType.Edit, "User", model.UserId, $"تعديل مستخدم: {model.UserName}", oldValues, newValues);
 
             TempData["Success"] = "تم حفظ تعديلات المستخدم بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -503,10 +505,11 @@ namespace ERP.Controllers
             // ممكن لاحقاً نمنع حذف الـ Admin الرئيسي هنا لو حابب.
             try
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { user.UserName, user.DisplayName, user.Email });
                 _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "User", id, $"حذف مستخدم: {user?.UserName}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "User", id, $"حذف مستخدم: {user.UserName}", oldValues: oldValues);
 
                 TempData["Success"] = "تم حذف المستخدم بنجاح.";
             }

@@ -139,6 +139,8 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _context.PurchaseReturns.AsNoTracking().FirstOrDefaultAsync(p => p.PRetId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.PRetDate, existing.CustomerId, existing.WarehouseId, existing.NetTotal }) : null;
                 // تحديث وقت آخر تعديل
                 purchaseReturn.UpdatedAt = DateTime.Now;
 
@@ -148,7 +150,8 @@ namespace ERP.Controllers
                 // حفظ التغييرات في قاعدة البيانات
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "PurchaseReturn", purchaseReturn.PRetId, $"تعديل مرتجع شراء رقم {purchaseReturn.PRetId}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { purchaseReturn.PRetDate, purchaseReturn.CustomerId, purchaseReturn.WarehouseId, purchaseReturn.NetTotal });
+                await _activityLogger.LogAsync(UserActionType.Edit, "PurchaseReturn", purchaseReturn.PRetId, $"تعديل مرتجع شراء رقم {purchaseReturn.PRetId}", oldValues, newValues);
 
                 TempData["Msg"] = "تم تعديل مرتجع الشراء بنجاح.";
             }
@@ -685,12 +688,13 @@ namespace ERP.Controllers
                 );
 
                 // 5) حذف الهيدر (Cascade يحذف السطور)
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { ret.PRetDate, ret.CustomerId, ret.WarehouseId, ret.NetTotal });
                 _context.PurchaseReturns.Remove(ret);
 
                 await _context.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "PurchaseReturn", id, $"حذف مرتجع شراء رقم {id}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "PurchaseReturn", id, $"حذف مرتجع شراء رقم {id}", oldValues: oldValues);
 
                 return new DeletePurchaseReturnResult(DeletePurchaseReturnStatus.Deleted, "تم الحذف.");
             }

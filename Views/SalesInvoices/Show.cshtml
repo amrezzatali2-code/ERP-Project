@@ -327,29 +327,87 @@
         }
 
         @@media print {
+            /* حجم الصفحة — هوامش صغيرة جداً لتشمل الورقة كلها */
+            @@page {
+                size: A4 landscape;
+                margin: 3mm;
+            }
             /* يظهر في الطباعة فقط */
             .print-only {
                 display: block !important;
+            }
+            /* طباعة الفاتورة: إخفاء كل شيء وإظهار منطقة الطباعة فقط */
+            body.printing-invoice * {
+                display: none !important;
+            }
+            body.printing-invoice #piPrintWrapper,
+            body.printing-invoice #piPrintWrapper * {
+                display: block !important;
+            }
+            body.printing-invoice #piPrintWrapper table,
+            body.printing-invoice #piPrintWrapper thead,
+            body.printing-invoice #piPrintWrapper tbody,
+            body.printing-invoice #piPrintWrapper tr,
+            body.printing-invoice #piPrintWrapper th,
+            body.printing-invoice #piPrintWrapper td {
+                display: table !important;
+            }
+            body.printing-invoice #piPrintWrapper thead { display: table-header-group !important; }
+            body.printing-invoice #piPrintWrapper tbody { display: table-row-group !important; }
+            body.printing-invoice #piPrintWrapper tr { display: table-row !important; }
+            body.printing-invoice #piPrintWrapper th,
+            body.printing-invoice #piPrintWrapper td { display: table-cell !important; }
+            /* منطقة الطباعة: تملأ الصفحة بالكامل — fixed لتظهر فوق كل المحتوى المخفي */
+            body.printing-invoice #piPrintWrapper {
+                position: fixed !important;
+                top: 0 !important;
+                left: 0 !important;
+                right: 0 !important;
+                bottom: 0 !important;
+                width: 100% !important;
+                height: 100% !important;
+                max-width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+                z-index: 99999 !important;
+                background: white !important;
+            }
+            #piPrintWrapper {
+                position: relative !important;
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: visible !important;
+            }
+            #piPrintArea,
+            .pi-print-copy {
+                width: 100% !important;
+                max-width: 100% !important;
+                overflow: visible !important;
             }
             /* مهم: فك أي Scroll أثناء الطباعة */
             .erp-table-wrapper {
                 max-height: none !important;
                 overflow: visible !important;
             }
-            /* تنسيق جدول الطباعة لو اتنسخ */
+            /* تنسيق جدول الطباعة — يملأ الصفحة بحجم أوضح */
             #piPrintArea table,
             .pi-print-copy table {
-                width: 100%;
+                width: 100% !important;
+                max-width: 100% !important;
                 border-collapse: collapse;
                 font-size: 12px;
+                table-layout: auto;
             }
 
             #piPrintArea th, #piPrintArea td,
             .pi-print-copy th, .pi-print-copy td {
-                border: 1px solid #d0d0d0;
-                padding: 6px;
+                border: 1px solid #333;
+                padding: 6px 8px;
                 vertical-align: middle;
-                white-space: nowrap;
+                white-space: normal;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
             }
 
             #piPrintArea thead,
@@ -361,53 +419,71 @@
             .pi-print-copy tr {
                 break-inside: avoid;
             }
-            /* صفحة واحدة طولية */
-            .print-mode-1 { }
-            /* أصل وصورة: صفحة عرضية مقسومة لقسمين — تصغير لاحتواء النسختين */
+            /* صفحة واحدة — عرضية، المحتوى يملأ الصفحة بحجم واضح */
+            .print-mode-1 #piPrintArea {
+                font-size: 14px !important;
+                padding: 0 !important;
+            }
+            .print-mode-1 #piPrintArea .mb-3,
+            .print-mode-1 #piPrintArea .small {
+                font-size: 12px !important;
+            }
+            .print-mode-1 #piPrintArea table {
+                font-size: 13px !important;
+            }
+            /* أصل وصورة: صفحة عرضية مقسومة لقسمين */
             .print-mode-2 {
                 display: grid !important;
                 grid-template-columns: 1fr 1fr;
                 gap: 0.5rem;
-                width: 100%;
+                width: 100% !important;
             }
             .print-mode-2 .pi-print-copy {
                 break-inside: avoid;
-                min-width: 0;
-                transform: scale(0.85);
+                min-width: 0 !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+                transform: scale(0.9);
                 transform-origin: top center;
-                font-size: 10px !important;
+                font-size: 9px !important;
+            }
+            .print-mode-2 .pi-print-copy table {
+                font-size: 9px !important;
             }
             .print-mode-2 .pi-print-copy th,
             .print-mode-2 .pi-print-copy td {
-                padding: 3px !important;
-                font-size: inherit !important;
+                padding: 2px 4px !important;
             }
             .print-mode-2 .pi-print-copy .mb-3,
             .print-mode-2 .pi-print-copy .small {
-                font-size: 9px !important;
+                font-size: 8px !important;
             }
-            /* أصل وصورتين: صفحة عرضية مقسومة لثلاثة أقسام — تصغير لاحتواء النسخ الثلاث */
+            /* أصل وصورتين: صفحة عرضية مقسومة لثلاثة أقسام */
             .print-mode-3 {
                 display: grid !important;
                 grid-template-columns: 1fr 1fr 1fr;
                 gap: 0.25rem;
-                width: 100%;
+                width: 100% !important;
             }
             .print-mode-3 .pi-print-copy {
                 break-inside: avoid;
-                min-width: 0;
-                transform: scale(0.6);
+                min-width: 0 !important;
+                max-width: 100% !important;
+                overflow: hidden !important;
+                transform: scale(0.75);
                 transform-origin: top center;
-                font-size: 8px !important;
+                font-size: 7px !important;
+            }
+            .print-mode-3 .pi-print-copy table {
+                font-size: 7px !important;
             }
             .print-mode-3 .pi-print-copy th,
             .print-mode-3 .pi-print-copy td {
-                padding: 2px !important;
-                font-size: inherit !important;
+                padding: 1px 3px !important;
             }
             .print-mode-3 .pi-print-copy .mb-3,
             .print-mode-3 .pi-print-copy .small {
-                font-size: 7px !important;
+                font-size: 6px !important;
             }
         }
 
@@ -603,7 +679,8 @@
                         <a href="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "#")" id="btnCustomerVolume" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none"
                            data-tab-id="customer-engagement"
                            data-tab-title="حجم تعامل عميل"
-                           data-url="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "")">
+                           data-url="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "")"
+                           data-keep-active-posted="1">
                             📊 حجم تعامل
                         </a>
 
@@ -713,6 +790,7 @@
                                                             data-district="@c.District"
                                                             data-area="@c.Area"
                                                             data-credit="@c.Credit"
+                                                            data-balance="@(c.CurrentBalance.ToString("0.##"))"
                                                             data-policy-id="@c.PolicyId"
                                                             data-policy-name="@c.PolicyName">
                                                     </option>
@@ -793,8 +871,8 @@
 
                                 <div class="row g-2 align-items-end">
                                     <div class="col">
-                                        <label class="form-label form-label-sm">أمر البيع المرجعي</label>
-                                        <input id="RefPRId" class="form-control form-control-sm text-center" value="@((ViewBag.RefDocId?.ToString() ?? ""))" readonly />
+                                        <label class="form-label form-label-sm">حالة الفاتورة</label>
+                                        <input id="InvoiceStatusDisplay" class="form-control form-control-sm text-center" value="@(Model?.Status ?? "غير مرحلة")" readonly />
                                     </div>
                                     <div class="col">
                                         <label class="form-label form-label-sm">الهاتف</label>
@@ -826,6 +904,7 @@
                                         <input id="CustomerCredit" class="form-control form-control-sm"
                                                value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))" readonly data-lock-posted="1" />
                                     </div>
+                                    <input type="hidden" id="CustomerCurrentBalance" value="@((Model?.Customer?.CurrentBalance ?? 0m).ToString("0.##"))" />
                                 </div>
                             </div>
                         </div>
@@ -853,43 +932,57 @@
                                             <input type="text" id="ProdQuotaText"
                                                    class="form-control form-control-sm text-center" value="بدون كوتة" readonly />
                                         </div>
+                                        <div class="col-3 col-md-2">
+                                            <label class="form-label form-label-sm">البونص</label>
+                                            <input type="text" id="ProdBonusText"
+                                                   class="form-control form-control-sm text-center" value="بدون بونص" readonly />
+                                        </div>
+                                        <div class="col-3 col-md-2">
+                                            <label class="form-label form-label-sm">مجموعة الصنف</label>
+                                            <input type="text" id="ProdGroupText"
+                                                   class="form-control form-control-sm text-center" value="بدون مجموعة" readonly />
+                                        </div>
+                                        <div class="col-3 col-md-2">
+                                            <label class="form-label form-label-sm">سياسة المجموعة</label>
+                                            <input type="text" id="ProdGroupPolicyText"
+                                                   class="form-control form-control-sm text-center" value="—" readonly
+                                                   title="السياسة المطبقة من مجموعة الصنف (الربح من جدول سياسات المخازن)" />
+                                        </div>
                                         <div class="col-3 col-md-1">
                                             <label class="form-label form-label-sm">الخصم المرجّح%</label>
                                             <input type="text" id="ProdWeightedDiscount"
                                                    class="form-control form-control-sm text-center" value="0" readonly />
                                         </div>
-                                        <div class="col-12 col-md-5 col-lg-5">
-                                            <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
-                                            <select id="AlternativeProducts" class="form-select form-select-sm"></select>
-                                        </div>
                                     </div>
 
                                     @* =========================
-                                      قائمة تشغيلات الصنف (FEFO)
+                                      بدائل الصنف + تشغيلات الصنف (FEFO) — في صف واحد
                                            ========================= *@
-                                    <div class="mt-0">
-                                        <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
-                                            <label class="form-label form-label-sm mb-0">تشغيلات الصنف (حسب FEFO)</label>
-                                            
+                                    <div class="row g-2 align-items-start">
+                                        <div class="col-12 col-md-4 col-lg-3">
+                                            <label class="form-label form-label-sm">بدائل الصنف (حسب الاسم العلمي)</label>
+                                            <select id="AlternativeProducts" class="form-select form-select-sm"></select>
                                         </div>
-
-                                        <div class="table-responsive invoice-batch-table-wrap">
-                                            <table class="table table-sm table-bordered align-middle text-center mb-0 invoice-batch-table">
-                                                <thead class="table-light">
-                                                    <tr>
-                                                        <th style="width:60px;">المسلسل</th>
-                                                        <th style="width:90px;">التشغيلة</th>
-                                                        <th style="width:100px;">الصلاحية</th>
-                                                        <th style="width:80px;">الكمية</th>
-                                                        <th style="width:110px;">سعر الجمهور</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody id="BatchQueueBody">
-                                                    <tr>
-                                                        <td colspan="5" class="text-muted">لا توجد تشغيلات بعد.</td>
-                                                    </tr>
-                                                </tbody>
-                                            </table>
+                                        <div class="col-12 col-md-8 col-lg-9">
+                                            <label class="form-label form-label-sm mb-1">تشغيلات الصنف (حسب FEFO)</label>
+                                            <div class="table-responsive invoice-batch-table-wrap">
+                                                <table class="table table-sm table-bordered align-middle text-center mb-0 invoice-batch-table">
+                                                    <thead class="table-light">
+                                                        <tr>
+                                                            <th style="width:60px;">المسلسل</th>
+                                                            <th style="width:90px;">التشغيلة</th>
+                                                            <th style="width:100px;">الصلاحية</th>
+                                                            <th style="width:80px;">الكمية</th>
+                                                            <th style="width:110px;">سعر الجمهور</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody id="BatchQueueBody">
+                                                        <tr>
+                                                            <td colspan="5" class="text-muted">لا توجد تشغيلات بعد.</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
                                     </div>
 
@@ -936,7 +1029,9 @@
                                                             data-generic="@p.GenericName"
                                                             data-company="@p.Company"
                                                             data-price="@p.PriceRetail"
-                                                            data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                                            data-hasquota="@(p.HasQuota ? "true" : "false")"
+                                                            data-hasbonus="@(p.HasBonus ? "true" : "false")"
+                                                            data-bonusgroup="@(p.BonusGroupName ?? "")">
                                                     </option>
                                                 }
                                             }
@@ -1140,13 +1235,18 @@
                             int totalQty = lines.Sum(l => l.Qty);
 
                             decimal totalRetail = lines.Sum(l => l.Qty * l.PriceRetail);
-                            decimal totalAfterDiscount = lines.Sum(l =>
-                            l.Qty * l.PriceRetail * (1m - (l.Disc1Percent / 100m))
-                            );
+                            decimal totalAfterDiscount = Model.TotalAfterDiscountBeforeTax;
+                            if (totalAfterDiscount == 0 && lines.Any())
+                            {
+                                totalAfterDiscount = lines.Sum(l => l.LineTotalAfterDiscount) - Model.HeaderDiscountValue;
+                                if (totalAfterDiscount < 0) totalAfterDiscount = 0;
+                            }
 
                             decimal taxAmount = Model.TaxAmount;
                             decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
                             decimal netTotal = totalAfterDiscountAndTax;
+                            // نسبة الضريبة المعروضة (للإدخال): من الإجمالي بعد الخصم
+                            decimal taxPercentDisplay = totalAfterDiscount > 0 ? Math.Round(taxAmount * 100m / totalAfterDiscount, 2) : 0m;
                         }
 
                         <div class="card shadow-sm invoice-totals-card">
@@ -1174,15 +1274,24 @@
                                         <span id="TotalAfterDiscountValue" class="badge bg-light text-dark invoice-summary-badge">@totalAfterDiscount.ToString("0.00")</span>
                                     </div>
                                     <div class="invoice-summary-item">
-                                        <label class="form-label form-label-sm mb-0 small">قيمة الضريبة</label>
-                                        <input type="number" step="0.01" id="TaxAmountInput"
+                                        <label class="form-label form-label-sm mb-0 small">نسبة الضريبة %</label>
+                                        <input type="number" step="0.01" id="TaxPercentInput"
                                                class="form-control form-control-sm text-center pi-input invoice-summary-tax"
-                                               value="@taxAmount.ToString("0.00")" data-lock-posted="1"/>
+                                               value="@taxPercentDisplay.ToString("0.00")" placeholder="0" data-lock-posted="1"/>
+                                        <span id="TaxAmountDisplay" class="small text-muted d-block mt-1">قيمة الضريبة: <strong id="TaxAmountValue">@taxAmount.ToString("0.00")</strong></span>
                                     </div>
                                     <div class="invoice-summary-item invoice-summary-total">
                                         <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
                                         <span id="TotalAfterDiscountAndTaxValue" class="badge bg-primary text-white invoice-summary-badge fw-bold">@totalAfterDiscountAndTax.ToString("0.00")</span>
                                         <span id="NetTotalValue" class="visually-hidden">@netTotal.ToString("0.00")</span>
+                                    </div>
+                                    <div class="invoice-summary-item">
+                                        <span class="small text-muted d-block">الحساب السابق للعميل</span>
+                                        <span id="CustomerPreviousBalanceValue" class="badge bg-light text-dark invoice-summary-badge">@((Model?.Customer?.CurrentBalance ?? 0m).ToString("0.00"))</span>
+                                    </div>
+                                    <div class="invoice-summary-item">
+                                        <span class="small text-muted d-block">المبلغ المتبقى من الحد الائتماني</span>
+                                        <span id="CreditRemainingValue" class="badge bg-light text-dark invoice-summary-badge">@((Math.Max(0, (Model?.Customer?.CreditLimit ?? 0m) - (Model?.Customer?.CurrentBalance ?? 0m) - netTotal)).ToString("0.00"))</span>
                                     </div>
                                     @if (Model.UpdatedAt.HasValue)
                                     {
@@ -1272,6 +1381,66 @@
 
 @section Scripts {
         <script>
+                      // =========================================================
+            // (0) دوال القفل عند الترحيل — يجب أن تكون في المستوى الأعلى لتعمل عند التحميل الأولي
+            // =========================================================
+            function isInvoicePosted() {
+                const flag = document.getElementById("InvoiceIsPostedFlag");
+                return flag && flag.value === "1";
+            }
+            function setInvoicePosted(posted) {
+                const flag = document.getElementById("InvoiceIsPostedFlag");
+                if (flag) flag.value = posted ? "1" : "0";
+            }
+            function applyPostedUiLock() {
+                const posted = isInvoicePosted();
+                const lockables = document.querySelectorAll('[data-lock-posted="1"]');
+                lockables.forEach(el => {
+                    if (el.getAttribute('data-keep-active-posted') === '1') return;
+                    if (el.dataset.lockInit !== "1") {
+                        el.dataset.lockInit = "1";
+                        el.dataset.origDisabled = el.disabled ? "1" : "0";
+                        el.dataset.origReadonly = el.readOnly ? "1" : "0";
+                        el.dataset.origTabIndex = el.getAttribute("tabindex") ?? "";
+                    }
+                    const tag = (el.tagName || "").toUpperCase();
+                    if (posted) {
+                        if (tag === "BUTTON") { el.disabled = true; return; }
+                        if (tag === "A") {
+                            el.classList.add("disabled", "pe-none");
+                            el.setAttribute("aria-disabled", "true");
+                            el.setAttribute("tabindex", "-1");
+                            return;
+                        }
+                        if (tag === "INPUT" || tag === "TEXTAREA") {
+                            el.readOnly = true;
+                            el.classList.add("bg-light", "text-muted");
+                            return;
+                        }
+                        if (tag === "SELECT") { el.disabled = true; return; }
+                        return;
+                    }
+                    const origDisabled = el.dataset.origDisabled === "1";
+                    const origReadonly = el.dataset.origReadonly === "1";
+                    const origTabIndex = el.dataset.origTabIndex;
+                    if (tag === "BUTTON") { el.disabled = origDisabled; return; }
+                    if (tag === "A") {
+                        el.classList.remove("disabled", "pe-none");
+                        el.removeAttribute("aria-disabled");
+                        if (origTabIndex === "") el.removeAttribute("tabindex");
+                        else el.setAttribute("tabindex", origTabIndex);
+                        return;
+                    }
+                    if (tag === "INPUT" || tag === "TEXTAREA") {
+                        el.readOnly = origReadonly;
+                        el.classList.remove("bg-light", "text-muted");
+                        return;
+                    }
+                    if (tag === "SELECT") { el.disabled = origDisabled; return; }
+                });
+            }
+            document.addEventListener("DOMContentLoaded", applyPostedUiLock);
+
                       // =========================================================
             // (A) أوتوكومبليت العميل (اسم ⇐⇒ كود + بيانات + سياسة)
             // =========================================================
@@ -1371,6 +1540,10 @@
                         if (suspendedMsg) suspendedMsg.classList.add('d-none');
                         if (saveBtn) saveBtn.disabled = false;
 
+                        // ✅ تحديث زر حجم التعامل (تفعيله عند إلغاء اختيار العميل)
+                        if (typeof window.__refreshSideNavButtons === 'function') {
+                            window.__refreshSideNavButtons();
+                        }
                         return;
                     }
 
@@ -1385,6 +1558,7 @@
                     const district = opt.getAttribute('data-district') || opt.getAttribute('data-District') || ''; // متغير: الحي
                     const area     = opt.getAttribute('data-area')     || opt.getAttribute('data-Area')     || ''; // متغير: المنطقة
                     const credit   = opt.getAttribute('data-credit')   || opt.getAttribute('data-Credit')   || ''; // متغير: الحد الائتماني
+                    const balance  = opt.getAttribute('data-balance')  || opt.getAttribute('data-Balance')  || '0'; // متغير: الحساب السابق للعميل
 
                     // ✅ جديد: سياسة العميل
                     const policyId   = opt.getAttribute('data-policy-id')   || opt.getAttribute('data-PolicyId')   || '';
@@ -1404,11 +1578,37 @@
                     if (custAddressInput)  custAddressInput.value  = address;
                     if (custCreditInput)   custCreditInput.value   = credit;
 
+                    // ✅ تحديث الحساب السابق للعميل والمبلغ المتبقى
+                    const custBalanceHidden = document.getElementById('CustomerCurrentBalance');
+                    if (custBalanceHidden) custBalanceHidden.value = balance;
+                    if (typeof updateSummaryBadges === 'function') {
+                        const netEl = document.getElementById('NetTotalValue');
+                        const netTotal = netEl ? parseFloat(netEl.textContent || '0') : 0;
+                        const totAfter = parseDecimalSafe(document.getElementById('TotalAfterDiscountValue')?.textContent || 0);
+                        const taxPct = parseDecimalSafe(document.getElementById('TaxPercentInput')?.value || 0);
+                        const taxAmt = totAfter * (taxPct / 100);
+                        const totals = {
+                            totalLines: document.getElementById('TotalLinesValue')?.textContent || 0,
+                            totalItems: document.getElementById('TotalItemsValue')?.textContent || 0,
+                            totalQty: document.getElementById('TotalQtyValue')?.textContent || 0,
+                            totalRetail: document.getElementById('TotalRetailValue')?.textContent || 0,
+                            totalAfterDiscount: document.getElementById('TotalAfterDiscountValue')?.textContent || 0,
+                            taxAmount: taxAmt,
+                            totalAfterDiscountAndTax: totAfter + taxAmt,
+                            netTotal: totAfter + taxAmt
+                        };
+                        updateSummaryBadges(totals);
+                    }
+
                             // ✅ تعبئة سياسة العميل (نُظهر الاسم فقط)
             if (policyIdBox) policyIdBox.value = policyId; // يظل مخفي للاستخدام لاحقاً
 
             if (policyTextBox) {
                 policyTextBox.value = (policyName || '').trim(); // عرض اسم السياسة فقط
+            }
+            // ✅ تحديث زر حجم التعامل عند اختيار/تغيير العميل
+            if (typeof window.__refreshSideNavButtons === 'function') {
+                window.__refreshSideNavButtons();
             }
 
                     // ✅ العميل الموقوف: إظهار الرسالة ومنع الحفظ
@@ -1611,6 +1811,8 @@
                                 if (prodPriceInput)  prodPriceInput.value  = '';
 
                                 if (prodQuotaText)    prodQuotaText.value    = 'بدون كوتة';
+                                const prodBonusText = document.getElementById('ProdBonusText');
+                                if (prodBonusText)    prodBonusText.value    = 'بدون بونص';
                                 if (prodWeightedDisc) prodWeightedDisc.value = '0';
 
                                 if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
@@ -1628,6 +1830,8 @@
                             const name     = opt.value                        || ''; // متغير: اسم الصنف
                             const generic  = opt.getAttribute('data-generic') || ''; // متغير: الاسم العلمي
                             const hasQuota = (opt.getAttribute('data-hasquota') === 'true'); // متغير: هل له كوتة؟
+                            const hasBonus = (opt.getAttribute('data-hasbonus') === 'true'); // متغير: هل له بونص؟
+                            const bonusGroup = opt.getAttribute('data-bonusgroup') || ''; // متغير: اسم مجموعة البونص
                             let priceRaw   = opt.getAttribute('data-price')   || '0'; // متغير: السعر كنص
 
                             // معالجة السعر
@@ -1647,6 +1851,10 @@
 
                             if (prodQuotaText) {
                                 prodQuotaText.value = hasQuota ? 'له كوتة' : 'بدون كوتة';
+                            }
+                            const prodBonusText = document.getElementById('ProdBonusText');
+                            if (prodBonusText) {
+                                prodBonusText.value = hasBonus && bonusGroup ? bonusGroup : 'بدون بونص';
                             }
 
                             // حالياً: الخصم المرجّح = 0 (هنربطه بالسياسات لاحقاً)
@@ -1714,10 +1922,15 @@
                     if (prodQtyAll)       prodQtyAll.value       = (data.qtyAllWarehouses ?? 0);
 
                     // 2) كوتة
-                    if (prodQuotaText) {
-                        const hasQuota = !!data.hasQuota;
-                        prodQuotaText.value = hasQuota ? 'له كوتة' : 'بدون كوتة';
-                    }
+                    if (prodQuotaText) prodQuotaText.value = (data.quotaText ?? 'بدون كوتة').toString();
+
+                    // 2.1) مجموعة الصنف
+                    const prodGroupText = document.getElementById('ProdGroupText');
+                    if (prodGroupText) prodGroupText.value = (data.productGroupName ?? 'بدون مجموعة').toString();
+
+                    // 2.2) سياسة المجموعة المطبقة (رقم/اسم السياسة)
+                    const groupPolicyBox = document.getElementById('ProdGroupPolicyText');
+                    if (groupPolicyBox) groupPolicyBox.value = (data.appliedGroupPolicyName ?? data.appliedGroupPolicyId ?? '').toString() || '—';
 
                     // 3) الخصم المرجّح
                     if (prodWeightedDisc) {
@@ -2467,11 +2680,28 @@
 
                         setText('TotalRetailValue', fmt2(totalRetail));
                         setText('TotalAfterDiscountValue', fmt2(totalAfterDiscount));
-                        const taxInp = document.getElementById('TaxAmountInput');
-            if (taxInp) taxInp.value = fmt2(taxAmount);
+                        const taxPercentInp = document.getElementById('TaxPercentInput');
+                        const taxAmountVal = document.getElementById('TaxAmountValue');
+                        const totAfterDisc = parseDecimalSafe(totalAfterDiscount);
+                        const taxPct = totAfterDisc > 0 ? (parseDecimalSafe(taxAmount) * 100 / totAfterDisc) : 0;
+                        if (taxPercentInp) taxPercentInp.value = fmt2(taxPct);
+                        if (taxAmountVal) taxAmountVal.textContent = fmt2(taxAmount);
 
                         setText('TotalAfterDiscountAndTaxValue', fmt2(totalAfterDiscountAndTax));
                         setText('NetTotalValue', fmt2(netTotal));
+
+                        // ✅ تحديث الحساب السابق والمبلغ المتبقى من الحد الائتماني
+                        const custBalanceEl = document.getElementById('CustomerCurrentBalance');
+                        const creditLimitEl = document.getElementById('CustomerCredit');
+                        const prevBalanceEl = document.getElementById('CustomerPreviousBalanceValue');
+                        const creditRemainingEl = document.getElementById('CreditRemainingValue');
+                        if (custBalanceEl && creditLimitEl && prevBalanceEl && creditRemainingEl) {
+                            const custBalance = parseDecimalSafe(custBalanceEl.value);
+                            const creditLimit = parseDecimalSafe(creditLimitEl.value);
+                            prevBalanceEl.textContent = fmt2(custBalance);
+                            const remaining = Math.max(0, creditLimit - custBalance - parseDecimalSafe(netTotal));
+                            creditRemainingEl.textContent = fmt2(remaining);
+                        }
                     }
                     window.updateSummaryBadges = updateSummaryBadges;
 
@@ -2577,7 +2807,8 @@
                          // =========================
                          // 2) استدعاء API بيانات الصنف (GET)
                          // =========================
-                         const url = `/SalesInvoices/GetSalesProductInfo?prodId=${pid}&warehouseId=${warehouseId}`;
+                         const customerId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                         const url = `/SalesInvoices/GetSalesProductInfo?prodId=${pid}&warehouseId=${warehouseId}&customerId=${customerId}`;
                          console.log('refreshProductInfoAfterAddLine URL =', url);
 
                          try {
@@ -2613,11 +2844,19 @@
                              const quotaBox = document.getElementById('ProdQuotaText');
                              if (quotaBox) quotaBox.value = (info.quotaText ?? 'بدون كوتة').toString();
 
+                             const bonusBox = document.getElementById('ProdBonusText');
+                             if (bonusBox) bonusBox.value = (info.bonusText ?? 'بدون بونص').toString();
+
+                             const groupBox = document.getElementById('ProdGroupText');
+                             if (groupBox) groupBox.value = (info.productGroupName ?? 'بدون مجموعة').toString();
+
+                             const groupPolicyBox = document.getElementById('ProdGroupPolicyText');
+                             if (groupPolicyBox) groupPolicyBox.value = (info.appliedGroupPolicyName ?? info.appliedGroupPolicyId ?? '').toString() || '—';
+
                              // متغير: الخصم المرجح للصنف %
                              const wdBox = document.getElementById('ProdWeightedDiscount');
                              if (wdBox) {
-                                 // ✅ تنسيق رقم بسيط بدل أرقام طويلة
-                                 const wd = Number(info.weightedDiscountPct ?? 0);
+                                 const wd = Number(info.weightedDiscount ?? 0);
                                  wdBox.value = (Number.isFinite(wd) ? wd.toFixed(2) : '0.00');
                              }
 
@@ -2690,8 +2929,9 @@
                 try { if (__productInfoAbort) __productInfoAbort.abort(); } catch { }
                 __productInfoAbort = new AbortController();
 
-                // ✅ كسر الكاش + منع التخزين
-                const url = `/SalesInvoices/GetSalesProductInfo?prodId=${pid}&warehouseId=${warehouseId}&_ts=${Date.now()}`;
+                // ✅ كسر الكاش + منع التخزين (مع customerId لتطبيق سياسة المجموعة الصحيحة)
+                const customerId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                const url = `/SalesInvoices/GetSalesProductInfo?prodId=${pid}&warehouseId=${warehouseId}&customerId=${customerId}&_ts=${Date.now()}`;
 
                 try {
                     const resp = await fetch(url, {
@@ -2721,6 +2961,15 @@
 
                     const quotaBox = document.getElementById('ProdQuotaText');
                     if (quotaBox) quotaBox.value = (info.quotaText ?? 'بدون كوتة').toString();
+
+                    const bonusBox = document.getElementById('ProdBonusText');
+                    if (bonusBox) bonusBox.value = (info.bonusText ?? 'بدون بونص').toString();
+
+                    const groupBox = document.getElementById('ProdGroupText');
+                    if (groupBox) groupBox.value = (info.productGroupName ?? 'بدون مجموعة').toString();
+
+                    const groupPolicyBox = document.getElementById('ProdGroupPolicyText');
+                    if (groupPolicyBox) groupPolicyBox.value = (info.appliedGroupPolicyName ?? info.appliedGroupPolicyId ?? '').toString() || '—';
 
                     const wdBox = document.getElementById('ProdWeightedDiscount');
                     if (wdBox) {
@@ -3404,16 +3653,57 @@
 
 
 
+            // الضريبة كنسبة من الإجمالي بعد الخصم — إعادة حساب العرض عند تغيير النسبة
+            function recalcTaxFromPercent() {
+                const percentInp = document.getElementById('TaxPercentInput');
+                const totalAfterEl = document.getElementById('TotalAfterDiscountValue');
+                const taxAmountEl = document.getElementById('TaxAmountValue');
+                const totalAndTaxEl = document.getElementById('TotalAfterDiscountAndTaxValue');
+                const netEl = document.getElementById('NetTotalValue');
+                const creditRemEl = document.getElementById('CreditRemainingValue');
+                const custBalanceEl = document.getElementById('CustomerCurrentBalance');
+                const creditLimitEl = document.getElementById('CustomerCredit');
+
+                const totalAfterDiscount = parseDecimalSafe(totalAfterEl?.textContent || 0);
+                const taxPercent = parseDecimalSafe(percentInp?.value || 0);
+                const taxAmount = Math.round(totalAfterDiscount * (taxPercent / 100) * 100) / 100;
+                const totalAfterDiscountAndTax = Math.round((totalAfterDiscount + taxAmount) * 100) / 100;
+
+                if (taxAmountEl) taxAmountEl.textContent = fmt2(taxAmount);
+                if (totalAndTaxEl) totalAndTaxEl.textContent = fmt2(totalAfterDiscountAndTax);
+                if (netEl) netEl.textContent = fmt2(totalAfterDiscountAndTax);
+                if (creditRemEl && custBalanceEl && creditLimitEl) {
+                    const remaining = Math.max(0, parseDecimalSafe(creditLimitEl.value) - parseDecimalSafe(custBalanceEl.value) - totalAfterDiscountAndTax);
+                    creditRemEl.textContent = fmt2(remaining);
+                }
+            }
+
+            document.getElementById('TaxPercentInput')?.addEventListener('input', recalcTaxFromPercent);
+            document.getElementById('TaxPercentInput')?.addEventListener('change', recalcTaxFromPercent);
+
             //حفظ الضريبة (Enter أو Blur)
 
             async function saveTaxAjax() {
 
-                const token = getAntiForgeryToken();
                 const invoiceId = parseInt('@(Model?.SIId ?? 0)', 10);
+                if (!invoiceId || invoiceId <= 0) {
+                    alert('يجب حفظ الفاتورة أولاً قبل تعديل الضريبة.');
+                    return;
+                }
 
-                const taxInput = document.getElementById('TaxAmountInput');
-                const taxVal = parseFloat(taxInput?.value || '0') || 0;
+                const totalAfterEl = document.getElementById('TotalAfterDiscountValue');
+                const percentInp = document.getElementById('TaxPercentInput');
+                const rawPercent = (percentInp?.value || '').toString().trim();
+                const taxPercent = parseDecimalSafe(rawPercent);
+                if (rawPercent !== '' && (isNaN(parseFloat(rawPercent.replace(',', '.'))) || taxPercent < 0 || taxPercent > 100)) {
+                    alert('من فضلك أدخل نسبة صحيحة (رقم بين 0 و 100).');
+                    return;
+                }
 
+                const totalAfterDiscount = parseDecimalSafe(totalAfterEl?.textContent || 0);
+                const taxVal = Math.round(totalAfterDiscount * (taxPercent / 100) * 100) / 100;
+
+                const token = getAntiForgeryToken();
                 const res = await fetch('@Url.Action("SaveTaxJson", "SalesInvoices")', {
                     method: 'POST',
                     headers: {
@@ -3433,14 +3723,14 @@
                 if (data.totals) updateSummaryBadges(data.totals);
             }
 
-            document.getElementById('TaxAmountInput')?.addEventListener('keydown', function (e) {
+            document.getElementById('TaxPercentInput')?.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     saveTaxAjax();
                 }
             });
 
-            document.getElementById('TaxAmountInput')?.addEventListener('blur', function () {
+            document.getElementById('TaxPercentInput')?.addEventListener('blur', function () {
                 saveTaxAjax();
             });
 
@@ -3580,11 +3870,41 @@
                                 btnPost.innerHTML = "⏳ جاري الترحيل...";
 
                                 if (msg) {
-                                    msg.textContent = "يتم الآن ترحيل الفاتورة...";
+                                    msg.textContent = "يتم حفظ التعديلات ثم الترحيل...";
                                     msg.className = "small mt-2 text-muted";
                                 }
 
                                 try {
+
+                                    // =========================
+                                    // 0) حفظ الهيدر أولاً (لتطبيق أي تعديل مثل تغيير العميل)
+                                    // =========================
+                                    const custId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                                    const whId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
+                                    if (custId <= 0 || whId <= 0) {
+                                        if (msg) { msg.textContent = "يجب اختيار العميل والمخزن قبل الترحيل."; msg.className = "small mt-2 text-danger"; }
+                                        btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                                        return;
+                                    }
+                                    const saveRes = await fetch('@Url.Action("SaveHeader", "SalesInvoices")', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ invoiceId: invoiceId, customerId: custId, warehouseId: whId, SOId: null })
+                                    });
+                                    let saveData = null;
+                                    try { const txt = await saveRes.text(); if (txt) saveData = JSON.parse(txt); } catch { }
+                                    if (!saveRes.ok || !saveData?.success) {
+                                        const errMsg = (saveData && saveData.message) ? saveData.message : 'تعذر حفظ التعديلات قبل الترحيل.';
+                                        if (msg) { msg.textContent = errMsg; msg.className = "small mt-2 text-danger"; }
+                                        alert(errMsg);
+                                        btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                                        return;
+                                    }
+
+                                    if (msg) {
+                                        msg.textContent = "يتم الآن ترحيل الفاتورة...";
+                                        msg.className = "small mt-2 text-muted";
+                                    }
 
                                     // =========================
                                     // 1) طلب الترحيل
@@ -3884,121 +4204,37 @@
 
 
 
-                                    // =========================================================
-                        // ثابت: قراءة حالة "مُرحّلة؟" من Flag (0/1)
-                        // =========================================================
-                        function isInvoicePosted() {
-                            const flag = document.getElementById("InvoiceIsPostedFlag"); // متغير: علم الترحيل
-                            return flag && flag.value === "1";
-                        }
-
-                        // =========================================================
-                        // ثابت: تحديث Flag بعد الترحيل/الفتح (بدون Reload)
-                        // =========================================================
-                        function setInvoicePosted(posted) {
-                            const flag = document.getElementById("InvoiceIsPostedFlag"); // متغير: علم الترحيل
-                            if (flag) flag.value = posted ? "1" : "0";
-                        }
-
-                        // =========================================================
-                        // ثابت: تطبيق القفل على أي عنصر عليه data-lock-posted="1"
-                        // =========================================================
-                        function applyPostedUiLock() {
-
-                            const posted = isInvoicePosted(); // متغير: هل الفاتورة مُرحّلة؟
-                            const lockables = document.querySelectorAll('[data-lock-posted="1"]'); // متغير: العناصر المطلوب قفلها
-
-                            lockables.forEach(el => {
-
-                                // حفظ الحالة الأصلية مرة واحدة
-                                if (el.dataset.lockInit !== "1") {
-                                    el.dataset.lockInit = "1";
-                                    el.dataset.origDisabled = el.disabled ? "1" : "0";           // متغير: disabled الأصلي
-                                    el.dataset.origReadonly = el.readOnly ? "1" : "0";           // متغير: readonly الأصلي
-                                    el.dataset.origTabIndex = el.getAttribute("tabindex") ?? ""; // متغير: tabindex الأصلي
-                                }
-
-                                const tag = (el.tagName || "").toUpperCase(); // متغير: نوع العنصر
-
-                                // -------------------------
-                                // حالة: مُرحّلة (قفل)
-                                // -------------------------
-                                if (posted) {
-
-                                    if (tag === "BUTTON") {
-                                        el.disabled = true;
-                                        return;
-                                    }
-
-                                    if (tag === "A") {
-                                        el.classList.add("disabled", "pe-none");
-                                        el.setAttribute("aria-disabled", "true");
-                                        el.setAttribute("tabindex", "-1");
-                                        return;
-                                    }
-
-                                    if (tag === "INPUT" || tag === "TEXTAREA") {
-                                        el.readOnly = true;
-                                        el.classList.add("bg-light", "text-muted");
-                                        return;
-                                    }
-
-                                    if (tag === "SELECT") {
-                                        el.disabled = true;
-                                        return;
-                                    }
-
-                                    return;
-                                }
-
-                                // -------------------------
-                                // حالة: مفتوحة (ارجاع الأصل)
-                                // -------------------------
-                                const origDisabled = el.dataset.origDisabled === "1";
-                                const origReadonly = el.dataset.origReadonly === "1";
-                                const origTabIndex = el.dataset.origTabIndex;
-
-                                if (tag === "BUTTON") {
-                                    el.disabled = origDisabled;
-                                    return;
-                                }
-
-                                if (tag === "A") {
-                                    el.classList.remove("disabled", "pe-none");
-                                    el.removeAttribute("aria-disabled");
-                                    if (origTabIndex === "") el.removeAttribute("tabindex");
-                                    else el.setAttribute("tabindex", origTabIndex);
-                                    return;
-                                }
-
-                                if (tag === "INPUT" || tag === "TEXTAREA") {
-                                    el.readOnly = origReadonly;
-                                    el.classList.remove("bg-light", "text-muted");
-                                    return;
-                                }
-
-                                if (tag === "SELECT") {
-                                    el.disabled = origDisabled;
-                                    return;
-                                }
-                            });
-                        }
-
-                        // تشغيل القفل مرة عند تحميل الصفحة
-                        document.addEventListener("DOMContentLoaded", applyPostedUiLock);
-
-                        // تشيك بوكس "عرض الصفر": عند التغيير نعيد تحميل الصفحة بالمعامل الجديد
+                        // تشيك بوكس "عرض الصفر": تحديث الداتاليست فقط (بدون إعادة تحميل أو فتح فاتورة جديدة)
                         document.addEventListener("DOMContentLoaded", function () {
-                            const chk = document.getElementById('chkIncludeZeroQty');
-                            if (!chk) return;
-                            chk.addEventListener('change', function () {
-                                const url = new URL(window.location.href);
-                                if (chk.checked) {
-                                    url.searchParams.set('includeZeroQty', 'true');
-                                } else {
-                                    url.searchParams.delete('includeZeroQty');
-                                }
-                                window.location.href = url.toString();
+                            document.body.addEventListener('change', function (ev) {
+                                const chk = ev.target;
+                                if (!chk || chk.id !== 'chkIncludeZeroQty') return;
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
+                                const includeZero = !!chk.checked;
+                                const url = `/SalesInvoices/GetProductsForDatalist?includeZeroQty=${includeZero}&warehouseId=${warehouseId || ''}`;
+                                fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } })
+                                    .then(r => r.ok ? r.json() : [])
+                                    .then(products => {
+                                        const list = document.getElementById('productsList');
+                                        if (!list) return;
+                                        list.innerHTML = '';
+                                        (products || []).forEach(p => {
+                                            const opt = document.createElement('option');
+                                            opt.value = p.name || '';
+                                            opt.setAttribute('data-id', (p.id || '').toString());
+                                            opt.setAttribute('data-code', (p.id || '').toString());
+                                            opt.setAttribute('data-generic', p.genericName || '');
+                                            opt.setAttribute('data-company', p.company || '');
+                                            opt.setAttribute('data-price', '0');
+                                            opt.setAttribute('data-hasquota', p.hasQuota ? 'true' : 'false');
+                                            opt.setAttribute('data-hasbonus', p.hasBonus ? 'true' : 'false');
+                                            opt.setAttribute('data-bonusgroup', p.bonusGroupName || '');
+                                            list.appendChild(opt);
+                                        });
+                                    })
+                                    .catch(e => console.warn('chkIncludeZeroQty:', e));
                             });
                         });
 
@@ -4222,10 +4458,14 @@
                                 const volumeUrl = customerId > 0 ? `/Customers/Show/${customerId}?frame=1` : '';
                                 btnVolume.setAttribute('href', volumeUrl || '#');
                                 btnVolume.setAttribute('data-url', volumeUrl || '');
+                                btnVolume.setAttribute('aria-disabled', customerId > 0 ? 'false' : 'true');
+                                btnVolume.dataset.volumeEnabled = customerId > 0 ? '1' : '0';
                                 btnVolume.style.pointerEvents = customerId > 0 ? '' : 'none';
                                 btnVolume.style.opacity = customerId > 0 ? '1' : '0.5';
+                                btnVolume.classList.toggle('disabled', customerId <= 0);
                             }
                         }
+                        window.__refreshSideNavButtons = refreshSideNavButtons;
 
                         // =========================
                         // تحميل Body فقط وتبديل المحتوى
@@ -4307,6 +4547,22 @@
                             }
                         }
 
+                        // ✅ زر التحديث في الناف بار: تحديث الفاتورة الحالية فقط (بدون فتح فاتورة جديدة)
+                        window.__ERP_REFRESH__ = function () {
+                            const currentId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10) || 0;
+                            const baseUrl = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url') || '@Url.Action("Show", "SalesInvoices", new { frame = 1 })';
+                            if (currentId > 0 && typeof loadInvoiceBody === 'function') {
+                                try {
+                                    const u = new URL(baseUrl, window.location.origin);
+                                    u.searchParams.set('id', currentId);
+                                    const chk = document.getElementById('chkIncludeZeroQty');
+                                    if (chk && chk.checked) u.searchParams.set('includeZeroQty', 'true');
+                                    loadInvoiceBody(u.toString());
+                                } catch (e) { console.warn('__ERP_REFRESH__:', e); }
+                            }
+                            // لو فاتورة جديدة (currentId=0): لا نعيد التحميل حتى لا نفقد البيانات المدخلة
+                        };
+
 
 
 
@@ -4321,6 +4577,16 @@
 
                             // حماية: لو target مش Element (نادرًا) نخرج
                             if (!(t instanceof Element)) return;
+
+                                    // =========================
+                        // (0.5) زر حجم التعامل: منع الضغط عند عدم اختيار عميل
+                        // =========================
+                        const volBtn = t.closest('#btnCustomerVolume');
+                        if (volBtn && volBtn.dataset.volumeEnabled === '0') {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            return;
+                        }
 
                                     // =========================
                         // (0) زر مسح سطر من الفاتورة
@@ -4539,7 +4805,8 @@
                             linesWrap.innerHTML = `<div class="text-muted small">تعذر العثور على جدول السطور.</div>`;
                         } else {
                             const clone = table.cloneNode(true);
-                            clone.querySelectorAll("button, a").forEach(x => x.remove());
+                            clone.querySelectorAll("button, a, .no-print").forEach(x => x.remove());
+                            clone.querySelectorAll("th.no-print, td.no-print").forEach(x => x.remove());
                             linesWrap.appendChild(clone);
                         }
                     }
@@ -4551,7 +4818,7 @@
                     const totalQty = el("TotalQtyValue")?.textContent?.trim() || "0";
                     const totalRetail = el("TotalRetailValue")?.textContent?.trim() || "0";
                     const totalAfterDiscount = el("TotalAfterDiscountValue")?.textContent?.trim() || "0";
-                    const tax = (el("TaxAmountInput")?.value || "").trim() || "0";
+                    const tax = (el("TaxAmountValue")?.textContent || "").trim() || "0";
                     const totalAfterDiscountAndTax = el("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
                     const netTotal = el("NetTotalValue")?.textContent?.trim() || "0";
                     totalsWrap.innerHTML = `<table><thead><tr><th colspan="4">الإجماليات</th></tr></thead><tbody>
@@ -4570,7 +4837,7 @@
                         return;
                     }
                     if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
-                        if (msg) { msg.textContent = "❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة)."; msg.className = "small mt-2 text-danger"; }
+                        if (msg) { msg.textContent = "❌ يجب ترحيل الفاتورة قبل الطباعة"; msg.className = "small mt-2 text-danger"; }
                         document.getElementById("btnPostInvoice")?.focus();
                         return;
                     }
@@ -4601,12 +4868,17 @@
                         wrapper.classList.add("print-mode-" + mode);
                         landscapeStyleEl = document.createElement("style");
                         landscapeStyleEl.id = "si-print-landscape";
-                        landscapeStyleEl.textContent = "@@media print { @@page { size: landscape; } }";
+                        landscapeStyleEl.textContent = "@@media print { @@page { size: A4 landscape; margin: 3mm; } }";
                         document.head.appendChild(landscapeStyleEl);
                     } else {
                         wrapper.classList.add("print-mode-1");
+                        landscapeStyleEl = document.createElement("style");
+                        landscapeStyleEl.id = "si-print-landscape";
+                        landscapeStyleEl.textContent = "@@media print { @@page { size: A4 landscape; margin: 3mm; } }";
+                        document.head.appendChild(landscapeStyleEl);
                     }
 
+                    document.body.classList.add("printing-invoice");
                     setTimeout(() => window.print(), 50);
                 }
 
@@ -4619,6 +4891,7 @@
                 });
 
                 window.addEventListener("afterprint", function () {
+                    document.body.classList.remove("printing-invoice");
                     printing = false;
                     if (landscapeStyleEl && landscapeStyleEl.parentNode) {
                         landscapeStyleEl.remove();

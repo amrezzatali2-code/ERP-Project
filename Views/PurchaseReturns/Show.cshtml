@@ -1313,6 +1313,35 @@
                     btnPost.disabled = true;
                     var postSuccess = false;
                     try {
+                        // حفظ الهيدر أولاً (لتطبيق أي تعديل مثل تغيير المورد)
+                        var customerId = parseInt(document.getElementById('CustomerId').value || '0', 10);
+                        var warehouseId = parseInt(document.getElementById('WarehouseId').value || '0', 10);
+                        var refPiInput = document.getElementById('RefPIId');
+                        var refPIId = 0;
+                        if (refPiInput && refPiInput.value.trim() !== '') {
+                            var v = parseInt(refPiInput.value.trim(), 10);
+                            if (!isNaN(v)) refPIId = v;
+                        }
+                        if (customerId <= 0 || warehouseId <= 0) {
+                            if (postMsg) { postMsg.textContent = "يجب اختيار المورد والمخزن قبل الترحيل."; postMsg.className = "small mt-2 text-danger"; }
+                            btnPost.disabled = false;
+                            return;
+                        }
+                        {
+                            var saveRes = await fetch('@Url.Action("SaveHeader", "PurchaseReturns")', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ pretId: pretId, customerId: customerId, warehouseId: warehouseId, refPIId: refPIId || null })
+                            });
+                            var saveTxt = await saveRes.text();
+                            var saveData = null;
+                            if (saveTxt) { try { saveData = JSON.parse(saveTxt); } catch (e) {} }
+                            if (!saveRes.ok || !saveData || !saveData.success) {
+                                if (postMsg) { postMsg.textContent = (saveData && saveData.message) ? saveData.message : 'تعذر حفظ التعديلات قبل الترحيل.'; postMsg.className = 'small mt-2 text-danger'; }
+                                btnPost.disabled = false;
+                                return;
+                            }
+                        }
                         var res = await fetch('@Url.Action("PostReturn", "PurchaseReturns")?id=' + pretId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                         var txt = await res.text();
                         var data = null;

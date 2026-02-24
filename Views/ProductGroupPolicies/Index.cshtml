@@ -90,6 +90,9 @@
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود القاعدة</option>
+                            <option value="groupname"@Html.Raw(searchBy == "groupname" ? " selected" : "")>اسم المجموعة</option>
+                            <option value="policyname"@Html.Raw(searchBy == "policyname" ? " selected" : "")>اسم السياسة</option>
+                            <option value="warehousename"@Html.Raw(searchBy == "warehousename" ? " selected" : "")>اسم المخزن</option>
                             <option value="group"@Html.Raw(searchBy == "group" ? " selected" : "")>كود مجموعة الأصناف</option>
                             <option value="policy"@Html.Raw(searchBy == "policy" ? " selected" : "")>كود السياسة</option>
                             <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>مفعّلة؟</option>
@@ -183,8 +186,10 @@
                     </th>
 
                     <th data-col="id">@sortLink("id", "كود القاعدة")</th>
-                    <th data-col="group">@sortLink("group", "كود مجموعة الأصناف")</th>
-                    <th data-col="policy">@sortLink("policy", "كود السياسة")</th>
+                    <th data-col="group">@sortLink("group", "اسم المجموعة")</th>
+                    <th data-col="policy">@sortLink("policy", "اسم السياسة")</th>
+                    <th data-col="warehouse">@sortLink("warehouse", "اسم المخزن")</th>
+                    <th data-col="profit">@sortLink("profit", "نسبة الربح %")</th>
                     <th data-col="active">@sortLink("active", "مفعّلة؟")</th>
                     <th data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
 
@@ -198,7 +203,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="9" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -215,8 +220,13 @@
                             </td>
 
                             <td data-col="id">@r.Id</td>
-                            <td data-col="group">@r.ProductGroupId</td>
-                            <td data-col="policy">@r.PolicyId</td>
+                            <td data-col="group">@(r.ProductGroup?.Name ?? "-")</td>
+                            <td data-col="policy">@(r.Policy?.Name ?? "-")</td>
+                            <td data-col="warehouse">@(r.Warehouse?.WarehouseName ?? "-")</td>
+                            <td data-col="profit">@{
+                                var profitMap = ViewBag.WarehouseProfitMap as System.Collections.Generic.Dictionary<string, decimal>;
+                                decimal displayProfit = r.ProfitPercent > 0 ? r.ProfitPercent : (profitMap != null && profitMap.TryGetValue($"{r.PolicyId}_{r.WarehouseId}", out var wp) ? wp : 0m);
+                            }@displayProfit.ToString("0.00")%</td>
                             <td data-col="active">@(r.IsActive ? "نعم" : "لا")</td>
                             <td data-col="created">@r.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
 

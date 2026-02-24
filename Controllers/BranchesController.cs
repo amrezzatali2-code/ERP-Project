@@ -321,12 +321,14 @@ namespace ERP.Controllers
             if (dbBranch == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { dbBranch.BranchName });
             dbBranch.BranchName = branch.BranchName;   // تعديل الاسم فقط
             dbBranch.UpdatedAt = DateTime.Now;        // تحديث تاريخ آخر تعديل
 
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Edit, "Branch", id, $"تعديل فرع: {dbBranch.BranchName}");
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new { dbBranch.BranchName });
+            await _activityLogger.LogAsync(UserActionType.Edit, "Branch", id, $"تعديل فرع: {dbBranch.BranchName}", oldValues, newValues);
 
             TempData["Ok"] = "تم تعديل بيانات الفرع.";
             return RedirectToAction(nameof(Index));
@@ -361,10 +363,11 @@ namespace ERP.Controllers
             if (branch == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { branch.BranchName });
             _db.Branches.Remove(branch);
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Delete, "Branch", id, $"حذف فرع: {branch.BranchName}");
+            await _activityLogger.LogAsync(UserActionType.Delete, "Branch", id, $"حذف فرع: {branch.BranchName}", oldValues: oldValues);
 
             TempData["Ok"] = "تم حذف السجل.";
             return RedirectToAction(nameof(Index));
@@ -495,8 +498,7 @@ namespace ERP.Controllers
 
 
         /// <summary>
-        /// تصدير الفروع المطابقة للفلاتر الحالية إلى ملف CSV
-        /// يمكن فتحه مباشرة في Excel.
+        /// تصدير الفروع المطابقة للفلاتر الحالية (Excel أو CSV).
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> Export(
@@ -506,7 +508,8 @@ namespace ERP.Controllers
             string? dir,
             bool useDateRange,
             DateTime? fromDate,
-            DateTime? toDate)
+            DateTime? toDate,
+            string? format = "excel")
         {
             // تطبيق الفلاتر
             var query = FilterBranches(search, searchBy, useDateRange, fromDate, toDate);
@@ -530,42 +533,65 @@ namespace ERP.Controllers
             };
 
             var list = await query.AsNoTracking().ToListAsync();
+            var fmt = (format ?? "excel").Trim().ToLowerInvariant();
 
-            // بناء CSV بسيط (يفتح في Excel)
-            var sb = new StringBuilder();
-
-            // هيدر الأعمدة
-            sb.AppendLine("BranchId,BranchName,CreatedAt,UpdatedAt");
-
-            // دالة مساعدة للهروب من الفواصل وعلامات الاقتباس
-            string Csv(string? value)
+            // ---------- CSV ----------
+            if (fmt == "csv")
             {
-                value ??= "";
-                if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+                string Csv(string? value)
                 {
-                    value = "\"" + value.Replace("\"", "\"\"") + "\"";
+                    value ??= "";
+                    if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+                        value = "\"" + value.Replace("\"", "\"\"") + "\"";
+                    return value;
                 }
-                return value;
+
+                var sb = new StringBuilder();
+                sb.AppendLine("BranchId,BranchName,CreatedAt,UpdatedAt");
+                foreach (var b in list)
+                {
+                    sb.AppendLine(string.Join(",",
+                        b.BranchId,
+                        Csv(b.BranchName),
+                        Csv(b.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? ""),
+                        Csv(b.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "")
+                    ));
+                }
+
+                var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+                return File(bytes, "text/csv; charset=utf-8", $"Branches_{DateTime.Now:yyyyMMdd_HHmm}.csv");
             }
 
+            // ---------- Excel (.xlsx) ----------
+            using var wb = new XLWorkbook();
+            var ws = wb.Worksheets.Add("الفروع");
+
+            ws.Cell(1, 1).Value = "كود الفرع";
+            ws.Cell(1, 2).Value = "اسم الفرع";
+            ws.Cell(1, 3).Value = "تاريخ الإنشاء";
+            ws.Cell(1, 4).Value = "آخر تعديل";
+
+            var header = ws.Range(1, 1, 1, 4);
+            header.Style.Font.Bold = true;
+            header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            int row = 2;
             foreach (var b in list)
             {
-                var created = b.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
-                var updated = b.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
-
-                sb.AppendLine(string.Join(",",
-                    b.BranchId,
-                    Csv(b.BranchName),
-                    Csv(created),
-                    Csv(updated)
-                ));
+                ws.Cell(row, 1).Value = b.BranchId;
+                ws.Cell(row, 2).Value = b.BranchName ?? "";
+                ws.Cell(row, 3).Value = b.CreatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
+                ws.Cell(row, 4).Value = b.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
+                row++;
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = $"Branches_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            ws.Columns().AdjustToContents();
 
-            // Content-Type يسمح بفتح الملف في Excel مباشرة
-            return File(bytes, "text/csv", fileName);
+            using var stream = new MemoryStream();
+            wb.SaveAs(stream);
+            stream.Position = 0;
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"Branches_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
         }
 
     }

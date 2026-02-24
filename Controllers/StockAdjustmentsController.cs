@@ -474,11 +474,14 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _context.StockAdjustments.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.AdjustmentDate, existing.WarehouseId, existing.ReferenceNo, existing.Reason }) : null;
                 adjustment.UpdatedAt = DateTime.UtcNow;
                 _context.Update(adjustment);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "StockAdjustment", adjustment.Id, $"تعديل تسوية جرد رقم {adjustment.Id}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { adjustment.AdjustmentDate, adjustment.WarehouseId, adjustment.ReferenceNo, adjustment.Reason });
+                await _activityLogger.LogAsync(UserActionType.Edit, "StockAdjustment", adjustment.Id, $"تعديل تسوية جرد رقم {adjustment.Id}", oldValues, newValues);
 
                 TempData["Msg"] = "تم تعديل التسوية بنجاح.";
             }
@@ -534,6 +537,7 @@ namespace ERP.Controllers
 
             try
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { adjustment.AdjustmentDate, adjustment.WarehouseId, adjustment.ReferenceNo, adjustment.Reason });
                 if (adjustment.IsPosted)
                 {
                     var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
@@ -543,7 +547,7 @@ namespace ERP.Controllers
                 _context.StockAdjustments.Remove(adjustment);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "StockAdjustment", id, $"حذف تسوية جرد رقم {id}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "StockAdjustment", id, $"حذف تسوية جرد رقم {id}", oldValues: oldValues);
 
                 TempData["Msg"] = "تم حذف التسوية بنجاح.";
             }

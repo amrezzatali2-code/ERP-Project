@@ -30,6 +30,32 @@ namespace ERP.Controllers
             _context = context;
         }
 
+        /// <summary>
+        /// بناء خريطة نسبة الربح من سياسات المخازن لبنود ذات ProfitPercent = 0
+        /// </summary>
+        private async Task<Dictionary<string, decimal>> BuildWarehouseProfitMapAsync(IEnumerable<ProductGroupPolicy> items)
+        {
+            var zeroItems = items.Where(x => x.ProfitPercent == 0).ToList();
+            if (!zeroItems.Any()) return new Dictionary<string, decimal>();
+
+            var pairs = zeroItems.Select(x => (x.PolicyId, x.WarehouseId)).Distinct().ToList();
+            var policyIds = pairs.Select(p => p.PolicyId).Distinct().ToList();
+            var warehouseIds = pairs.Select(p => p.WarehouseId).Distinct().ToList();
+            var pairSet = new HashSet<(int, int)>(pairs);
+
+            // جلب القواعد ثم فلترة في الذاكرة (لتفادي خطأ ترجمة LINQ إلى SQL)
+            var rules = await _context.WarehousePolicyRules
+                .AsNoTracking()
+                .Where(w => w.IsActive && policyIds.Contains(w.PolicyId) && warehouseIds.Contains(w.WarehouseId))
+                .Select(w => new { w.PolicyId, w.WarehouseId, w.ProfitPercent })
+                .ToListAsync();
+
+            var map = new Dictionary<string, decimal>();
+            foreach (var r in rules.Where(r => pairSet.Contains((r.PolicyId, r.WarehouseId))))
+                map[$"{r.PolicyId}_{r.WarehouseId}"] = r.ProfitPercent;
+            return map;
+        }
+
         // =========================
         // دالة مساعدة لتحميل قوائم:
         // - مجموعات الأصناف
@@ -97,9 +123,13 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate)
         {
-            // 1) الاستعلام الأساسي (قراءة فقط لتحسين الأداء)
+            // 1) الاستعلام الأساسي مع تحميل الأسماء (مجموعة، سياسة، مخزن)
             IQueryable<ProductGroupPolicy> q =
-                _context.ProductGroupPolicies.AsNoTracking();
+                _context.ProductGroupPolicies
+                    .Include(x => x.ProductGroup)
+                    .Include(x => x.Policy)
+                    .Include(x => x.Warehouse)
+                    .AsNoTracking();
 
             // 2) فلتر الكود من/إلى (على Id = كود القاعدة)
             if (fromCode.HasValue)
@@ -147,6 +177,9 @@ namespace ERP.Controllers
             var stringFields =
                 new Dictionary<string, Expression<Func<ProductGroupPolicy, string?>>>(StringComparer.OrdinalIgnoreCase)
                 {
+                    ["groupname"] = x => x.ProductGroup != null ? x.ProductGroup.Name : null,
+                    ["policyname"] = x => x.Policy != null ? x.Policy.Name : null,
+                    ["warehousename"] = x => x.Warehouse != null ? x.Warehouse.WarehouseName : null,
                     ["status"] = x => x.IsActive ? "active" : "inactive",
                     ["active"] = x => x.IsActive ? "نعم" : "لا"
                 };
@@ -166,9 +199,10 @@ namespace ERP.Controllers
                 new Dictionary<string, Expression<Func<ProductGroupPolicy, object>>>()
                 {
                     ["id"] = x => x.Id,
-                    ["group"] = x => x.ProductGroupId,
-                    ["policy"] = x => x.PolicyId,
-                    ["warehouse"] = x => x.WarehouseId,
+                    ["group"] = x => x.ProductGroup != null ? x.ProductGroup.Name : "",
+                    ["policy"] = x => x.Policy != null ? x.Policy.Name : "",
+                    ["warehouse"] = x => x.Warehouse != null ? x.Warehouse.WarehouseName : "",
+                    ["profit"] = x => x.ProfitPercent,
                     ["active"] = x => x.IsActive,
                     ["created"] = x => x.CreatedAt
                 };
@@ -238,6 +272,9 @@ namespace ERP.Controllers
             // حقل التاريخ المستخدم في الفلترة (للنموذج الموحد)
             ViewBag.DateField = "CreatedAt";
 
+            // نسبة الربح من سياسات المخازن عندما تكون صفر في ProductGroupPolicy
+            ViewBag.WarehouseProfitMap = await BuildWarehouseProfitMapAsync(model.Items);
+
             return View(model);
         }
 
@@ -282,14 +319,17 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            // Include للمجموعة والسياسة والمخزن عشان نجيب الأسماء
-            query = query
-                .Include(r => r.ProductGroup)
-                .Include(r => r.Policy)
-                .Include(r => r.Warehouse);
-
-            // 2) جلب كل النتائج (بدون Paging)
+            // 2) جلب كل النتائج (بدون Paging) — الـ Include موجود في BuildPoliciesQuery
             var list = await query.ToListAsync();
+
+            // خريطة نسبة الربح من سياسات المخازن (عندما تكون صفر في ProductGroupPolicy)
+            var profitMap = await BuildWarehouseProfitMapAsync(list);
+
+            decimal GetEffectiveProfit(ProductGroupPolicy r)
+            {
+                if (r.ProfitPercent > 0) return r.ProfitPercent;
+                return profitMap.TryGetValue($"{r.PolicyId}_{r.WarehouseId}", out var p) ? p : 0m;
+            }
 
             // 3) لو المطلوب Excel (افتراضي)
             if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
@@ -301,19 +341,17 @@ namespace ERP.Controllers
 
                 // عناوين الأعمدة
                 worksheet.Cell(row, 1).Value = "كود القاعدة";
-                worksheet.Cell(row, 2).Value = "كود مجموعة الأصناف";
-                worksheet.Cell(row, 3).Value = "اسم مجموعة الأصناف";
-                worksheet.Cell(row, 4).Value = "كود السياسة";
-                worksheet.Cell(row, 5).Value = "اسم السياسة";
-                worksheet.Cell(row, 6).Value = "كود المخزن";
-                worksheet.Cell(row, 7).Value = "اسم المخزن";
-                worksheet.Cell(row, 8).Value = "أقصى خصم للعميل %";
-                worksheet.Cell(row, 9).Value = "مفعّلة؟";
-                worksheet.Cell(row, 10).Value = "تاريخ الإنشاء";
-                worksheet.Cell(row, 11).Value = "آخر تعديل";
+                worksheet.Cell(row, 2).Value = "اسم المجموعة";
+                worksheet.Cell(row, 3).Value = "اسم السياسة";
+                worksheet.Cell(row, 4).Value = "اسم المخزن";
+                worksheet.Cell(row, 5).Value = "نسبة الربح %";
+                worksheet.Cell(row, 6).Value = "أقصى خصم للعميل %";
+                worksheet.Cell(row, 7).Value = "مفعّلة؟";
+                worksheet.Cell(row, 8).Value = "تاريخ الإنشاء";
+                worksheet.Cell(row, 9).Value = "آخر تعديل";
 
                 // تنسيق الهيدر
-                var header = worksheet.Range(row, 1, row, 11);
+                var header = worksheet.Range(row, 1, row, 9);
                 header.Style.Font.Bold = true;
 
                 // كتابة البيانات
@@ -322,16 +360,14 @@ namespace ERP.Controllers
                     row++;
 
                     worksheet.Cell(row, 1).Value = r.Id;
-                    worksheet.Cell(row, 2).Value = r.ProductGroupId;
-                    worksheet.Cell(row, 3).Value = r.ProductGroup?.Name ?? "";          // اسم المجموعة
-                    worksheet.Cell(row, 4).Value = r.PolicyId;
-                    worksheet.Cell(row, 5).Value = r.Policy?.Name ?? "";                 // اسم السياسة
-                    worksheet.Cell(row, 6).Value = r.WarehouseId;
-                    worksheet.Cell(row, 7).Value = r.Warehouse?.WarehouseName ?? "";     // اسم المخزن
-                    worksheet.Cell(row, 8).Value = r.MaxDiscountToCustomer;              // أقصى خصم
-                    worksheet.Cell(row, 9).Value = r.IsActive ? "مفعّلة" : "موقوفة";
-                    worksheet.Cell(row, 10).Value = r.CreatedAt;
-                    worksheet.Cell(row, 11).Value = r.UpdatedAt;
+                    worksheet.Cell(row, 2).Value = r.ProductGroup?.Name ?? "";
+                    worksheet.Cell(row, 3).Value = r.Policy?.Name ?? "";
+                    worksheet.Cell(row, 4).Value = r.Warehouse?.WarehouseName ?? "";
+                    worksheet.Cell(row, 5).Value = GetEffectiveProfit(r);
+                    worksheet.Cell(row, 6).Value = r.MaxDiscountToCustomer;
+                    worksheet.Cell(row, 7).Value = r.IsActive ? "مفعّلة" : "موقوفة";
+                    worksheet.Cell(row, 8).Value = r.CreatedAt;
+                    worksheet.Cell(row, 9).Value = r.UpdatedAt;
                 }
 
                 worksheet.Columns().AdjustToContents();
@@ -351,34 +387,21 @@ namespace ERP.Controllers
                 // 4) حالة CSV
                 var sb = new StringBuilder();
 
-                sb.AppendLine("Id,ProductGroupId,ProductGroupName,PolicyId,PolicyName,WarehouseId,WarehouseName,MaxDiscountToCustomer,IsActive,CreatedAt,UpdatedAt");
+                sb.AppendLine("Id,GroupName,PolicyName,WarehouseName,ProfitPercent,MaxDiscountToCustomer,IsActive,CreatedAt,UpdatedAt");
 
                 foreach (var r in list)
                 {
-                    string groupName = (r.ProductGroup?.Name ?? string.Empty)
-                        .Replace("\"", "\"\"");
-                    string policyName = (r.Policy?.Name ?? string.Empty)
-                        .Replace("\"", "\"\"");
-                    string warehouseName = (r.Warehouse?.WarehouseName ?? string.Empty)
-                        .Replace("\"", "\"\"");
+                    string groupName = (r.ProductGroup?.Name ?? string.Empty).Replace("\"", "\"\"");
+                    string policyName = (r.Policy?.Name ?? string.Empty).Replace("\"", "\"\"");
+                    string warehouseName = (r.Warehouse?.WarehouseName ?? string.Empty).Replace("\"", "\"\"");
 
                     string created = r.CreatedAt.ToString("yyyy-MM-dd HH:mm");
-                    string updated = r.UpdatedAt.HasValue
-                        ? r.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
-                        : string.Empty;
-
-                    string maxDiscountText = r.MaxDiscountToCustomer.HasValue
-                        ? r.MaxDiscountToCustomer.Value.ToString("0.##", CultureInfo.InvariantCulture)
-                        : string.Empty;
+                    string updated = r.UpdatedAt.HasValue ? r.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : string.Empty;
+                    string maxDiscountText = r.MaxDiscountToCustomer.HasValue ? r.MaxDiscountToCustomer.Value.ToString("0.##", CultureInfo.InvariantCulture) : string.Empty;
 
                     sb.AppendLine(
-                        $"{r.Id}," +
-                        $"{r.ProductGroupId}," +
-                        $"\"{groupName}\"," +
-                        $"{r.PolicyId}," +
-                        $"\"{policyName}\"," +
-                        $"{r.WarehouseId}," +
-                        $"\"{warehouseName}\"," +
+                        $"{r.Id},\"{groupName}\",\"{policyName}\",\"{warehouseName}\"," +
+                        $"{GetEffectiveProfit(r).ToString("0.##", CultureInfo.InvariantCulture)}," +
                         $"{maxDiscountText}," +
                         $"{(r.IsActive ? 1 : 0)}," +
                         $"{created}," +
@@ -402,10 +425,19 @@ namespace ERP.Controllers
                 return NotFound();
 
             var policy = await _context.ProductGroupPolicies
+                                       .Include(p => p.ProductGroup)
+                                       .Include(p => p.Policy)
+                                       .Include(p => p.Warehouse)
                                        .AsNoTracking()
                                        .FirstOrDefaultAsync(p => p.Id == id.Value);
             if (policy == null)
                 return NotFound();
+
+            // نسبة الربح الفعلية (من سياسات المخازن إن كانت صفر)
+            var profitMap = await BuildWarehouseProfitMapAsync(new[] { policy });
+            ViewBag.EffectiveProfit = policy.ProfitPercent > 0
+                ? policy.ProfitPercent
+                : (profitMap.TryGetValue($"{policy.PolicyId}_{policy.WarehouseId}", out var p) ? p : 0m);
 
             return View(policy);
         }

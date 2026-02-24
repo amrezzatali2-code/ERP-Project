@@ -1,0 +1,96 @@
+@using ERP.ViewModels
+@{
+    ViewData["Title"] = "تقرير: مبيعات أصناف البونص لكل مستخدم";
+
+    var reportData = ViewBag.ReportData as List<BonusReportDto> ?? new List<BonusReportDto>();
+    var totalSalesValue = ViewBag.TotalSalesValue as decimal? ?? 0m;
+    var totalBonusAmount = ViewBag.TotalBonusAmount as decimal? ?? 0m;
+    var totalQty = ViewBag.TotalQty as int? ?? 0;
+
+    var fromDate = ViewBag.FromDate as DateTime?;
+    var toDate = ViewBag.ToDate as DateTime?;
+    var warehouseId = ViewBag.WarehouseId as int?;
+    var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+}
+
+<div dir="rtl" class="container-fluid">
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <form method="get" asp-action="BonusReport" asp-controller="Reports" id="filtersForm">
+            <div class="row g-3 align-items-end">
+                <input type="hidden" name="loadReport" value="true" />
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="fromDate" dir="ltr" class="form-control erp-filter-input" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="toDate" dir="ltr" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">المخزن</label>
+                    <select name="warehouseId" class="form-select erp-filter-input">
+                        <option value="">الكل</option>
+                        @foreach (var wh in warehouses)
+                        {
+                            <option value="@wh.Value" @(warehouseId?.ToString() == wh.Value ? "selected" : null)>@wh.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-auto erp-filter-section">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
+                        <span>📊</span> تجميع التقرير
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    @if (reportData.Any())
+    {
+        <div class="erp-table-wrapper mt-3">
+            <div class="table-responsive">
+                <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                    <thead class="table-light sticky-top">
+                        <tr>
+                            <th style="min-width: 130px;">المستخدم</th>
+                            <th style="min-width: 180px;">اسم الصنف</th>
+                            <th style="min-width: 120px;">مجموعة البونص</th>
+                            <th class="text-end" style="min-width: 110px;">البونص لكل علبة</th>
+                            <th class="text-end" style="min-width: 90px;">الكمية</th>
+                            <th class="text-end" style="min-width: 120px;">إجمالي المبيعات</th>
+                            <th class="text-end" style="min-width: 120px;">قيمة البونص</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var item in reportData)
+                        {
+                            <tr>
+                                <td><strong>@(string.IsNullOrEmpty(item.UserName) ? "—" : item.UserName)</strong></td>
+                                <td>@item.ProdName</td>
+                                <td><small class="text-muted">@item.ProductBonusGroupName</small></td>
+                                <td class="text-end">@item.BonusAmountPerUnit.ToString("N2")</td>
+                                <td class="text-end">@item.TotalQty.ToString("N0")</td>
+                                <td class="text-end">@item.TotalSalesValue.ToString("N2")</td>
+                                <td class="text-end">@item.TotalBonusAmount.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot class="table-secondary fw-bold">
+                        <tr>
+                            <td colspan="4" class="text-end"><strong>المجموع:</strong></td>
+                            <td class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
+                            <td class="text-end"><strong>@totalSalesValue.ToString("N2")</strong></td>
+                            <td class="text-end"><strong>@totalBonusAmount.ToString("N2")</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info text-center mt-3">
+            <p class="mb-0">لا توجد بيانات لعرضها. اضغط «تجميع التقرير» بعد اختيار الفلاتر.</p>
+        </div>
+    }
+</div>

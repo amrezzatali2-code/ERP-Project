@@ -585,7 +585,66 @@ body {
     font-size: 0.75rem;
 }
 
-
+/* ================== فلتر الأعمدة بنمط Excel ================== */
+.erp-col-header-filterable {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+.erp-col-header-filterable .erp-col-sort {
+    flex: 1;
+    min-width: 0;
+}
+.erp-col-filter-btn {
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 3px;
+}
+.erp-col-filter-btn:hover {
+    background-color: rgba(37, 99, 235, 0.1);
+}
+.erp-column-filter-panel {
+    position: fixed;
+    z-index: 1060;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 0.5rem;
+    max-height: 70vh;
+    font-size: 0.78rem;
+}
+.erp-column-filter-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid #eee;
+    font-weight: 600;
+    font-size: 0.82rem;
+}
+.erp-column-filter-body {
+    min-width: 180px;
+}
+.erp-column-filter-list .form-check {
+    padding: 0.1rem 0;
+}
+.erp-column-filter-list .form-check-input {
+    margin-left: 0.25rem;
+    transform: scale(0.9);
+}
+.erp-column-filter-list .erp-filter-items {
+    margin-top: 0.25rem;
+}
+.erp-column-filter-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
 
 
 /* =========================================================
@@ -669,31 +728,29 @@ body {
 
     @media print {
 
-        /* وضع طباعة الفاتورة فقط: نخفي كل حاجة بـ display */
+        /* وضع طباعة الفاتورة: نخفي كل شيء ونظهر منطقة الطباعة فقط */
         body.printing-invoice * {
             display: none !important;
         }
 
-        /* ونظهر منطقة الفاتورة فقط */
-        body.printing-invoice #piPrintArea,
-        body.printing-invoice #piPrintArea * {
+        body.printing-invoice #piPrintWrapper {
             display: block !important;
         }
 
-        /* مهم: نفك سكرول جدول السطور أثناء الطباعة */
+        body.printing-invoice #piPrintWrapper * {
+            display: block !important;
+        }
+
+        body.printing-invoice #piPrintWrapper table { display: table !important; }
+        body.printing-invoice #piPrintWrapper thead { display: table-header-group !important; }
+        body.printing-invoice #piPrintWrapper tbody { display: table-row-group !important; }
+        body.printing-invoice #piPrintWrapper tr { display: table-row !important; }
+        body.printing-invoice #piPrintWrapper th,
+        body.printing-invoice #piPrintWrapper td { display: table-cell !important; }
+
         body.printing-invoice .erp-table-wrapper {
             max-height: none !important;
             overflow: visible !important;
-        }
-
-        /* تقليل احتمالات صفحات فاضية */
-        body.printing-invoice #piPrintArea {
-            position: static !important;
-        }
-
-        /* هوامش الورقة */
-        @page {
-            margin: 10mm;
         }
     }
 

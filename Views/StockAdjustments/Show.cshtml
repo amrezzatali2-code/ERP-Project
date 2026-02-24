@@ -868,9 +868,36 @@
             const oldHtml = btnPost.innerHTML;
             btnPost.disabled = true;
             btnPost.innerHTML = '⏳ جاري الترحيل...';
-            if (msgDiv) { msgDiv.textContent = 'جاري الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
+            if (msgDiv) { msgDiv.textContent = 'يتم حفظ التعديلات ثم الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
 
             try {
+                // حفظ الهيدر أولاً (لتطبيق أي تعديل)
+                const adjustmentDate = document.getElementById('AdjustmentDateInput')?.value;
+                const warehouseId = parseInt(document.querySelector('[name="WarehouseId"]')?.value || '0', 10);
+                const referenceNo = document.querySelector('[name="ReferenceNo"]')?.value || '';
+                const reason = document.querySelector('[name="Reason"]')?.value || '';
+                if (warehouseId > 0) {
+                    const saveDto = { id: adjustmentId, adjustmentDate: adjustmentDate, warehouseId: warehouseId, referenceNo: referenceNo, reason: reason };
+                    const saveRes = await fetch('@Url.Action("UpdateHeaderJson", "StockAdjustments")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                        body: JSON.stringify(saveDto)
+                    });
+                    if (!saveRes.ok) {
+                        const errTxt = await saveRes.text();
+                        if (msgDiv) { msgDiv.textContent = 'تعذر حفظ التعديلات: ' + errTxt; msgDiv.className = 'small mt-2 text-danger'; }
+                        btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                        return;
+                    }
+                    const saveResult = await saveRes.json();
+                    if (!saveResult || !saveResult.ok) {
+                        if (msgDiv) { msgDiv.textContent = (saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل الترحيل.'; msgDiv.className = 'small mt-2 text-danger'; }
+                        btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                        return;
+                    }
+                }
+                if (msgDiv) { msgDiv.textContent = 'جاري الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
+
                 const response = await fetch(`@Url.Action("PostAdjustment", "StockAdjustments")?id=${adjustmentId}`, {
                     method: 'POST',
                     headers: {

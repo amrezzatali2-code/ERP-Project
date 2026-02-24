@@ -240,7 +240,11 @@
                   asp-controller="Customers"
                   class="row g-3 align-items-end">
 
-                <input type="hidden" id="partySearchId" name="id" />
+                <input type="hidden" id="partySearchId" name="id" value="@(Model?.CustomerId.ToString() ?? "")" />
+                @if (Context.Request.Query["frame"] == "1")
+                {
+                    <input type="hidden" name="frame" value="1" />
+                }
 
                 <div class="col-12 col-lg-4 erp-filter-section">
                     <label class="form-label">بحث بالكود أو الاسم</label>
@@ -248,7 +252,8 @@
                         <input id="partySearchInput"
                                type="text"
                                class="form-control erp-filter-input"
-                               placeholder="اكتب جزء من اسم العميل أو الكود..." />
+                               placeholder="اكتب جزء من اسم العميل أو الكود..."
+                               value="@(Model != null ? Model.CustomerId + " — " + Model.CustomerName : "")" />
                         <div id="partySuggestions"
                              class="list-group position-absolute w-100 shadow-sm"
                              style="z-index: 1050; max-height: 200px; overflow-y: auto; display: none;">

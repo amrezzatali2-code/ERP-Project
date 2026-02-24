@@ -1238,9 +1238,6 @@ namespace ERP.Migrations
 
                     b.HasIndex("PolicyId");
 
-                    b.HasIndex("ProductGroupId")
-                        .IsUnique();
-
                     b.HasIndex("WarehouseId");
 
                     b.HasIndex("ProductGroupId", "PolicyId", "WarehouseId")

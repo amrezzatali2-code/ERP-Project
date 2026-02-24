@@ -1,4 +1,4 @@
-﻿@model ERP.Models.SalesInvoice
+@model ERP.Models.SalesInvoice
 
 @{
     ViewData["Title"] = "إنشاء فاتورة مبيعات جديدة";
@@ -290,6 +290,9 @@
     @{await Html.RenderPartialAsync("_ValidationScriptsPartial");}
 
     <script>
+        // ✅ منع زر التحديث من إعادة التحميل (حتى لا نفقد البيانات المدخلة)
+        window.__ERP_REFRESH__ = function () { /* لا شيء عند فاتورة جديدة */ };
+
         // عند تغيير اسم العميل نظهر كود العميل في الحقل المجاور
         // نفترض أن كل Option في قائمة العملاء يحتوي على data-code = كود العميل
         const ddlCustomer     = document.getElementById("CustomerId");   // دروب داون العملاء

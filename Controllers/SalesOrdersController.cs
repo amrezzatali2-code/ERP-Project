@@ -286,13 +286,14 @@ namespace ERP.Controllers
                     return RedirectToAction(nameof(Index));
                 }
 
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { order.SODate, order.CustomerId, order.WarehouseId, order.ExpectedItemsTotal });
                 // ملاحظة: يمكن لاحقاً منع الحذف لو الحالة Approved / Closed
                 _context.SalesOrders.Remove(order);   // حذف الهيدر، والسطور تُحذف بالكاسكيد
                 await _context.SaveChangesAsync();
 
                 await tx.CommitAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "SalesOrder", id, $"حذف أمر بيع رقم {id}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "SalesOrder", id, $"حذف أمر بيع رقم {id}", oldValues: oldValues);
 
                 TempData["ok"] = $"تم حذف أمر البيع رقم {id}.";
             }
@@ -581,6 +582,8 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _context.SalesOrders.AsNoTracking().FirstOrDefaultAsync(o => o.SOId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.SODate, existing.CustomerId, existing.WarehouseId, existing.ExpectedItemsTotal }) : null;
                 // تحديث وقت آخر تعديل (لو الخاصية موجودة في الموديل)
                 order.UpdatedAt = DateTime.Now;
 
@@ -595,7 +598,8 @@ namespace ERP.Controllers
                 // حفظ التغييرات فعلياً في SQL Server
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "SalesOrder", order.SOId, $"تعديل أمر بيع رقم {order.SOId}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { order.SODate, order.CustomerId, order.WarehouseId, order.ExpectedItemsTotal });
+                await _activityLogger.LogAsync(UserActionType.Edit, "SalesOrder", order.SOId, $"تعديل أمر بيع رقم {order.SOId}", oldValues, newValues);
 
                 TempData["Msg"] = "تم تعديل أمر البيع بنجاح.";
                 return RedirectToAction(nameof(Index));

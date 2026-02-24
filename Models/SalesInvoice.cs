@@ -47,6 +47,8 @@ namespace ERP.Models
         [Display(Name = "كود المخزن")]           // تعليق عربي: كود المخزن (رقم المخزن)
         public int WarehouseId { get; set; }      // متغير: رقم المخزن (int) يُستخدم كـ FK على جدول المخازن
 
+        [Display(Name = "المخزن")]
+        public virtual Warehouse? Warehouse { get; set; }  // متغير: كائن المخزن المرتبط
 
         // ========== طريقة الدفع ==========
         [Display(Name = "طريقة الدفع")]

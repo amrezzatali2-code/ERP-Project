@@ -319,11 +319,14 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _context.ProductGroups.AsNoTracking().FirstOrDefaultAsync(g => g.ProductGroupId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.Name }) : null;
                 group.UpdatedAt = DateTime.Now;
                 _context.Update(group);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "ProductGroup", id, $"تعديل مجموعة أصناف: {group.Name}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { group.Name });
+                await _activityLogger.LogAsync(UserActionType.Edit, "ProductGroup", id, $"تعديل مجموعة أصناف: {group.Name}", oldValues, newValues);
 
                 TempData["Msg"] = "تم تعديل مجموعة الأصناف بنجاح.";
             }
@@ -372,10 +375,11 @@ namespace ERP.Controllers
             if (group == null)
                 return NotFound();
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { group.Name });
             _context.ProductGroups.Remove(group);
             await _context.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Delete, "ProductGroup", id, $"حذف مجموعة أصناف: {group.Name}");
+            await _activityLogger.LogAsync(UserActionType.Delete, "ProductGroup", id, $"حذف مجموعة أصناف: {group.Name}", oldValues: oldValues);
 
             TempData["Msg"] = "تم حذف مجموعة الأصناف.";
             return RedirectToAction(nameof(Index));

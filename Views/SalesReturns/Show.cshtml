@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Mvc.Rendering
+@using Microsoft.AspNetCore.Mvc.Rendering
 @model ERP.Models.SalesReturn
 
 @{
@@ -1314,6 +1314,35 @@
                     if (!confirm('هل تريد ترحيل هذا المرتجع؟')) return;
                     btnPost.disabled = true;
                     try {
+                        // حفظ الهيدر أولاً (لتطبيق أي تعديل مثل تغيير العميل)
+                        var customerId = parseInt(document.getElementById('CustomerId').value || '0', 10);
+                        var warehouseId = parseInt(document.getElementById('WarehouseId').value || '0', 10);
+                        var salesInvoiceIdInput = document.getElementById('SalesInvoiceId');
+                        var salesInvoiceId = 0;
+                        if (salesInvoiceIdInput && salesInvoiceIdInput.value.trim() !== '') {
+                            var v = parseInt(salesInvoiceIdInput.value.trim(), 10);
+                            if (!isNaN(v)) salesInvoiceId = v;
+                        }
+                        if (customerId <= 0 || warehouseId <= 0) {
+                            if (postMsg) { postMsg.textContent = "يجب اختيار العميل والمخزن قبل الترحيل."; postMsg.className = "small mt-2 text-danger"; }
+                            btnPost.disabled = false;
+                            return;
+                        }
+                        {
+                            var saveRes = await fetch('@Url.Action("SaveHeader", "SalesReturns")', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ srId: srId, customerId: customerId, warehouseId: warehouseId, salesInvoiceId: salesInvoiceId || null })
+                            });
+                            var saveTxt = await saveRes.text();
+                            var saveData = null;
+                            if (saveTxt) { try { saveData = JSON.parse(saveTxt); } catch (e) {} }
+                            if (!saveRes.ok || !saveData || !saveData.success) {
+                                if (postMsg) { postMsg.textContent = (saveData && saveData.message) ? saveData.message : 'تعذر حفظ التعديلات قبل الترحيل.'; postMsg.className = 'small mt-2 text-danger'; }
+                                btnPost.disabled = false;
+                                return;
+                            }
+                        }
                         var res = await fetch('@Url.Action("PostReturn", "SalesReturns")?id=' + srId, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
                         var txt = await res.text();
                         var data = null;

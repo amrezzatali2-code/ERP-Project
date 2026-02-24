@@ -789,9 +789,36 @@
             const oldHtml = btnPost.innerHTML;
             btnPost.disabled = true;
             btnPost.innerHTML = '⏳ جاري الترحيل...';
-            if (msgDiv) { msgDiv.textContent = 'جاري الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
+            if (msgDiv) { msgDiv.textContent = 'يتم حفظ التعديلات ثم الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
 
             try {
+                // حفظ الهيدر أولاً (لتطبيق أي تعديل)
+                const transferDate = document.getElementById('TransferDateInput')?.value;
+                const fromWarehouseId = parseInt(document.querySelector('[name="FromWarehouseId"]')?.value || '0', 10);
+                const toWarehouseId = parseInt(document.querySelector('[name="ToWarehouseId"]')?.value || '0', 10);
+                const note = document.querySelector('[name="Note"]')?.value || '';
+                if (fromWarehouseId > 0 && toWarehouseId > 0 && fromWarehouseId !== toWarehouseId) {
+                    const saveDto = { id: transferId, transferDate: transferDate, fromWarehouseId: fromWarehouseId, toWarehouseId: toWarehouseId, note: note };
+                    const saveRes = await fetch('@Url.Action("UpdateHeaderJson", "StockTransfers")', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': token },
+                        body: JSON.stringify(saveDto)
+                    });
+                    if (!saveRes.ok) {
+                        const errTxt = await saveRes.text();
+                        if (msgDiv) { msgDiv.textContent = 'تعذر حفظ التعديلات: ' + errTxt; msgDiv.className = 'small mt-2 text-danger'; }
+                        btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                        return;
+                    }
+                    const saveResult = await saveRes.json();
+                    if (!saveResult || !saveResult.ok) {
+                        if (msgDiv) { msgDiv.textContent = (saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل الترحيل.'; msgDiv.className = 'small mt-2 text-danger'; }
+                        btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                        return;
+                    }
+                }
+                if (msgDiv) { msgDiv.textContent = 'جاري الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
+
                 const response = await fetch(`@Url.Action("PostTransfer", "StockTransfers")?id=${transferId}`, {
                     method: 'POST',
                     headers: { 'RequestVerificationToken': token }

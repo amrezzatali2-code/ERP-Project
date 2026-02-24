@@ -9,6 +9,8 @@ namespace ERP.ViewModels
         public string ProdCode { get; set; } = "";
         public string ProdName { get; set; } = "";
         public string CategoryName { get; set; } = "";
+        public string ProductGroupName { get; set; } = "";
+        public string ProductBonusGroupName { get; set; } = "";
         public int CurrentQty { get; set; }
         public decimal WeightedDiscount { get; set; }
         public decimal SalesQty { get; set; }

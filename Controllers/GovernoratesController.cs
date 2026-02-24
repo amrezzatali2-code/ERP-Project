@@ -219,12 +219,14 @@ namespace ERP.Controllers
             if (!ModelState.IsValid)
                 return View(entity);
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { entity.GovernorateName });
             entity.GovernorateName = vm.GovernorateName;
             entity.UpdatedAt = DateTime.Now;   // تسجيل آخر تعديل
 
             await _db.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Edit, "Governorate", id, $"تعديل محافظة: {entity.GovernorateName}");
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new { entity.GovernorateName });
+            await _activityLogger.LogAsync(UserActionType.Edit, "Governorate", id, $"تعديل محافظة: {entity.GovernorateName}", oldValues, newValues);
 
             TempData["Ok"] = "تم تعديل بيانات المحافظة.";
             return RedirectToAction(nameof(Index));
@@ -247,10 +249,11 @@ namespace ERP.Controllers
             var entity = await _db.Governorates.FindAsync(id);
             if (entity != null)
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { entity.GovernorateName });
                 _db.Governorates.Remove(entity);
                 await _db.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "Governorate", id, $"حذف محافظة: {entity.GovernorateName}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "Governorate", id, $"حذف محافظة: {entity.GovernorateName}", oldValues: oldValues);
 
                 TempData["Ok"] = "تم حذف المحافظة.";
             }
@@ -343,37 +346,19 @@ namespace ERP.Controllers
 
 
         // =========================================================================
-        // Export — تصدير المحافظات (Excel أو CSV) مع نفس الفلاتر بالضبط
+        // Export — تصدير كل المحافظات (Excel أو CSV) بدون اعتماد على الفلاتر
         // =========================================================================
         [HttpGet]
-        public async Task<IActionResult> Export(
-            string? search,
-            string? searchBy = "all",
-            string? sort = "name",
-            string? dir = "asc",
-            bool useDateRange = false,
-            DateTime? fromDate = null,
-            DateTime? toDate = null,
-            string? dateField = "created",
-            int? codeFrom = null,
-            int? codeTo = null,
-            string? format = "excel")
+        public async Task<IActionResult> Export(string? format = "excel")
         {
-            var q = SearchSortFilter(
-                search, searchBy,
-                sort, dir,
-                useDateRange, fromDate, toDate, dateField ?? "created",
-                codeFrom, codeTo
-            );
-
-
-
-            var rows = await q.ToListAsync();
-
-            format = (format ?? "excel").Trim().ToLowerInvariant();
+            var rows = await _db.Governorates
+                .AsNoTracking()
+                .OrderBy(g => g.GovernorateName)
+                .ToListAsync();
+            var fmt = (format ?? "excel").Trim().ToLowerInvariant();
 
             // ---------------- CSV ----------------
-            if (format == "csv")
+            if (fmt == "csv")
             {
                 var sb = new StringBuilder();
 
@@ -404,43 +389,36 @@ namespace ERP.Controllers
                 return File(bytes, ctype, name);
             }
 
-            // ---------------- Excel ----------------
+            // ---------------- Excel (.xlsx) ----------------
             using var wb = new XLWorkbook();
-            var ws = wb.Worksheets.Add("Governorates");
+            var ws = wb.Worksheets.Add("المحافظات");
 
-            int r = 1;
+            ws.Cell(1, 1).Value = "كود المحافظة";
+            ws.Cell(1, 2).Value = "اسم المحافظة";
+            ws.Cell(1, 3).Value = "تاريخ الإنشاء";
+            ws.Cell(1, 4).Value = "آخر تعديل";
 
-            ws.Cell(r, 1).Value = "كود المحافظة";
-            ws.Cell(r, 2).Value = "اسم المحافظة";
-            ws.Cell(r, 3).Value = "تاريخ الإنشاء";
-            ws.Cell(r, 4).Value = "آخر تعديل";
-
-            var header = ws.Range(r, 1, r, 4);
+            var header = ws.Range(1, 1, 1, 4);
             header.Style.Font.Bold = true;
             header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
+            int row = 2;
             foreach (var g in rows)
             {
-                r++;
-                ws.Cell(r, 1).Value = g.GovernorateId;   // كود
-                ws.Cell(r, 2).Value = g.GovernorateName; // اسم
-                ws.Cell(r, 3).Value = g.CreatedAt;       // تاريخ إنشاء
-                ws.Cell(r, 4).Value = g.UpdatedAt;       // آخر تعديل
+                ws.Cell(row, 1).Value = g.GovernorateId;
+                ws.Cell(row, 2).Value = g.GovernorateName ?? "";
+                ws.Cell(row, 3).Value = g.CreatedAt.HasValue ? g.CreatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "";
+                ws.Cell(row, 4).Value = g.UpdatedAt.HasValue ? g.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "";
+                row++;
             }
 
-            ws.Column(3).Style.DateFormat.Format = "yyyy-MM-dd HH:mm";
-            ws.Column(4).Style.DateFormat.Format = "yyyy-MM-dd HH:mm";
             ws.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
             wb.SaveAs(stream);
             stream.Position = 0;
-
-            var fileNameXlsx = $"Governorates_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
-            const string contentTypeXlsx =
-                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-
-            return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"Governorates_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
         }
 
         // دالة مساعدة صغيرة لتجهيز نص الـ CSV

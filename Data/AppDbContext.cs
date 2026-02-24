@@ -396,10 +396,8 @@ namespace ERP.Data
             {
                 entity.ToTable("ProductGroupPolicies");
 
-                // فهرس فريد على ProductGroupId
-                // (كل مجموعة أصناف لها سياسة واحدة فعالة)
-                entity.HasIndex(x => x.ProductGroupId)
-                      .IsUnique();
+                // الفهرس الفريد المركب يسمح بنفس المجموعة والسياسة لمخازن مختلفة
+                // (يُعرّف في HasIndex أدناه)
 
                 // ربط مع مجموعة الأصناف
                 entity.HasOne(x => x.ProductGroup)
@@ -1612,11 +1610,16 @@ namespace ERP.Data
 
 
                 // 🔹 علاقة فاتورة البيع مع العميل (Customer)
-                // عميل واحد -> له العديد من فواتير البيع
                 e.HasOne(x => x.Customer)
-                 .WithMany(c => c.SalesInvoices)     // ICollection<SalesInvoice> داخل Customer
-                 .HasForeignKey(x => x.CustomerId)   // FK في الهيدر
-                 .OnDelete(DeleteBehavior.Restrict); // لا نحذف الفواتير تلقائياً عند حذف العميل
+                 .WithMany(c => c.SalesInvoices)
+                 .HasForeignKey(x => x.CustomerId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                // 🔹 علاقة فاتورة البيع مع المخزن (Warehouse)
+                e.HasOne(x => x.Warehouse)
+                 .WithMany()
+                 .HasForeignKey(x => x.WarehouseId)
+                 .OnDelete(DeleteBehavior.Restrict);
             });
 
 

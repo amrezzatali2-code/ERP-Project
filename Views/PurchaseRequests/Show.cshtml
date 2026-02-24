@@ -3642,11 +3642,28 @@
                                      btnPost.innerHTML = "⏳ جاري التحويل...";
 
                                      if (msg) {
-                                         msg.textContent = "يتم الآن تحويل الطلب...";
+                                         msg.textContent = "يتم حفظ التعديلات ثم التحويل...";
                                          msg.className = "small mt-2 text-muted";
                                      }
 
                                      try {
+
+                                         // =========================
+                                         // 0) حفظ الهيدر أولاً (لتطبيق أي تعديل مثل تغيير المورد)
+                                         // =========================
+                                         if (typeof window.__saveHeaderAndUpdateDom === 'function') {
+                                             const saveResult = await window.__saveHeaderAndUpdateDom();
+                                             if (!saveResult || !saveResult.ok) {
+                                                 if (msg) { msg.textContent = (saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل التحويل.'; msg.className = 'small mt-2 text-danger'; }
+                                                 btnPost.disabled = false;
+                                                 btnPost.innerHTML = oldHtml;
+                                                 return;
+                                             }
+                                         }
+                                         if (msg) {
+                                             msg.textContent = "يتم الآن تحويل الطلب...";
+                                             msg.className = "small mt-2 text-muted";
+                                         }
 
                                          // =========================
                                          // 1) طلب  التحويل

@@ -2903,11 +2903,47 @@ document.addEventListener('DOMContentLoaded', () => {
                     btnPost.innerHTML = "⏳ جاري الترحيل...";
 
                     if (msg) {
-                        msg.textContent = "يتم الآن ترحيل الفاتورة...";
+                        msg.textContent = "يتم حفظ التعديلات ثم الترحيل...";
                         msg.className = "small mt-2 text-muted";
                     }
 
                     try {
+
+                        // =========================
+                        // 0) حفظ الهيدر أولاً (لتطبيق أي تعديل مثل تغيير المورد)
+                        // =========================
+                        const custId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                        const whId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
+                        if (custId <= 0 || whId <= 0) {
+                            if (msg) { msg.textContent = "يجب اختيار المورد والمخزن قبل الترحيل."; msg.className = "small mt-2 text-danger"; }
+                            btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                            return;
+                        }
+                        let refPrId = null;
+                        const refPrInput = document.getElementById('RefPRId');
+                        if (refPrInput && refPrInput.value.trim() !== '') {
+                            const p = parseInt(refPrInput.value.trim(), 10);
+                            if (!isNaN(p)) refPrId = p;
+                        }
+                        const saveRes = await fetch('@Url.Action("SaveHeader", "PurchaseInvoices")', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ piId: invoiceId, customerId: custId, warehouseId: whId, refPrId: refPrId })
+                        });
+                        let saveData = null;
+                        try { const txt = await saveRes.text(); if (txt) saveData = JSON.parse(txt); } catch { }
+                        if (!saveRes.ok || !saveData?.success) {
+                            const errMsg = (saveData && saveData.message) ? saveData.message : 'تعذر حفظ التعديلات قبل الترحيل.';
+                            if (msg) { msg.textContent = errMsg; msg.className = "small mt-2 text-danger"; }
+                            alert(errMsg);
+                            btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                            return;
+                        }
+
+                        if (msg) {
+                            msg.textContent = "يتم الآن ترحيل الفاتورة...";
+                            msg.className = "small mt-2 text-muted";
+                        }
 
                         // =========================
                         // 1) طلب الترحيل

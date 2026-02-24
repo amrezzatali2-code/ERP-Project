@@ -75,6 +75,29 @@ namespace ERP.Controllers
       string? filterCompany = null,      // متغير: فلتر حسب الشركة (Company)
       string? filterImported = null,     // متغير: فلتر حسب المنشأ (محلي/مستورد)
 
+      // ✅ فلاتر أعمدة بنمط Excel (قيم متعددة مفصولة بـ |)
+      string? filterCol_productGroup = null,
+      string? filterCol_bonusGroup = null,
+      string? filterCol_company = null,
+      string? filterCol_imported = null,
+      string? filterCol_isactive = null,
+      // فلاتر باقي الأعمدة
+      string? filterCol_id = null,
+      string? filterCol_name = null,
+      string? filterCol_barcode = null,
+      string? filterCol_generic = null,
+      string? filterCol_category = null,
+      string? filterCol_price = null,
+      string? filterCol_created = null,
+      string? filterCol_modified = null,
+      string? filterCol_lastprice = null,
+      string? filterCol_hasQuota = null,
+      string? filterCol_quotaQuantity = null,
+      string? filterCol_descShort = null,
+      // فلاتر رقمية متقدمة (صيغ < > من:إلى)
+      string? filterCol_idExpr = null,      // مثل: <10 أو >10 أو 10:100
+      string? filterCol_priceExpr = null,   // مثل: <100 أو >50 أو 50:200
+
       int page = 1,                      // متغير: رقم الصفحة الحالية
       int pageSize = 50                  // متغير: عدد السطور في الصفحة
   )
@@ -158,12 +181,22 @@ namespace ERP.Controllers
                         break;
 
                     case "category":
+                    case "productgroup":
                         if (modeEquals)
                             q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name == s);
                         else if (modeStarts)
                             q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeStarts));
                         else
                             q = q.Where(p => p.ProductGroup != null && p.ProductGroup.Name != null && EF.Functions.Like(p.ProductGroup.Name, likeContains));
+                        break;
+
+                    case "bonusgroup":
+                        if (modeEquals)
+                            q = q.Where(p => p.ProductBonusGroup != null && p.ProductBonusGroup.Name == s);
+                        else if (modeStarts)
+                            q = q.Where(p => p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeStarts));
+                        else
+                            q = q.Where(p => p.ProductBonusGroup != null && p.ProductBonusGroup.Name != null && EF.Functions.Like(p.ProductBonusGroup.Name, likeContains));
                         break;
 
                     case "comp":
@@ -328,6 +361,293 @@ namespace ERP.Controllers
             }
 
             // =========================================================
+            // (5b) فلاتر أعمدة بنمط Excel (قيم متعددة مفصولة بـ |)
+            // =========================================================
+            var sep = new[] { '|' };
+            if (!string.IsNullOrWhiteSpace(filterCol_productGroup))
+            {
+                var ids = filterCol_productGroup.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.ProductGroupId != null && ids.Contains(p.ProductGroupId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup))
+            {
+                var ids = filterCol_bonusGroup.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.ProductBonusGroupId != null && ids.Contains(p.ProductBonusGroupId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_company))
+            {
+                var vals = filterCol_company.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Company != null && vals.Contains(p.Company));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_imported))
+            {
+                var vals = filterCol_imported.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Imported != null && vals.Contains(p.Imported));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_isactive))
+            {
+                var vals = filterCol_isactive.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                {
+                    var activeVals = new List<bool>();
+                    if (vals.Contains("نشط")) activeVals.Add(true);
+                    if (vals.Contains("موقوف")) activeVals.Add(false);
+                    if (activeVals.Count > 0)
+                        q = q.Where(p => activeVals.Contains(p.IsActive));
+                }
+            }
+
+            // فلاتر باقي الأعمدة النصية
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => ids.Contains(p.ProdId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.ProdName != null && vals.Contains(p.ProdName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_barcode))
+            {
+                var vals = filterCol_barcode.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Barcode != null && vals.Contains(p.Barcode));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_generic))
+            {
+                var vals = filterCol_generic.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.GenericName != null && vals.Contains(p.GenericName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_category))
+            {
+                var ids = filterCol_category.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.CategoryId != null && ids.Contains(p.CategoryId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_price))
+            {
+                var prices = filterCol_price.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (prices.Count > 0)
+                    q = q.Where(p => prices.Contains(p.PriceRetail));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_hasQuota))
+            {
+                var vals = filterCol_hasQuota.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                {
+                    var quotaVals = new List<bool>();
+                    if (vals.Contains("نعم")) quotaVals.Add(true);
+                    if (vals.Contains("لا")) quotaVals.Add(false);
+                    if (quotaVals.Count > 0)
+                        q = q.Where(p => quotaVals.Contains(p.HasQuota));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity))
+            {
+                var qty = filterCol_quotaQuantity.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (qty.Count > 0)
+                    q = q.Where(p => p.QuotaQuantity != null && qty.Contains(p.QuotaQuantity.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_descShort))
+            {
+                var vals = filterCol_descShort.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Description != null && vals.Any(v => p.Description.Contains(v)));
+            }
+
+            // فلاتر التاريخ (نطاق سنة/شهر)
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var dateParts = filterCol_created.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (dateParts.Count > 0)
+                {
+                    var dateFilters = dateParts.Select(dp =>
+                    {
+                        var parts = dp.Split('-');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m))
+                            return new { Year = y, Month = m };
+                        return null;
+                    }).Where(x => x != null).ToList();
+                    if (dateFilters.Count > 0)
+                    {
+                        q = q.Where(p => dateFilters.Any(df =>
+                            p.CreatedAt.Year == df.Year && p.CreatedAt.Month == df.Month));
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_modified))
+            {
+                var dateParts = filterCol_modified.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (dateParts.Count > 0)
+                {
+                    var dateFilters = dateParts.Select(dp =>
+                    {
+                        var parts = dp.Split('-');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m))
+                            return new { Year = y, Month = m };
+                        return null;
+                    }).Where(x => x != null).ToList();
+                    if (dateFilters.Count > 0)
+                    {
+                        q = q.Where(p => dateFilters.Any(df =>
+                            p.UpdatedAt.Year == df.Year && p.UpdatedAt.Month == df.Month));
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_lastprice))
+            {
+                var dateParts = filterCol_lastprice.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (dateParts.Count > 0)
+                {
+                    var dateFilters = dateParts.Select(dp =>
+                    {
+                        var parts = dp.Split('-');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m))
+                            return new { Year = y, Month = m };
+                        return null;
+                    }).Where(x => x != null).ToList();
+                    if (dateFilters.Count > 0)
+                    {
+                        q = q.Where(p => p.LastPriceChangeDate.HasValue && dateFilters.Any(df =>
+                            p.LastPriceChangeDate!.Value.Year == df.Year && p.LastPriceChangeDate.Value.Month == df.Month));
+                    }
+                }
+            }
+
+            // =========================================================
+            // (5c) فلاتر رقمية متقدمة (صيغ < > من:إلى)
+            // =========================================================
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                var expr = filterCol_idExpr.Trim();
+                if (expr.StartsWith("<=") && int.TryParse(expr.Substring(2), out var max))
+                {
+                    q = q.Where(p => p.ProdId <= max);
+                }
+                else if (expr.StartsWith(">=") && int.TryParse(expr.Substring(2), out var min))
+                {
+                    q = q.Where(p => p.ProdId >= min);
+                }
+                else if (expr.StartsWith("<") && int.TryParse(expr.Substring(1), out var max2))
+                {
+                    q = q.Where(p => p.ProdId < max2);
+                }
+                else if (expr.StartsWith(">") && int.TryParse(expr.Substring(1), out var min2))
+                {
+                    q = q.Where(p => p.ProdId > min2);
+                }
+                else if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 &&
+                        int.TryParse(parts[0].Trim(), out var from) &&
+                        int.TryParse(parts[1].Trim(), out var to))
+                    {
+                        if (from > to) (from, to) = (to, from);
+                        q = q.Where(p => p.ProdId >= from && p.ProdId <= to);
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_priceExpr))
+            {
+                var expr = filterCol_priceExpr.Trim();
+                if (expr.StartsWith("<=") && decimal.TryParse(expr.Substring(2), out var max))
+                {
+                    q = q.Where(p => p.PriceRetail <= max);
+                }
+                else if (expr.StartsWith(">=") && decimal.TryParse(expr.Substring(2), out var min))
+                {
+                    q = q.Where(p => p.PriceRetail >= min);
+                }
+                else if (expr.StartsWith("<") && decimal.TryParse(expr.Substring(1), out var max2))
+                {
+                    q = q.Where(p => p.PriceRetail < max2);
+                }
+                else if (expr.StartsWith(">") && decimal.TryParse(expr.Substring(1), out var min2))
+                {
+                    q = q.Where(p => p.PriceRetail > min2);
+                }
+                else if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 &&
+                        decimal.TryParse(parts[0].Trim(), out var from) &&
+                        decimal.TryParse(parts[1].Trim(), out var to))
+                    {
+                        if (from > to) (from, to) = (to, from);
+                        q = q.Where(p => p.PriceRetail >= from && p.PriceRetail <= to);
+                    }
+                }
+            }
+
+            // =========================================================
             // (6) فلتر التاريخ/الوقت (CreatedAt)
             // =========================================================
             if (useDateRange)
@@ -404,6 +724,27 @@ namespace ERP.Controllers
 
             ViewBag.ProductGroups = new SelectList(productGroups, "ProductGroupId", "Name", filterProductGroupId);
 
+            // فلاتر أعمدة Excel
+            ViewBag.FilterCol_ProductGroup = filterCol_productGroup;
+            ViewBag.FilterCol_BonusGroup = filterCol_bonusGroup;
+            ViewBag.FilterCol_Company = filterCol_company;
+            ViewBag.FilterCol_Imported = filterCol_imported;
+            ViewBag.FilterCol_IsActive = filterCol_isactive;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Barcode = filterCol_barcode;
+            ViewBag.FilterCol_Generic = filterCol_generic;
+            ViewBag.FilterCol_Category = filterCol_category;
+            ViewBag.FilterCol_Price = filterCol_price;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Modified = filterCol_modified;
+            ViewBag.FilterCol_LastPrice = filterCol_lastprice;
+            ViewBag.FilterCol_HasQuota = filterCol_hasQuota;
+            ViewBag.FilterCol_QuotaQuantity = filterCol_quotaQuantity;
+            ViewBag.FilterCol_DescShort = filterCol_descShort;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
+            ViewBag.FilterCol_PriceExpr = filterCol_priceExpr;
+
             var companies = await _db.Products
                 .AsNoTracking()
                 .Where(p => !string.IsNullOrWhiteSpace(p.Company))
@@ -457,7 +798,189 @@ namespace ERP.Controllers
             return View(model);
         }
 
+        // =========================================================
+        // API: جلب القيم المميزة لعمود (للفلترة بنمط Excel)
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var q = _db.Products
+                .Include(p => p.ProductGroup)
+                .Include(p => p.ProductBonusGroup)
+                .AsNoTracking();
 
+            List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
+            {
+                // أعمدة رقمية (ID)
+                "id" => (await q
+                    .Select(p => p.ProdId)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500) // حد أقصى 500 قيمة لتجنب التحميل البطيء
+                    .ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString()))
+                    .ToList(),
+                
+                // أعمدة نصية
+                "name" => (await q
+                    .Where(p => !string.IsNullOrWhiteSpace(p.ProdName))
+                    .Select(p => p.ProdName!)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v, v))
+                    .ToList(),
+                "barcode" => (await q
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Barcode))
+                    .Select(p => p.Barcode!)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v, v))
+                    .ToList(),
+                "generic" => (await q
+                    .Where(p => !string.IsNullOrWhiteSpace(p.GenericName))
+                    .Select(p => p.GenericName!)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v, v))
+                    .ToList(),
+                "category" => (await q
+                    .Where(p => p.CategoryId.HasValue)
+                    .Select(p => p.CategoryId!.Value)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString()))
+                    .ToList(),
+                "productgroup" => (await q
+                    .Where(p => p.ProductGroup != null)
+                    .Select(p => new { p.ProductGroup!.ProductGroupId, p.ProductGroup.Name })
+                    .Distinct()
+                    .OrderBy(x => x.Name)
+                    .ToListAsync())
+                    .Select(x => (x.ProductGroupId.ToString(), x.Name ?? ""))
+                    .ToList(),
+                "bonusgroup" => (await q
+                    .Where(p => p.ProductBonusGroup != null)
+                    .Select(p => new { p.ProductBonusGroup!.ProductBonusGroupId, p.ProductBonusGroup.Name })
+                    .Distinct()
+                    .OrderBy(x => x.Name)
+                    .ToListAsync())
+                    .Select(x => (x.ProductBonusGroupId.ToString(), x.Name ?? ""))
+                    .ToList(),
+                "company" => (await q
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Company))
+                    .Select(p => p.Company!)
+                    .Distinct()
+                    .OrderBy(c => c)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(c => (c, c))
+                    .ToList(),
+                
+                // أعمدة رقمية (السعر)
+                "price" => (await q
+                    .Where(p => p.PriceRetail > 0)
+                    .Select(p => p.PriceRetail)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v.ToString("N2"), v.ToString("N2")))
+                    .ToList(),
+                
+                // أعمدة نصية محدودة القيم
+                "imported" => (await q
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Imported))
+                    .Select(p => p.Imported!)
+                    .Distinct()
+                    .OrderBy(i => i)
+                    .ToListAsync())
+                    .Select(i => (i, i))
+                    .ToList(),
+                "isactive" => new List<(string, string)>
+                {
+                    ("نشط", "نشط"),
+                    ("موقوف", "موقوف")
+                },
+                "hasquota" => new List<(string, string)>
+                {
+                    ("نعم", "نعم"),
+                    ("لا", "لا")
+                },
+                
+                // أعمدة رقمية (الكمية)
+                "quotaquantity" => (await q
+                    .Where(p => p.QuotaQuantity.HasValue && p.QuotaQuantity.Value > 0)
+                    .Select(p => p.QuotaQuantity!.Value)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString()))
+                    .ToList(),
+                
+                // أعمدة التاريخ (نعرض فقط السنوات والأشهر المميزة)
+                "created" => (await q
+                    .Select(p => new { Year = p.CreatedAt.Year, Month = p.CreatedAt.Month })
+                    .Distinct()
+                    .OrderByDescending(x => x.Year)
+                    .ThenByDescending(x => x.Month)
+                    .Take(100)
+                    .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}"))
+                    .ToList(),
+                "modified" => (await q
+                    .Select(p => new { Year = p.UpdatedAt.Year, Month = p.UpdatedAt.Month })
+                    .Distinct()
+                    .OrderByDescending(x => x.Year)
+                    .ThenByDescending(x => x.Month)
+                    .Take(100)
+                    .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}"))
+                    .ToList(),
+                "lastprice" => (await q
+                    .Where(p => p.LastPriceChangeDate.HasValue)
+                    .Select(p => new { Year = p.LastPriceChangeDate!.Value.Year, Month = p.LastPriceChangeDate.Value.Month })
+                    .Distinct()
+                    .OrderByDescending(x => x.Year)
+                    .ThenByDescending(x => x.Month)
+                    .Take(100)
+                    .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}"))
+                    .ToList(),
+                
+                // الوصف المختصر (نص)
+                "descshort" => (await q
+                    .Where(p => !string.IsNullOrWhiteSpace(p.Description))
+                    .Select(p => p.Description!.Substring(0, Math.Min(50, p.Description.Length)))
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(200)
+                    .ToListAsync())
+                    .Select(v => (v, v))
+                    .ToList(),
+                
+                _ => new List<(string Value, string Display)>()
+            };
+
+            // تطبيق البحث داخل القائمة
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                items = items
+                    .Where(x => x.Display.ToLowerInvariant().Contains(searchTerm))
+                    .ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
+        }
 
 
 
@@ -798,11 +1321,34 @@ namespace ERP.Controllers
             int? filterProductGroupId = null,
             string? filterCompany = null,
             string? filterImported = null,
+            // ✅ فلاتر أعمدة Excel
+            string? filterCol_productGroup = null,
+            string? filterCol_bonusGroup = null,
+            string? filterCol_company = null,
+            string? filterCol_imported = null,
+            string? filterCol_isactive = null,
+            // فلاتر باقي الأعمدة
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_barcode = null,
+            string? filterCol_generic = null,
+            string? filterCol_category = null,
+            string? filterCol_price = null,
+            string? filterCol_created = null,
+            string? filterCol_modified = null,
+            string? filterCol_lastprice = null,
+            string? filterCol_hasQuota = null,
+            string? filterCol_quotaQuantity = null,
+            string? filterCol_descShort = null,
+            // فلاتر رقمية متقدمة
+            string? filterCol_idExpr = null,
+            string? filterCol_priceExpr = null,
             string? format = "excel")    // excel | csv
         {
             // متغير: الاستعلام الأساسي بدون تتبّع لزيادة السرعة
             IQueryable<Product> q = _db.Products
                 .Include(p => p.ProductGroup)
+                .Include(p => p.ProductBonusGroup)
                 .AsNoTracking();
 
             // ========= البحث =========
@@ -897,6 +1443,218 @@ namespace ERP.Controllers
                 else if (importedFilter == "محلي" || importedFilter == "local")
                 {
                     q = q.Where(p => (p.Imported ?? "").Contains("محلي"));
+                }
+            }
+
+            // ========= فلاتر أعمدة Excel =========
+            var sep = new[] { '|' };
+            if (!string.IsNullOrWhiteSpace(filterCol_productGroup))
+            {
+                var ids = filterCol_productGroup.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.ProductGroupId != null && ids.Contains(p.ProductGroupId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup))
+            {
+                var ids = filterCol_bonusGroup.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.ProductBonusGroupId != null && ids.Contains(p.ProductBonusGroupId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_company))
+            {
+                var vals = filterCol_company.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Company != null && vals.Contains(p.Company));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_imported))
+            {
+                var vals = filterCol_imported.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Imported != null && vals.Contains(p.Imported));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_isactive))
+            {
+                var vals = filterCol_isactive.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                {
+                    var activeVals = new List<bool>();
+                    if (vals.Contains("نشط")) activeVals.Add(true);
+                    if (vals.Contains("موقوف")) activeVals.Add(false);
+                    if (activeVals.Count > 0)
+                        q = q.Where(p => activeVals.Contains(p.IsActive));
+                }
+            }
+
+            // فلاتر باقي الأعمدة (نفس منطق Index)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) q = q.Where(p => ids.Contains(p.ProdId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) q = q.Where(p => p.ProdName != null && vals.Contains(p.ProdName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_barcode))
+            {
+                var vals = filterCol_barcode.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) q = q.Where(p => p.Barcode != null && vals.Contains(p.Barcode));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_generic))
+            {
+                var vals = filterCol_generic.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) q = q.Where(p => p.GenericName != null && vals.Contains(p.GenericName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_category))
+            {
+                var ids = filterCol_category.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) q = q.Where(p => p.CategoryId != null && ids.Contains(p.CategoryId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_price))
+            {
+                var prices = filterCol_price.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (prices.Count > 0) q = q.Where(p => prices.Contains(p.PriceRetail));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_hasQuota))
+            {
+                var vals = filterCol_hasQuota.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                {
+                    var quotaVals = new List<bool>();
+                    if (vals.Contains("نعم")) quotaVals.Add(true);
+                    if (vals.Contains("لا")) quotaVals.Add(false);
+                    if (quotaVals.Count > 0) q = q.Where(p => quotaVals.Contains(p.HasQuota));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity))
+            {
+                var qty = filterCol_quotaQuantity.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (qty.Count > 0) q = q.Where(p => p.QuotaQuantity != null && qty.Contains(p.QuotaQuantity.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_descShort))
+            {
+                var vals = filterCol_descShort.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) q = q.Where(p => p.Description != null && vals.Any(v => p.Description.Contains(v)));
+            }
+
+            // فلاتر التاريخ
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var dateParts = filterCol_created.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (dateParts.Count > 0)
+                {
+                    var dateFilters = dateParts.Select(dp =>
+                    {
+                        var parts = dp.Split('-');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m))
+                            return new { Year = y, Month = m };
+                        return null;
+                    }).Where(x => x != null).ToList();
+                    if (dateFilters.Count > 0)
+                        q = q.Where(p => dateFilters.Any(df => p.CreatedAt.Year == df.Year && p.CreatedAt.Month == df.Month));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_modified))
+            {
+                var dateParts = filterCol_modified.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (dateParts.Count > 0)
+                {
+                    var dateFilters = dateParts.Select(dp =>
+                    {
+                        var parts = dp.Split('-');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m))
+                            return new { Year = y, Month = m };
+                        return null;
+                    }).Where(x => x != null).ToList();
+                    if (dateFilters.Count > 0)
+                        q = q.Where(p => dateFilters.Any(df => p.UpdatedAt.Year == df.Year && p.UpdatedAt.Month == df.Month));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_lastprice))
+            {
+                var dateParts = filterCol_lastprice.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (dateParts.Count > 0)
+                {
+                    var dateFilters = dateParts.Select(dp =>
+                    {
+                        var parts = dp.Split('-');
+                        if (parts.Length == 2 && int.TryParse(parts[0], out var y) && int.TryParse(parts[1], out var m))
+                            return new { Year = y, Month = m };
+                        return null;
+                    }).Where(x => x != null).ToList();
+                    if (dateFilters.Count > 0)
+                        q = q.Where(p => p.LastPriceChangeDate.HasValue && dateFilters.Any(df =>
+                            p.LastPriceChangeDate!.Value.Year == df.Year && p.LastPriceChangeDate.Value.Month == df.Month));
+                }
+            }
+
+            // فلاتر رقمية متقدمة
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                var expr = filterCol_idExpr.Trim();
+                if (expr.StartsWith("<=") && int.TryParse(expr.Substring(2), out var max))
+                    q = q.Where(p => p.ProdId <= max);
+                else if (expr.StartsWith(">=") && int.TryParse(expr.Substring(2), out var min))
+                    q = q.Where(p => p.ProdId >= min);
+                else if (expr.StartsWith("<") && int.TryParse(expr.Substring(1), out var max2))
+                    q = q.Where(p => p.ProdId < max2);
+                else if (expr.StartsWith(">") && int.TryParse(expr.Substring(1), out var min2))
+                    q = q.Where(p => p.ProdId > min2);
+                else if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out var from) && int.TryParse(parts[1].Trim(), out var to))
+                    {
+                        if (from > to) (from, to) = (to, from);
+                        q = q.Where(p => p.ProdId >= from && p.ProdId <= to);
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_priceExpr))
+            {
+                var expr = filterCol_priceExpr.Trim();
+                if (expr.StartsWith("<=") && decimal.TryParse(expr.Substring(2), out var max))
+                    q = q.Where(p => p.PriceRetail <= max);
+                else if (expr.StartsWith(">=") && decimal.TryParse(expr.Substring(2), out var min))
+                    q = q.Where(p => p.PriceRetail >= min);
+                else if (expr.StartsWith("<") && decimal.TryParse(expr.Substring(1), out var max2))
+                    q = q.Where(p => p.PriceRetail < max2);
+                else if (expr.StartsWith(">") && decimal.TryParse(expr.Substring(1), out var min2))
+                    q = q.Where(p => p.PriceRetail > min2);
+                else if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 && decimal.TryParse(parts[0].Trim(), out var from) && decimal.TryParse(parts[1].Trim(), out var to))
+                    {
+                        if (from > to) (from, to) = (to, from);
+                        q = q.Where(p => p.PriceRetail >= from && p.PriceRetail <= to);
+                    }
                 }
             }
 

@@ -469,12 +469,15 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _context.StockTransfers.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.TransferDate, existing.FromWarehouseId, existing.ToWarehouseId, existing.Note }) : null;
                 stockTransfer.UpdatedAt = DateTime.Now;
 
                 _context.Update(stockTransfer);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "StockTransfer", stockTransfer.Id, $"تعديل تحويل مخزني رقم {stockTransfer.Id}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { stockTransfer.TransferDate, stockTransfer.FromWarehouseId, stockTransfer.ToWarehouseId, stockTransfer.Note });
+                await _activityLogger.LogAsync(UserActionType.Edit, "StockTransfer", stockTransfer.Id, $"تعديل تحويل مخزني رقم {stockTransfer.Id}", oldValues, newValues);
 
                 TempData["SuccessMessage"] = "تم تعديل التحويل المخزني بنجاح.";
                 return RedirectToAction(nameof(Index));
@@ -530,6 +533,7 @@ namespace ERP.Controllers
 
             try
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { transfer.TransferDate, transfer.FromWarehouseId, transfer.ToWarehouseId, transfer.Note });
                 if (transfer.IsPosted)
                 {
                     var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
@@ -539,7 +543,7 @@ namespace ERP.Controllers
                 _context.StockTransfers.Remove(transfer);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "StockTransfer", id, $"حذف تحويل مخزني رقم {id}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "StockTransfer", id, $"حذف تحويل مخزني رقم {id}", oldValues: oldValues);
 
                 TempData["SuccessMessage"] = $"تم حذف التحويل رقم {id} بنجاح.";
             }

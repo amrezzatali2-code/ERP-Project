@@ -444,6 +444,8 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await _context.Policies.AsNoTracking().FirstOrDefaultAsync(x => x.PolicyId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.Name, existing.Description }) : null;
                 // تحديث آخر تعديل
                 policy.UpdatedAt = DateTime.Now;
 
@@ -453,7 +455,8 @@ namespace ERP.Controllers
                 // حفظ التغييرات
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "Policy", id, $"تعديل سياسة: {policy.Name}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { policy.Name, policy.Description });
+                await _activityLogger.LogAsync(UserActionType.Edit, "Policy", id, $"تعديل سياسة: {policy.Name}", oldValues, newValues);
 
                 TempData["SuccessMessage"] = "تم تعديل السياسة بنجاح.";
                 return RedirectToAction(nameof(Index));
@@ -516,10 +519,11 @@ namespace ERP.Controllers
 
             try
             {
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { policy.Name, policy.Description });
                 _context.Policies.Remove(policy);
                 await _context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "Policy", id, $"حذف سياسة: {policy.Name}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "Policy", id, $"حذف سياسة: {policy.Name}", oldValues: oldValues);
 
                 TempData["SuccessMessage"] = "تم حذف السياسة بنجاح.";
             }

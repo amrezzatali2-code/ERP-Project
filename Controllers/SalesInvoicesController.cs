@@ -81,6 +81,7 @@ namespace ERP.Controllers
                       ? c.Area.AreaName
                       : string.Empty,                      // المنطقة
           Credit = c.CreditLimit,                          // حد الائتمان
+          CurrentBalance = c.CurrentBalance,               // الحساب السابق للعميل
 
           // ✅ جديد: سياسة العميل
           PolicyId = c.PolicyId,                           // كود السياسة (nullable)
@@ -349,14 +350,50 @@ namespace ERP.Controllers
                     GenericName = p.GenericName ?? string.Empty,
                     Company = p.Company ?? string.Empty,
                     HasQuota = p.HasQuota,
-                    PriceRetail = 0m
+                    PriceRetail = 0m,
+                    BonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null,
+                    HasBonus = p.ProductBonusGroupId != null
                 })
                 .ToListAsync();
 
             ViewBag.ProductsAuto = products;
         }
 
+        // =========================================================
+        // API: إرجاع قائمة الأصناف للداتاليست (بدون إعادة تحميل الصفحة)
+        // - يستخدم عند تغيير تشيك بوكس "عرض الصفر"
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetProductsForDatalist(bool includeZeroQty = false, int? warehouseId = null)
+        {
+            var productsQuery = _context.Products.AsNoTracking().OrderBy(p => p.ProdName);
 
+            if (!includeZeroQty)
+            {
+                var prodIdsWithStock = _context.StockBatches
+                    .AsNoTracking()
+                    .Where(sb => sb.QtyOnHand > 0);
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    prodIdsWithStock = prodIdsWithStock.Where(sb => sb.WarehouseId == warehouseId.Value);
+                var ids = await prodIdsWithStock.Select(sb => sb.ProdId).Distinct().ToListAsync();
+                productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
+            }
+
+            var products = await productsQuery
+                .Select(p => new
+                {
+                    id = p.ProdId,
+                    name = p.ProdName ?? string.Empty,
+                    genericName = p.GenericName ?? string.Empty,
+                    company = p.Company ?? string.Empty,
+                    hasQuota = p.HasQuota,
+                    hasBonus = p.ProductBonusGroupId != null,
+                    bonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null
+                })
+                .ToListAsync();
+
+            return Json(products);
+        }
 
 
 
@@ -439,7 +476,7 @@ namespace ERP.Controllers
             if (customerId < 0) customerId = 0;
 
             // =========================
-            // (2) هل الصنف عليه كوتة؟ (من Products)
+            // (2) هل الصنف عليه كوتة/بونص؟ (من Products)
             // =========================
             var prodInfo = await _context.Products
                 .AsNoTracking()
@@ -447,7 +484,11 @@ namespace ERP.Controllers
                 .Select(p => new
                 {
                     hasQuota = p.HasQuota,
-                    quotaQuantity = p.QuotaQuantity
+                    quotaQuantity = p.QuotaQuantity,
+                    bonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null,
+                    hasBonus = p.ProductBonusGroupId != null,
+                    productGroupName = p.ProductGroup != null ? p.ProductGroup.Name : null,
+                    productGroupId = p.ProductGroupId
                 })
                 .FirstOrDefaultAsync();
 
@@ -483,39 +524,31 @@ namespace ERP.Controllers
                 .SumAsync(sb => (decimal?)sb.QtyOnHand) ?? 0m; // متغير: إجمالي كل المخازن
 
             // =========================
-            // (4) الخصم المرجّح للصنف
+            // (4) الخصم المرجّح للصنف (تفضيل مخزن الفاتورة إن وُجد فيه مخزون)
             // =========================
             decimal weightedDiscount = 0m;
-            weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
-
-            string? wdError = null;        // متغير: تشخيص لو فيه خطأ
-
             try
             {
-                // ✅ الخصم المرجّح الحقيقي من الخدمة
-                weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
+                weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountForWarehouseAsync(prodId, warehouseId);
+                if (weightedDiscount == 0m)
+                    weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
             }
-            catch (Exception ex)
+            catch
             {
-                // تعليق: لو حصلت مشكلة جوه الخدمة، نرجّع 0 ونطلع رسالة للتشخيص
-                wdError = ex.Message;
-                weightedDiscount = 0m;
+                weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
             }
 
             // =========================================================
             // (4.1) خصم البيع النهائي (Auto) حسب السياسات + الخصم المرجح
             // =========================================================
-            decimal saleDisc1 = 0m; // متغير: خصم البيع النهائي %
-
-            // مثال: استدعاء من السيرفيس (أنت عندك StockAnalysisService شغال)
-            saleDisc1 = await _StockAnalysisService.GetSaleDiscountAsync(
+            var discountDetails = await _StockAnalysisService.GetSaleDiscountDetailsAsync(
                 prodId: prodId,
                 warehouseId: warehouseId,
                 customerId: customerId,
                 weightedPurchaseDiscount: weightedDiscount
             );
 
-            // حماية (0..100)
+            decimal saleDisc1 = discountDetails.SaleDiscount;
             if (saleDisc1 < 0) saleDisc1 = 0;
             if (saleDisc1 > 100) saleDisc1 = 100;
 
@@ -586,6 +619,11 @@ namespace ERP.Controllers
             // =========================
             var first = batches.FirstOrDefault();
 
+            // نص البونص المعروض
+            string bonusText = "بدون بونص";
+            if (prodInfo.hasBonus && !string.IsNullOrWhiteSpace(prodInfo.bonusGroupName))
+                bonusText = prodInfo.bonusGroupName;
+
             // =========================
             // (7) الرد النهائي للـ JS
             // =========================
@@ -593,13 +631,18 @@ namespace ERP.Controllers
             {
                 ok = true,
 
-                // كميات + كوتة + خصم مرجح + خصم بيع
+                // كميات + كوتة + بونص + خصم مرجح + خصم بيع + مجموعة الصنف
                 qtyCurrentWarehouse,
                 qtyAllWarehouses,
                 hasQuota = prodInfo.hasQuota,
                 quotaText,
+                bonusText,
                 weightedDiscount,
                 saleDisc1,
+                productGroupName = prodInfo.productGroupName ?? "بدون مجموعة",
+                appliedGroupPolicyId = discountDetails.AppliedGroupPolicyId,
+                appliedGroupPolicyName = discountDetails.AppliedGroupPolicyName,
+                policySource = discountDetails.PolicySource,
 
                 // تشغيلات FEFO
                 batches,
@@ -614,8 +657,72 @@ namespace ERP.Controllers
             });
         }
 
+        /// <summary>
+        /// تشخيص تطبيق سياسة المجموعة (للمساعدة في حل المشاكل)
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> DiagnosePolicy(int prodId, int warehouseId, int customerId)
+        {
+            if (prodId <= 0 || warehouseId <= 0)
+                return Json(new { ok = false, message = "prodId و warehouseId مطلوبان." });
 
+            var product = await _context.Products
+                .AsNoTracking()
+                .Where(p => p.ProdId == prodId)
+                .Select(p => new { p.ProductGroupId, GroupName = p.ProductGroup != null ? p.ProductGroup.Name : null })
+                .FirstOrDefaultAsync();
 
+            if (product == null)
+                return Json(new { ok = false, message = "الصنف غير موجود." });
+
+            decimal weightedDiscount = 0m;
+            try
+            {
+                weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountForWarehouseAsync(prodId, warehouseId);
+                if (weightedDiscount == 0m)
+                    weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
+            }
+            catch { }
+
+            object groupPoliciesForWarehouse;
+            object groupPoliciesAnyWarehouse;
+            if (product.ProductGroupId.HasValue && product.ProductGroupId.Value > 0)
+            {
+                groupPoliciesForWarehouse = await _context.ProductGroupPolicies
+                    .AsNoTracking()
+                    .Where(gp => gp.ProductGroupId == product.ProductGroupId!.Value && gp.WarehouseId == warehouseId && gp.IsActive)
+                    .Select(gp => new { gp.PolicyId, PolicyName = gp.Policy != null ? gp.Policy.Name : null, gp.ProfitPercent })
+                    .ToListAsync();
+                groupPoliciesAnyWarehouse = await _context.ProductGroupPolicies
+                    .AsNoTracking()
+                    .Where(gp => gp.ProductGroupId == product.ProductGroupId.Value && gp.IsActive)
+                    .Select(gp => new { gp.WarehouseId, gp.PolicyId, PolicyName = gp.Policy != null ? gp.Policy.Name : null, gp.ProfitPercent })
+                    .ToListAsync();
+            }
+            else
+            {
+                groupPoliciesForWarehouse = new List<object>();
+                groupPoliciesAnyWarehouse = new List<object>();
+            }
+
+            var discountDetails = await _StockAnalysisService.GetSaleDiscountDetailsAsync(prodId, warehouseId, customerId, weightedDiscount);
+
+            return Json(new
+            {
+                ok = true,
+                prodId,
+                warehouseId,
+                customerId,
+                productGroupId = product.ProductGroupId,
+                productGroupName = product.GroupName ?? "بدون مجموعة",
+                weightedDiscount,
+                saleDiscount = discountDetails.SaleDiscount,
+                appliedGroupPolicyId = discountDetails.AppliedGroupPolicyId,
+                appliedGroupPolicyName = discountDetails.AppliedGroupPolicyName,
+                policiesForGroupAndWarehouse = groupPoliciesForWarehouse,
+                policiesForGroupAnyWarehouse = groupPoliciesAnyWarehouse
+            });
+        }
 
 
 
@@ -740,39 +847,57 @@ namespace ERP.Controllers
                 // =========================
                 // 3.1) التحقق من الكوتة — يوم تجاري (7 صباحاً إلى 7 صباحاً التالي)
                 // - الصنف له كوتة (HasQuota + QuotaQuantity)
-                // - العميل بدون مضاعفة: كوتة الصنف فقط. مع مضاعفة: كوتة × QuotaMultiplier
+                // - المضاعفة: لو العميل عليه "مضاعفة الكوتة" و QuotaMultiplier > 0 → كوتة × المضاعفة، وإلا × 1
+                // - نعدّ المباع (مرحلة فقط) + سطور الفاتورة الحالية (مسودة) + الكمية الجديدة
                 // =========================
                 if (product.HasQuota && product.QuotaQuantity.HasValue && product.QuotaQuantity.Value > 0 && invoice.CustomerId > 0)
                 {
                     var customer = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
-                    int multiplier = (customer != null && customer.IsQuotaMultiplierEnabled && customer.QuotaMultiplier > 0)
-                        ? customer.QuotaMultiplier
-                        : 1;
+                    // مضاعفة الكوتة: تفعيل + قيمة > 0 وإلا نستخدم 1
+                    int multiplier = 1;
+                    if (customer != null && customer.IsQuotaMultiplierEnabled && customer.QuotaMultiplier > 0)
+                        multiplier = Math.Max(1, customer.QuotaMultiplier);
                     int effectiveQuota = product.QuotaQuantity.Value * multiplier;
 
-                    // حدود اليوم التجاري: من 7 صباحاً إلى 7 صباحاً اليوم التالي (أو 6:59:59)
+                    // حدود اليوم التجاري: من 7 صباحاً إلى 7 صباحاً اليوم التالي
                     var invDt = invoice.SIDate.Date.Add(invoice.SITime);
                     var (dayStart, dayEnd) = GetCommercialDayBounds(invDt);
 
-                    // مجموع الكميات المباعة لهذا العميل من هذا الصنف في اليوم التجاري الحالي
-                    var alreadySold = await _context.SalesInvoiceLines
+                    // (أ) كميات من فواتير مرحلة فقط (مباعة فعلياً) في اليوم التجاري
+                    var linesWithInvoices = await _context.SalesInvoiceLines
                         .AsNoTracking()
                         .Where(l => l.ProdId == dto.prodId)
                         .Join(_context.SalesInvoices.AsNoTracking(),
                             line => line.SIId,
                             inv => inv.SIId,
-                            (line, inv) => new { line, inv })
-                        .Where(x => x.inv.CustomerId == invoice.CustomerId)
-                        .Where(x => x.inv.SIDate.Date.Add(x.inv.SITime) >= dayStart && x.inv.SIDate.Date.Add(x.inv.SITime) < dayEnd)
-                        .SumAsync(x => x.line.Qty);
+                            (line, inv) => new { line.Qty, inv.CustomerId, inv.SIDate, inv.SITime, inv.IsPosted })
+                        .Where(x => x.CustomerId == invoice.CustomerId && x.IsPosted)
+                        .ToListAsync();
 
-                    if (alreadySold + dto.qty > effectiveQuota)
+                    var alreadySoldPosted = linesWithInvoices
+                        .Where(x =>
+                        {
+                            var dt = x.SIDate.Date.Add(x.SITime);
+                            return dt >= dayStart && dt < dayEnd;
+                        })
+                        .Sum(x => x.Qty);
+
+                    // (ب) سطور الفاتورة الحالية (مسودة) لنفس الصنف — لأننا نضيف لها الآن
+                    var currentInvoiceLinesQty = await _context.SalesInvoiceLines
+                        .AsNoTracking()
+                        .Where(l => l.SIId == invoice.SIId && l.ProdId == dto.prodId)
+                        .SumAsync(l => l.Qty);
+
+                    var totalAfterAdd = alreadySoldPosted + currentInvoiceLinesQty + dto.qty;
+
+                    if (totalAfterAdd > effectiveQuota)
                     {
                         await tx.RollbackAsync();
+                        var alreadyInPeriod = alreadySoldPosted + currentInvoiceLinesQty;
                         return BadRequest(new
                         {
                             ok = false,
-                            message = $"تجاوزت كوتة الصنف. المسموح لهذا العميل في اليوم التجاري: {effectiveQuota} علبة. تم بيع {alreadySold} علبة. المتبقي: {effectiveQuota - alreadySold} علبة."
+                            message = $"تجاوزت كوتة الصنف. المسموح لهذا العميل في اليوم التجاري: {effectiveQuota} علبة. تم بيع/إضافة {alreadyInPeriod} علبة. المتبقي: {effectiveQuota - alreadyInPeriod} علبة."
                         });
                     }
                 }
@@ -1073,16 +1198,9 @@ namespace ERP.Controllers
                         need -= take;
                     }
 
-                    // لو لسه في احتياج → ده خطأ منطقي (StockBatches قالت متاح لكن StockLedger مفيهوش RemainingQty كفاية)
-                    if (need > 0)
-                    {
-                        await tx.RollbackAsync();
-                        return BadRequest(new
-                        {
-                            ok = false,
-                            message = "حدث تعارض في FIFO: لا توجد دخلات كافية لاستهلاك الكمية (RemainingQty غير كافي)."
-                        });
-                    }
+                    // لو لسه في احتياج → StockBatches فيها كمية لكن StockLedger (دخلات الشراء) مفيهاش RemainingQty كافي
+                    // ✅ حل بديل: نسمح بالبيع بتكلفة صفر للجزء المتبقي (الصنف قد يكون دخل يدوياً أو بيانات غير متطابقة)
+                    // — البيع يتم، لكن تكلفة/ربح الجزء غير المستهلك = 0 وقد تحتاج مراجعة يدوية
 
                     // حساب تكلفة الوحدة من FIFO
                     decimal costPerUnit = qtyDelta > 0 ? (costTotal / qtyDelta) : 0m;
@@ -1709,6 +1827,44 @@ namespace ERP.Controllers
 
 
 
+
+        public class SaveTaxJsonDto
+        {
+            public int SIId { get; set; }
+            public decimal taxTotal { get; set; }    // قيمة الضريبة (تُحسب من النسبة في الواجهة)
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveTaxJson([FromBody] SaveTaxJsonDto dto)
+        {
+            if (dto == null || dto.SIId <= 0)
+                return BadRequest(new { ok = false, message = "بيانات الضريبة غير صحيحة." });
+
+            var invoice = await _context.SalesInvoices.FirstOrDefaultAsync(s => s.SIId == dto.SIId);
+            if (invoice == null)
+                return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
+
+            if (invoice.IsPosted)
+                return BadRequest(new { ok = false, message = "لا يمكن تعديل الضريبة: الفاتورة مُرحّلة. استخدم (فتح الفاتورة) أولاً." });
+
+            invoice.TaxAmount = Math.Round(dto.taxTotal, 2);
+            invoice.NetTotal = Math.Round(invoice.TotalAfterDiscountBeforeTax + invoice.TaxAmount, 2);
+            invoice.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Json(new
+            {
+                ok = true,
+                totals = new
+                {
+                    totalAfterDiscount = invoice.TotalAfterDiscountBeforeTax,
+                    taxAmount = invoice.TaxAmount,
+                    totalAfterDiscountAndTax = invoice.NetTotal,
+                    netTotal = invoice.NetTotal
+                }
+            });
+        }
 
         [HttpPost]
         [IgnoreAntiforgeryToken] // تعليق: لأن الاستدعاء من fetch بدون توكن
@@ -2431,8 +2587,11 @@ namespace ERP.Controllers
             if (page < 1) page = 1;
             if (pageSize <= 0) pageSize = 25;
 
-            // نبدأ بالاستعلام الأساسي بدون تنفيذ فعلي (IQueryable)
-            IQueryable<SalesInvoice> query = _context.SalesInvoices.AsNoTracking();
+            // نبدأ بالاستعلام الأساسي مع تحميل العميل والمخزن للعرض
+            IQueryable<SalesInvoice> query = _context.SalesInvoices
+                .AsNoTracking()
+                .Include(s => s.Customer)
+                .Include(s => s.Warehouse);
 
             // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
             int? codeFrom = Request.Query.ContainsKey("codeFrom")

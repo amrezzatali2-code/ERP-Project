@@ -346,6 +346,7 @@ namespace ERP.Controllers
                 return NotFound();
             }
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { role.Name, role.Description, role.IsActive });
             // تحديث الحقول القابلة للتعديل
             role.Name = input.Name;
             role.Description = input.Description;
@@ -357,7 +358,8 @@ namespace ERP.Controllers
 
             await _context.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Edit, "Role", id, $"تعديل دور: {role.Name}");
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new { role.Name, role.Description, role.IsActive });
+            await _activityLogger.LogAsync(UserActionType.Edit, "Role", id, $"تعديل دور: {role.Name}", oldValues, newValues);
 
             TempData["Success"] = "تم تعديل بيانات الدور بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -407,10 +409,11 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { role.Name, role.Description });
             _context.Roles.Remove(role);
             await _context.SaveChangesAsync();
 
-            await _activityLogger.LogAsync(UserActionType.Delete, "Role", id, $"حذف دور: {role.Name}");
+            await _activityLogger.LogAsync(UserActionType.Delete, "Role", id, $"حذف دور: {role.Name}", oldValues: oldValues);
 
             TempData["Success"] = "تم حذف الدور بنجاح.";
             return RedirectToAction(nameof(Index));

@@ -1,4 +1,4 @@
-﻿@model ERP.Models.ProductGroupPolicy
+@model ERP.Models.ProductGroupPolicy
 
 @{
     ViewData["Title"] = "تفاصيل سياسة مجموعة أصناف";
@@ -13,11 +13,19 @@
                 <dt class="col-sm-3">كود القاعدة</dt>
                 <dd class="col-sm-9">@Model.Id</dd>
 
-                <dt class="col-sm-3">كود مجموعة الأصناف</dt>
-                <dd class="col-sm-9">@Model.ProductGroupId</dd>
+                <dt class="col-sm-3">اسم المجموعة</dt>
+                <dd class="col-sm-9">@(Model.ProductGroup?.Name ?? "-")</dd>
 
-                <dt class="col-sm-3">كود السياسة</dt>
-                <dd class="col-sm-9">@Model.PolicyId</dd>
+                <dt class="col-sm-3">اسم السياسة</dt>
+                <dd class="col-sm-9">@(Model.Policy?.Name ?? "-")</dd>
+
+                <dt class="col-sm-3">اسم المخزن</dt>
+                <dd class="col-sm-9">@(Model.Warehouse?.WarehouseName ?? "-")</dd>
+
+                <dt class="col-sm-3">نسبة الربح %</dt>
+                <dd class="col-sm-9">@{
+                    var effProfit = (ViewBag.EffectiveProfit as decimal?) ?? Model.ProfitPercent;
+                }@effProfit.ToString("0.00")%</dd>
 
                 <dt class="col-sm-3">مفعّلة؟</dt>
                 <dd class="col-sm-9">@(Model.IsActive ? "نعم" : "لا")</dd>

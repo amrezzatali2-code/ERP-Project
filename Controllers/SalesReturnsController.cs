@@ -222,6 +222,8 @@ namespace ERP.Controllers
 
             try
             {
+                var existing = await context.SalesReturns.AsNoTracking().FirstOrDefaultAsync(s => s.SRId == id);
+                var oldValues = existing != null ? System.Text.Json.JsonSerializer.Serialize(new { existing.SRDate, existing.CustomerId, existing.WarehouseId, existing.NetTotal }) : null;
                 // تحديث وقت آخر تعديل
                 salesReturn.UpdatedAt = DateTime.Now;
 
@@ -236,7 +238,8 @@ namespace ERP.Controllers
                 // حفظ التغييرات فعلياً في SQL Server
                 await context.SaveChangesAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Edit, "SalesReturn", salesReturn.SRId, $"تعديل مرتجع بيع رقم {salesReturn.SRId}");
+                var newValues = System.Text.Json.JsonSerializer.Serialize(new { salesReturn.SRDate, salesReturn.CustomerId, salesReturn.WarehouseId, salesReturn.NetTotal });
+                await _activityLogger.LogAsync(UserActionType.Edit, "SalesReturn", salesReturn.SRId, $"تعديل مرتجع بيع رقم {salesReturn.SRId}", oldValues, newValues);
 
                 TempData["Msg"] = "تم تعديل مرتجع البيع بنجاح.";
                 return RedirectToAction(nameof(Index));
@@ -1264,12 +1267,13 @@ namespace ERP.Controllers
                 );
 
                 // 5) حذف الهيدر (Cascade يحذف السطور)
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new { ret.SRDate, ret.CustomerId, ret.WarehouseId, ret.NetTotal });
                 context.SalesReturns.Remove(ret);
 
                 await context.SaveChangesAsync();
                 await tx.CommitAsync();
 
-                await _activityLogger.LogAsync(UserActionType.Delete, "SalesReturn", id, $"حذف مرتجع بيع رقم {id}");
+                await _activityLogger.LogAsync(UserActionType.Delete, "SalesReturn", id, $"حذف مرتجع بيع رقم {id}", oldValues: oldValues);
 
                 return new DeleteReturnResult(DeleteReturnStatus.Deleted, "تم الحذف.");
             }

@@ -33,12 +33,35 @@
     var fromDate = Model.FromDate;
     var toDate = Model.ToDate;
 
-    // فلاتر متراكبة
+    // فلاتر متراكبة (مع fallback من الـ Request لو فشل ViewBag)
     int? filterProductGroupId = ViewBag.FilterProductGroupId as int?;
+    if (!filterProductGroupId.HasValue && int.TryParse(Context.Request.Query["filterProductGroupId"].ToString(), out var qPg))
+        filterProductGroupId = qPg;
     string? filterCompany = ViewBag.FilterCompany as string;
     string? filterImported = ViewBag.FilterImported as string;
     int? codeFrom = ViewBag.CodeFrom as int?;
     int? codeTo = ViewBag.CodeTo as int?;
+
+    // فلاتر أعمدة Excel
+    string? filterCol_productGroup = ViewBag.FilterCol_ProductGroup as string;
+    string? filterCol_bonusGroup = ViewBag.FilterCol_BonusGroup as string;
+    string? filterCol_company = ViewBag.FilterCol_Company as string;
+    string? filterCol_imported = ViewBag.FilterCol_Imported as string;
+    string? filterCol_isactive = ViewBag.FilterCol_IsActive as string;
+    string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string? filterCol_name = ViewBag.FilterCol_Name as string;
+    string? filterCol_barcode = ViewBag.FilterCol_Barcode as string;
+    string? filterCol_generic = ViewBag.FilterCol_Generic as string;
+    string? filterCol_category = ViewBag.FilterCol_Category as string;
+    string? filterCol_price = ViewBag.FilterCol_Price as string;
+    string? filterCol_created = ViewBag.FilterCol_Created as string;
+    string? filterCol_modified = ViewBag.FilterCol_Modified as string;
+    string? filterCol_lastprice = ViewBag.FilterCol_LastPrice as string;
+    string? filterCol_hasQuota = ViewBag.FilterCol_HasQuota as string;
+    string? filterCol_quotaQuantity = ViewBag.FilterCol_QuotaQuantity as string;
+    string? filterCol_descShort = ViewBag.FilterCol_DescShort as string;
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string;
+    string? filterCol_priceExpr = ViewBag.FilterCol_PriceExpr as string;
 
     // دالة توليد لينك مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
@@ -55,6 +78,25 @@
         filterProductGroupId,
         filterCompany,
         filterImported,
+        filterCol_productGroup,
+        filterCol_bonusGroup,
+        filterCol_company,
+        filterCol_imported,
+        filterCol_isactive,
+        filterCol_id,
+        filterCol_name,
+        filterCol_barcode,
+        filterCol_generic,
+        filterCol_category,
+        filterCol_price,
+        filterCol_created,
+        filterCol_modified,
+        filterCol_lastprice,
+        filterCol_hasQuota,
+        filterCol_quotaQuantity,
+        filterCol_descShort,
+        filterCol_idExpr,
+        filterCol_priceExpr,
         codeFrom,
         codeTo
     })!;
@@ -79,6 +121,25 @@
             filterProductGroupId,
             filterCompany,
             filterImported,
+            filterCol_productGroup,
+            filterCol_bonusGroup,
+            filterCol_company,
+            filterCol_imported,
+            filterCol_isactive,
+            filterCol_id,
+            filterCol_name,
+            filterCol_barcode,
+            filterCol_generic,
+            filterCol_category,
+            filterCol_price,
+            filterCol_created,
+            filterCol_modified,
+            filterCol_lastprice,
+            filterCol_hasQuota,
+            filterCol_quotaQuantity,
+            filterCol_descShort,
+            filterCol_idExpr,
+            filterCol_priceExpr,
             codeFrom,
             codeTo
         }) ?? "#";
@@ -90,6 +151,40 @@
         return new HtmlString(
             $@"<a href=""{url}"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>"
         );
+    };
+
+    // دالة عمود قابل للفلترة (بنمط Excel)
+    Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
+    {
+        var currentFilter = colKey == "productGroup" ? filterCol_productGroup :
+                            colKey == "bonusGroup" ? filterCol_bonusGroup :
+                            colKey == "company" ? filterCol_company :
+                            colKey == "imported" ? filterCol_imported :
+                            colKey == "isactive" ? filterCol_isactive :
+                            colKey == "id" ? (filterCol_id ?? filterCol_idExpr) :
+                            colKey == "name" ? filterCol_name :
+                            colKey == "barcode" ? filterCol_barcode :
+                            colKey == "generic" ? filterCol_generic :
+                            colKey == "category" ? filterCol_category :
+                            colKey == "price" ? (filterCol_price ?? filterCol_priceExpr) :
+                            colKey == "created" ? filterCol_created :
+                            colKey == "modified" ? filterCol_modified :
+                            colKey == "lastprice" ? filterCol_lastprice :
+                            colKey == "hasQuota" ? filterCol_hasQuota :
+                            colKey == "quotaQuantity" ? filterCol_quotaQuantity :
+                            colKey == "descShort" ? filterCol_descShort : null;
+
+        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var btnStateClass = hasFilter ? "text-primary" : "text-muted";
+
+        return new HtmlString($@"
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"">
+                <span class=""erp-col-sort"">{sortLink(sortKey, caption)}</span>
+                <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
+                        data-col=""{colKey}"" data-col-title=""{caption}"" title=""فلتر العمود"" style=""min-width:22px;"">
+                    <svg xmlns=""http://www.w3.org/2000/svg"" width=""14"" height=""14"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z""/></svg>
+                </button>
+            </div>");
     };
 }
 <div dir="rtl" class="container-fluid">
@@ -112,6 +207,8 @@
                             <option value="gen"@Html.Raw(searchBy == "gen" ? " selected" : "")>الاسم العلمي</option>
                             <option value="comp"@Html.Raw(searchBy == "comp" ? " selected" : "")>الشركة</option>
                             <option value="category"@Html.Raw(searchBy == "category" ? " selected" : "")>الفئة</option>
+                            <option value="productgroup"@Html.Raw(searchBy == "productgroup" ? " selected" : "")>مجموعة الصنف</option>
+                            <option value="bonusgroup"@Html.Raw(searchBy == "bonusgroup" ? " selected" : "")>مجموعة البونص</option>
                             <option value="price"@Html.Raw(searchBy == "price" ? " selected" : "")>سعر الجمهور</option>
                             <option value="imported"@Html.Raw(searchBy == "imported" ? " selected" : "")>محلي/مستورد</option>
                             <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>نشط/موقوف</option>
@@ -130,6 +227,11 @@
                     @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
                     @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
                     @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
                     @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
                 </form>
@@ -144,32 +246,42 @@
                     <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
                     <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
                 </div>
-                <div class="d-flex flex-wrap gap-2 mt-2 justify-content-center w-100">
-                    <select name="filterProductGroupId" id="filterProductGroupId" class="form-select erp-filter-input" style="max-width:140px" form="productsSearchForm">
-                        <option value="">جميع الفئات</option>
-                        @if (ViewBag.ProductGroups != null)
-                        {
-                            @foreach (var pg in (SelectList)ViewBag.ProductGroups)
+                <div class="d-flex flex-wrap gap-2 mt-2 justify-content-center w-100 align-items-end">
+                    <div class="d-flex flex-column">
+                        <label class="form-label small mb-0 text-center">مجموعات الاصناف</label>
+                        <select name="filterProductGroupId" id="filterProductGroupId" class="form-select erp-filter-input" style="max-width:140px" form="productsSearchForm">
+                            <option value=""@Html.Raw(!filterProductGroupId.HasValue ? " selected" : "")>الكل</option>
+                            @if (ViewBag.ProductGroups != null)
                             {
-                                <option value="@pg.Value"@Html.Raw(pg.Selected ? " selected" : "")>@pg.Text</option>
+                                @foreach (var pg in (SelectList)ViewBag.ProductGroups)
+                                {
+                                    var isSelected = filterProductGroupId.HasValue && pg.Value == filterProductGroupId.Value.ToString();
+                                    <option value="@pg.Value"@Html.Raw(isSelected ? " selected" : "")>@pg.Text</option>
+                                }
                             }
-                        }
-                    </select>
-                    <input type="text" name="filterCompany" id="filterCompany" class="form-control erp-filter-input" list="companiesList" placeholder="الشركة" value="@filterCompany" style="max-width:120px" form="productsSearchForm" />
-                    <datalist id="companiesList">
-                        @if (ViewBag.Companies != null)
-                        {
-                            @foreach (var comp in (List<string>)ViewBag.Companies)
+                        </select>
+                    </div>
+                    <div class="d-flex flex-column">
+                        <label class="form-label small mb-0 text-center">الشركة</label>
+                        <input type="text" name="filterCompany" id="filterCompany" class="form-control erp-filter-input" list="companiesList" placeholder="الكل" value="@filterCompany" style="max-width:120px" form="productsSearchForm" />
+                        <datalist id="companiesList">
+                            @if (ViewBag.Companies != null)
                             {
-                                <option value="@comp">@comp</option>
+                                @foreach (var comp in (List<string>)ViewBag.Companies)
+                                {
+                                    <option value="@comp">@comp</option>
+                                }
                             }
-                        }
-                    </datalist>
-                    <select name="filterImported" id="filterImported" class="form-select erp-filter-input" style="max-width:100px" form="productsSearchForm">
-                        <option value="">الكل</option>
-                        <option value="محلي"@Html.Raw(filterImported == "محلي" ? " selected" : "")>محلي</option>
-                        <option value="مستورد"@Html.Raw(filterImported == "مستورد" ? " selected" : "")>مستورد</option>
-                    </select>
+                        </datalist>
+                    </div>
+                    <div class="d-flex flex-column">
+                        <label class="form-label small mb-0 text-center">محلى او مستورد</label>
+                        <select name="filterImported" id="filterImported" class="form-select erp-filter-input" style="max-width:110px" form="productsSearchForm">
+                            <option value="">الكل</option>
+                            <option value="محلي"@Html.Raw(filterImported == "محلي" ? " selected" : "")>محلي</option>
+                            <option value="مستورد"@Html.Raw(filterImported == "مستورد" ? " selected" : "")>مستورد</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -201,6 +313,25 @@
                             @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
                             @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
                             @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
                             @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
@@ -234,6 +365,28 @@
         <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
         @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
         @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+        @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
+        @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
         @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
         @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
     </form>
@@ -251,29 +404,30 @@
                         <input type="checkbox" id="chkAllRows" />
                     </th>
 
-                    <th style="width:110px;" data-col="id">@sortLink("id", "كود الصنف")</th>
-                    <th data-col="col-name">@sortLink("name", "اسم الصنف")</th>
-                    <th data-col="barcode">@sortLink("code", "الباركود")</th>
-                    <th data-col="generic">@sortLink("gen", "الاسم العلمي")</th>
-                    <th data-col="category">@sortLink("category", "الفئة")</th>
+                    @* كل الأعمدة الآن قابلة للفلترة بنمط Excel *@
+                    <th style="width:110px;" data-col="id">@filterableCol("id", "id", "كود الصنف")</th>
+                    <th data-col="col-name">@filterableCol("name", "name", "اسم الصنف")</th>
+                    <th data-col="barcode">@filterableCol("barcode", "code", "الباركود")</th>
+                    <th data-col="generic">@filterableCol("generic", "gen", "الاسم العلمي")</th>
+                    <th data-col="category">@filterableCol("category", "category", "الفئة")</th>
 
                     @* 🔹 مجموعة الصنف + مجموعة البونص *@
-                    <th data-col="productGroup">@sortLink("productgroup", "مجموعة الصنف")</th>
-                    <th data-col="bonusGroup">@sortLink("bonusgroup", "مجموعة البونص")</th>
+                    <th data-col="productGroup">@filterableCol("productGroup", "productgroup", "مجموعة الصنف")</th>
+                    <th data-col="bonusGroup">@filterableCol("bonusGroup", "bonusgroup", "مجموعة البونص")</th>
 
-                    <th data-col="company">@sortLink("comp", "الشركة")</th>
-                    <th class="text-end" data-col="price">@sortLink("price", "سعر الجمهور")</th>
-                    <th data-col="imported">@sortLink("imported", "محلي/مستورد")</th>
-                    <th data-col="isactive">@sortLink("isactive", "الحالة")</th>
-                    <th style="width:150px;" data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
-                    <th style="width:150px;" data-col="modified">@sortLink("modified", "آخر تعديل")</th>
-                    <th style="width:150px;" data-col="lastprice">@sortLink("updated", "آخر تغيير سعر")</th>
+                    <th data-col="company">@filterableCol("company", "comp", "الشركة")</th>
+                    <th class="text-end" data-col="price">@filterableCol("price", "price", "سعر الجمهور")</th>
+                    <th data-col="imported">@filterableCol("imported", "imported", "محلي/مستورد")</th>
+                    <th data-col="isactive">@filterableCol("isactive", "isactive", "الحالة")</th>
+                    <th style="width:150px;" data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
+                    <th style="width:150px;" data-col="modified">@filterableCol("modified", "modified", "آخر تعديل")</th>
+                    <th style="width:150px;" data-col="lastprice">@filterableCol("lastprice", "updated", "آخر تغيير سعر")</th>
 
                     @* 🔹 أعمدة الكوتة *@
-                    <th data-col="hasQuota">@sortLink("hasquota", "له كوتة؟")</th>
-                    <th data-col="quotaQuantity">@sortLink("quotaquantity", "كمية الكوتة")</th>
+                    <th data-col="hasQuota">@filterableCol("hasQuota", "hasquota", "له كوتة؟")</th>
+                    <th data-col="quotaQuantity">@filterableCol("quotaQuantity", "quotaquantity", "كمية الكوتة")</th>
 
-                    <th data-col="descShort">@sortLink("descshort", "الوصف المختصر")</th>
+                    <th data-col="descShort">@filterableCol("descShort", "descshort", "الوصف المختصر")</th>
 
                     <th class="text-nowrap no-print"
                         style="width:220px;"
@@ -402,6 +556,25 @@
             @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
             @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
             @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
             @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
             @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
 
@@ -443,6 +616,24 @@
     </nav>
 </div>
 
+@* ===== قائمة فلتر العمود (بنمط Excel) ===== *@
+<div id="erpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+    <div class="erp-column-filter-header">
+        <span id="erpColumnFilterTitle">فلتر</span>
+        <button type="button" class="btn-close btn-sm" id="erpColumnFilterClose" aria-label="إغلاق"></button>
+    </div>
+    <div class="erp-column-filter-body">
+        <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+        <div id="erpColumnFilterList" class="erp-column-filter-list">
+            <div class="text-muted text-center py-3">جاري التحميل...</div>
+        </div>
+        <div class="erp-column-filter-actions mt-2">
+            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOk">تطبيق</button>
+            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClear">مسح الفلتر</button>
+        </div>
+    </div>
+</div>
+
 @* ===== Modal فلترة بالتاريخ/الوقت ===== *@
 <div class="modal fade no-print"
      id="dateFilterModal"
@@ -473,6 +664,25 @@
                     @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
                     @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_modified)) { <input type="hidden" name="filterCol_modified" value="@filterCol_modified" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
                     @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
                     @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
 
@@ -741,8 +951,18 @@
                 if (codeTo)   url.searchParams.set("codeTo", codeTo);
                 else          url.searchParams.delete("codeTo");
                 if (filterPg?.value) url.searchParams.set("filterProductGroupId", filterPg.value);
+                else url.searchParams.delete("filterProductGroupId");
                 if (filterComp?.value) url.searchParams.set("filterCompany", filterComp.value);
+                else url.searchParams.delete("filterCompany");
                 if (filterImp?.value) url.searchParams.set("filterImported", filterImp.value);
+                else url.searchParams.delete("filterImported");
+                ["filterCol_productGroup","filterCol_bonusGroup","filterCol_company","filterCol_imported","filterCol_isactive",
+                 "filterCol_id","filterCol_name","filterCol_barcode","filterCol_generic","filterCol_category","filterCol_price",
+                 "filterCol_created","filterCol_modified","filterCol_lastprice","filterCol_hasQuota","filterCol_quotaQuantity","filterCol_descShort",
+                 "filterCol_idExpr","filterCol_priceExpr"].forEach(k => {
+                    const v = new URL(window.location.href).searchParams.get(k);
+                    if (v) url.searchParams.set(k, v);
+                });
                 url.searchParams.set("page", "1");
                 return url.toString();
             }
@@ -770,14 +990,224 @@
                         url.searchParams.set("searchBy", form.querySelector('[name="searchBy"]')?.value || "all");
                         url.searchParams.set("sort", form.querySelector('[name="sort"]')?.value || "name");
                         url.searchParams.set("dir", form.querySelector('[name="dir"]')?.value || "asc");
+                        url.searchParams.set("page", "1");
+                        url.searchParams.set("pageSize", form.querySelector('[name="pageSize"]')?.value || "25");
+                        url.searchParams.set("useDateRange", form.querySelector('[name="useDateRange"]')?.value || "false");
+                        const fd = form.querySelector('[name="fromDate"]')?.value;
+                        const td = form.querySelector('[name="toDate"]')?.value;
+                        if (fd) url.searchParams.set("fromDate", fd);
+                        if (td) url.searchParams.set("toDate", td);
                         if (cf) url.searchParams.set("codeFrom", cf);
                         if (ct) url.searchParams.set("codeTo", ct);
                         if (filterPg?.value) url.searchParams.set("filterProductGroupId", filterPg.value);
                         if (filterComp?.value) url.searchParams.set("filterCompany", filterComp.value);
                         if (filterImp?.value) url.searchParams.set("filterImported", filterImp.value);
+                        ["filterCol_productGroup","filterCol_bonusGroup","filterCol_company","filterCol_imported","filterCol_isactive",
+                         "filterCol_id","filterCol_name","filterCol_barcode","filterCol_generic","filterCol_category","filterCol_price",
+                         "filterCol_created","filterCol_modified","filterCol_lastprice","filterCol_hasQuota","filterCol_quotaQuantity","filterCol_descShort",
+                         "filterCol_idExpr","filterCol_priceExpr"].forEach(k => {
+                            const v = new URL(window.location.href).searchParams.get(k);
+                            if (v) url.searchParams.set(k, v);
+                        });
                         window.location.href = url.toString();
                     }
                 });
+            });
+        })();
+
+        // =========================
+        // فلتر الأعمدة بنمط Excel (قائمة منسدلة + بحث + اختيار عناصر)
+        // =========================
+        (function () {
+            const panel = document.getElementById("erpColumnFilterPanel");
+            const titleEl = document.getElementById("erpColumnFilterTitle");
+            const searchInp = document.getElementById("erpColumnFilterSearch");
+            const listEl = document.getElementById("erpColumnFilterList");
+            const btnOk = document.getElementById("erpColumnFilterOk");
+            const btnClear = document.getElementById("erpColumnFilterClear");
+            const btnClose = document.getElementById("erpColumnFilterClose");
+
+            let currentCol = null;
+            let allItems = [];
+            let currentSelected = new Set();
+            let anchorRect = null;
+            const numericColumns = ["id", "price"]; // أعمدة رقمية تدعم البحث المتقدم
+
+            function getCurrentFilterValue(col) {
+                if (numericColumns.includes(col)) {
+                    return new URL(window.location.href).searchParams.get("filterCol_" + col + "Expr") || "";
+                }
+                return new URL(window.location.href).searchParams.get("filterCol_" + col) || "";
+            }
+
+            function adjustPanelPosition() {
+                if (!panel || !anchorRect) return;
+                const panelRect = panel.getBoundingClientRect();
+
+                let top = anchorRect.bottom + 4;
+                let left = anchorRect.left;
+
+                const margin = 8;
+                const maxBottom = window.innerHeight - margin;
+                const maxRight = window.innerWidth - margin;
+
+                if (top + panelRect.height > maxBottom) {
+                    top = Math.max(margin, maxBottom - panelRect.height);
+                }
+                if (left + panelRect.width > maxRight) {
+                    left = Math.max(margin, maxRight - panelRect.width);
+                }
+
+                panel.style.top = top + "px";
+                panel.style.left = left + "px";
+            }
+
+            function showPanel(btn) {
+                currentCol = btn.dataset.col;
+                const colTitle = btn.dataset.colTitle || currentCol;
+                titleEl.textContent = "فلتر: " + colTitle;
+                searchInp.value = "";
+                currentSelected = new Set();
+                anchorRect = btn.getBoundingClientRect();
+                panel.style.minWidth = Math.max(220, anchorRect.width) + "px";
+                panel.classList.remove("d-none");
+                adjustPanelPosition();
+
+                // للأعمدة الرقمية: عرض حقل إدخال للبحث المتقدم
+                if (numericColumns.includes(currentCol)) {
+                    const currentExpr = getCurrentFilterValue(currentCol);
+                    listEl.innerHTML = `
+                        <div class="mb-2">
+                            <label class="form-label small mb-1">بحث رقمي متقدم:</label>
+                            <input type="text" id="erpNumericExpr" class="form-control form-control-sm" 
+                                   placeholder="مثال: &lt;10 أو &gt;100 أو 10:100" 
+                                   value="${(currentExpr || "").replace(/</g, "&lt;").replace(/>/g, "&gt;")}">
+                            <small class="text-muted d-block mt-1">استخدم: &lt;10, &gt;10, &gt;=10, &lt;=10, 10:100</small>
+                        </div>`;
+                    adjustPanelPosition();
+                    return;
+                }
+
+                // للأعمدة النصية: تحميل قائمة القيم
+                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
+                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split("|").filter(Boolean));
+                
+                fetch("/Products/GetColumnValues?column=" + encodeURIComponent(currentCol))
+                    .then(r => r.json())
+                    .then(items => {
+                        allItems = items;
+                        renderList("");
+                    })
+                    .catch(() => {
+                        listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>';
+                    });
+            }
+
+            function renderList(search) {
+                const term = (search || "").toLowerCase();
+                const filtered = term ? allItems.filter(x => (x.display || x.value || "").toLowerCase().includes(term)) : allItems;
+                const allChecked = filtered.length > 0 && filtered.every(x => currentSelected.has(String(x.value)));
+                const someChecked = filtered.some(x => currentSelected.has(String(x.value)));
+
+                listEl.innerHTML = `
+                    <div class="form-check mb-1">
+                        <input type="checkbox" class="form-check-input" id="erpFilterSelectAll" ${allChecked ? "checked" : ""}>
+                        <label class="form-check-label small" for="erpFilterSelectAll">(تحديد الكل)</label>
+                    </div>
+                    <div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">
+                        ${filtered.map(x => {
+                            const v = String(x.value);
+                            const checked = currentSelected.has(v);
+                            return `<div class="form-check">
+                                <input type="checkbox" class="form-check-input erp-filter-item" value="${v.replace(/"/g, "&quot;")}" ${checked ? "checked" : ""} data-display="${(x.display || v).replace(/"/g, "&quot;")}">
+                                <label class="form-check-label small">${(x.display || v).replace(/</g, "&lt;")}</label>
+                            </div>`;
+                        }).join("")}
+                    </div>`;
+                const selectAllCb = listEl.querySelector("#erpFilterSelectAll");
+                if (selectAllCb) {
+                    selectAllCb.indeterminate = someChecked && !allChecked;
+                    selectAllCb.addEventListener("change", function () {
+                        filtered.forEach(x => {
+                            if (this.checked) currentSelected.add(String(x.value));
+                            else currentSelected.delete(String(x.value));
+                        });
+                        renderList(searchInp.value);
+                    });
+                }
+                listEl.querySelectorAll(".erp-filter-item").forEach(cb => {
+                    cb.addEventListener("change", function () {
+                        if (this.checked) currentSelected.add(this.value);
+                        else currentSelected.delete(this.value);
+                        renderList(searchInp.value);
+                    });
+                });
+                adjustPanelPosition();
+            }
+
+            function applyFilter() {
+                if (!currentCol) return;
+                const url = new URL(window.location.href);
+                
+                // للأعمدة الرقمية: استخدام التعبير النصي
+                if (numericColumns.includes(currentCol)) {
+                    const exprInput = document.getElementById("erpNumericExpr");
+                    const expr = exprInput ? exprInput.value.trim() : "";
+                    const exprParam = "filterCol_" + currentCol + "Expr";
+                    const listParam = "filterCol_" + currentCol;
+                    
+                    if (expr) {
+                        url.searchParams.set(exprParam, expr);
+                        url.searchParams.delete(listParam); // إزالة فلتر القائمة إن وُجد
+                    } else {
+                        url.searchParams.delete(exprParam);
+                        // لو في قيم محددة من قبل، نحتفظ بها
+                        const listVal = url.searchParams.get(listParam);
+                        if (!listVal) url.searchParams.delete(listParam);
+                    }
+                } else {
+                    // للأعمدة النصية: استخدام قائمة القيم
+                    const val = Array.from(currentSelected).filter(Boolean).join("|");
+                    const exprParam = "filterCol_" + currentCol + "Expr";
+                    if (val) {
+                        url.searchParams.set("filterCol_" + currentCol, val);
+                        url.searchParams.delete(exprParam); // إزالة التعبير إن وُجد
+                    } else {
+                        url.searchParams.delete("filterCol_" + currentCol);
+                    }
+                }
+                
+                url.searchParams.set("page", "1");
+                window.location.href = url.toString();
+            }
+
+            function clearFilter() {
+                if (!currentCol) return;
+                const url = new URL(window.location.href);
+                url.searchParams.delete("filterCol_" + currentCol);
+                url.searchParams.delete("filterCol_" + currentCol + "Expr");
+                url.searchParams.set("page", "1");
+                window.location.href = url.toString();
+            }
+
+            document.querySelectorAll(".erp-col-filter-btn").forEach(btn => {
+                btn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    showPanel(this);
+                });
+            });
+
+            searchInp?.addEventListener("input", function () {
+                renderList(this.value);
+            });
+
+            btnOk?.addEventListener("click", applyFilter);
+            btnClear?.addEventListener("click", clearFilter);
+            btnClose?.addEventListener("click", () => panel.classList.add("d-none"));
+
+            document.addEventListener("click", function (e) {
+                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
+                    panel.classList.add("d-none");
             });
         })();
 
