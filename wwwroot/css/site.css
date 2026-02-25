@@ -166,11 +166,11 @@ body {
 /* ================== تصميم احترافي موحد لشريط فلاتر القوائم ================== */
 .erp-list-filter-bar {
     background: #fff;
-    border: 1px solid #e5e7eb;
+    border: 1px solid #bfdbfe; /* إطار أزرق فاتح */
     border-radius: 8px;
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    box-shadow: 0 1px 3px rgba(59,130,246,.12);
 }
 
 .erp-list-filter-bar .form-label {
@@ -494,19 +494,50 @@ body {
 
 /* ================== تنسيق جداول الـ ERP (هيدر ثابت + شكل موحد) ================== */
 
+/* غلاف السكرول: اتجاه LTR حتى يظهر شريط التمرير على اليمين ولا يظهر جزء أبيض على اليسار */
+.erp-table-scroll-container {
+    direction: ltr;
+    width: 100%;
+}
+
 /* الغلاف الخارجي للجدول - هو اللي فيه Scroll */
 .erp-table-wrapper {
     max-height: 500px; /* ارتفاع الجدول، غيّره حسب احتياج الشاشة */
-    overflow-y: auto; /* سكرول رأسي للصفوف فقط */
-    border: 1px solid #dee2e6; /* برواز خفيف حول الجدول */
-    border-radius: .5rem; /* زوايا مدوّرة بسيطة */
-    background-color: #fff; /* خلفية بيضاء */
-    direction: rtl; /* الجدول من اليمين لليسار */
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid #e0e7ff;
+    border-radius: .5rem;
+    background-color: #fff;
+    direction: rtl;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
 }
 
     /* منع مسافة تحت الجدول جوة الـ wrapper */
     .erp-table-wrapper table {
         margin-bottom: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+    }
+    
+    /* إضافة border خفيف للجدول نفسه */
+    .erp-table-wrapper .erp-table {
+        border: none;
+        border-radius: 0;
+    }
+    
+    /* التأكد من أن الجدول يبدأ من الحافة بدون مسافة */
+    .erp-table-wrapper .erp-table thead th:first-child,
+    .erp-table-wrapper .erp-table tbody td:first-child {
+        padding-right: 0.75rem;
+    }
+    
+    .erp-table-wrapper .erp-table thead th:last-child,
+    .erp-table-wrapper .erp-table tbody td:last-child {
+        padding-left: 0.75rem;
     }
 
 /* تثبيت رأس الجدول — يطبق على كل الجداول (حجم التعامل، حركة الصنف، وجميع القوائم) */
@@ -516,19 +547,92 @@ body {
     position: sticky !important;
     top: 0 !important;
     z-index: 2;
-    background-color: #f8f9fa !important;
-    box-shadow: 0 1px 0 0 #dee2e6;
+    background-color: #fafbfc !important;
+    box-shadow: 0 2px 0 0 #adb5bd; /* إطار سفلي أوضح للهيدر */
 }
 
 /* توافق مع table-light في Bootstrap */
 .table-light th {
-    background-color: #f8f9fa !important;
+    background-color: #fafbfc !important;
 }
 
 /* تحسين شكل جدول ERP الموحّد */
 .erp-table {
     font-size: 0.9rem;
     vertical-align: middle;
+    margin: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+/* توسيط جميع عناصر الجدول (نص وأزرار) */
+.erp-table-wrapper .erp-table thead th,
+.erp-table-wrapper .erp-table tbody td {
+    text-align: center !important;
+}
+
+.erp-table-wrapper .erp-table thead th .erp-col-header-filterable,
+.erp-table-wrapper .erp-table thead th .d-flex {
+    justify-content: center;
+}
+
+/* أزرار داخل الجدول: إطار ملون فقط (بدون ملء الخلفية) */
+.erp-table-wrapper .btn-erp-primary {
+    background-color: transparent !important;
+    color: var(--erp-primary) !important;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--erp-primary) !important;
+}
+
+.erp-table-wrapper .btn-erp-primary:hover {
+    background-color: var(--erp-primary) !important;
+    color: #fff !important;
+}
+
+.erp-table-wrapper .btn-erp-danger {
+    background-color: transparent !important;
+    color: var(--erp-danger) !important;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--erp-danger) !important;
+}
+
+.erp-table-wrapper .btn-erp-danger:hover {
+    background-color: var(--erp-danger) !important;
+    color: #fff !important;
+}
+
+.erp-table-wrapper .btn-erp-secondary {
+    background-color: transparent !important;
+    color: var(--erp-secondary) !important;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--erp-secondary) !important;
+}
+
+.erp-table-wrapper .btn-erp-secondary:hover {
+    background-color: var(--erp-secondary) !important;
+    color: #fff !important;
+}
+
+/* إزالة أي مساحة بيضاء على الجانبين */
+.erp-table-wrapper::-webkit-scrollbar {
+    width: 8px;
+}
+
+.erp-table-wrapper::-webkit-scrollbar-track {
+    background: #fff; /* نفس خلفية الجدول لعدم ظهور شريط أبيض منفصل */
+    border-radius: 4px;
+}
+
+.erp-table-wrapper::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 4px;
+}
+
+.erp-table-wrapper::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
 
 /* ================== مقبض تحريك عرض الأعمدة ================== */
@@ -590,8 +694,9 @@ body {
     display: flex;
     align-items: center;
     gap: 0.25rem;
+    justify-content: space-between;
 }
-.erp-col-header-filterable .erp-col-sort {
+.erp-col-header-filterable .erp-col-title {
     flex: 1;
     min-width: 0;
 }
@@ -600,8 +705,11 @@ body {
     border: none;
     background: transparent;
     cursor: pointer;
-    padding: 2px;
+    padding: 2px 4px;
     border-radius: 3px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 .erp-col-filter-btn:hover {
     background-color: rgba(37, 99, 235, 0.1);
@@ -613,9 +721,12 @@ body {
     border: 1px solid #dee2e6;
     border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    padding: 0.5rem;
-    max-height: 70vh;
-    font-size: 0.78rem;
+    padding: 0.75rem;
+    max-height: 75vh;
+    font-size: 0.8rem;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
 }
 .erp-column-filter-header {
     display: flex;
@@ -625,10 +736,38 @@ body {
     margin-bottom: 0.5rem;
     border-bottom: 1px solid #eee;
     font-weight: 600;
-    font-size: 0.82rem;
+    font-size: 0.85rem;
+    flex-shrink: 0;
 }
 .erp-column-filter-body {
-    min-width: 180px;
+    min-width: 200px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.erp-column-filter-body .erp-filter-section {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+.erp-filter-sort-section {
+    padding-bottom: 0.5rem;
+}
+.erp-filter-sort-section .erp-sort-btn {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.5rem;
+    text-align: right;
+    border-radius: 4px;
+    transition: all 0.15s;
+}
+.erp-filter-sort-section .erp-sort-btn:hover {
+    background-color: rgba(37, 99, 235, 0.08);
+}
+.erp-filter-sort-section .erp-sort-btn.active {
+    background-color: var(--erp-primary);
+    color: #fff;
+    border-color: var(--erp-primary);
 }
 .erp-column-filter-list .form-check {
     padding: 0.1rem 0;
@@ -642,8 +781,15 @@ body {
 }
 .erp-column-filter-actions {
     display: flex;
+    flex-direction: column;
     gap: 0.5rem;
-    flex-wrap: wrap;
+    flex-shrink: 0;
+    padding-top: 0.5rem;
+    border-top: 1px solid #eee;
+    background: #fff;
+}
+.erp-column-filter-actions .btn {
+    width: 100%;
 }
 
 
