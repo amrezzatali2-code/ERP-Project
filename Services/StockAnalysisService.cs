@@ -67,7 +67,7 @@ namespace ERP.Services
             if (totalQty <= 0m) return 0m;
 
             decimal weighted = rows.Sum(r => ((decimal)r.qty) * r.discPct);
-            return weighted / totalQty;
+            return ClampPercent(weighted / totalQty);
         }
 
 
@@ -96,9 +96,12 @@ namespace ERP.Services
 
             decimal totalRemaining = rows.Sum(r => r.remaining);
             if (totalRemaining <= 0m) return 0m;
+            // تجنّب القسمة على أعداد صغيرة جداً (قد تنتج أرقاماً خاطئة)
+            if (totalRemaining < 0.001m) return 0m;
 
             decimal weighted = rows.Sum(r => r.remaining * r.discPct);
-            return weighted / totalRemaining;
+            decimal result = weighted / totalRemaining;
+            return ClampPercent(result);
         }
 
         /// <summary>
@@ -123,7 +126,54 @@ namespace ERP.Services
             if (rows.Count == 0) return 0m;
             decimal totalRemaining = rows.Sum(r => r.remaining);
             if (totalRemaining <= 0m) return 0m;
-            return rows.Sum(r => r.remaining * r.discPct) / totalRemaining;
+            if (totalRemaining < 0.001m) return 0m;
+            decimal result = rows.Sum(r => r.remaining * r.discPct) / totalRemaining;
+            return ClampPercent(result);
+        }
+
+        /// <summary>
+        /// الخصم الفعّال للصنف: خصم يدوي (من ProductDiscountOverrides) إن وُجد، وإلا الخصم المرجّح المحسوب من StockLedger.
+        /// أولوية الـ override: (ProductId + WarehouseId + BatchId) ثم (ProductId + WarehouseId) ثم (ProductId فقط).
+        /// </summary>
+        public async Task<decimal> GetEffectivePurchaseDiscountAsync(int productId, int? warehouseId, int? batchId)
+        {
+            // البحث عن أحدث override حسب الأولوية
+            var overrideQuery = _context.ProductDiscountOverrides
+                .AsNoTracking()
+                .Where(x => x.ProductId == productId);
+
+            // أولاً: تطابق تام (ProductId + WarehouseId + BatchId)
+            if (warehouseId.HasValue && batchId.HasValue)
+            {
+                var exact = await overrideQuery
+                    .Where(x => x.WarehouseId == warehouseId && x.BatchId == batchId)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .Select(x => (decimal?)x.OverrideDiscountPct)
+                    .FirstOrDefaultAsync();
+                if (exact.HasValue) return ClampPercent(exact.Value);
+            }
+            // ثانياً: (ProductId + WarehouseId) و BatchId = null
+            if (warehouseId.HasValue)
+            {
+                var byWh = await overrideQuery
+                    .Where(x => x.WarehouseId == warehouseId && x.BatchId == null)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .Select(x => (decimal?)x.OverrideDiscountPct)
+                    .FirstOrDefaultAsync();
+                if (byWh.HasValue) return ClampPercent(byWh.Value);
+            }
+            // ثالثاً: مستوى الصنف فقط (WarehouseId = null, BatchId = null)
+            var byProduct = await overrideQuery
+                .Where(x => x.WarehouseId == null && x.BatchId == null)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => (decimal?)x.OverrideDiscountPct)
+                .FirstOrDefaultAsync();
+            if (byProduct.HasValue) return ClampPercent(byProduct.Value);
+
+            // لا يوجد override: استخدام الخصم المرجّح المحسوب
+            if (warehouseId.HasValue)
+                return await GetWeightedPurchaseDiscountForWarehouseAsync(productId, warehouseId.Value);
+            return await GetWeightedPurchaseDiscountCurrentAsync(productId);
         }
 
         // ============================================================

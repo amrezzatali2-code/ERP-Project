@@ -1,7 +1,9 @@
 using DocumentFormat.OpenXml.VariantTypes;
 using ERP.Data;
+using ERP.Filters;
 using ERP.Infrastructure;
 using ERP.Models;
+using ERP.Security;
 using ERP.Services;
 using ERP.ViewModels;
 using Microsoft.AspNetCore.Mvc;
@@ -524,22 +526,14 @@ namespace ERP.Controllers
                 .SumAsync(sb => (decimal?)sb.QtyOnHand) ?? 0m; // متغير: إجمالي كل المخازن
 
             // =========================
-            // (4) الخصم المرجّح للصنف (تفضيل مخزن الفاتورة إن وُجد فيه مخزون)
+            // (4) الخصم الفعّال للصنف (يدوي من ProductDiscountOverrides إن وُجد، وإلا المرجّح من StockLedger)
             // =========================
-            decimal weightedDiscount = 0m;
-            try
-            {
-                weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountForWarehouseAsync(prodId, warehouseId);
-                if (weightedDiscount == 0m)
-                    weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
-            }
-            catch
-            {
-                weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
-            }
+            decimal effectiveDiscount = await _StockAnalysisService.GetEffectivePurchaseDiscountAsync(prodId, warehouseId, null);
+            // تحديد النسبة بين 0 و 100 لتجنب عرض قيم خاطئة (مثل بيانات فاسدة في StockLedger)
+            decimal weightedDiscount = effectiveDiscount < 0m ? 0m : (effectiveDiscount > 100m ? 100m : effectiveDiscount);
 
             // =========================================================
-            // (4.1) خصم البيع النهائي (Auto) حسب السياسات + الخصم المرجح
+            // (4.1) خصم البيع النهائي (Auto) حسب السياسات + الخصم الفعّال
             // =========================================================
             var discountDetails = await _StockAnalysisService.GetSaleDiscountDetailsAsync(
                 prodId: prodId,
@@ -675,14 +669,8 @@ namespace ERP.Controllers
             if (product == null)
                 return Json(new { ok = false, message = "الصنف غير موجود." });
 
-            decimal weightedDiscount = 0m;
-            try
-            {
-                weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountForWarehouseAsync(prodId, warehouseId);
-                if (weightedDiscount == 0m)
-                    weightedDiscount = await _StockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(prodId);
-            }
-            catch { }
+            // الخصم الفعّال = خصم يدوي إن وُجد، وإلا المرجّح من StockLedger
+            decimal weightedDiscount = await _StockAnalysisService.GetEffectivePurchaseDiscountAsync(prodId, warehouseId, null);
 
             object groupPoliciesForWarehouse;
             object groupPoliciesAnyWarehouse;
@@ -1867,7 +1855,8 @@ namespace ERP.Controllers
         }
 
         [HttpPost]
-        [IgnoreAntiforgeryToken] // تعليق: لأن الاستدعاء من fetch بدون توكن
+        [IgnoreAntiforgeryToken]
+        [RequirePermission(PermissionCodes.SalesInvoices.Post)]
         public async Task<IActionResult> PostInvoice(int id)
         {
             // ================================
@@ -2026,6 +2015,7 @@ namespace ERP.Controllers
 
         [HttpPost]
         [IgnoreAntiforgeryToken]
+        [RequirePermission(PermissionCodes.SalesInvoices.UnPost)]
         public async Task<IActionResult> OpenInvoice(int id)
         {
             // ================================
@@ -2357,6 +2347,7 @@ namespace ERP.Controllers
         //   - لو فتح عادي => يفتح أقرب فاتورة (التالي ثم السابق) بدل صفحة فاضية
         // =========================================================
         [HttpGet]
+        [RequirePermission(PermissionCodes.SalesInvoices.Show)]
         public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null, bool includeZeroQty = false)
         {
             // =========================================
@@ -2563,6 +2554,7 @@ namespace ERP.Controllers
         // =========================
         // Index — عرض قائمة فواتير البيع
         // =========================
+        [RequirePermission(PermissionCodes.SalesInvoices.View)]
         public async Task<IActionResult> Index(
             string? search,                      // نص البحث
             string? searchBy,                    // نوع البحث: id / customer / warehouse / date / status
@@ -2685,8 +2677,8 @@ namespace ERP.Controllers
         
         // =========================================================
         // Create — GET: فتح شاشة إنشاء فاتورة مبيعات جديدة
-        // =========================================================
         [HttpGet]
+        [RequirePermission(PermissionCodes.SalesInvoices.Create)]
         public async Task<IActionResult> Create(bool includeZeroQty = false)
         {
             // =========================================================
@@ -2749,6 +2741,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.SalesInvoices.Create)]
         public async Task<IActionResult> Create(SalesInvoice invoice, bool includeZeroQty = false)
         {
             // تحقق إضافي على نسبة خصم الهيدر (0..100)
@@ -2812,6 +2805,7 @@ namespace ERP.Controllers
 
 
         [HttpGet]
+        [RequirePermission(PermissionCodes.SalesInvoices.Edit)]
         public async Task<IActionResult> Edit(int id)
         {
             // تحقق بسيط من رقم الفاتورة
@@ -2845,6 +2839,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.SalesInvoices.Edit)]
         public async Task<IActionResult> Edit(int id, SalesInvoice invoice)
         {
             // تأكد أن رقم الفاتورة في الرابط هو نفس الموجود في الموديل
@@ -2909,8 +2904,8 @@ namespace ERP.Controllers
 
         // =========================
         // Export — تصدير فواتير المبيعات (CSV يفتح في Excel)
-        // =========================
         [HttpGet]
+        [RequirePermission(PermissionCodes.SalesInvoices.Export)]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
@@ -2995,8 +2990,7 @@ namespace ERP.Controllers
 
 
         // =========================
-        // Delete — GET: صفحة تأكيد الحذف
-        // =========================
+        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
@@ -3026,6 +3020,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var result = await TryDeleteSalesInvoiceDeepAsync(id);
@@ -3056,6 +3051,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
             if (string.IsNullOrWhiteSpace(selectedIds))
@@ -3147,6 +3143,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
         public async Task<IActionResult> DeleteAll()
         {
             var allIds = await _context.SalesInvoices

@@ -1,4 +1,4 @@
-﻿@model ERP.Models.UserRole
+@model ERP.Models.UserRole
 
 @{
     ViewData["Title"] = "تعديل دور مستخدم";
@@ -15,7 +15,7 @@
             <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
 
             <div class="mb-3">
-                <label asp-for="UserId" class="form-label"></label>
+                <label asp-for="UserId" class="form-label fw-semibold">المستخدم</label>
                 <select asp-for="UserId"
                         asp-items="ViewBag.UserId"
                         class="form-select">
@@ -24,17 +24,21 @@
             </div>
 
             <div class="mb-3">
-                <label asp-for="RoleId" class="form-label"></label>
+                <label asp-for="RoleId" class="form-label fw-semibold">الدور</label>
                 <select asp-for="RoleId"
                         asp-items="ViewBag.RoleId"
-                        class="form-select">
+                        class="form-select"
+                        id="RoleId">
                 </select>
                 <span asp-validation-for="RoleId" class="text-danger"></span>
             </div>
 
             <div class="mb-3 form-check">
                 <input asp-for="IsPrimary" class="form-check-input ms-2" />
-                <label asp-for="IsPrimary" class="form-check-label"></label>
+                <label asp-for="IsPrimary" class="form-check-label">دور افتراضي؟</label>
+                <div class="form-text small text-muted">
+                    عندما يكون للمستخدم أكثر من دور، يُستخدم الدور الافتراضي كأساس عند الالتباس.
+                </div>
             </div>
 
             <div class="mb-3">
@@ -44,9 +48,18 @@
                        readonly />
             </div>
 
+            @* تفاصيل صلاحيات الدور (نفس صفحة إسناد دور لمستخدم) *@
+            <div class="mb-3">
+                <label class="form-label fw-semibold">صلاحيات هذا الدور</label>
+                <div id="role-permissions-box"
+                     class="border rounded p-2 small bg-light">
+                    جاري تحميل صلاحيات الدور...
+                </div>
+            </div>
+
         </div>
         <div class="card-footer d-flex justify-content-between">
-            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <a asp-action="Index" class="btn btn-secondary">أدوار المستخدمين</a>
             <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
         </div>
     </form>
@@ -56,4 +69,137 @@
     @{
         await Html.RenderPartialAsync("_ValidationScriptsPartial");
     }
+    <script>
+        const rolePermsUrl = '@Url.Action("GetRolePermissionsEditable", "UserRoles")';
+
+        document.addEventListener("DOMContentLoaded", function () {
+            const roleSelect = document.getElementById("RoleId");
+            const box = document.getElementById("role-permissions-box");
+            if (!roleSelect || !box) return;
+
+            function loadPermissions() {
+                const roleId = roleSelect.value;
+                if (!roleId) {
+                    box.innerHTML = "اختر دوراً من القائمة لعرض صلاحياته.";
+                    return;
+                }
+                fetch(rolePermsUrl + "?roleId=" + roleId)
+                    .then(r => r.text())
+                    .then(html => {
+                        box.innerHTML = html;
+                        initPermTable();
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        box.innerHTML = "حدث خطأ أثناء تحميل الصلاحيات.";
+                    });
+            }
+
+            function updateModuleStatus(modRow) {
+                if (!modRow) return;
+                const modId = modRow.id;
+                const children = box.querySelectorAll("tr.perm-child-row[data-parent=\"" + modId + "\"] .perm-cb");
+                const allChecked = children.length > 0 && Array.from(children).every(function(c) { return c.checked; });
+                const modCb = modRow.querySelector(".perm-module-cb");
+                const span = modRow.querySelector(".perm-module-status");
+                if (modCb) modCb.checked = allChecked;
+                if (span) { span.textContent = allChecked ? "✔" : "✖"; span.className = "perm-module-status " + (allChecked ? "text-success" : "text-danger"); }
+            }
+
+            function updateStatus(cb) {
+                const tr = cb.closest("tr");
+                if (!tr) return;
+                const span = tr.querySelector(".perm-status");
+                if (span) {
+                    span.textContent = cb.checked ? "✔" : "✖";
+                    span.className = "perm-status " + (cb.checked ? "text-success" : "text-danger");
+                }
+            }
+
+            function initPermTable() {
+                const searchInput = document.getElementById("permSearchInput");
+                const chkAll = document.getElementById("chkAllPerms");
+                const rows = box.querySelectorAll("#permEditableTable tbody tr");
+
+                if (searchInput) {
+                    searchInput.value = "";
+                    searchInput.oninput = filterRows;
+                }
+                function filterRows() {
+                    const term = (searchInput && searchInput.value ? searchInput.value : "").trim().toLowerCase();
+                    rows.forEach(function(tr) {
+                        const isChild = tr.classList.contains("perm-child-row");
+                        const search = (tr.dataset.search || "").toLowerCase();
+                        const matchSearch = !term || search.indexOf(term) !== -1;
+                        if (isChild) {
+                            const parent = tr.dataset.parent ? box.querySelector("#" + tr.dataset.parent) : null;
+                            const parentCollapsed = parent ? parent.classList.contains("perm-collapsed") : false;
+                            const parentMatches = parent && (parent.dataset.search || "").toLowerCase().indexOf(term) !== -1;
+                            if (term && parentMatches && parentCollapsed && parent) {
+                                parent.classList.remove("perm-collapsed");
+                                var exp = parent.querySelector(".perm-expand"); if (exp) { exp.textContent = "−"; exp.title = "إغلاق الشجرة"; }
+                            }
+                            const show = (matchSearch || parentMatches) && (!parent || !parent.classList.contains("perm-collapsed"));
+                            tr.style.display = show ? "" : "none";
+                        } else {
+                            const children = box.querySelectorAll("tr.perm-child-row[data-parent=\"" + (tr.id || "") + "\"]");
+                            const anyChildMatches = !term || Array.from(children).some(function(ch) { return (ch.dataset.search || "").toLowerCase().indexOf(term) !== -1; });
+                            tr.style.display = (matchSearch || anyChildMatches) ? "" : "none";
+                        }
+                    });
+                }
+
+                box.querySelectorAll(".perm-expand").forEach(function(btn) {
+                    btn.onclick = function () {
+                        const modRow = this.closest("tr");
+                        const modId = modRow ? modRow.id : null;
+                        const collapsed = modRow ? modRow.classList.toggle("perm-collapsed") : false;
+                        const children = modId ? box.querySelectorAll("tr[data-parent=\"" + modId + "\"]") : [];
+                        children.forEach(function(ch) { ch.style.display = collapsed ? "none" : ""; });
+                        this.textContent = collapsed ? "+" : "−";
+                        this.title = collapsed ? "فتح الشجرة" : "إغلاق الشجرة";
+                    };
+                });
+
+                box.querySelectorAll(".perm-module-cb").forEach(function(cb) {
+                    cb.onchange = function () {
+                        const mod = this.dataset.module;
+                        const children = box.querySelectorAll("tr.perm-child-row[data-module=\"" + mod + "\"]");
+                        children.forEach(function(tr) {
+                            const chCb = tr.querySelector(".perm-cb");
+                            if (chCb) { chCb.checked = this.checked; updateStatus(chCb); }
+                        });
+                        updateModuleStatus(this.closest("tr"));
+                    };
+                });
+
+                if (chkAll) {
+                    chkAll.onchange = function () {
+                        box.querySelectorAll(".perm-cb").forEach(function(cb) {
+                            const tr = cb.closest("tr");
+                            if (tr && tr.style.display !== "none") {
+                                cb.checked = chkAll.checked;
+                                updateStatus(cb);
+                            }
+                        });
+                        box.querySelectorAll(".perm-module-row").forEach(function(modRow) {
+                            if (modRow.style.display !== "none") updateModuleStatus(modRow);
+                        });
+                    };
+                }
+                box.querySelectorAll(".perm-cb").forEach(function(cb) {
+                    cb.onchange = function () {
+                        updateStatus(this);
+                        const tr = this.closest("tr");
+                        const mod = tr ? tr.dataset.module : null;
+                        const modRow = mod ? box.querySelector("tr.perm-module-row[data-module=\"" + mod + "\"]") : null;
+                        if (modRow) updateModuleStatus(modRow);
+                    };
+                });
+            }
+
+            roleSelect.addEventListener("change", loadPermissions);
+            loadPermissions();
+        });
+    </script>
 }

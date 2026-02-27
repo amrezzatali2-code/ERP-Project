@@ -166,7 +166,7 @@ body {
 /* ================== تصميم احترافي موحد لشريط فلاتر القوائم ================== */
 .erp-list-filter-bar {
     background: #fff;
-    border: 1px solid #bfdbfe; /* إطار أزرق فاتح */
+    border: 2px solid #c7d2fe; /* نفس سمك ولون حدود الجدول */
     border-radius: 8px;
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
@@ -498,17 +498,20 @@ body {
 .erp-table-scroll-container {
     direction: ltr;
     width: 100%;
+    overflow-x: auto;
+    margin-left: 0;
+    padding-left: 0;
 }
 
-/* الغلاف الخارجي للجدول - هو اللي فيه Scroll */
+/* الغلاف الخارجي للجدول — LTR حتى يكون شريط التمرير العمودي على اليمين ويزول الشريط الأبيض عن اليسار */
 .erp-table-wrapper {
-    max-height: 500px; /* ارتفاع الجدول، غيّره حسب احتياج الشاشة */
+    max-height: 500px;
     overflow-y: auto;
-    overflow-x: hidden;
-    border: 1px solid #e0e7ff;
+    overflow-x: auto;
+    border: 2px solid #c7d2fe;
     border-radius: .5rem;
     background-color: #fff;
-    direction: rtl;
+    direction: ltr;
     padding: 0;
     margin: 0;
     width: 100%;
@@ -521,10 +524,12 @@ body {
         border-collapse: separate;
         border-spacing: 0;
         width: 100%;
+        min-width: max-content; /* الجدول لا يتقلص عن عرض المحتوى فيظهر الشريط الأفقي عند الحاجة */
     }
     
-    /* إضافة border خفيف للجدول نفسه */
+    /* الجدول: RTL لعرض الأعمدة من اليمين لليسار، بدون حدود داخلية */
     .erp-table-wrapper .erp-table {
+        direction: rtl;
         border: none;
         border-radius: 0;
     }
@@ -724,7 +729,9 @@ body {
     padding: 0.75rem;
     max-height: 75vh;
     font-size: 0.8rem;
-    min-width: 250px;
+    width: 300px;
+    min-width: 300px;
+    max-width: 300px;
     display: flex;
     flex-direction: column;
 }
@@ -751,6 +758,12 @@ body {
     overflow-y: auto;
     min-height: 0;
 }
+.erp-column-filter-panel #erpColumnFilterSearch,
+.erp-column-filter-panel #erpNumericExpr {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
 .erp-filter-sort-section {
     padding-bottom: 0.5rem;
 }
@@ -776,8 +789,15 @@ body {
     margin-left: 0.25rem;
     transform: scale(0.9);
 }
+.erp-column-filter-list .form-check-label {
+    white-space: normal;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    min-width: 0;
+}
 .erp-column-filter-list .erp-filter-items {
     margin-top: 0.25rem;
+    padding-bottom: 0.5rem;
 }
 .erp-column-filter-actions {
     display: flex;

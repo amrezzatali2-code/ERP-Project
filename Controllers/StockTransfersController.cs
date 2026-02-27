@@ -920,13 +920,16 @@ namespace ERP.Controllers
                 });
             }
 
-            decimal weightedDiscount = await _stockAnalysisService.GetWeightedPurchaseDiscountForWarehouseAsync(prodId, fromWarehouseId);
+            int? firstBatchId = null;
+            if (batchInfos.Count > 0)
+                firstBatchId = batchInfos[0].BatchId;
+            // الخصم الفعّال = خصم يدوي من ProductDiscountOverrides إن وُجد، وإلا المرجّح من StockLedger
+            decimal weightedDiscount = await _stockAnalysisService.GetEffectivePurchaseDiscountAsync(prodId, fromWarehouseId, firstBatchId);
 
             decimal priceRetail = product.PriceRetail;
             decimal unitCost = 0m;
             string? firstBatchNo = null;
             string? firstExpiry = null;
-            int? firstBatchId = null;
             if (batchInfos.Count > 0)
             {
                 var first = batchInfos[0];

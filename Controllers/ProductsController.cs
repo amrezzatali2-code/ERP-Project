@@ -418,17 +418,24 @@ namespace ERP.Controllers
                 }
             }
 
-            // فلاتر باقي الأعمدة النصية
+            // فلاتر باقي الأعمدة النصية (كود الصنف: من filterCol_id أو رقم واحد من filterCol_idExpr)
+            var filterByIds = new List<int>();
             if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
-                var ids = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                filterByIds = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue)
                     .Select(x => x!.Value)
                     .ToList();
-                if (ids.Count > 0)
-                    q = q.Where(p => ids.Contains(p.ProdId));
             }
+            if (filterByIds.Count == 0 && !string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                var expr = filterCol_idExpr.Trim();
+                if (int.TryParse(expr, out var singleId))
+                    filterByIds.Add(singleId);
+            }
+            if (filterByIds.Count > 0)
+                q = q.Where(p => filterByIds.Contains(p.ProdId));
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
                 var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries)
@@ -585,19 +592,19 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
             {
                 var expr = filterCol_idExpr.Trim();
-                if (expr.StartsWith("<=") && int.TryParse(expr.Substring(2), out var max))
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var max))
                 {
                     q = q.Where(p => p.ProdId <= max);
                 }
-                else if (expr.StartsWith(">=") && int.TryParse(expr.Substring(2), out var min))
+                else if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var min))
                 {
                     q = q.Where(p => p.ProdId >= min);
                 }
-                else if (expr.StartsWith("<") && int.TryParse(expr.Substring(1), out var max2))
+                else if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var max2))
                 {
                     q = q.Where(p => p.ProdId < max2);
                 }
-                else if (expr.StartsWith(">") && int.TryParse(expr.Substring(1), out var min2))
+                else if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var min2))
                 {
                     q = q.Where(p => p.ProdId > min2);
                 }
@@ -612,6 +619,11 @@ namespace ERP.Controllers
                         if (from > to) (from, to) = (to, from);
                         q = q.Where(p => p.ProdId >= from && p.ProdId <= to);
                     }
+                }
+                else if (int.TryParse(expr, out var exactId))
+                {
+                    // رقم واحد فقط = بحث عن كود صنف مطابق (مثل 64444)
+                    q = q.Where(p => p.ProdId == exactId);
                 }
             }
             if (!string.IsNullOrWhiteSpace(filterCol_priceExpr))
@@ -638,12 +650,17 @@ namespace ERP.Controllers
                     var separator = expr.Contains(':') ? ':' : '-';
                     var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
                     if (parts.Length == 2 &&
-                        decimal.TryParse(parts[0].Trim(), out var from) &&
-                        decimal.TryParse(parts[1].Trim(), out var to))
+                        decimal.TryParse(parts[0].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var from) &&
+                        decimal.TryParse(parts[1].Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var to))
                     {
                         if (from > to) (from, to) = (to, from);
                         q = q.Where(p => p.PriceRetail >= from && p.PriceRetail <= to);
                     }
+                }
+                else if (decimal.TryParse(expr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var exactPrice))
+                {
+                    // رقم واحد = سعر يساوي بالضبط (مثل 100 أو 99.50)
+                    q = q.Where(p => p.PriceRetail == exactPrice);
                 }
             }
 
@@ -822,34 +839,16 @@ namespace ERP.Controllers
                     .Select(v => (v.ToString(), v.ToString()))
                     .ToList(),
                 
-                // أعمدة نصية
-                "name" => (await q
-                    .Where(p => !string.IsNullOrWhiteSpace(p.ProdName))
-                    .Select(p => p.ProdName!)
-                    .Distinct()
-                    .OrderBy(v => v)
-                    .Take(500)
-                    .ToListAsync())
-                    .Select(v => (v, v))
-                    .ToList(),
-                "barcode" => (await q
-                    .Where(p => !string.IsNullOrWhiteSpace(p.Barcode))
-                    .Select(p => p.Barcode!)
-                    .Distinct()
-                    .OrderBy(v => v)
-                    .Take(500)
-                    .ToListAsync())
-                    .Select(v => (v, v))
-                    .ToList(),
-                "generic" => (await q
-                    .Where(p => !string.IsNullOrWhiteSpace(p.GenericName))
-                    .Select(p => p.GenericName!)
-                    .Distinct()
-                    .OrderBy(v => v)
-                    .Take(500)
-                    .ToListAsync())
-                    .Select(v => (v, v))
-                    .ToList(),
+                // أعمدة نصية — عند وجود نص بحث نفلتر في DB أولاً حتى تظهر كل النتائج (مثل ديمرا)
+                "name" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(p => !string.IsNullOrWhiteSpace(p.ProdName)).Select(p => p.ProdName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, "%" + searchTerm + "%")).Select(p => p.ProdName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "barcode" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(p => !string.IsNullOrWhiteSpace(p.Barcode)).Select(p => p.Barcode!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(p => p.Barcode != null && EF.Functions.Like(p.Barcode, "%" + searchTerm + "%")).Select(p => p.Barcode!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "generic" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(p => !string.IsNullOrWhiteSpace(p.GenericName)).Select(p => p.GenericName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(p => p.GenericName != null && EF.Functions.Like(p.GenericName, "%" + searchTerm + "%")).Select(p => p.GenericName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
                 "category" => (await q
                     .Where(p => p.CategoryId.HasValue)
                     .Select(p => p.CategoryId!.Value)
@@ -875,15 +874,9 @@ namespace ERP.Controllers
                     .ToListAsync())
                     .Select(x => (x.ProductBonusGroupId.ToString(), x.Name ?? ""))
                     .ToList(),
-                "company" => (await q
-                    .Where(p => !string.IsNullOrWhiteSpace(p.Company))
-                    .Select(p => p.Company!)
-                    .Distinct()
-                    .OrderBy(c => c)
-                    .Take(500)
-                    .ToListAsync())
-                    .Select(c => (c, c))
-                    .ToList(),
+                "company" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(p => !string.IsNullOrWhiteSpace(p.Company)).Select(p => p.Company!).Distinct().OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c, c)).ToList()
+                    : (await q.Where(p => p.Company != null && EF.Functions.Like(p.Company, "%" + searchTerm + "%")).Select(p => p.Company!).Distinct().OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c!, c)).ToList(),
                 
                 // أعمدة رقمية (السعر)
                 "price" => (await q
@@ -1612,17 +1605,17 @@ namespace ERP.Controllers
                 }
             }
 
-            // فلاتر رقمية متقدمة
+            // فلاتر رقمية متقدمة (بما فيها رقم واحد = كود صنف مطابق)
             if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
             {
                 var expr = filterCol_idExpr.Trim();
-                if (expr.StartsWith("<=") && int.TryParse(expr.Substring(2), out var max))
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var max))
                     q = q.Where(p => p.ProdId <= max);
-                else if (expr.StartsWith(">=") && int.TryParse(expr.Substring(2), out var min))
+                else if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var min))
                     q = q.Where(p => p.ProdId >= min);
-                else if (expr.StartsWith("<") && int.TryParse(expr.Substring(1), out var max2))
+                else if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var max2))
                     q = q.Where(p => p.ProdId < max2);
-                else if (expr.StartsWith(">") && int.TryParse(expr.Substring(1), out var min2))
+                else if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var min2))
                     q = q.Where(p => p.ProdId > min2);
                 else if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-"))
                 {
@@ -1634,6 +1627,8 @@ namespace ERP.Controllers
                         q = q.Where(p => p.ProdId >= from && p.ProdId <= to);
                     }
                 }
+                else if (int.TryParse(expr, out var exactId))
+                    q = q.Where(p => p.ProdId == exactId);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_priceExpr))
             {
@@ -1656,6 +1651,8 @@ namespace ERP.Controllers
                         q = q.Where(p => p.PriceRetail >= from && p.PriceRetail <= to);
                     }
                 }
+                else if (decimal.TryParse(expr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var exactPrice))
+                    q = q.Where(p => p.PriceRetail == exactPrice);
             }
 
             // ========= فلترة بالتاريخ (تاريخ الإنشاء) =========
@@ -2172,11 +2169,8 @@ namespace ERP.Controllers
                     .SumAsync(sl => (sl.TotalCost ?? (sl.QtyOut * sl.UnitCost)));
             ViewBag.NetAmount = calculatedNetAmount;
 
-            // ===== 10) حساب الخصم المرجح من StockAnalysisService =====
-            // الخصم المرجح = متوسط الخصم الموزون للمشتريات المتبقية من StockLedger
-            // يعتمد على: SourceType == "Purchase" و RemainingQty > 0
-            // الصيغة: Sum(RemainingQty × PurchaseDiscount) / Sum(RemainingQty)
-            decimal calculatedWeightedDiscount = await _stockAnalysisService.GetWeightedPurchaseDiscountCurrentAsync(finalProdId.Value);
+            // ===== 10) الخصم الفعّال (يدوي من ProductDiscountOverrides إن وُجد، وإلا المرجّح من StockLedger) =====
+            decimal calculatedWeightedDiscount = await _stockAnalysisService.GetEffectivePurchaseDiscountAsync(finalProdId.Value, warehouseId, null);
             ViewBag.WeightedDiscount = calculatedWeightedDiscount;
 
             // ===== 11) جلب بيانات المشتريات من PILines =====

@@ -296,6 +296,8 @@ if (window.__ERP_TABS_INITED__) {
 
             tabId = normalizeTabId(tabId);
             url = normalizeUrl(url);
+            // تاب حركة الصنف: عنوان ثابت "حركة الصنف" فقط
+            if (tabId === 'product-movement-tab') title = 'حركة الصنف';
 
             if (!tabId) {
                 console.warn("⚠ openTab تم استدعاؤه بـ tabId فارغ → تم إلغاء فتح التاب لمنع التكرار");
@@ -450,9 +452,10 @@ if (window.__ERP_TABS_INITED__) {
 
             // ✅ تحديث عنوان التاب الحالي فقط (بدون تغيير الـ URL)
             if (data.type === 'erp-set-tab-title') {
+                var activeTab = tabsBar.querySelector('.app-tab.active');
+                if (activeTab && normalizeTabId(activeTab.getAttribute('data-tab-id')) === 'product-movement-tab') return; // لا نغيّر عنوان تاب حركة الصنف
                 var title = (data.title || '').trim();
                 if (title) {
-                    var activeTab = tabsBar.querySelector('.app-tab.active');
                     if (activeTab) {
                         var titleEl = activeTab.querySelector('.app-tab-title');
                         if (titleEl) titleEl.textContent = title;
@@ -477,6 +480,8 @@ if (window.__ERP_TABS_INITED__) {
             var tabId = normalizeTabId(data.tabId || '');
             var url = normalizeUrl(data.url);
             var title = (data.title || '').trim();
+            // تاب حركة الصنف: عنوان ثابت دائماً "حركة الصنف" فقط
+            if (tabId === 'product-movement-tab') title = 'حركة الصنف';
 
             if (!tabId) {
                 console.warn("⚠ message: tabId فارغ → لن يتم فتح تبويب");

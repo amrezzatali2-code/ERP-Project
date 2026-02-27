@@ -64,6 +64,9 @@ namespace ERP.Data
         public DbSet<ProductGroup> ProductGroups { get; set; } = null!;         // مجموعات الأصناف
         public DbSet<ProductGroupPolicy> ProductGroupPolicies { get; set; } = null!; // سياسة كل مجموعة أصناف
 
+        /// <summary>جدول الخصم اليدوي للبيع (تقرير أرصدة الأصناف + المبيعات).</summary>
+        public DbSet<ProductDiscountOverride> ProductDiscountOverrides { get; set; } = null!;
+
         // ========================
         // جداول تسويات المخزون (الهيدر + السطور)
         // ========================
@@ -179,7 +182,10 @@ namespace ERP.Data
             // ===========================
             mb.Entity<StockTransfer>(entity =>
             {
-                entity.ToTable("StockTransfers");          // اسم الجدول
+                entity.ToTable("StockTransfers", t => t.HasCheckConstraint(
+                    "CK_StockTransfer_Warehouses",
+                    "[FromWarehouseId] <> [ToWarehouseId]"
+                ));
 
                 entity.HasKey(t => t.Id);                  // المفتاح الأساسي
 
@@ -200,12 +206,6 @@ namespace ERP.Data
                       .WithMany()
                       .HasForeignKey(t => t.UserId)
                       .OnDelete(DeleteBehavior.SetNull);
-
-                // شرط: لا يجوز أن يكون المخزن المصدر = المخزن الوجهة
-                entity.HasCheckConstraint(
-                    "CK_StockTransfer_Warehouses",
-                    "[FromWarehouseId] <> [ToWarehouseId]"
-                );
             });
 
             // ===========================
@@ -2053,6 +2053,19 @@ namespace ERP.Data
                 .WithMany()
                 .HasForeignKey(sl => sl.BatchId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // =======================
+            // جدول الخصم اليدوي للبيع (ProductDiscountOverrides)
+            // =======================
+            mb.Entity<ProductDiscountOverride>(e =>
+            {
+                e.ToTable("ProductDiscountOverrides");
+                e.HasIndex(x => x.ProductId).HasDatabaseName("IX_ProductDiscountOverrides_Product");
+                e.HasIndex(x => new { x.ProductId, x.WarehouseId, x.BatchId }).HasDatabaseName("IX_ProductDiscountOverrides_ProductWarehouseBatch");
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);
+            });
         }
 
         

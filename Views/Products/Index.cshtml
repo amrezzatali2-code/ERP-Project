@@ -231,16 +231,7 @@
                     <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
                     @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
                     @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
-                    @if (filterProductGroupId.HasValue) { <input type="hidden" name="filterProductGroupId" value="@filterProductGroupId.Value" /> }
-                    @if (!string.IsNullOrWhiteSpace(filterCompany)) { <input type="hidden" name="filterCompany" value="@filterCompany" /> }
-                    @if (!string.IsNullOrWhiteSpace(filterImported)) { <input type="hidden" name="filterImported" value="@filterImported" /> }
-                    @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
-                    @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
-                    @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
-                    @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
-                    @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
-                    @if (codeFrom.HasValue) { <input type="hidden" name="codeFrom" value="@codeFrom" /> }
-                    @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
+                    @* لا نرسل أي فلتر أعمدة أو فلتر مجموعة/شركة/كود — حتى يبحث في كل الأصناف *@
                 </form>
             </div>
 
@@ -363,7 +354,7 @@
 
     @* ===== جدول الأصناف (هو الذى يتطبع) - مع هيدر ثابت ===== *@
     <div class="erp-table-scroll-container mt-3">
-        <div class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto;">
+        <div class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="productsTable" class="table table-striped table-hover erp-table erp-table-sortable erp-products-table">
             <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
@@ -468,12 +459,12 @@
                             <td data-col="descShort" title="@desc">@descShort</td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                                @* زر حركة الصنف يفتح شاشة Show فى تاب مستقل *@
+                                @* زر حركة الصنف يفتح شاشة حركة الصنف الموحدة (نفس التاب دائماً) *@
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"
                                    asp-action="Show"
                                    asp-route-id="@p.ProdId"
-                                   data-tab-id="product-movement"
-                                   data-tab-title="حركة صنف - @p.ProdName">
+                                   data-tab-id="product-movement-tab"
+                                   data-tab-title="حركة الصنف">
                                     حركة الصنف
                                 </a>
                                 <a class="btn btn-erp btn-erp-primary btn-erp-sm"
@@ -607,10 +598,12 @@
             </div>
         </div>
         
-        @* الفلترة *@
+        @* الفلترة — يُخفى للكود والسعر (يظهر فقط "بحث رقمي") *@
         <div class="erp-filter-section">
-            <label class="form-label small mb-1 fw-bold">الفلترة:</label>
-            <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+            <div id="erpColumnFilterSearchRow">
+                <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+            </div>
             <div id="erpColumnFilterList" class="erp-column-filter-list">
                 <div class="text-muted text-center py-3">جاري التحميل...</div>
             </div>
@@ -622,6 +615,8 @@
         </div>
     </div>
 </div>
+@* نموذج خفي لتطبيق فلتر العمود — الـ action من السيرفر لضمان المسار الصحيح *@
+<form id="erpColumnFilterApplyForm" method="get" action="@Url.Action("Index", "Products")" class="d-none" style="display:none !important;"></form>
 
 @* ===== Modal فلترة بالتاريخ/الوقت ===== *@
 <div class="modal fade no-print"
@@ -773,6 +768,35 @@
 
 @section Scripts {
     <script>
+        // =========================
+        // حركة الصنف: فتح في نفس التاب (مثل فاتورة البيع) — عند النقر من داخل iframe نرسل postMessage للوالد
+        // =========================
+        (function () {
+            document.addEventListener("click", function (e) {
+                var link = e.target.closest('a.app-menu-link[data-tab-id="product-movement-tab"]');
+                if (!link) return;
+                e.preventDefault();
+                e.stopPropagation();
+                var url = (link.getAttribute("href") || link.href || "").trim();
+                if (!url) return;
+                var sep = url.indexOf("?") >= 0 ? "&" : "?";
+                url = url + sep + "frame=1";
+                var tabId = "product-movement-tab";
+                var title = (link.getAttribute("data-tab-title") || "حركة الصنف").trim();
+                try {
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({ type: "erp-open-tab", tabId: tabId, title: title, url: url }, "*");
+                        return;
+                    }
+                } catch (err) { console.error("حركة الصنف postMessage:", err); }
+                if (window.erpTabs && typeof window.erpTabs.openTab === "function") {
+                    window.erpTabs.openTab(tabId, url, title);
+                } else {
+                    window.location.href = url;
+                }
+            });
+        })();
+
         // =========================
         // زر الطباعة — يطبع الجدول فقط
         // =========================
@@ -1011,6 +1035,7 @@
             const panel = document.getElementById("erpColumnFilterPanel");
             const titleEl = document.getElementById("erpColumnFilterTitle");
             const searchInp = document.getElementById("erpColumnFilterSearch");
+            const searchRowEl = document.getElementById("erpColumnFilterSearchRow");
             const listEl = document.getElementById("erpColumnFilterList");
             const btnOk = document.getElementById("erpColumnFilterOk");
             const btnClear = document.getElementById("erpColumnFilterClear");
@@ -1021,12 +1046,21 @@
             let currentSortDir = null;
             let allItems = [];
             let currentSelected = new Set();
+            let filterListLoading = false;
             let anchorRect = null;
-            const numericColumns = ["id", "price"]; // أعمدة رقمية تدعم البحث المتقدم
+            const numericColumns = ["id", "price"];
+            // تحويل مفتاح العمود إلى searchBy (بحث عام) لاستخدامه عند الكتابة في "بحث في العناصر"
+            const columnToSearchBy = {
+                name: "name", barcode: "code", generic: "gen", company: "comp", category: "category",
+                productGroup: "productgroup", bonusGroup: "bonusgroup", price: "price",
+                imported: "imported", isactive: "active", created: "updated", modified: "updated", lastprice: "updated",
+                hasQuota: "all", quotaQuantity: "all", descShort: "all"
+            };
 
             function getCurrentFilterValue(col) {
                 if (numericColumns.includes(col)) {
-                    return new URL(window.location.href).searchParams.get("filterCol_" + col + "Expr") || "";
+                    var url = new URL(window.location.href);
+                    return url.searchParams.get("filterCol_" + col + "Expr") || url.searchParams.get("filterCol_" + col) || "";
                 }
                 return new URL(window.location.href).searchParams.get("filterCol_" + col) || "";
             }
@@ -1107,8 +1141,9 @@
                 
                 adjustPanelPosition();
 
-                // للأعمدة الرقمية: عرض حقل إدخال للبحث المتقدم
+                // للأعمدة الرقمية (كود الصنف، سعر الجمهور): إخفاء بوكس الفلترة وإظهار "بحث رقمي" فقط
                 if (numericColumns.includes(currentCol)) {
+                    if (searchRowEl) searchRowEl.style.display = "none";
                     const currentExpr = getCurrentFilterValue(currentCol);
                     listEl.innerHTML = `
                         <div class="mb-2">
@@ -1119,7 +1154,6 @@
                             <small class="text-muted d-block mt-1">مثال: 53812 أو &lt;10 أو &gt;100 أو 10:100</small>
                         </div>`;
                     adjustPanelPosition();
-                    // إضافة Enter key handler
                     setTimeout(() => {
                         const exprInput = document.getElementById("erpNumericExpr");
                         if (exprInput) {
@@ -1135,19 +1169,25 @@
                     return;
                 }
 
-                // للأعمدة النصية: تحميل قائمة القيم
+                // للأعمدة النصية: إظهار بوكس الفلترة وتحميل قائمة القيم
+                if (searchRowEl) searchRowEl.style.display = "";
                 listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
                 currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split("|").filter(Boolean));
                 
-                fetch("/Products/GetColumnValues?column=" + encodeURIComponent(currentCol))
-                    .then(r => r.json())
-                    .then(items => {
-                        allItems = items;
-                        renderList("");
-                    })
-                    .catch(() => {
-                        listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>';
-                    });
+                function fetchColumnValues(searchText) {
+                    var url = "/Products/GetColumnValues?column=" + encodeURIComponent(currentCol);
+                    if (searchText) url += "&search=" + encodeURIComponent(searchText);
+                    fetch(url)
+                        .then(r => r.json())
+                        .then(items => {
+                            allItems = items;
+                            renderList("");
+                        })
+                        .catch(() => {
+                            listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>';
+                        });
+                }
+                fetchColumnValues((searchInp && searchInp.value) ? searchInp.value.trim() : "");
             }
 
             function renderList(search) {
@@ -1155,6 +1195,7 @@
                 const filtered = term ? allItems.filter(x => (x.display || x.value || "").toLowerCase().includes(term)) : allItems;
                 const allChecked = filtered.length > 0 && filtered.every(x => currentSelected.has(String(x.value)));
                 const someChecked = filtered.some(x => currentSelected.has(String(x.value)));
+                const showLoading = filterListLoading && filtered.length === 0 && term;
 
                 listEl.innerHTML = `
                     <div class="form-check mb-1">
@@ -1162,7 +1203,7 @@
                         <label class="form-check-label small" for="erpFilterSelectAll">(تحديد الكل)</label>
                     </div>
                     <div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">
-                        ${filtered.map(x => {
+                        ${showLoading ? '<div class="small text-muted py-2">جاري البحث...</div>' : filtered.map(x => {
                             const v = String(x.value);
                             const checked = currentSelected.has(v);
                             return `<div class="form-check">
@@ -1171,6 +1212,10 @@
                             </div>`;
                         }).join("")}
                     </div>`;
+                if (showLoading) {
+                    adjustPanelPosition();
+                    return;
+                }
                 const selectAllCb = listEl.querySelector("#erpFilterSelectAll");
                 if (selectAllCb) {
                     selectAllCb.indeterminate = someChecked && !allChecked;
@@ -1196,53 +1241,41 @@
                 if (!currentCol) return;
                 const url = new URL(window.location.href);
                 
-                // تطبيق الترتيب (لو تم الضغط على زر ترتيب مباشرة)
+                // إزالة كل الفلاتر حتى يبحث في كل الداتا
+                const keysToRemove = [];
+                url.searchParams.forEach(function(_, key) {
+                    if (key.startsWith("filterCol_") || key === "filterProductGroupId" || key === "filterCompany" || key === "filterImported" || key === "codeFrom" || key === "codeTo")
+                        keysToRemove.push(key);
+                });
+                keysToRemove.forEach(function(k) { url.searchParams.delete(k); });
+                
                 if (applySort !== null && sortDir !== null) {
                     url.searchParams.set("sort", applySort);
                     url.searchParams.set("dir", sortDir);
                 } else if (currentSortKey) {
-                    // الاحتفاظ بالترتيب الحالي
                     const currentSort = getCurrentSort();
                     url.searchParams.set("sort", currentSort.sort);
                     url.searchParams.set("dir", currentSort.dir);
                 }
                 
-                // تطبيق الفلترة
                 if (numericColumns.includes(currentCol)) {
                     const exprInput = document.getElementById("erpNumericExpr");
-                    const expr = exprInput ? exprInput.value.trim() : "";
-                    const exprParam = "filterCol_" + currentCol + "Expr";
-                    const listParam = "filterCol_" + currentCol;
-                    
-                    if (expr) {
-                        // لو المستخدم كتب رقم مباشرة (مثل 53812) بدون < أو > أو :
-                        // نعتبره مساواة مباشرة
-                        if (/^\d+$/.test(expr)) {
-                            // رقم مباشر - نستخدم فلتر القائمة
-                            url.searchParams.set(listParam, expr);
-                            url.searchParams.delete(exprParam);
-                        } else {
-                            // تعبير متقدم (<, >, من:إلى)
-                            url.searchParams.set(exprParam, expr);
-                            url.searchParams.delete(listParam);
-                        }
-                    } else {
-                        url.searchParams.delete(exprParam);
-                        const listVal = url.searchParams.get(listParam);
-                        if (!listVal) url.searchParams.delete(listParam);
-                    }
+                    const expr = exprInput ? String(exprInput.value || "").trim() : "";
+                    if (expr) url.searchParams.set("filterCol_" + currentCol + "Expr", expr);
                 } else {
-                    const val = Array.from(currentSelected).filter(Boolean).join("|");
-                    const exprParam = "filterCol_" + currentCol + "Expr";
-                    if (val) {
-                        url.searchParams.set("filterCol_" + currentCol, val);
-                        url.searchParams.delete(exprParam);
+                    const filterBoxText = (searchInp && searchInp.value) ? String(searchInp.value).trim() : "";
+                    if (filterBoxText) {
+                        url.searchParams.set("search", filterBoxText);
+                        url.searchParams.set("searchBy", columnToSearchBy[currentCol] || "all");
                     } else {
-                        url.searchParams.delete("filterCol_" + currentCol);
+                        const val = Array.from(currentSelected).filter(Boolean).join("|");
+                        if (val) url.searchParams.set("filterCol_" + currentCol, val);
                     }
                 }
                 
                 url.searchParams.set("page", "1");
+                
+                // الانتقال المباشر بالرابط لضمان وصول كل المعاملات (بما فيها البحث الرقمي filterCol_*Expr)
                 window.location.href = url.toString();
             }
 
@@ -1251,9 +1284,12 @@
                 const url = new URL(window.location.href);
                 url.searchParams.delete("filterCol_" + currentCol);
                 url.searchParams.delete("filterCol_" + currentCol + "Expr");
-                // إزالة الترتيب أيضاً (اختياري - يمكن إبقاؤه)
-                // url.searchParams.delete("sort");
-                // url.searchParams.delete("dir");
+                // إذا كان الفلتر مطبّقاً عبر "بحث في العناصر" (search + searchBy) نزيلهما أيضاً
+                var searchByVal = url.searchParams.get("searchBy") || "";
+                if (columnToSearchBy[currentCol] && searchByVal === columnToSearchBy[currentCol]) {
+                    url.searchParams.delete("search");
+                    url.searchParams.delete("searchBy");
+                }
                 url.searchParams.set("page", "1");
                 window.location.href = url.toString();
             }
@@ -1276,19 +1312,49 @@
                 }
             });
 
+            var fetchListDebounce = null;
             searchInp?.addEventListener("input", function () {
-                renderList(this.value);
+                if (numericColumns.includes(currentCol)) return;
+                var inp = this;
+                var keepFocus = (document.activeElement === inp);
+                var term = (inp.value || "");
+                // تأخير التحديث حتى لا تُسرق الكتابة ولا يختفي الحرف
+                setTimeout(function() {
+                    renderList(term);
+                    if (keepFocus && searchInp) searchInp.focus();
+                }, 0);
+                if (fetchListDebounce) clearTimeout(fetchListDebounce);
+                fetchListDebounce = setTimeout(function() {
+                    fetchListDebounce = null;
+                    if (!currentCol) return;
+                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
+                    filterListLoading = true;
+                    renderList(searchInp ? searchInp.value : "");
+                    var url = "/Products/GetColumnValues?column=" + encodeURIComponent(currentCol);
+                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
+                    fetch(url).then(r => r.json()).then(function(items) {
+                        filterListLoading = false;
+                        allItems = items;
+                        renderList(searchInp ? searchInp.value : "");
+                        if (searchInp) searchInp.focus();
+                    }).catch(function() {
+                        filterListLoading = false;
+                        renderList(searchInp ? searchInp.value : "");
+                    });
+                }, 400);
             });
 
-            // Enter key للتطبيق
             searchInp?.addEventListener("keydown", function(e) {
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    applyFilter();
-                }
+                if (e.key !== "Enter") return;
+                e.preventDefault();
+                applyFilter();
             });
 
-            btnOk?.addEventListener("click", () => applyFilter());
+            btnOk?.addEventListener("click", function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                applyFilter();
+            });
             btnClear?.addEventListener("click", clearFilter);
             btnClose?.addEventListener("click", () => panel.classList.add("d-none"));
 
@@ -1296,6 +1362,25 @@
                 if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
                     panel.classList.add("d-none");
             });
+
+            // بعد التحميل: إذا كان الرابط فيه openFilter و search نفتح اللوحة ونظهر بوكس البحث ولا نخفيه
+            (function checkOpenFilter() {
+                var url = new URL(window.location.href);
+                var openFilterCol = url.searchParams.get("openFilter");
+                var searchVal = url.searchParams.get("search") || "";
+                if (!openFilterCol || numericColumns.indexOf(openFilterCol) >= 0) return;
+                window.scrollTo(0, 0);
+                var btn = document.querySelector('.erp-col-filter-btn[data-col="' + openFilterCol + '"]');
+                if (btn) {
+                    setTimeout(function() {
+                        showPanel(btn);
+                        if (searchInp) searchInp.value = searchVal;
+                        url.searchParams.delete("openFilter");
+                        var newUrl = url.pathname + (url.searchParams.toString() ? "?" + url.searchParams.toString() : "");
+                        window.history.replaceState({}, "", newUrl);
+                    }, 100);
+                }
+            })();
         })();
 
         // =========================

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.ComponentModel.DataAnnotations;          // تعليقات العرض Display + Required + MaxLength
 using System.ComponentModel.DataAnnotations.Schema;   // DatabaseGenerated
 using Microsoft.EntityFrameworkCore;                  // Precision

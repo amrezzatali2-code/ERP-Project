@@ -1,5 +1,6 @@
 using ERP.Data;
 using ERP.Data.Seed;                 // كلاس Seed للصلاحيات والأدوار
+using ERP.Filters;                   // PopulateUserPermissionsFilter
 using ERP.Services;                  // خدمة DocumentTotalsService
 using ERP.Seed;
 using ERP.Seeders;
@@ -34,6 +35,7 @@ namespace ERP
 
                 // إضافة الفلتر على مستوى كل الكنترولرات
                 options.Filters.Add(new AuthorizeFilter(policy));
+                options.Filters.Add<PopulateUserPermissionsFilter>();
             })
             .AddJsonOptions(options =>
             {

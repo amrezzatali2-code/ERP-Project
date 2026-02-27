@@ -46,7 +46,15 @@ namespace ERP.Controllers
             int pageSize = 25,
             bool useDateRange = false,      // تفعيل فلترة التاريخ
             DateTime? fromDate = null,      // من تاريخ (تاريخ إنشاء المخزن)
-            DateTime? toDate = null         // إلى تاريخ
+            DateTime? toDate = null,        // إلى تاريخ
+            int? fromCode = null,          // فلتر كود من
+            int? toCode = null,            // فلتر كود إلى
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_branch = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_modified = null
         )
         {
             // الاستعلام الأساسي مع جلب الفرع (Branch)
@@ -111,6 +119,12 @@ namespace ERP.Controllers
                 }
             }
 
+            // ===== فلتر كود من/إلى =====
+            if (fromCode.HasValue)
+                q = q.Where(w => w.WarehouseId >= fromCode.Value);
+            if (toCode.HasValue)
+                q = q.Where(w => w.WarehouseId <= toCode.Value);
+
             // ===== فلترة بالتاريخ (تاريخ الإنشاء) =====
             if (useDateRange)
             {
@@ -123,6 +137,76 @@ namespace ERP.Controllers
                 {
                     q = q.Where(w => w.CreatedAt <= toDate.Value);
                 }
+            }
+
+            // ===== فلاتر الأعمدة (بنمط Excel) =====
+            var sep = new[] { '|', ',' };
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? (int?)v : null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(w => ids.Contains(w.WarehouseId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(w => vals.Contains(w.WarehouseName ?? ""));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_branch))
+            {
+                var vals = filterCol_branch.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(w => w.Branch != null && vals.Contains(w.Branch.BranchName ?? ""));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_active))
+            {
+                var vals = filterCol_active.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant())
+                    .ToList();
+                var activeList = new List<string> { "نشط", "active", "1", "نعم", "yes", "true" };
+                var inactiveList = new List<string> { "موقوف", "inactive", "0", "لا", "no", "false" };
+                bool wantActive = vals.Any(v => activeList.Contains(v));
+                bool wantInactive = vals.Any(v => inactiveList.Contains(v));
+                if (wantActive && !wantInactive)
+                    q = q.Where(w => w.IsActive);
+                else if (wantInactive && !wantActive)
+                    q = q.Where(w => !w.IsActive);
+                else if (wantActive && wantInactive) { /* الكل */ }
+                else
+                    q = q.Where(w => false);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var yearMonthKeys = new List<int>();
+                foreach (var part in filterCol_created.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()))
+                {
+                    if (part.Length >= 7 && part[4] == '-' && int.TryParse(part.AsSpan(0, 4), out var y) && int.TryParse(part.AsSpan(5, 2), out var m))
+                        yearMonthKeys.Add(y * 100 + m);
+                }
+                if (yearMonthKeys.Count > 0)
+                    q = q.Where(w => yearMonthKeys.Contains(w.CreatedAt.Year * 100 + w.CreatedAt.Month));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_modified))
+            {
+                var yearMonthKeys = new List<int>();
+                foreach (var part in filterCol_modified.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()))
+                {
+                    if (part.Length >= 7 && part[4] == '-' && int.TryParse(part.AsSpan(0, 4), out var y) && int.TryParse(part.AsSpan(5, 2), out var m))
+                        yearMonthKeys.Add(y * 100 + m);
+                }
+                if (yearMonthKeys.Count > 0)
+                    q = q.Where(w => yearMonthKeys.Contains((w.UpdatedAt ?? w.CreatedAt).Year * 100 + (w.UpdatedAt ?? w.CreatedAt).Month));
             }
 
             // ===== الترتيب =====
@@ -204,8 +288,45 @@ namespace ERP.Controllers
             ViewBag.UseDateRange = useDateRange;
             ViewBag.FromDate = fromDate;
             ViewBag.ToDate = toDate;
+            ViewBag.FromCode = fromCode;
+            ViewBag.ToCode = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Branch = filterCol_branch;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Modified = filterCol_modified;
 
             return View(model);
+        }
+
+        // =========================================================
+        // API: جلب القيم المميزة لعمود (للفلترة بنمط Excel)
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var q = _db.Warehouses.Include(w => w.Branch).AsNoTracking();
+
+            List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
+            {
+                "id" => (await q.Select(w => w.WarehouseId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "name" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(w => !string.IsNullOrWhiteSpace(w.WarehouseName)).Select(w => w.WarehouseName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(w => w.WarehouseName != null && EF.Functions.Like(w.WarehouseName, "%" + searchTerm + "%")).Select(w => w.WarehouseName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "branch" => (await q.Where(w => w.Branch != null && !string.IsNullOrEmpty(w.Branch.BranchName)).Select(w => w.Branch!.BranchName!).Distinct().OrderBy(x => x).Take(500).ToListAsync())
+                    .Select(x => (x, x)).ToList(),
+                "active" => new List<(string, string)> { ("نشط", "نشط"), ("موقوف", "موقوف") },
+                "created" => (await q.Select(w => new { w.CreatedAt.Year, w.CreatedAt.Month }).Distinct().OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "modified" => (await q.Select(w => new { Year = (w.UpdatedAt ?? w.CreatedAt).Year, Month = (w.UpdatedAt ?? w.CreatedAt).Month }).Distinct().OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                _ => new List<(string Value, string Display)>(),
+            };
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================

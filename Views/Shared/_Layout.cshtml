@@ -555,7 +555,7 @@
                             </ul>
                         </li>
 
-                        @* ===== المبيعات ===== *@
+                        @* ===== المبيعات (الرابط يظهر دائماً؛ الوصول يُمنع من السيرفر حسب الصلاحية) ===== *@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="salesMenu" role="button"
                                data-bs-toggle="dropdown" aria-expanded="false">
@@ -635,6 +635,15 @@
                                        data-tab-id="so-lines"
                                        data-tab-title="قائمة أصناف أوامر المبيعات">
                                         قائمة أصناف أوامر المبيعات
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="ProductDiscountOverrides" asp-action="Index"
+                                       data-tab-id="product-discount-overrides"
+                                       data-tab-title="قائمة الخصم اليدوي للبيع">
+                                        قائمة الخصم اليدوي للبيع
                                     </a>
                                 </li>
                             </ul>

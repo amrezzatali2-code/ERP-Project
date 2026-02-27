@@ -148,13 +148,13 @@ namespace ERP.Controllers
         /// </summary>
         private async Task PopulateLookupsAsync(int? selectedUserId = null, int? selectedRoleId = null)
         {
-            // قائمة المستخدمين
+            // قائمة المستخدمين (اسم واحد بدون تكرار)
             var users = await _context.Users
                 .OrderBy(u => u.UserName)
                 .Select(u => new
                 {
                     u.UserId,
-                    Text = (u.DisplayName ?? u.UserName) + " (" + u.UserName + ")"
+                    Text = u.DisplayName ?? u.UserName
                 })
                 .ToListAsync();
 

@@ -15,5 +15,10 @@ namespace ERP.Services
         /// هل المستخدم الحالي يملك الصلاحية؟ (يقرأ UserId من HttpContext)
         /// </summary>
         Task<bool> HasPermissionAsync(string permissionCode);
+
+        /// <summary>
+        /// يرجع مجموعة أكواد الصلاحيات الممنوحة للمستخدم (للعرض في القائمة وغيرها).
+        /// </summary>
+        Task<HashSet<string>> GetUserPermissionCodesAsync(int userId);
     }
 }

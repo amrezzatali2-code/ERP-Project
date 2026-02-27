@@ -21,9 +21,13 @@
     var productGroupId = ViewBag.ProductGroupId as int?;
     var hasBonus = ViewBag.HasBonus as bool?;
     var warehouseId = ViewBag.WarehouseId as int?;
+    var whStr = Context.Request.Query["warehouseId"].FirstOrDefault();
+    if (!string.IsNullOrEmpty(whStr) && int.TryParse(whStr, out var whParsed))
+        warehouseId = whParsed;
     var fromDate = ViewBag.FromDate as DateTime?;
     var toDate = ViewBag.ToDate as DateTime?;
     var includeZeroQty = ViewBag.IncludeZeroQty as bool? ?? false;
+    var includeBatches = ViewBag.IncludeBatches as bool? ?? true;
     var sortBy = ViewBag.SortBy as string ?? "name";
     var sortDir = ViewBag.SortDir as string ?? "asc";
 
@@ -45,6 +49,7 @@
             fromDate,
             toDate,
             includeZeroQty,
+            includeBatches,
             sortBy = col,
             sortDir = direction,
             loadReport = true,
@@ -66,6 +71,7 @@
             fromDate,
             toDate,
             includeZeroQty,
+            includeBatches,
             sortBy,
             sortDir,
             loadReport = true,
@@ -76,12 +82,14 @@
 }
 
 <div dir="rtl" class="container-fluid">
+    @* توكن مكافحة التزوير لطلبات AJAX (حفظ الخصم اليدوي) *@
+    <form id="__AntiForgeryFormProductBalances" method="post" style="display:none">@Html.AntiForgeryToken()</form>
     @* ===== شريط الفلاتر الموحد (هادئ للعين) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2 product-balances-report">
         <form method="get" asp-action="ProductBalances" asp-controller="Reports" id="filtersForm">
             <div class="row g-3 align-items-end">
                 <input type="hidden" name="loadReport" value="true" />
-                <div class="col-12 col-lg-3 erp-filter-section">
+                <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">بحث</label>
                     <input type="text"
                            name="search"
@@ -122,48 +130,58 @@
                 </div>
                 <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">المخزن</label>
-                    <select name="warehouseId" class="form-select erp-filter-input">
+                    <select name="warehouseId" id="warehouseIdSelect" class="form-select erp-filter-input">
                         <option value="">الكل</option>
                         @foreach (var wh in warehouses)
                         {
-                            <option value="@wh.Value" @(warehouseId?.ToString() == wh.Value ? "selected" : null)>@wh.Text</option>
+                            var whVal = wh.Value ?? "";
+                            var isSelected = warehouseId.HasValue && !string.IsNullOrEmpty(whVal) && warehouseId.Value.ToString().Equals(whVal.Trim(), StringComparison.Ordinal);
+                            <option value="@whVal" @(isSelected ? "selected" : null)>@wh.Text</option>
                         }
                     </select>
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">من تاريخ</label>
-                    <input type="date" name="fromDate" dir="ltr" class="form-control erp-filter-input" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                @* من تاريخ+وقت إلى تاريخ+وقت — جنب بعض *@
+                <div class="col-12 col-lg-auto erp-filter-section">
+                    <div class="d-flex flex-nowrap align-items-end gap-2">
+                        <div class="erp-pb-date-from-wrap">
+                            <label class="form-label small mb-0">من (تاريخ ووقت)</label>
+                            <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                        </div>
+                        <div class="erp-pb-date-to-wrap ms-2">
+                            <label class="form-label small mb-0">إلى (تاريخ ووقت)</label>
+                            <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                        </div>
+                    </div>
                 </div>
                 <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">إلى تاريخ</label>
-                    <input type="date" name="toDate" dir="ltr" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">خيارات</label>
+                    <label class="form-label d-none d-md-block" style="visibility:hidden">—</label>
+                    <input type="hidden" name="includeBatches" value="true" />
                     <div class="form-check mb-1">
                         <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
                         <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
                     </div>
-                    <div class="form-check mb-0">
-                        <input class="form-check-input" type="checkbox" name="hasBonus" value="true" id="hasBonus" @(hasBonus == true ? "checked" : "") />
-                        <label class="form-check-label small" for="hasBonus">أصناف عليها بونص فقط</label>
-                    </div>
                 </div>
-                <div class="col-12 col-lg-auto erp-filter-section">
+                <div class="col-12 col-lg-auto erp-filter-section ms-lg-auto">
                     <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
-                    <div class="d-flex flex-nowrap gap-2 product-balances-btns">
-                        <button type="submit" class="btn btn-erp btn-erp-sm product-balances-btn product-balances-btn-primary">
+                    <div class="d-flex flex-wrap gap-2 justify-content-start">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
                             <span>📊</span> تجميع التقرير
                         </button>
-                        <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-sm text-decoration-none product-balances-btn product-balances-btn-secondary">
+                        <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none">
                             <span>🔄</span> إعادة تعيين
                         </a>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" data-bs-toggle="modal" data-bs-target="#columnsModalProductBalances" title="إظهار/إخفاء أعمدة التقرير">
+                            اختيار الأعمدة
+                        </button>
                         @if (reportData.Any())
                         {
-                            <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, includeZeroQty, sortBy, sortDir })"
-                               class="btn btn-erp btn-erp-sm text-decoration-none product-balances-btn product-balances-btn-success">
+                            <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, includeZeroQty, includeBatches, sortBy, sortDir })"
+                               class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none">
                                 <span>📥</span> تصدير Excel
                             </a>
+                            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع">
+                                <span>💾</span> حفظ الخصم اليدوي
+                            </button>
                         }
                     </div>
                 </div>
@@ -184,211 +202,905 @@
         </form>
     </div>
 
-    @* ===== Pagination Info ===== *@
-    @if (reportData.Any() && totalPages > 1)
-    {
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <small class="text-muted">
-                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
-            </small>
-            <small class="text-muted">
-                @($"صفحة {page} من {totalPages}")
-            </small>
-        </div>
-    }
+    @* ===== عنوان الجدول + إجمالي الأصناف ===== *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 mb-2">
+        <h5 class="mb-0">أرصدة الأصناف</h5>
+        @if (reportData.Any())
+        {
+            <small class="text-muted">إجمالي الأصناف: <span id="productBalancesItemCount">@totalCount</span></small>
+        }
+    </div>
 
-    @* ===== جدول البيانات ===== *@
-    @if (reportData.Any())
-    {
-        <div class="erp-table-wrapper mt-3 product-balances-table">
-            <div class="table-responsive">
-                <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                        <thead class="table-light sticky-top">
-                            <tr>
-                                <th style="min-width: 80px;">
-                                    <a href="@sortUrl("code", sortBy == "code" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الكود @if (sortBy == "code") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th style="min-width: 200px;">
-                                    <a href="@sortUrl("name", sortBy == "name" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        اسم الصنف @if (sortBy == "name") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th>الفئة</th>
-                                <th style="min-width: 120px;">مجموعة الصنف</th>
-                                <th style="min-width: 120px;">مجموعة البونص</th>
-                                <th class="text-end" style="min-width: 100px;">
-                                    <a href="@sortUrl("qty", sortBy == "qty" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الكمية الحالية @if (sortBy == "qty") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th class="text-end" style="min-width: 120px;">الخصم المرجح %</th>
-                                <th class="text-end" style="min-width: 100px;">
-                                    <a href="@sortUrl("sales", sortBy == "sales" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        المبيعات @if (sortBy == "sales") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th class="text-end" style="min-width: 120px;">سعر الجمهور</th>
-                                <th class="text-end" style="min-width: 120px;">تكلفة العلبة</th>
-                                <th class="text-end" style="min-width: 130px;">
-                                    <a href="@sortUrl("cost", sortBy == "cost" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        التكلفة الإجمالية @if (sortBy == "cost") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach (var item in reportData)
-                            {
-                                <tr>
-                                    <td><strong>@item.ProdCode</strong></td>
-                                    <td>@item.ProdName</td>
-                                    <td><small class="text-muted">@item.CategoryName</small></td>
-                                    <td><small class="text-muted">@item.ProductGroupName</small></td>
-                                    <td><small class="text-muted">@item.ProductBonusGroupName</small></td>
-                                    <td class="text-end"><strong>@item.CurrentQty.ToString("N0")</strong></td>
-                                    <td class="text-end">@item.WeightedDiscount.ToString("N2")%</td>
-                                    <td class="text-end">@item.SalesQty.ToString("N2")</td>
-                                    <td class="text-end">@item.PriceRetail.ToString("N2")</td>
-                                    <td class="text-end">@item.UnitCost.ToString("N2")</td>
-                                    <td class="text-end"><strong>@item.TotalCost.ToString("N2")</strong></td>
-                                </tr>
-                            }
-                        </tbody>
-                        <tfoot class="table-secondary fw-bold">
-                            <tr>
-                                <td colspan="5" class="text-end"><strong>المجموع الإجمالي:</strong></td>
-                                <td class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
-                                <td></td>
-                                <td class="text-end"><strong>@totalSalesQty.ToString("N2")</strong></td>
-                                <td class="text-end"><strong>@totalPriceRetail.ToString("N2")</strong></td>
-                                <td class="text-end"><strong>@totalUnitCost.ToString("N2")</strong></td>
-                                <td class="text-end">
-                                    <strong class="product-balances-total-value">@totalCost.ToString("N2")</strong>
+    @* ===== جدول البيانات (نفس هيكل Index قائمة الأصناف) ===== *@
+    <div class="erp-table-scroll-container mt-2">
+        <div id="productBalancesScrollWrapper" class="erp-table-wrapper erp-print-area erp-list-index-table-section product-balances-table" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+            <table class="table table-striped table-hover mb-0 erp-table erp-table-sortable" id="productBalancesTable" data-pb-total-count="@totalCount">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
+                    <tr>
+                        <th style="min-width: 80px;" data-col="code">
+                            <div class="d-flex align-items-center gap-1">
+                                <span>الكود</span>
+                                <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="code" data-sort-key="code" data-col-title="الكود" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                            </div>
+                        </th>
+                        <th style="min-width: 200px;" data-col="name">
+                            <div class="d-flex align-items-center gap-1">
+                                <span>اسم الصنف</span>
+                                <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="name" data-sort-key="name" data-col-title="اسم الصنف" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                            </div>
+                        </th>
+                        <th style="min-width: 90px;" data-col="batch">التشغيلة</th>
+                        <th style="min-width: 100px;" data-col="date">التاريخ</th>
+                        <th style="min-width: 100px;" data-col="category">
+                            <div class="d-flex align-items-center gap-1"><span>الفئة</span><button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="category" data-col-title="الفئة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div>
+                        </th>
+                        <th style="min-width: 120px;" data-col="productGroup">
+                            <div class="d-flex align-items-center gap-1"><span>مجموعة الصنف</span><button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="productGroup" data-col-title="مجموعة الصنف" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div>
+                        </th>
+                        <th style="min-width: 120px;" data-col="bonusGroup">
+                            <div class="d-flex align-items-center gap-1"><span>مجموعة البونص</span><button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="bonusGroup" data-col-title="مجموعة البونص" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div>
+                        </th>
+                        <th class="text-end" style="min-width: 100px;" data-col="qty">
+                            <div class="d-flex align-items-center justify-content-end gap-1">
+                                <span>الكمية الحالية</span>
+                                <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="qty" data-sort-key="qty" data-col-title="الكمية الحالية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                            </div>
+                        </th>
+                        <th class="text-end" style="min-width: 100px;" data-col="discount">
+                            <div class="d-flex align-items-center justify-content-end gap-1"><span>الخصم المرجح %</span><button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="discount" data-col-title="الخصم المرجح %" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div>
+                        </th>
+                        <th class="text-end d-print-none" style="min-width: 140px;" data-col="manualDiscount" title="لو الصنف ليس له خصم يدوي يُستخدم الخصم المرجّح (عمود الخصم المرجح %).">
+                            <span>الخصم اليدوي للبيع %</span>
+                        </th>
+                        <th class="text-end" style="min-width: 100px;" data-col="sales">
+                            <div class="d-flex align-items-center justify-content-end gap-1">
+                                <span>المبيعات</span>
+                                <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="sales" data-sort-key="sales" data-col-title="المبيعات" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                            </div>
+                        </th>
+                        <th class="text-end" style="min-width: 110px;" data-col="priceRetail">
+                            <div class="d-flex align-items-center justify-content-end gap-1"><span>سعر الجمهور</span><button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="priceRetail" data-col-title="سعر الجمهور" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div>
+                        </th>
+                        <th class="text-end" style="min-width: 110px;" data-col="unitCost">
+                            <div class="d-flex align-items-center justify-content-end gap-1"><span>تكلفة العلبة</span><button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="unitCost" data-col-title="تكلفة العلبة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div>
+                        </th>
+                        <th class="text-end" style="min-width: 120px;" data-col="cost">
+                            <div class="d-flex align-items-center justify-content-end gap-1">
+                                <span>التكلفة الإجمالية</span>
+                                <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="cost" data-sort-key="cost" data-col-title="التكلفة الإجمالية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                            </div>
+                        </th>
+                        <th class="text-nowrap no-print" style="width:200px;min-width:200px;" data-col="actions" data-col-fixed="true">أوامر</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!reportData.Any())
+                    {
+                        <tr>
+                            <td colspan="15" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        @foreach (var item in reportData)
+                        {
+                            var hasBatches = item.Batches != null && item.Batches.Count >= 2;
+                            <tr data-pb-row data-prod-id="@item.ProdId" data-qty="@item.CurrentQty" data-has-batches="@(hasBatches ? "1" : "0")">
+                                <td data-col="code" class="align-middle">
+                                    @if (hasBatches)
+                                    {
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-secondary erp-pb-toggle-batches" data-prod-id="@item.ProdId" tabindex="0" title="فتح/إغلاق التشغيلات — Enter: فتح والانتقال لأول تشغيلة" aria-label="فتح التشغيلات">
+                                            <span class="erp-pb-chevron">▶</span>
+                                        </button>
+                                        <span class="me-1">@item.ProdCode</span>
+                                    }
+                                    else
+                                    {
+                                        @item.ProdCode
+                                    }
+                                </td>
+                                <td data-col="name">@item.ProdName</td>
+                                <td data-col="batch"><small class="text-muted">@(hasBatches ? "—" : (!string.IsNullOrEmpty(item.FirstBatchNo) || item.FirstBatchExpiry.HasValue ? (item.FirstBatchNo ?? "—") : "—"))</small></td>
+                                <td data-col="date" class="text-nowrap"><small class="text-muted">@(hasBatches ? "—" : (item.FirstBatchExpiry.HasValue ? item.FirstBatchExpiry.Value.ToString("yyyy/MM/dd") : "—"))</small></td>
+                                <td data-col="category"><small class="text-muted">@item.CategoryName</small></td>
+                                <td data-col="productGroup"><small class="text-muted">@item.ProductGroupName</small></td>
+                                <td data-col="bonusGroup"><small class="text-muted">@item.ProductBonusGroupName</small></td>
+                                <td data-col="qty" class="text-end">@item.CurrentQty.ToString("N0")</td>
+                                <td data-col="discount" class="text-end">@item.WeightedDiscount.ToString("N2")</td>
+                                <td data-col="manualDiscount" class="text-end d-print-none">
+                                    @if (hasBatches)
+                                    {
+                                        <span class="text-muted small">عدّل في التشغيلات أدناه</span>
+                                    }
+                                    else
+                                    {
+                                        <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm text-end erp-pb-manual-discount-inp" style="width:70px;min-width:70px;margin-left:auto;" value="@(item.ManualDiscountPct?.ToString("N2", System.Globalization.CultureInfo.InvariantCulture) ?? "")" title="الخصم اليدوي للبيع % — Enter: حفظ والانتقال للصف التالي" data-prod-id="@item.ProdId" data-warehouse-id="@(warehouseId?.ToString() ?? "")" data-batch-id="" />
+                                    }
+                                </td>
+                                <td data-col="sales" class="text-end">@item.SalesQty.ToString("N2")</td>
+                                <td data-col="priceRetail" class="text-end">@item.PriceRetail.ToString("N2")</td>
+                                <td data-col="unitCost" class="text-end">@item.UnitCost.ToString("N2")</td>
+                                <td data-col="cost" class="text-end">@item.TotalCost.ToString("N2")</td>
+                                <td class="text-nowrap no-print d-print-none" data-col="actions">
+                                    <a class="btn btn-erp btn-erp-secondary btn-erp-sm erp-pb-open-tab" href="@Url.Action("Show", "Products", new { id = item.ProdId })" data-tab-id="product-movement-tab" data-tab-title="حركة الصنف">حركة الصنف</a>
+                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm erp-pb-open-tab" href="@Url.Action("Edit", "Products", new { id = item.ProdId })" data-tab-id="prod-edit-@item.ProdId" data-tab-title="تعديل الصنف">تعديل</a>
                                 </td>
                             </tr>
-                        </tfoot>
-                    </table>
-                </div>
+                            @if (hasBatches)
+                            {
+                                @foreach (var batch in item.Batches!)
+                                {
+                                    <tr class="erp-pb-batch-row erp-pb-batches-for" data-pb-batch-row data-prod-id="@item.ProdId" data-batch-id="@(batch.BatchId ?? 0)" data-qty="@batch.CurrentQty" data-pb-batches-for="@item.ProdId" style="display: none;">
+                                        <td></td>
+                                        <td class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
+                                        <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
+                                        <td data-col="date"><small class="text-muted">@(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("yyyy/MM/dd") : "—")</small></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td data-col="qty" class="text-end">@batch.CurrentQty.ToString("N0")</td>
+                                        <td data-col="discount" class="text-end">@(batch.WeightedDiscount.ToString("N2") + " %")</td>
+                                        <td data-col="manualDiscount" class="text-end d-print-none">
+                                            <input type="number" step="0.01" min="0" max="100" class="form-control form-control-sm text-end erp-pb-manual-discount-inp" style="width:70px;min-width:70px;margin-left:auto;" value="@(batch.ManualDiscountPct?.ToString("N2", System.Globalization.CultureInfo.InvariantCulture) ?? "")" data-prod-id="@item.ProdId" data-warehouse-id="@(warehouseId?.ToString() ?? "")" data-batch-id="@(batch.BatchId?.ToString() ?? "")" />
+                                        </td>
+                                        <td data-col="sales" class="text-end">@batch.SalesQty.ToString("N2")</td>
+                                        <td data-col="priceRetail" class="text-end">@batch.PriceRetail.ToString("N2")</td>
+                                        <td class="text-end">@batch.UnitCost.ToString("N2")</td>
+                                        <td class="text-end">@batch.TotalCost.ToString("N2")</td>
+                                        <td data-col="actions" class="d-print-none"></td>
+                                    </tr>
+                                }
+                            }
+                        }
+                    }
+                </tbody>
+                @if (reportData.Any())
+                {
+                    <tfoot class="table-secondary fw-bold" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
+                        <tr>
+                            <td colspan="8" class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                            <td id="productBalancesFooterQty" class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
+                            <td></td>
+                            <td class="d-print-none"></td>
+                            <td id="productBalancesFooterSales" class="text-end"><strong>@totalSalesQty.ToString("N2")</strong></td>
+                            <td id="productBalancesFooterPriceRetail" class="text-end"><strong>@totalPriceRetail.ToString("N2")</strong></td>
+                            <td id="productBalancesFooterUnitCost" class="text-end"><strong>@totalUnitCost.ToString("N2")</strong></td>
+                            <td id="productBalancesFooterCost" class="text-end"><strong class="product-balances-total-value">@totalCost.ToString("N2")</strong></td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
         </div>
+    </div>
 
-        @* ===== Pagination Controls ===== *@
-        @if (totalPages > 1)
-        {
-            <nav aria-label="pagination" class="mt-3 d-print-none">
-                <ul class="pagination justify-content-center">
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(1)">الأول</a>
-                    </li>
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page - 1)">السابق</a>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">@($"صفحة {page} من {totalPages}")</span>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page + 1)">التالي</a>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
-                    </li>
-                </ul>
-            </nav>
-        }
-    }
-    else
+    @* ===== Pagination + عرض من-إلى ===== *@
+    @if (reportData.Any())
     {
-        <div class="alert alert-info text-center">
-            <p class="mb-0">لا توجد بيانات لعرضها</p>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" id="productBalancesPaginationBar">
+            <small class="text-muted" id="productBalancesPaginationText">
+                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
+            </small>
+            @if (totalPages > 1)
+            {
+                <nav aria-label="pagination">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(page == 1 ? "disabled" : "")">
+                            <a class="page-link" href="@pageUrl(1)">الأول</a>
+                        </li>
+                        <li class="page-item @(page == 1 ? "disabled" : "")">
+                            <a class="page-link" href="@pageUrl(page - 1)">السابق</a>
+                        </li>
+                        <li class="page-item disabled">
+                            <span class="page-link">صفحة @(page) من @(totalPages)</span>
+                        </li>
+                        <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                            <a class="page-link" href="@pageUrl(page + 1)">التالي</a>
+                        </li>
+                        <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                            <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
+                        </li>
+                    </ul>
+                </nav>
+            }
         </div>
     }
+</div>
+
+@* مودال اختيار الأعمدة (نفس فكرة قائمة الأصناف) *@
+<div class="modal fade no-print" id="columnsModalProductBalances" tabindex="-1" aria-labelledby="columnsModalProductBalancesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content" dir="rtl">
+            <div class="modal-header">
+                <h5 class="modal-title flex-grow-1" id="columnsModalProductBalancesLabel">اختيار الأعمدة الظاهرة في تقرير أرصدة الأصناف</h5>
+                <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <div class="small text-muted mb-2">ضع علامة ✓ أمام الأعمدة التي تريد ظهورها في الجدول.</div>
+                <div id="columnsListProductBalances"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <button type="button" id="btnApplyColumnsProductBalances" class="btn btn-erp btn-erp-primary">تطبيق</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@* لوحة ترتيب وفلتر العمود (مثل قائمة الأصناف — زر واحد: ترتيب + فلترة نصية أو رقمية) *@
+<div id="erpPbColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+    <div class="erp-column-filter-header">
+        <span id="erpPbColumnFilterTitle">ترتيب وفلتر</span>
+        <button type="button" class="btn-close btn-sm" id="erpPbColumnFilterClose" aria-label="إغلاق"></button>
+    </div>
+    <div class="erp-column-filter-body">
+        <div id="erpPbSortSection" class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+            <div class="d-flex flex-column gap-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-pb-sort-btn" data-sort-dir="asc"><span class="me-2">▲</span> ترتيب تصاعدي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-pb-sort-btn" data-sort-dir="desc"><span class="me-2">▼</span> ترتيب تنازلي</button>
+            </div>
+        </div>
+        <div class="erp-filter-section">
+            <div id="erpPbFilterSearchRow">
+                <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                <input type="text" id="erpPbColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+            </div>
+            <div id="erpPbColumnFilterList" class="erp-column-filter-list"></div>
+        </div>
+        <div class="erp-column-filter-actions mt-2">
+            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpPbColumnFilterOk">تطبيق</button>
+            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpPbColumnFilterClear">مسح الفلتر</button>
+        </div>
+    </div>
 </div>
 
 @section Styles {
     <style>
         datalist { display: none; }
-
-        /* ألوان هادئة للعين — أزرار بخلفية بيضاء وحدود باهتة */
-        .product-balances-report .product-balances-btn {
-            background-color: #fff !important;
-            border-width: 1.5px !important;
-            border-style: solid !important;
-        }
-        .product-balances-btn-primary {
-            color: #5b6b7a !important;
-            border-color: #94a3b8 !important;
-        }
-        .product-balances-btn-primary:hover {
-            background-color: #f1f5f9 !important;
-            color: #475569 !important;
-            border-color: #64748b !important;
-        }
-        .product-balances-btn-secondary {
-            color: #64748b !important;
-            border-color: #cbd5e1 !important;
-        }
-        .product-balances-btn-secondary:hover {
-            background-color: #f8fafc !important;
-            color: #475569 !important;
-        }
-        .product-balances-btn-success {
-            color: #4d7c5a !important;
-            border-color: #86efac !important;
-        }
-        .product-balances-btn-success:hover {
-            background-color: #f0fdf4 !important;
-            color: #166534 !important;
+        /* حقول التاريخ والوقت أصغر حجماً ومنع التداخل */
+        .erp-datetime-input {
+            min-width: 165px;
+            max-width: 180px;
+            width: 100%;
+            padding-inline-end: 2rem;
+            font-size: 0.875rem;
+            box-sizing: border-box;
         }
 
-        /* جدول — ألوان هادئة */
+        /* ألوان التقرير مثل قائمة الأصناف بالضبط (نفس erp-table و table-light) */
+        #productBalancesTable thead th,
         .product-balances-table .erp-table thead th {
-            background-color: #f1f5f9 !important;
-            color: #475569;
-            border-bottom: 1px solid #e2e8f0;
+            background-color: #fafbfc !important;
+            color: #212529;
+            border-bottom: 1px solid #dee2e6;
             font-weight: 600;
         }
         .product-balances-table .erp-table tfoot {
-            background-color: #f8fafc !important;
-            border-top: 1px solid #e2e8f0;
+            background-color: #e9ecef !important;
+            border-top: 1px solid #dee2e6;
         }
-        .product-balances-table .erp-table tbody tr:hover {
-            background-color: #f8fafc !important;
-        }
-        /* المجموع الإجمالي — لون هادئ بدل الأزرق القوي */
         .product-balances-total-value {
             font-size: 1.05rem;
             color: #475569 !important;
         }
         a.text-decoration-none:hover { text-decoration: underline !important; }
+        .erp-pb-col-filter-btn { color: #64748b; }
+        .erp-pb-col-filter-btn:hover { color: #475569; }
+        .erp-pb-col-filter-btn.erp-pb-filter-active { color: #0d6efd !important; }
+        /* لوحة ترتيب وفلتر — إظهار المحتوى كاملاً (قائمة الصنف ظاهرة للآخر وكاملة جانبياً) */
+        #erpPbColumnFilterPanel.erp-column-filter-panel {
+            min-width: 300px;
+            max-width: min(340px, 92vw);
+            width: auto;
+        }
+        #erpPbColumnFilterPanel .erp-column-filter-body {
+            max-height: 75vh;
+            overflow-y: auto;
+            overflow-x: visible;
+        }
+        #erpPbColumnFilterPanel .erp-column-filter-list .form-check-label,
+        #erpPbColumnFilterPanel .erp-filter-items .form-check-label {
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            min-width: 0;
+            display: block;
+        }
+        #erpPbColumnFilterPanel .erp-filter-items {
+            padding-bottom: 1rem;
+            -webkit-overflow-scrolling: touch;
+        }
+        /* حدود ظاهرة للمحتويات الداخلية */
+        #erpPbColumnFilterPanel .erp-column-filter-header {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            margin: -0.25rem 0 0.5rem 0;
+            background: #f8f9fa;
+        }
+        #erpPbColumnFilterPanel #erpPbSortSection {
+            border: 1px solid #dee2e6 !important;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 0.75rem;
+            background: #fff;
+        }
+        #erpPbColumnFilterPanel #erpPbFilterSearchRow {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 0.5rem;
+            background: #fff;
+        }
+        #erpPbColumnFilterPanel #erpPbColumnFilterList {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            background: #fafbfc;
+        }
+        #erpPbColumnFilterPanel .erp-filter-items {
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 0.35rem 0.5rem;
+            margin-top: 0.25rem;
+            background: #fff;
+        }
+        #erpPbColumnFilterPanel .erp-column-filter-list .form-check {
+            border-bottom: 1px solid #f1f3f4;
+            padding: 0.25rem 0;
+        }
+        #erpPbColumnFilterPanel .erp-column-filter-list .form-check:last-child {
+            border-bottom: none;
+        }
+        #erpPbColumnFilterPanel .erp-column-filter-actions {
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 0.5rem 0.75rem;
+            margin-top: 0.5rem;
+            background: #f8f9fa;
+        }
     </style>
 }
 
 @section Scripts {
     <script>
-        // ضمان إرسال includeZeroQty حتى لو كان checkbox غير مفعّل
+        // فتح حركة الصنف / تعديل الصنف في تاب (نفس نظام قائمة الأصناف)
+        (function () {
+            document.addEventListener('click', function (e) {
+                var link = e.target.closest('a.erp-pb-open-tab');
+                if (!link) return;
+                e.preventDefault();
+                e.stopPropagation();
+                var url = (link.getAttribute('href') || link.href || '').trim();
+                if (!url) return;
+                url = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'frame=1';
+                var tabId = (link.getAttribute('data-tab-id') || '').trim();
+                var title = (link.getAttribute('data-tab-title') || 'حركة الصنف').trim();
+                try {
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({ type: 'erp-open-tab', tabId: tabId, title: title, url: url }, '*');
+                        return;
+                    }
+                } catch (err) { console.error('erp-pb-open-tab:', err); }
+                if (window.top.erpTabs && typeof window.top.erpTabs.openTab === 'function')
+                    window.top.erpTabs.openTab(tabId, url, title);
+                else
+                    window.location.href = url;
+            });
+        })();
+
+        // ضمان إرسال includeZeroQty حتى لو كان checkbox غير مفعّل + تثبيت اختيار المخزن من الـ URL
         document.addEventListener('DOMContentLoaded', function () {
+            // الشريط الأفقي يكون ناحية اليمين عند فتح التقرير (إظهار أعمدة اليمين أولاً)
+            var scrollWrapper = document.getElementById('productBalancesScrollWrapper');
+            if (scrollWrapper) {
+                function scrollHorizontalToRight() {
+                    var maxScroll = scrollWrapper.scrollWidth - scrollWrapper.clientWidth;
+                    if (maxScroll > 0) scrollWrapper.scrollLeft = maxScroll;
+                }
+                requestAnimationFrame(function () { requestAnimationFrame(scrollHorizontalToRight); });
+            }
+
             const form = document.getElementById('filtersForm');
             const includeZeroCb = document.getElementById('includeZeroQty');
-            const hasBonusCb = document.getElementById('hasBonus');
-            
+            var warehouseSelect = document.getElementById('warehouseIdSelect');
+            if (warehouseSelect) {
+                var url = new URL(window.location.href);
+                var whFromUrl = url.searchParams.get('warehouseId');
+                if (whFromUrl !== null && whFromUrl !== '') {
+                    warehouseSelect.value = whFromUrl;
+                }
+            }
             if (form) {
                 form.addEventListener('submit', function (e) {
-                    [['includeZeroQty', includeZeroCb], ['hasBonus', hasBonusCb]].forEach(function (pair) {
-                        const name = pair[0];
-                        const cb = pair[1];
-                        const existingHidden = form.querySelector('input[name="' + name + '"][type="hidden"]');
-                        if (existingHidden) existingHidden.remove();
-                        if (cb && !cb.checked) {
-                            const hidden = document.createElement('input');
-                            hidden.type = 'hidden';
-                            hidden.name = name;
-                            hidden.value = name === 'hasBonus' ? '' : 'false';
-                            form.appendChild(hidden);
+                    var existingHidden = form.querySelector('input[name="includeZeroQty"][type="hidden"]');
+                    if (existingHidden) existingHidden.remove();
+                    if (includeZeroCb && !includeZeroCb.checked) {
+                        var hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'includeZeroQty';
+                        hidden.value = 'false';
+                        form.appendChild(hidden);
+                    }
+                });
+            }
+
+            // فتح/إغلاق صفوف التشغيلات عند النقر على السهم؛ Enter على السهم المغلق يفتح التشغيلات وينقل الفوكس لأول حقل خصم
+            document.querySelectorAll('.erp-pb-toggle-batches').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var prodId = this.getAttribute('data-prod-id');
+                    var chevron = this.querySelector('.erp-pb-chevron');
+                    var batchRows = document.querySelectorAll('tr.erp-pb-batches-for[data-pb-batches-for="' + prodId + '"]');
+                    if (!batchRows.length || !chevron) return;
+                    var isHidden = batchRows[0].style.display === 'none';
+                    batchRows.forEach(function (tr) { tr.style.display = isHidden ? '' : 'none'; });
+                    chevron.textContent = isHidden ? '▼' : '▶';
+                });
+                btn.addEventListener('keydown', function (e) {
+                    if (e.key !== 'Enter') return;
+                    var prodId = this.getAttribute('data-prod-id');
+                    var batchRows = document.querySelectorAll('tr.erp-pb-batches-for[data-pb-batches-for="' + prodId + '"]');
+                    if (!batchRows.length) return;
+                    var isHidden = batchRows[0].style.display === 'none';
+                    if (isHidden) {
+                        e.preventDefault();
+                        this.click();
+                        var firstInp = batchRows[0].querySelector('.erp-pb-manual-discount-inp');
+                        if (firstInp) {
+                            setTimeout(function () { firstInp.focus(); firstInp.select(); }, 50);
                         }
+                    }
+                });
+            });
+
+            // حفظ الخصم اليدوي للبيع (بدون رسالة نجاح — Enter: حفظ ونقل الفوكس للصف التالي، زر عام: حفظ الكل)
+            (function () {
+                var tbl = document.getElementById('productBalancesTable');
+                var tokenEl = document.querySelector('#__AntiForgeryFormProductBalances input[name="__RequestVerificationToken"]');
+                if (!tbl || !tokenEl) return;
+
+                function saveOneRow(inp) {
+                    var productId = parseInt(inp.getAttribute('data-prod-id') || '0', 10);
+                    var warehouseIdStr = (inp.getAttribute('data-warehouse-id') || '').trim();
+                    var batchIdStr = (inp.getAttribute('data-batch-id') || '').trim();
+                    if (productId <= 0) return Promise.resolve();
+                    var rawVal = (inp.value || '').replace(/,/g, '').trim();
+                    var manualDiscountPct = rawVal === '' ? null : parseFloat(rawVal);
+                    if (manualDiscountPct !== null && (isNaN(manualDiscountPct) || manualDiscountPct < 0)) manualDiscountPct = null;
+                    if (manualDiscountPct !== null && manualDiscountPct > 100) manualDiscountPct = 100;
+
+                    var formData = new FormData();
+                    formData.append('__RequestVerificationToken', tokenEl.value);
+                    formData.append('productId', productId);
+                    if (warehouseIdStr && !isNaN(parseInt(warehouseIdStr, 10))) formData.append('warehouseId', warehouseIdStr);
+                    if (batchIdStr && !isNaN(parseInt(batchIdStr, 10))) formData.append('batchId', batchIdStr);
+                    if (manualDiscountPct !== null) formData.append('manualDiscountPct', manualDiscountPct);
+
+                    return fetch('@Url.Action("SaveManualDiscount", "Reports")', {
+                        method: 'POST',
+                        body: formData,
+                        headers: { 'RequestVerificationToken': tokenEl.value }
+                    }).then(function (r) { return r.json(); });
+                }
+
+                function getOrderedManualDiscountInputs() {
+                    var rows = tbl.querySelectorAll('tbody tr[data-pb-row], tbody tr.erp-pb-batch-row');
+                    var list = [];
+                    rows.forEach(function (tr) {
+                        if (tr.style.display === 'none') return;
+                        var inp = tr.querySelector('.erp-pb-manual-discount-inp');
+                        if (inp) list.push(inp);
+                    });
+                    return list;
+                }
+
+                // Enter: حفظ الصف الحالي بدون رسالة ثم نقل الفوكس للصف التالي
+                tbl.querySelectorAll('.erp-pb-manual-discount-inp').forEach(function (inp) {
+                    inp.addEventListener('keydown', function (e) {
+                        if (e.key !== 'Enter') return;
+                        e.preventDefault();
+                        var currentInp = this;
+                        saveOneRow(currentInp).then(function () {
+                            var all = getOrderedManualDiscountInputs();
+                            var idx = all.indexOf(currentInp);
+                            if (idx >= 0 && idx < all.length - 1) {
+                                all[idx + 1].focus();
+                                all[idx + 1].select();
+                            }
+                        });
+                    });
+                });
+
+                // زر الحفظ العام: حفظ كل الصفوف الظاهرة بدون رسالة
+                var btnAll = document.getElementById('erpPbSaveAllManualDiscount');
+                if (btnAll) {
+                    btnAll.addEventListener('click', function () {
+                        var inputs = getOrderedManualDiscountInputs();
+                        if (inputs.length === 0) return;
+                        btnAll.disabled = true;
+                        var promises = inputs.map(function (inp) { return saveOneRow(inp); });
+                        Promise.all(promises).then(function () {
+                            btnAll.disabled = false;
+                        }).catch(function () {
+                            btnAll.disabled = false;
+                        });
+                    });
+                }
+            })();
+        });
+
+        // ترتيب وفلتر الأعمدة (زر واحد: ترتيب + فلترة نصية أو رقمية — مثل قائمة الأصناف)
+        (function () {
+            const table = document.getElementById('productBalancesTable');
+            const panel = document.getElementById('erpPbColumnFilterPanel');
+            const titleEl = document.getElementById('erpPbColumnFilterTitle');
+            const sortSection = document.getElementById('erpPbSortSection');
+            const searchRow = document.getElementById('erpPbFilterSearchRow');
+            const searchInp = document.getElementById('erpPbColumnFilterSearch');
+            const listEl = document.getElementById('erpPbColumnFilterList');
+            const btnOk = document.getElementById('erpPbColumnFilterOk');
+            const btnClear = document.getElementById('erpPbColumnFilterClear');
+            const btnClose = document.getElementById('erpPbColumnFilterClose');
+            if (!table || !panel || !listEl) return;
+
+            const numericColumns = ['code', 'qty', 'discount', 'manualDiscount', 'sales', 'priceRetail', 'unitCost', 'cost'];
+            let currentCol = null;
+            let currentSortKey = null;
+            let currentFilterBtn = null;
+            let selectedValues = new Set();
+
+            function getCurrentSort() {
+                var url = new URL(window.location.href);
+                return { sortBy: url.searchParams.get('sortBy') || 'name', sortDir: url.searchParams.get('sortDir') || 'asc' };
+            }
+
+            function parseCellNumber(td) {
+                if (!td) return NaN;
+                var t = (td.textContent || '').replace(/,/g, '').trim();
+                return parseFloat(t) || NaN;
+            }
+
+            function matchNumericExpr(num, expr) {
+                if (expr === '' || expr == null) return true;
+                expr = String(expr).trim();
+                if (!expr) return true;
+                if (expr.indexOf(':') !== -1) {
+                    var parts = expr.split(':');
+                    var a = parseFloat(String(parts[0]).trim());
+                    var b = parseFloat(String(parts[1]).trim());
+                    if (isNaN(a) || isNaN(b)) return true;
+                    return num >= Math.min(a, b) && num <= Math.max(a, b);
+                }
+                if (expr.indexOf('>') === 0) {
+                    var v = parseFloat(expr.substring(1).trim());
+                    return !isNaN(v) && num > v;
+                }
+                if (expr.indexOf('<') === 0) {
+                    var v = parseFloat(expr.substring(1).trim());
+                    return !isNaN(v) && num < v;
+                }
+                var exact = parseFloat(expr);
+                return !isNaN(exact) && (isNaN(num) ? false : Math.abs(num - exact) < 1e-6);
+            }
+
+            function getDistinctValues(col) {
+                var cells = table.querySelectorAll('tbody tr[data-pb-row] td[data-col="' + col + '"]');
+                var set = new Set();
+                cells.forEach(function (td) {
+                    var inp = td.querySelector('.erp-pb-manual-discount-inp');
+                    var v = (col === 'manualDiscount' && inp) ? (inp.value || '').trim() : (td.textContent || '').trim();
+                    if (v) set.add(v);
+                });
+                return Array.from(set).sort();
+            }
+
+            function getCellNumericValue(td, col) {
+                if (!td) return NaN;
+                if (col === 'manualDiscount') {
+                    var inp = td.querySelector('.erp-pb-manual-discount-inp');
+                    if (inp) { var n = parseFloat(String(inp.value).replace(/,/g, '').trim()); return isNaN(n) ? 0 : n; }
+                }
+                if (col === 'discount') {
+                    var t = (td.textContent || '').replace(/,/g, '').trim();
+                    return parseFloat(t) || NaN;
+                }
+                var t = (td.textContent || '').replace(/,/g, '').trim();
+                return parseFloat(t) || NaN;
+            }
+
+            function updateFooterTotals() {
+                var rows = table.querySelectorAll('tbody tr[data-pb-row]');
+                var totalQty = 0, totalSales = 0, totalPriceRetail = 0, totalUnitCost = 0, totalCost = 0, visibleCount = 0;
+                rows.forEach(function (tr) {
+                    if (tr.style.display === 'none') return;
+                    visibleCount++;
+                    var qty = parseInt(tr.getAttribute('data-qty') || '0', 10) || 0;
+                    totalQty += qty;
+                    var salesTd = tr.querySelector('td[data-col="sales"]');
+                    var priceTd = tr.querySelector('td[data-col="priceRetail"]');
+                    var unitCostTd = tr.querySelector('td[data-col="unitCost"]');
+                    var costTd = tr.querySelector('td[data-col="cost"]');
+                    totalSales += parseCellNumber(salesTd);
+                    totalPriceRetail += parseCellNumber(priceTd);
+                    totalUnitCost += parseCellNumber(unitCostTd);
+                    totalCost += parseCellNumber(costTd);
+                });
+                var footerQty = document.getElementById('productBalancesFooterQty');
+                var footerSales = document.getElementById('productBalancesFooterSales');
+                var footerPriceRetail = document.getElementById('productBalancesFooterPriceRetail');
+                var footerUnitCost = document.getElementById('productBalancesFooterUnitCost');
+                var footerCost = document.getElementById('productBalancesFooterCost');
+                if (footerQty) footerQty.innerHTML = '<strong>' + totalQty.toLocaleString('ar-EG') + '</strong>';
+                if (footerSales) footerSales.innerHTML = '<strong>' + totalSales.toFixed(2) + '</strong>';
+                if (footerPriceRetail) footerPriceRetail.innerHTML = '<strong>' + totalPriceRetail.toFixed(2) + '</strong>';
+                if (footerUnitCost) footerUnitCost.innerHTML = '<strong>' + totalUnitCost.toFixed(2) + '</strong>';
+                if (footerCost) footerCost.innerHTML = '<strong class="product-balances-total-value">' + totalCost.toFixed(2) + '</strong>';
+                var paginationText = document.getElementById('productBalancesPaginationText');
+                if (paginationText) paginationText.textContent = 'عرض 1 - ' + visibleCount + ' من ' + visibleCount;
+            }
+
+            function restoreFooterTotals() {
+                var footer = document.getElementById('productBalancesFooter');
+                if (!footer) return;
+                var totalQty = footer.getAttribute('data-total-qty') || '0';
+                var totalSales = footer.getAttribute('data-total-sales') || '0';
+                var totalPriceRetail = footer.getAttribute('data-total-priceretail') || '0';
+                var totalUnitCost = footer.getAttribute('data-total-unitcost') || '0';
+                var totalCost = footer.getAttribute('data-total-cost') || '0';
+                var totalCount = table.getAttribute('data-pb-total-count') || '0';
+                var pageSize = @(pageSize);
+                var page = @(page);
+                var from = (page - 1) * pageSize + 1;
+                var toStr = Math.min(page * pageSize, parseInt(totalCount, 10));
+                var footerQty = document.getElementById('productBalancesFooterQty');
+                var footerSales = document.getElementById('productBalancesFooterSales');
+                var footerPriceRetail = document.getElementById('productBalancesFooterPriceRetail');
+                var footerUnitCost = document.getElementById('productBalancesFooterUnitCost');
+                var footerCost = document.getElementById('productBalancesFooterCost');
+                if (footerQty) footerQty.innerHTML = '<strong>' + parseFloat(totalQty).toLocaleString('ar-EG') + '</strong>';
+                if (footerSales) footerSales.innerHTML = '<strong>' + parseFloat(totalSales).toFixed(2) + '</strong>';
+                if (footerPriceRetail) footerPriceRetail.innerHTML = '<strong>' + parseFloat(totalPriceRetail).toFixed(2) + '</strong>';
+                if (footerUnitCost) footerUnitCost.innerHTML = '<strong>' + parseFloat(totalUnitCost).toFixed(2) + '</strong>';
+                if (footerCost) footerCost.innerHTML = '<strong class="product-balances-total-value">' + parseFloat(totalCost).toFixed(2) + '</strong>';
+                var paginationText = document.getElementById('productBalancesPaginationText');
+                if (paginationText) paginationText.textContent = 'عرض ' + from + ' - ' + toStr + ' من ' + totalCount;
+            }
+
+            function applySort(sortKey, sortDir) {
+                var url = new URL(window.location.href);
+                url.searchParams.set('sortBy', sortKey);
+                url.searchParams.set('sortDir', sortDir);
+                url.searchParams.set('loadReport', 'true');
+                url.searchParams.set('page', '1');
+                window.location.href = url.toString();
+            }
+
+            function showPanel(btn) {
+                currentCol = btn.dataset.col;
+                currentSortKey = btn.dataset.sortKey || null;
+                currentFilterBtn = btn;
+                var colTitle = btn.dataset.colTitle || currentCol;
+                titleEl.textContent = 'ترتيب وفلتر: ' + colTitle;
+                selectedValues = new Set();
+                if (searchInp) searchInp.value = '';
+
+                if (sortSection) {
+                    sortSection.style.display = currentSortKey ? '' : 'none';
+                    if (currentSortKey) {
+                        var cur = getCurrentSort();
+                        var isCurrent = (cur.sortBy || '').toLowerCase() === (currentSortKey || '').toLowerCase();
+                        var curDir = isCurrent ? cur.sortDir : 'asc';
+                        panel.querySelectorAll('.erp-pb-sort-btn').forEach(function (b) {
+                            if (isCurrent && b.dataset.sortDir === curDir) {
+                                b.classList.add('active', 'btn-primary');
+                                b.classList.remove('btn-outline-secondary');
+                            } else {
+                                b.classList.remove('active', 'btn-primary');
+                                b.classList.add('btn-outline-secondary');
+                            }
+                        });
+                    }
+                }
+
+                if (numericColumns.indexOf(currentCol) !== -1) {
+                    if (searchRow) searchRow.style.display = 'none';
+                    listEl.innerHTML = '<div class="mb-2">' +
+                        '<label class="form-label small mb-1 fw-bold">بحث رقمي:</label>' +
+                        '<input type="text" id="erpPbNumericExpr" class="form-control form-control-sm" placeholder="اكتب القيمة أو استخدم: &lt;10, &gt;100, 10:100">' +
+                        '<small class="text-muted d-block mt-1">مثال: 53812 أو &gt;10 أو &lt;100 أو 10:100</small></div>';
+                    setTimeout(function () {
+                        var exprInp = document.getElementById('erpPbNumericExpr');
+                        if (exprInp) {
+                            exprInp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applyFilter(); } });
+                            exprInp.focus();
+                        }
+                    }, 50);
+                } else {
+                    if (searchRow) searchRow.style.display = '';
+                    var values = getDistinctValues(currentCol);
+                    var allChecked = true;
+                    var html = '<div class="form-check mb-1">' +
+                        '<input type="checkbox" class="form-check-input" id="erpPbFilterSelectAll" ' + (allChecked ? 'checked' : '') + '>' +
+                        '<label class="form-check-label small" for="erpPbFilterSelectAll">(تحديد الكل)</label></div>' +
+                        '<div class="erp-filter-items" style="max-height:320px;overflow-y:auto;">';
+                    values.forEach(function (v) {
+                        html += '<div class="form-check"><input type="checkbox" class="form-check-input erp-pb-filter-cb" value="' + String(v).replace(/"/g, '&quot;') + '" checked data-value="' + String(v).replace(/"/g, '&quot;') + '">' +
+                            '<label class="form-check-label small">' + String(v).replace(/</g, '&lt;') + '</label></div>';
+                    });
+                    html += '</div>';
+                    listEl.innerHTML = html;
+                    var selectAllCb = listEl.querySelector('#erpPbFilterSelectAll');
+                    if (selectAllCb) {
+                        selectAllCb.addEventListener('change', function () {
+                            var chk = this.checked;
+                            listEl.querySelectorAll('.erp-pb-filter-cb').forEach(function (cb) { cb.checked = chk; });
+                        });
+                    }
+                    listEl.querySelectorAll('.erp-pb-filter-cb').forEach(function (cb) {
+                        cb.addEventListener('change', function () {
+                            var list = listEl.querySelectorAll('.erp-pb-filter-cb');
+                            var checked = listEl.querySelectorAll('.erp-pb-filter-cb:checked').length;
+                            if (selectAllCb) { selectAllCb.checked = checked === list.length; selectAllCb.indeterminate = checked > 0 && checked < list.length; }
+                        });
+                    });
+                }
+
+                panel.classList.remove('d-none');
+                var r = btn.getBoundingClientRect();
+                panel.style.position = 'fixed';
+                var panelW = 320;
+                var panelH = window.innerHeight * 0.75;
+                var left = r.left;
+                var top = r.bottom + 4;
+                if (left + panelW > window.innerWidth) left = Math.max(0, window.innerWidth - panelW);
+                if (left < 0) left = 0;
+                if (top + panelH > window.innerHeight) top = Math.max(4, window.innerHeight - panelH - 8);
+                if (top < 0) top = 4;
+                panel.style.left = left + 'px';
+                panel.style.top = top + 'px';
+            }
+
+            function updateItemCount() {
+                var el = document.getElementById('productBalancesItemCount');
+                if (!el) return;
+                var rows = table.querySelectorAll('tbody tr[data-pb-row]');
+                var visible = 0;
+                rows.forEach(function (tr) { if (tr.style.display !== 'none') visible++; });
+                el.textContent = visible;
+            }
+
+            function applyFilter() {
+                if (!currentCol) return;
+                var rows = table.querySelectorAll('tbody tr[data-pb-row]');
+                if (numericColumns.indexOf(currentCol) !== -1) {
+                    var exprInp = document.getElementById('erpPbNumericExpr');
+                    var expr = exprInp ? (exprInp.value || '').trim() : '';
+                    rows.forEach(function (tr) {
+                        var td = tr.querySelector('td[data-col="' + currentCol + '"]');
+                        var num = getCellNumericValue(td, currentCol);
+                        tr.style.display = matchNumericExpr(num, expr) ? '' : 'none';
+                    });
+                } else {
+                    var checkboxes = listEl.querySelectorAll('.erp-pb-filter-cb:checked');
+                    selectedValues = new Set();
+                    checkboxes.forEach(function (cb) { selectedValues.add(cb.dataset.value); });
+                    rows.forEach(function (tr) {
+                        var td = tr.querySelector('td[data-col="' + currentCol + '"]');
+                        var v = (td ? td.textContent : '').trim();
+                        tr.style.display = selectedValues.size === 0 || selectedValues.has(v) ? '' : 'none';
+                    });
+                }
+                document.querySelectorAll('tr.erp-pb-batches-for').forEach(function (batchRow) {
+                    var pid = batchRow.getAttribute('data-pb-batches-for');
+                    var productRow = table.querySelector('tr[data-pb-row][data-prod-id="' + pid + '"]');
+                    if (!productRow || productRow.style.display === 'none') batchRow.style.display = 'none';
+                });
+                updateItemCount();
+                updateFooterTotals();
+                table.querySelectorAll('.erp-pb-col-filter-btn').forEach(function (b) { b.classList.remove('erp-pb-filter-active'); });
+                if (currentFilterBtn) currentFilterBtn.classList.add('erp-pb-filter-active');
+                panel.classList.add('d-none');
+            }
+
+            function clearFilter() {
+                if (!currentCol) return;
+                table.querySelectorAll('.erp-pb-col-filter-btn').forEach(function (b) { b.classList.remove('erp-pb-filter-active'); });
+                table.querySelectorAll('tbody tr[data-pb-row]').forEach(function (tr) { tr.style.display = ''; });
+                table.querySelectorAll('tbody tr.erp-pb-batches-for').forEach(function (tr) { /* leave expanded state as is */ });
+                selectedValues = new Set();
+                var totalEl = document.getElementById('productBalancesItemCount');
+                var totalAttr = table.getAttribute('data-pb-total-count');
+                if (totalEl && totalAttr !== null && totalAttr !== '') totalEl.textContent = totalAttr;
+                restoreFooterTotals();
+                panel.classList.add('d-none');
+            }
+
+            table.querySelectorAll('.erp-pb-col-filter-btn').forEach(function (btn) {
+                btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); showPanel(btn); });
+            });
+            panel.querySelectorAll('.erp-pb-sort-btn').forEach(function (b) {
+                b.addEventListener('click', function () {
+                    if (currentSortKey) applySort(currentSortKey, this.dataset.sortDir);
+                });
+            });
+            btnOk.addEventListener('click', function () { applyFilter(); });
+            btnClear.addEventListener('click', clearFilter);
+            btnClose.addEventListener('click', function () { panel.classList.add('d-none'); });
+            if (searchInp) {
+                searchInp.addEventListener('input', function () {
+                    var term = (searchInp.value || '').trim().toLowerCase();
+                    listEl.querySelectorAll('.form-check').forEach(function (div) {
+                        if (div.querySelector('#erpPbFilterSelectAll')) return;
+                        var label = div.querySelector('label');
+                        var text = (label ? label.textContent : '').toLowerCase();
+                        div.style.display = !term || text.indexOf(term) !== -1 ? '' : 'none';
                     });
                 });
             }
-        });
+            document.addEventListener('click', function (e) {
+                if (panel && !panel.classList.contains('d-none') && !panel.contains(e.target) && !e.target.closest('.erp-pb-col-filter-btn'))
+                    panel.classList.add('d-none');
+            });
+
+            // اختيار الأعمدة (حفظ في localStorage مثل قائمة الأصناف)
+            var pbTable = document.getElementById('productBalancesTable');
+            if (pbTable) {
+                var storageKeyPb = 'product-balances-columns-visibility';
+                var headerCellsPb = Array.from(pbTable.querySelectorAll('thead th[data-col]'));
+                var columnsPb = headerCellsPb
+                    .filter(function (th) { return !th.hasAttribute('data-col-fixed'); })
+                    .map(function (th) {
+                        var title = th.innerText.trim();
+                        var col = th.getAttribute('data-col');
+                        return { key: col, title: title };
+                    });
+                var hiddenPb = [];
+                try {
+                    var savedPb = localStorage.getItem(storageKeyPb);
+                    if (savedPb) hiddenPb = JSON.parse(savedPb);
+                } catch (e) { hiddenPb = []; }
+                function applyVisibilityPb() {
+                    columnsPb.forEach(function (col) {
+                        var isHidden = hiddenPb.indexOf(col.key) !== -1;
+                        pbTable.querySelectorAll('[data-col="' + col.key + '"]').forEach(function (cell) {
+                            cell.classList.toggle('d-none', isHidden);
+                        });
+                    });
+                }
+                applyVisibilityPb();
+                var listContainerPb = document.getElementById('columnsListProductBalances');
+                if (listContainerPb) {
+                    listContainerPb.innerHTML = '';
+                    columnsPb.forEach(function (col) {
+                        var wrap = document.createElement('div');
+                        wrap.className = 'form-check mb-1';
+                        var cb = document.createElement('input');
+                        cb.type = 'checkbox';
+                        cb.className = 'form-check-input ms-2';
+                        cb.id = 'col_pb_' + col.key;
+                        cb.checked = hiddenPb.indexOf(col.key) === -1;
+                        cb.dataset.colKey = col.key;
+                        var label = document.createElement('label');
+                        label.className = 'form-check-label';
+                        label.setAttribute('for', cb.id);
+                        label.innerText = col.title;
+                        wrap.appendChild(cb);
+                        wrap.appendChild(label);
+                        listContainerPb.appendChild(wrap);
+                    });
+                }
+                document.getElementById('btnApplyColumnsProductBalances')?.addEventListener('click', function () {
+                    var checks = listContainerPb ? listContainerPb.querySelectorAll('input[type="checkbox"][data-col-key]') : [];
+                    hiddenPb = [];
+                    checks.forEach(function (cb) {
+                        if (!cb.checked) hiddenPb.push(cb.dataset.colKey);
+                    });
+                    try { localStorage.setItem(storageKeyPb, JSON.stringify(hiddenPb)); } catch (e) {}
+                    applyVisibilityPb();
+                    var modal = bootstrap.Modal.getInstance(document.getElementById('columnsModalProductBalances'));
+                    if (modal) modal.hide();
+                });
+            }
+        })();
     </script>
 }

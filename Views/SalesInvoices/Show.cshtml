@@ -1932,17 +1932,18 @@
                     const groupPolicyBox = document.getElementById('ProdGroupPolicyText');
                     if (groupPolicyBox) groupPolicyBox.value = (data.appliedGroupPolicyName ?? data.appliedGroupPolicyId ?? '').toString() || '—';
 
-                    // 3) الخصم المرجّح
+                    // 3) الخصم المرجّح (تحديد بين 0 و 100 وتنسيق لتجنب قيم خاطئة)
                     if (prodWeightedDisc) {
-                        prodWeightedDisc.value = (data.weightedDiscount ?? 0);
+                        const wd = Number(data.weightedDiscount ?? 0);
+                        prodWeightedDisc.value = (Number.isFinite(wd) && wd >= 0 && wd <= 100) ? Number(wd).toFixed(2) : '0.00';
                     }
 
 
-                    // 3.1) ✅ خصم البيع (من السياسات + الخصم المرجح)
-                    // مهم: لازم يكون السيرفر بيرجع saleDisc1 ضمن JSON
-                        if (prodDisc1Input) {
-                         prodDisc1Input.value = (data.saleDisc1 ?? 0);
-                            }
+                    // 3.1) ✅ خصم البيع (من السياسات + الخصم المرجح) — تحديد بين 0 و 100
+                    if (prodDisc1Input) {
+                        const sd = Number(data.saleDisc1 ?? 0);
+                        prodDisc1Input.value = (Number.isFinite(sd) && sd >= 0 && sd <= 100) ? Number(sd).toFixed(2) : '0.00';
+                    }
 
 
                     // 4) جدول تشغيلات FEFO (كارت 2)
@@ -2857,7 +2858,7 @@
                              const wdBox = document.getElementById('ProdWeightedDiscount');
                              if (wdBox) {
                                  const wd = Number(info.weightedDiscount ?? 0);
-                                 wdBox.value = (Number.isFinite(wd) ? wd.toFixed(2) : '0.00');
+                                 wdBox.value = (Number.isFinite(wd) && wd >= 0 && wd <= 100) ? Number(wd).toFixed(2) : '0.00';
                              }
 
                              // =========================
@@ -2973,9 +2974,8 @@
 
                     const wdBox = document.getElementById('ProdWeightedDiscount');
                     if (wdBox) {
-                                 const wd = Number(info.weightedDiscount ?? 0); // ✅ الاسم الصحيح القادم من الـ API
-
-                        wdBox.value = (Number.isFinite(wd) ? wd.toFixed(2) : '0.00');
+                        const wd = Number(info.weightedDiscount ?? 0);
+                        wdBox.value = (Number.isFinite(wd) && wd >= 0 && wd <= 100) ? Number(wd).toFixed(2) : '0.00';
                     }
 
                     // =========================
@@ -3294,7 +3294,7 @@
                                     return;
                                 }
 
-                                openTabFromFrame(buildMovementUrl(id), 'prod-move-' + id, 'حركة الصنف');
+                                openTabFromFrame(buildMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
                             });
                         }
 

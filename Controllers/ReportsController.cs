@@ -2,6 +2,7 @@ using ERP.Data;
 using ERP.Services;
 using ERP.Models;
 using ERP.ViewModels;
+using ERP.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -21,12 +22,14 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly StockAnalysisService _stockAnalysisService;
         private readonly ILedgerPostingService _ledgerPostingService;
+        private readonly IUserActivityLogger _activityLogger;
 
-        public ReportsController(AppDbContext context, StockAnalysisService stockAnalysisService, ILedgerPostingService ledgerPostingService)
+        public ReportsController(AppDbContext context, StockAnalysisService stockAnalysisService, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
         {
             _context = context;
             _stockAnalysisService = stockAnalysisService;
             _ledgerPostingService = ledgerPostingService;
+            _activityLogger = activityLogger;
         }
 
         /// <summary>
@@ -334,6 +337,7 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             bool includeZeroQty = false,
+            bool includeBatches = true,
             string? sortBy = "name",
             string? sortDir = "asc",
             bool loadReport = false,
@@ -397,8 +401,12 @@ namespace ERP.Controllers
             ViewBag.ProductsAuto = productsAuto;
 
             // =========================================================
-            // 2) تجهيز الفلاتر
+            // 2) تجهيز الفلاتر — المخزن: نقرأه دائماً من الطلب لضمان بقاء الاختيار بعد التجميع
             // =========================================================
+            var whFromQuery = Request.Query["warehouseId"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(whFromQuery) && int.TryParse(whFromQuery, out var whIdParsed))
+                warehouseId = whIdParsed;
+
             ViewBag.Search = search ?? "";
             ViewBag.CategoryId = categoryId;
             ViewBag.ProductGroupId = productGroupId;
@@ -407,6 +415,7 @@ namespace ERP.Controllers
             ViewBag.FromDate = fromDate;
             ViewBag.ToDate = toDate;
             ViewBag.IncludeZeroQty = includeZeroQty;
+            ViewBag.IncludeBatches = includeBatches;
             ViewBag.SortBy = sortBy;
             ViewBag.SortDir = sortDir;
 
@@ -415,9 +424,9 @@ namespace ERP.Controllers
             // =========================================================
             if (!loadReport)
             {
-                // الصفحة تفتح بدون بيانات - فقط الفلاتر
-                // الافتراضي: عرض الصفر = false (غير مفعل عند أول فتح)
+                // الصفحة تفتح بدون بيانات - فقط الفلاتر (عرض التشغيلات مفعّل افتراضياً)
                 ViewBag.IncludeZeroQty = false;
+                ViewBag.IncludeBatches = true;
                 ViewBag.ReportData = new List<ProductBalanceReportDto>();
                 ViewBag.TotalCost = 0m;
                 return View();
@@ -432,15 +441,10 @@ namespace ERP.Controllers
                 ViewBag.IncludeZeroQty = false;
             }
 
-            // عند عدم تحديد تاريخ: استخدام الشهر الحالي افتراضياً لعرض المبيعات
-            var today = DateTime.Today;
-            if (!fromDate.HasValue && !toDate.HasValue)
-            {
-                fromDate = new DateTime(today.Year, today.Month, 1);
-                toDate = today;
-                ViewBag.FromDate = fromDate;
-                ViewBag.ToDate = toDate;
-            }
+            // عند عدم تحديد تاريخ: لا نطبّق فلتر "أصناف تم شراؤها في الفترة" (نعرض الكل حسب الفلاتر الأخرى)
+            // عند التحديد: نقتصر على أصناف لها حركة شراء (StockLedger SourceType=Purchase) في المدى [fromDate, toDate]
+            DateTime? fromDateUtc = fromDate.HasValue ? (DateTime?)DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local) : null;
+            DateTime? toDateUtc = toDate.HasValue ? (DateTime?)DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : null;
 
             // =========================================================
             // 4) بناء الاستعلام الأساسي للأصناف (عند طلب التقرير)
@@ -488,6 +492,20 @@ namespace ERP.Controllers
             // =========================================================
             var productIds = await productsQuery.Select(p => p.ProdId).ToListAsync();
 
+            // 5.1) عند تحديد من/إلى تاريخ: نقتصر على أصناف تم شراؤها في هذه الفترة (StockLedger Purchase + TranDate)
+            if (productIds.Count > 0 && (fromDateUtc.HasValue || toDateUtc.HasValue))
+            {
+                var purchaseInRangeQuery = _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.SourceType == "Purchase" && productIds.Contains(sl.ProdId));
+                if (fromDateUtc.HasValue)
+                    purchaseInRangeQuery = purchaseInRangeQuery.Where(sl => sl.TranDate >= fromDateUtc.Value);
+                if (toDateUtc.HasValue)
+                    purchaseInRangeQuery = purchaseInRangeQuery.Where(sl => sl.TranDate <= toDateUtc.Value);
+                var purchasedIds = await purchaseInRangeQuery.Select(sl => sl.ProdId).Distinct().ToListAsync();
+                productIds = productIds.Intersect(purchasedIds).ToList();
+            }
+
             if (productIds.Count == 0)
             {
                 ViewBag.ReportData = new List<ProductBalanceReportDto>();
@@ -495,12 +513,30 @@ namespace ERP.Controllers
                 return View();
             }
 
+            // عند اختيار مخزن: نضمّن أصنافاً لها أي حركة (تحويل أو شراء أو غيره) في هذا المخزن حتى تظهر الأصناف المحوّلة (أصناف نشطة فقط)
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                var inWarehouseIds = await _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.WarehouseId == warehouseId.Value)
+                    .Select(sl => sl.ProdId)
+                    .Distinct()
+                    .ToListAsync();
+                var activeProductIds = await _context.Products.Where(p => p.IsActive).Select(p => p.ProdId).ToListAsync();
+                productIds = productIds.Union(inWarehouseIds.Intersect(activeProductIds)).Distinct().ToList();
+            }
+
             // =========================================================
             // 6) تحميل البيانات بشكل مجمع (Bulk Loading) - تحسين الأداء
             // =========================================================
             
-            // 6.1) تحميل جميع Products دفعة واحدة
-            var productsDict = await productsQuery
+            // 6.1) تحميل جميع Products دفعة واحدة (لجميع productIds بعد دمج أصناف المخزن)
+            var productsDict = await _context.Products
+                .AsNoTracking()
+                .Where(p => productIds.Contains(p.ProdId))
+                .Include(p => p.Category)
+                .Include(p => p.ProductGroup)
+                .Include(p => p.ProductBonusGroup)
                 .Select(p => new
                 {
                     p.ProdId,
@@ -543,59 +579,118 @@ namespace ERP.Controllers
                 })
                 .ToDictionaryAsync(x => x.ProdId);
 
-            // 6.4) تحميل جميع المبيعات دفعة واحدة (إن وُجدت فلاتر تاريخ)
-            Dictionary<int, decimal> salesQuantities = new Dictionary<int, decimal>();
-            if (fromDate.HasValue || toDate.HasValue)
+            // 6.3.1) تحميل بيانات التشغيلات (كل ProdId + BatchNo + Expiry) لعرض صنف بتشغيلتين أو أكثر
+            var batchLedgerQuery = _context.StockLedger
+                .AsNoTracking()
+                .Where(x =>
+                    productIds.Contains(x.ProdId) &&
+                    x.SourceType == "Purchase" &&
+                    (x.RemainingQty ?? 0) > 0);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                batchLedgerQuery = batchLedgerQuery.Where(x => x.WarehouseId == warehouseId.Value);
+            var batchRowsRaw = await batchLedgerQuery
+                .GroupBy(x => new { x.ProdId, x.BatchNo, x.Expiry })
+                .Select(g => new
+                {
+                    g.Key.ProdId,
+                    g.Key.BatchNo,
+                    g.Key.Expiry,
+                    TotalRemaining = g.Sum(x => x.RemainingQty ?? 0),
+                    WeightedDiscount = g.Sum(x => (decimal)(x.RemainingQty ?? 0) * ((decimal?)(x.PurchaseDiscount) ?? 0m)),
+                    WeightedCost = g.Sum(x => (decimal)(x.RemainingQty ?? 0) * x.UnitCost)
+                })
+                .ToListAsync();
+            // تجميع التشغيلات حسب الصنف مع التأكد أن كل عنصر يخص نفس الصنف فقط
+            var batchesByProdId = productIds.Distinct().ToDictionary(
+                pid => pid,
+                pid => batchRowsRaw.Where(b => b.ProdId == pid).ToList());
+
+            var batchMasterList = await _context.Batches
+                .AsNoTracking()
+                .Where(b => productIds.Contains(b.ProdId))
+                .Select(b => new { b.BatchId, b.ProdId, b.BatchNo, b.Expiry, b.PriceRetailBatch })
+                .ToListAsync();
+            var batchLookup = batchMasterList
+                .GroupBy(b => b.ProdId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            // 6.3.2) تحميل أحدث الخصم اليدوي (ProductDiscountOverrides) لكل صنف/مخزن/تشغيلة
+            var overridesList = await _context.ProductDiscountOverrides
+                .AsNoTracking()
+                .Where(x => productIds.Contains(x.ProductId) && (x.WarehouseId == null || (warehouseId.HasValue && x.WarehouseId == warehouseId.Value)))
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => new { x.ProductId, x.WarehouseId, x.BatchId, x.OverrideDiscountPct, x.CreatedAt })
+                .ToListAsync();
+
+            decimal? GetLatestOverride(int p, int? w, int? b)
             {
-                var salesQuery = _context.SalesInvoiceLines
-                    .AsNoTracking()
-                    .Include(sil => sil.SalesInvoice)
-                    .Where(sil =>
-                        productIds.Contains(sil.ProdId) &&
-                        sil.SalesInvoice.IsPosted);
-
-                if (warehouseId.HasValue && warehouseId.Value > 0)
-                {
-                    salesQuery = salesQuery.Where(sil => sil.SalesInvoice.WarehouseId == warehouseId.Value);
-                }
-
-                if (fromDate.HasValue)
-                {
-                    var from = fromDate.Value.Date;
-                    salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
-                }
-
-                if (toDate.HasValue)
-                {
-                    var to = toDate.Value.Date.AddDays(1);
-                    salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate < to);
-                }
-
-                salesQuantities = await salesQuery
-                    .GroupBy(sil => sil.ProdId)
-                    .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m })
-                    .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+                var match = overridesList
+                    .Where(o => o.ProductId == p && (!w.HasValue || o.WarehouseId == null || o.WarehouseId == w) && (o.BatchId == null || (b.HasValue && o.BatchId == b)))
+                    .OrderByDescending(o => o.BatchId.HasValue ? 1 : 0)
+                    .ThenByDescending(o => o.WarehouseId.HasValue ? 1 : 0)
+                    .ThenByDescending(o => o.CreatedAt)
+                    .FirstOrDefault();
+                return match?.OverrideDiscountPct;
             }
 
-            // 6.4.1) تحميل مرتجعات البيع (خصم من كمية المبيعات) عند وجود فلاتر تاريخ
-            Dictionary<int, decimal> returnQuantities = new Dictionary<int, decimal>();
-            if (fromDate.HasValue || toDate.HasValue)
+            // 6.4) تحميل المبيعات: إذا وُجد تاريخ محدد نقتصر على المدى، وإلا نعرض كل المبيعات
+            var salesQuery = _context.SalesInvoiceLines
+                .AsNoTracking()
+                .Include(sil => sil.SalesInvoice)
+                .Where(sil =>
+                    productIds.Contains(sil.ProdId) &&
+                    sil.SalesInvoice.IsPosted);
+
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                salesQuery = salesQuery.Where(sil => sil.SalesInvoice.WarehouseId == warehouseId.Value);
+
+            if (fromDate.HasValue)
             {
-                var returnsQuery = _context.SalesReturnLines
-                    .AsNoTracking()
-                    .Include(srl => srl.SalesReturn)
-                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null && srl.SalesReturn.IsPosted);
-                if (warehouseId.HasValue && warehouseId.Value > 0)
-                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
-                if (fromDate.HasValue)
-                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
-                if (toDate.HasValue)
-                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
-                returnQuantities = await returnsQuery
-                    .GroupBy(srl => srl.ProdId)
-                    .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
-                    .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+                var from = fromDate.Value.Date;
+                salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
             }
+            if (toDate.HasValue)
+            {
+                var to = toDate.Value.Date.AddDays(1);
+                salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate < to);
+            }
+
+            var salesQuantities = await salesQuery
+                .GroupBy(sil => sil.ProdId)
+                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m })
+                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+
+            // 6.4.0) مبيعات حسب التشغيلة (ProdId + BatchNo + Expiry) لعرض المبيعات أمام كل تشغيلة
+            var salesLinesByBatch = await salesQuery
+                .Select(sil => new { sil.ProdId, BatchNo = (sil.BatchNo ?? "").Trim(), sil.Expiry, Qty = (decimal)sil.Qty })
+                .ToListAsync();
+            var salesByBatchKey = salesLinesByBatch
+                .GroupBy(x => new { x.ProdId, x.BatchNo, ExpiryDate = x.Expiry.HasValue ? x.Expiry!.Value.Date : (DateTime?)null })
+                .ToDictionary(g => (g.Key.ProdId, g.Key.BatchNo, g.Key.ExpiryDate), g => g.Sum(x => x.Qty));
+
+            // 6.4.1) مرتجعات البيع (خصم من كمية المبيعات): نفس منطق التاريخ (محدد = في المدى، غير محدد = الكل)
+            var returnsQuery = _context.SalesReturnLines
+                .AsNoTracking()
+                .Include(srl => srl.SalesReturn)
+                .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null && srl.SalesReturn.IsPosted);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
+            if (fromDate.HasValue)
+                returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
+            var returnQuantities = await returnsQuery
+                .GroupBy(srl => srl.ProdId)
+                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
+                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+
+            // مرتجعات حسب التشغيلة (لخصمها من مبيعات كل تشغيلة)
+            var returnsLinesByBatch = await returnsQuery
+                .Select(srl => new { srl.ProdId, BatchNo = (srl.BatchNo ?? "").Trim(), srl.Expiry, Qty = (decimal)srl.Qty })
+                .ToListAsync();
+            var returnsByBatchKey = returnsLinesByBatch
+                .GroupBy(x => new { x.ProdId, x.BatchNo, ExpiryDate = x.Expiry.HasValue ? x.Expiry!.Value.Date : (DateTime?)null })
+                .ToDictionary(g => (g.Key.ProdId, g.Key.BatchNo, g.Key.ExpiryDate), g => g.Sum(x => x.Qty));
 
             // 6.5) بناء reportData من البيانات المحملة
             var reportData = new List<ProductBalanceReportDto>();
@@ -611,35 +706,30 @@ namespace ERP.Controllers
                 if (!includeZeroQty && currentQty == 0)
                     continue;
 
-                // الخصم المرجح
+                // الخصم المرجح (محسوب من StockLedger: متوسط موزون لخصم الشراء حسب الكمية المتبقية)
                 decimal weightedDiscount = 0m;
-                if (stockLedgerDiscount.TryGetValue(prodId, out var discountData))
-                {
-                    if (discountData.TotalRemaining > 0)
-                    {
-                        weightedDiscount = discountData.WeightedDiscount / discountData.TotalRemaining;
-                    }
-                }
+                if (stockLedgerDiscount.TryGetValue(prodId, out var discountData) && discountData.TotalRemaining > 0)
+                    weightedDiscount = discountData.WeightedDiscount / discountData.TotalRemaining;
 
                 // صافي المبيعات (المبيعات − مرتجعات البيع)
                 decimal salesQty = salesQuantities.TryGetValue(prodId, out var sales) ? sales : 0m;
                 if (returnQuantities.TryGetValue(prodId, out var retQty))
                     salesQty = Math.Max(0m, salesQty - retQty);
 
-                // تكلفة العلبة
+                // تكلفة العلبة (محسوبة من StockLedger: متوسط موزون للتكلفة حسب الكمية المتبقية)
                 decimal unitCost = 0m;
-                if (stockLedgerDiscount.TryGetValue(prodId, out var costData))
-                {
-                    if (costData.TotalRemaining > 0)
-                    {
-                        unitCost = costData.WeightedCost / costData.TotalRemaining;
-                    }
-                }
+                if (stockLedgerDiscount.TryGetValue(prodId, out var costData) && costData.TotalRemaining > 0)
+                    unitCost = costData.WeightedCost / costData.TotalRemaining;
 
                 // التكلفة الإجمالية
                 decimal totalCost = currentQty * unitCost;
 
-                reportData.Add(new ProductBalanceReportDto
+                // الخصم اليدوي والفعّال (الجدول الجديد هو مصدر الخصم في البيع)
+                var manualPct = GetLatestOverride(prodId, warehouseId, null);
+                var effectivePct = manualPct ?? weightedDiscount;
+                var profitDelta = (effectivePct - weightedDiscount) * product.PriceRetail * currentQty / 100m;
+
+                var dto = new ProductBalanceReportDto
                 {
                     ProdId = prodId,
                     ProdCode = prodId.ToString(),
@@ -649,11 +739,73 @@ namespace ERP.Controllers
                     ProductBonusGroupName = product.ProductBonusGroupName ?? "",
                     CurrentQty = currentQty,
                     WeightedDiscount = weightedDiscount,
+                    ManualDiscountPct = manualPct,
+                    EffectiveDiscountPct = effectivePct,
+                    ProfitDeltaExpected = profitDelta,
                     SalesQty = salesQty,
                     PriceRetail = product.PriceRetail,
                     UnitCost = unitCost,
                     TotalCost = totalCost
-                });
+                };
+                // التشغيلات: نعرض فقط التشغيلات التي لها كميات فعلية في StockLedger، والصنف نعرض له قسم التشغيلات فقط إذا كان له أكثر من تشغيلة واحدة (٢+)
+                if (includeBatches && batchLookup.TryGetValue(prodId, out var prodBatches) && prodBatches != null)
+                {
+                    var ledgerList = batchesByProdId.TryGetValue(prodId, out var blist) ? blist : null;
+                    var batchRows = new List<ProductBalanceBatchRow>();
+                    foreach (var m in prodBatches.OrderBy(m => m.Expiry).ThenBy(m => m.BatchNo ?? ""))
+                    {
+                        var bExp = m.Expiry.Date;
+                        var match = ledgerList?.FirstOrDefault(b => (b.BatchNo ?? "").Trim() == (m.BatchNo ?? "").Trim() && (b.Expiry?.Date ?? DateTime.MinValue) == bExp);
+                        decimal brQty = match != null ? match.TotalRemaining : 0m;
+                        if (brQty <= 0) continue; // نعرض فقط التشغيلات التي لها كمية فعلية
+                        decimal calcDisc = match != null ? match.WeightedDiscount / brQty : 0m;
+                        decimal calcCost = match != null ? match.WeightedCost / brQty : 0m;
+                        var manualBatch = GetLatestOverride(prodId, warehouseId, m.BatchId);
+                        var effectiveBatch = manualBatch ?? calcDisc;
+                        var batchKey = (prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: m.Expiry.Date);
+                        decimal batchSalesQty = salesByBatchKey.TryGetValue(batchKey, out var bs) ? bs : 0m;
+                        if (returnsByBatchKey.TryGetValue(batchKey, out var br))
+                            batchSalesQty = Math.Max(0m, batchSalesQty - br);
+                        decimal batchPriceRetail = (m.PriceRetailBatch ?? 0m) > 0m ? (m.PriceRetailBatch ?? 0m) : product.PriceRetail;
+                        batchRows.Add(new ProductBalanceBatchRow
+                        {
+                            BatchId = m.BatchId,
+                            BatchNo = m.BatchNo,
+                            Expiry = m.Expiry,
+                            CurrentQty = (int)brQty,
+                            WeightedDiscount = calcDisc,
+                            ManualDiscountPct = manualBatch,
+                            EffectiveDiscountPct = effectiveBatch,
+                            UnitCost = calcCost,
+                            TotalCost = brQty * calcCost,
+                            SalesQty = batchSalesQty,
+                            PriceRetail = batchPriceRetail
+                        });
+                    }
+                    if (batchRows.Count >= 2) // الصنف له أكثر من تشغيلة واحدة فقط نعرض قسم التشغيلات
+                    {
+                        dto.Batches = batchRows;
+                        // تكلفة الصف الرئيسي = إجمالي تكلفات التشغيلات المعروضة (حتى يتطابق الرقم مع مجموع الثلاث تشغيلات)
+                        decimal batchesTotalCost = batchRows.Sum(b => b.TotalCost);
+                        int batchesTotalQty = batchRows.Sum(b => b.CurrentQty);
+                        dto.TotalCost = batchesTotalCost;
+                        dto.UnitCost = batchesTotalQty > 0 ? batchesTotalCost / batchesTotalQty : unitCost;
+                    }
+                    else if (batchRows.Count == 1)
+                    {
+                        // تشغيلة واحدة: عرض رقم التشغيلة والتاريخ في الصف الرئيسي
+                        dto.FirstBatchNo = batchRows[0].BatchNo;
+                        dto.FirstBatchExpiry = batchRows[0].Expiry;
+                    }
+                }
+                // إذا لم يُملأ التشغيلة/التاريخ من جدول Batches، استخدم أول تشغيلة من دفتر الحركة (StockLedger) إن وُجدت
+                if (includeBatches && dto.FirstBatchNo == null && dto.Batches == null && batchesByProdId.TryGetValue(prodId, out var ledgerOnly) && ledgerOnly != null && ledgerOnly.Count > 0)
+                {
+                    var first = ledgerOnly.OrderBy(b => b.Expiry).ThenBy(b => b.BatchNo ?? "").First();
+                    dto.FirstBatchNo = string.IsNullOrWhiteSpace(first.BatchNo) ? null : (first.BatchNo ?? "").Trim();
+                    dto.FirstBatchExpiry = first.Expiry;
+                }
+                reportData.Add(dto);
             }
 
             // =========================================================
@@ -735,6 +887,80 @@ namespace ERP.Controllers
             ViewBag.TotalCost = totalCostSum;
 
             return View();
+        }
+
+        /// <summary>
+        /// حفظ الخصم اليدوي للبيع من تقرير أرصدة الأصناف (AJAX).
+        /// إذا القيمة فارغة: حذف أحدث override مطابق. وإلا: إدراج سجل جديد.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> SaveManualDiscount(
+            [FromForm] int productId,
+            [FromForm] int? warehouseId,
+            [FromForm] int? batchId,
+            [FromForm] decimal? manualDiscountPct,
+            [FromForm] string? reason)
+        {
+            if (productId <= 0)
+            {
+                return Json(new { success = false, message = "معرف الصنف غير صالح." });
+            }
+
+            var userName = User?.Identity?.Name ?? "SYSTEM";
+            int? wh = (warehouseId.HasValue && warehouseId.Value > 0) ? warehouseId : null;
+            int? bat = (batchId.HasValue && batchId.Value > 0) ? batchId : null;
+
+            if (!manualDiscountPct.HasValue || (manualDiscountPct.HasValue && manualDiscountPct.Value < 0))
+            {
+                // إلغاء الخصم اليدوي: حذف أحدث سجل مطابق (خيار A)
+                var toDelete = await _context.ProductDiscountOverrides
+                    .Where(x => x.ProductId == productId
+                        && (wh == null ? x.WarehouseId == null : x.WarehouseId == wh)
+                        && (bat == null ? x.BatchId == null : x.BatchId == bat))
+                    .OrderByDescending(x => x.CreatedAt)
+                    .FirstOrDefaultAsync();
+
+                if (toDelete != null)
+                {
+                    _context.ProductDiscountOverrides.Remove(toDelete);
+                    await _context.SaveChangesAsync();
+                    await _activityLogger.LogAsync(UserActionType.Edit, "ProductDiscountOverride", toDelete.Id, "إلغاء الخصم اليدوي للبيع (من تقرير أرصدة الأصناف)", newValues: $"{{\"ProductId\":{productId},\"WarehouseId\":{warehouseId},\"BatchId\":{batchId}}}");
+                }
+                return Json(new { success = true, message = "تم إلغاء الخصم اليدوي." });
+            }
+
+            decimal value = Math.Min(100m, Math.Max(0m, manualDiscountPct.Value));
+
+            // عدم التكرار: إدراج سجل جديد فقط عند تغيّر القيمة (أحدث override لنفس المفتاح له نفس النسبة => لا إدراج)
+            var latest = await _context.ProductDiscountOverrides
+                .AsNoTracking()
+                .Where(x => x.ProductId == productId
+                    && (wh == null ? x.WarehouseId == null : x.WarehouseId == wh)
+                    && (bat == null ? x.BatchId == null : x.BatchId == bat))
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => new { x.OverrideDiscountPct })
+                .FirstOrDefaultAsync();
+
+            if (latest != null && latest.OverrideDiscountPct == value)
+            {
+                return Json(new { success = true, message = "القيمة نفسها مسجلة مسبقاً، لم يُضف سجل جديد." });
+            }
+
+            _context.ProductDiscountOverrides.Add(new ProductDiscountOverride
+            {
+                ProductId = productId,
+                WarehouseId = wh,
+                BatchId = bat,
+                OverrideDiscountPct = value,
+                Reason = reason?.Length > 200 ? reason.Substring(0, 200) : reason,
+                CreatedBy = userName,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _context.SaveChangesAsync();
+            await _activityLogger.LogAsync(UserActionType.Create, "ProductDiscountOverride", null, "تعيين خصم يدوي للبيع (من تقرير أرصدة الأصناف)", newValues: $"{{\"ProductId\":{productId},\"WarehouseId\":{warehouseId},\"BatchId\":{batchId},\"OverrideDiscountPct\":{value}}}");
+
+            return Json(new { success = true, message = "تم حفظ الخصم اليدوي." });
         }
 
         // =========================================================
@@ -1620,6 +1846,7 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             bool includeZeroQty = false,
+            bool includeBatches = true,
             string? sortBy = "name",
             string? sortDir = "asc")
         {
@@ -1630,13 +1857,7 @@ namespace ERP.Controllers
                 includeZeroQty = false;
             }
 
-            // عند عدم تحديد تاريخ: استخدام الشهر الحالي افتراضياً (نفس ProductBalances)
-            var todayExport = DateTime.Today;
-            if (!fromDate.HasValue && !toDate.HasValue)
-            {
-                fromDate = new DateTime(todayExport.Year, todayExport.Month, 1);
-                toDate = todayExport;
-            }
+            // عند عدم تحديد تاريخ: لا نطبّق فلتر "أصناف تم شراؤها في الفترة"
 
             // بناء الاستعلام (نفس منطق ProductBalances)
             var productsQuery = _context.Products
@@ -1673,12 +1894,29 @@ namespace ERP.Controllers
             productsQuery = productsQuery.Where(p => p.IsActive == true);
 
             var productIds = await productsQuery.Select(p => p.ProdId).ToListAsync();
+
+            // أصناف تم شراؤها في الفترة (من إلى مع وقت) — نفس منطق ProductBalances
+            if (productIds.Count > 0 && (fromDate.HasValue || toDate.HasValue))
+            {
+                var fromDateUtc = fromDate.HasValue ? (DateTime?)DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local) : null;
+                var toDateUtc = toDate.HasValue ? (DateTime?)DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : null;
+                var purchaseInRangeQuery = _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.SourceType == "Purchase" && productIds.Contains(sl.ProdId));
+                if (fromDateUtc.HasValue)
+                    purchaseInRangeQuery = purchaseInRangeQuery.Where(sl => sl.TranDate >= fromDateUtc.Value);
+                if (toDateUtc.HasValue)
+                    purchaseInRangeQuery = purchaseInRangeQuery.Where(sl => sl.TranDate <= toDateUtc.Value);
+                var purchasedIds = await purchaseInRangeQuery.Select(sl => sl.ProdId).Distinct().ToListAsync();
+                productIds = productIds.Intersect(purchasedIds).ToList();
+            }
+
             if (productIds.Count == 0)
             {
                 return BadRequest("لا توجد بيانات للتصدير");
             }
 
-            // تحميل البيانات بشكل مجمع (نفس منطق ProductBalances)
+            // تحميل البيانات بشكل مجمع (نفس منطق ProductBalances، مع الخصم/التكلفة المعدّلة)
             var productsDict = await productsQuery
                 .Select(p => new
                 {
@@ -1721,57 +1959,74 @@ namespace ERP.Controllers
                 })
                 .ToDictionaryAsync(x => x.ProdId);
 
-            Dictionary<int, decimal> salesQuantities = new Dictionary<int, decimal>();
-            if (fromDate.HasValue || toDate.HasValue)
+            var batchLedgerQueryExp = _context.StockLedger.AsNoTracking()
+                .Where(x => productIds.Contains(x.ProdId) && x.SourceType == "Purchase" && (x.RemainingQty ?? 0) > 0);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                batchLedgerQueryExp = batchLedgerQueryExp.Where(x => x.WarehouseId == warehouseId.Value);
+            var batchRowsRawExp = await batchLedgerQueryExp
+                .GroupBy(x => new { x.ProdId, x.BatchNo, x.Expiry })
+                .Select(g => new { g.Key.ProdId, g.Key.BatchNo, g.Key.Expiry, TotalRemaining = g.Sum(x => x.RemainingQty ?? 0), WeightedDiscount = g.Sum(x => (decimal)(x.RemainingQty ?? 0) * ((decimal?)(x.PurchaseDiscount) ?? 0m)), WeightedCost = g.Sum(x => (decimal)(x.RemainingQty ?? 0) * x.UnitCost) })
+                .ToListAsync();
+            var batchesByProdIdExp = productIds.Distinct().ToDictionary(pid => pid, pid => batchRowsRawExp.Where(b => b.ProdId == pid).ToList());
+            var batchMasterListExp = await _context.Batches.AsNoTracking().Where(b => productIds.Contains(b.ProdId)).Select(b => new { b.BatchId, b.ProdId, b.BatchNo, b.Expiry }).ToListAsync();
+            var batchLookupExp = batchMasterListExp.GroupBy(b => b.ProdId).ToDictionary(g => g.Key, g => g.ToList());
+
+            // تحميل الخصم اليدوي للتصدير (نفس منطق ProductBalances)
+            var overridesListExp = await _context.ProductDiscountOverrides
+                .AsNoTracking()
+                .Where(x => productIds.Contains(x.ProductId) && (x.WarehouseId == null || (warehouseId.HasValue && x.WarehouseId == warehouseId.Value)))
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => new { x.ProductId, x.WarehouseId, x.BatchId, x.OverrideDiscountPct, x.CreatedAt })
+                .ToListAsync();
+            decimal? GetLatestOverrideExp(int p, int? w, int? b)
             {
-                var salesQuery = _context.SalesInvoiceLines
-                    .AsNoTracking()
-                    .Include(sil => sil.SalesInvoice)
-                    .Where(sil =>
-                        productIds.Contains(sil.ProdId) &&
-                        sil.SalesInvoice.IsPosted);
-
-                if (warehouseId.HasValue && warehouseId.Value > 0)
-                {
-                    salesQuery = salesQuery.Where(sil => sil.SalesInvoice.WarehouseId == warehouseId.Value);
-                }
-
-                if (fromDate.HasValue)
-                {
-                    var from = fromDate.Value.Date;
-                    salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
-                }
-
-                if (toDate.HasValue)
-                {
-                    var to = toDate.Value.Date.AddDays(1);
-                    salesQuery = salesQuery.Where(sil => sil.SalesInvoice.SIDate < to);
-                }
-
-                salesQuantities = await salesQuery
-                    .GroupBy(sil => sil.ProdId)
-                    .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m })
-                    .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+                var match = overridesListExp
+                    .Where(o => o.ProductId == p && (!w.HasValue || o.WarehouseId == null || o.WarehouseId == w) && (o.BatchId == null || (b.HasValue && o.BatchId == b)))
+                    .OrderByDescending(o => o.BatchId.HasValue ? 1 : 0)
+                    .ThenByDescending(o => o.WarehouseId.HasValue ? 1 : 0)
+                    .ThenByDescending(o => o.CreatedAt)
+                    .FirstOrDefault();
+                return match?.OverrideDiscountPct;
             }
 
-            Dictionary<int, decimal> returnQuantities = new Dictionary<int, decimal>();
-            if (fromDate.HasValue || toDate.HasValue)
+            // المبيعات ومرتجعات البيع: إذا وُجد تاريخ محدد نقتصر على المدى، وإلا كل المبيعات/المرتجعات
+            var salesQueryExp = _context.SalesInvoiceLines
+                .AsNoTracking()
+                .Include(sil => sil.SalesInvoice)
+                .Where(sil =>
+                    productIds.Contains(sil.ProdId) &&
+                    sil.SalesInvoice.IsPosted);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                salesQueryExp = salesQueryExp.Where(sil => sil.SalesInvoice.WarehouseId == warehouseId.Value);
+            if (fromDate.HasValue)
             {
-                var returnsQuery = _context.SalesReturnLines
-                    .AsNoTracking()
-                    .Include(srl => srl.SalesReturn)
-                    .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null && srl.SalesReturn.IsPosted);
-                if (warehouseId.HasValue && warehouseId.Value > 0)
-                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
-                if (fromDate.HasValue)
-                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
-                if (toDate.HasValue)
-                    returnsQuery = returnsQuery.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
-                returnQuantities = await returnsQuery
-                    .GroupBy(srl => srl.ProdId)
-                    .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
-                    .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+                var from = fromDate.Value.Date;
+                salesQueryExp = salesQueryExp.Where(sil => sil.SalesInvoice.SIDate >= from);
             }
+            if (toDate.HasValue)
+            {
+                var to = toDate.Value.Date.AddDays(1);
+                salesQueryExp = salesQueryExp.Where(sil => sil.SalesInvoice.SIDate < to);
+            }
+            var salesQuantities = await salesQueryExp
+                .GroupBy(sil => sil.ProdId)
+                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m })
+                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+
+            var returnsQueryExp = _context.SalesReturnLines
+                .AsNoTracking()
+                .Include(srl => srl.SalesReturn)
+                .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null && srl.SalesReturn.IsPosted);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                returnsQueryExp = returnsQueryExp.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
+            if (fromDate.HasValue)
+                returnsQueryExp = returnsQueryExp.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                returnsQueryExp = returnsQueryExp.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
+            var returnQuantities = await returnsQueryExp
+                .GroupBy(srl => srl.ProdId)
+                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
+                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
 
             var reportData = new List<ProductBalanceReportDto>();
 
@@ -1785,30 +2040,23 @@ namespace ERP.Controllers
                     continue;
 
                 decimal weightedDiscount = 0m;
-                if (stockLedgerDiscount.TryGetValue(prodId, out var discountData))
-                {
-                    if (discountData.TotalRemaining > 0)
-                    {
-                        weightedDiscount = discountData.WeightedDiscount / discountData.TotalRemaining;
-                    }
-                }
+                if (stockLedgerDiscount.TryGetValue(prodId, out var discountDataExp) && discountDataExp.TotalRemaining > 0)
+                    weightedDiscount = discountDataExp.WeightedDiscount / discountDataExp.TotalRemaining;
 
                 decimal salesQty = salesQuantities.TryGetValue(prodId, out var sales) ? sales : 0m;
                 if (returnQuantities.TryGetValue(prodId, out var retQty))
                     salesQty = Math.Max(0m, salesQty - retQty);
 
                 decimal unitCost = 0m;
-                if (stockLedgerDiscount.TryGetValue(prodId, out var costData))
-                {
-                    if (costData.TotalRemaining > 0)
-                    {
-                        unitCost = costData.WeightedCost / costData.TotalRemaining;
-                    }
-                }
+                if (stockLedgerDiscount.TryGetValue(prodId, out var costDataExp) && costDataExp.TotalRemaining > 0)
+                    unitCost = costDataExp.WeightedCost / costDataExp.TotalRemaining;
 
                 decimal totalCost = currentQty * unitCost;
+                var manualPctExp = GetLatestOverrideExp(prodId, warehouseId, null);
+                var effectivePctExp = manualPctExp ?? weightedDiscount;
+                var profitDeltaExp = (effectivePctExp - weightedDiscount) * product.PriceRetail * currentQty / 100m;
 
-                reportData.Add(new ProductBalanceReportDto
+                var dtoExp = new ProductBalanceReportDto
                 {
                     ProdId = prodId,
                     ProdCode = prodId.ToString(),
@@ -1818,11 +2066,40 @@ namespace ERP.Controllers
                     ProductBonusGroupName = product.ProductBonusGroupName ?? "",
                     CurrentQty = currentQty,
                     WeightedDiscount = weightedDiscount,
+                    ManualDiscountPct = manualPctExp,
+                    EffectiveDiscountPct = effectivePctExp,
+                    ProfitDeltaExpected = profitDeltaExp,
                     SalesQty = salesQty,
                     PriceRetail = product.PriceRetail,
                     UnitCost = unitCost,
                     TotalCost = totalCost
-                });
+                };
+                if (includeBatches && batchLookupExp.TryGetValue(prodId, out var prodBatchesExp) && prodBatchesExp != null)
+                {
+                    var ledgerListExp = batchesByProdIdExp.TryGetValue(prodId, out var blistExp) ? blistExp : null;
+                    var batchRowsExp = new List<ProductBalanceBatchRow>();
+                    foreach (var m in prodBatchesExp.OrderBy(m => m.Expiry).ThenBy(m => m.BatchNo ?? ""))
+                    {
+                        var bExp = m.Expiry.Date;
+                        var matchExp = ledgerListExp?.FirstOrDefault(b => (b.BatchNo ?? "").Trim() == (m.BatchNo ?? "").Trim() && (b.Expiry?.Date ?? DateTime.MinValue) == bExp);
+                        decimal brQty = matchExp != null ? matchExp.TotalRemaining : 0m;
+                        if (brQty <= 0) continue;
+                        decimal brDisc = matchExp != null ? matchExp.WeightedDiscount / brQty : 0m;
+                        decimal brCost = matchExp != null ? matchExp.WeightedCost / brQty : 0m;
+                        var manualBatchExp = GetLatestOverrideExp(prodId, warehouseId, m.BatchId);
+                        var effectiveBatchExp = manualBatchExp ?? brDisc;
+                        batchRowsExp.Add(new ProductBalanceBatchRow { BatchNo = m.BatchNo, Expiry = m.Expiry, CurrentQty = (int)brQty, WeightedDiscount = brDisc, ManualDiscountPct = manualBatchExp, EffectiveDiscountPct = effectiveBatchExp, UnitCost = brCost, TotalCost = brQty * brCost });
+                    }
+                    if (batchRowsExp.Count >= 2)
+                    {
+                        dtoExp.Batches = batchRowsExp;
+                        decimal batchesTotalCostExp = batchRowsExp.Sum(b => b.TotalCost);
+                        int batchesTotalQtyExp = batchRowsExp.Sum(b => b.CurrentQty);
+                        dtoExp.TotalCost = batchesTotalCostExp;
+                        dtoExp.UnitCost = batchesTotalQtyExp > 0 ? batchesTotalCostExp / batchesTotalQtyExp : unitCost;
+                    }
+                }
+                reportData.Add(dtoExp);
             }
 
             // الترتيب (نفس منطق ProductBalances)
@@ -1870,14 +2147,16 @@ namespace ERP.Controllers
             worksheet.Cell(row, 5).Value = "مجموعة البونص";
             worksheet.Cell(row, 6).Value = "الكمية الحالية";
             worksheet.Cell(row, 7).Value = "الخصم المرجح %";
-            worksheet.Cell(row, 8).Value = "المبيعات";
-            worksheet.Cell(row, 9).Value = "سعر الجمهور";
-            worksheet.Cell(row, 10).Value = "تكلفة العلبة";
-            worksheet.Cell(row, 11).Value = "التكلفة الإجمالية";
+            worksheet.Cell(row, 8).Value = "الخصم اليدوي للبيع %";
+            worksheet.Cell(row, 9).Value = "الخصم الفعّال %";
+            worksheet.Cell(row, 10).Value = "المبيعات";
+            worksheet.Cell(row, 11).Value = "سعر الجمهور";
+            worksheet.Cell(row, 12).Value = "تكلفة العلبة";
+            worksheet.Cell(row, 13).Value = "التكلفة الإجمالية";
 
-            worksheet.Range(row, 1, row, 11).Style.Font.Bold = true;
+            worksheet.Range(row, 1, row, 13).Style.Font.Bold = true;
 
-            // البيانات
+            // البيانات (صف الصنف ثم صفوف التشغيلات إن وُجدت)
             row = 2;
             foreach (var item in reportData)
             {
@@ -1888,11 +2167,39 @@ namespace ERP.Controllers
                 worksheet.Cell(row, 5).Value = item.ProductBonusGroupName;
                 worksheet.Cell(row, 6).Value = item.CurrentQty;
                 worksheet.Cell(row, 7).Value = item.WeightedDiscount;
-                worksheet.Cell(row, 8).Value = item.SalesQty;
-                worksheet.Cell(row, 9).Value = item.PriceRetail;
-                worksheet.Cell(row, 10).Value = item.UnitCost;
-                worksheet.Cell(row, 11).Value = item.TotalCost;
+                if (item.ManualDiscountPct.HasValue)
+                    worksheet.Cell(row, 8).Value = item.ManualDiscountPct.Value;
+                else
+                    worksheet.Cell(row, 8).Value = string.Empty;
+                worksheet.Cell(row, 9).Value = item.EffectiveDiscountPct;
+                worksheet.Cell(row, 10).Value = item.SalesQty;
+                worksheet.Cell(row, 11).Value = item.PriceRetail;
+                worksheet.Cell(row, 12).Value = item.UnitCost;
+                worksheet.Cell(row, 13).Value = item.TotalCost;
                 row++;
+                if (item.Batches != null && item.Batches.Count >= 2)
+                {
+                    foreach (var batch in item.Batches)
+                    {
+                        worksheet.Cell(row, 1).Value = "";
+                        worksheet.Cell(row, 2).Value = "  └ تشغيلة: " + (batch.BatchNo ?? "-") + (batch.Expiry.HasValue ? " | " + batch.Expiry.Value.ToString("yyyy-MM-dd") : "");
+                        worksheet.Cell(row, 3).Value = "";
+                        worksheet.Cell(row, 4).Value = "";
+                        worksheet.Cell(row, 5).Value = "";
+                        worksheet.Cell(row, 6).Value = batch.CurrentQty;
+                        worksheet.Cell(row, 7).Value = batch.WeightedDiscount;
+                        if (batch.ManualDiscountPct.HasValue)
+                            worksheet.Cell(row, 8).Value = batch.ManualDiscountPct.Value;
+                        else
+                            worksheet.Cell(row, 8).Value = string.Empty;
+                        worksheet.Cell(row, 9).Value = batch.EffectiveDiscountPct;
+                        worksheet.Cell(row, 10).Value = "";
+                        worksheet.Cell(row, 11).Value = "";
+                        worksheet.Cell(row, 12).Value = batch.UnitCost;
+                        worksheet.Cell(row, 13).Value = batch.TotalCost;
+                        row++;
+                    }
+                }
             }
 
             worksheet.Columns().AdjustToContents();
