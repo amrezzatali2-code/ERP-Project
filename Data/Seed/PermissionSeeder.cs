@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -41,7 +41,8 @@ namespace ERP.Data.Seed
                         currentModule != "Inventory" &&
                         currentModule != "Purchasing" &&
                         currentModule != "Sales" &&
-                        currentModule != "Accounts")
+                        currentModule != "Accounts" &&
+                        currentModule != "Reports")
                     {
                         // مثال: "مخازن فرع فيصل" أو "حسابات داخلية" → سيبها زي ما هي
                         continue;
@@ -76,6 +77,8 @@ namespace ERP.Data.Seed
                             targetModule = "المبيعات"; break;
                         case "Accounts":
                             targetModule = "الحسابات"; break;
+                        case "Reports":
+                            targetModule = "التقارير"; break;
                         default:
                             // مفتاح غير معروف → ما نغيرش حاجة
                             break;
@@ -167,6 +170,7 @@ namespace ERP.Data.Seed
             // ================== Security (المستخدمون والصلاحيات) ==================
             AddCrud("Security", "المستخدمون والصلاحيات", "Users", "المستخدمين");
             AddCrud("Security", "المستخدمون والصلاحيات", "Roles", "أدوار المستخدمين");
+            AddCrud("Security", "المستخدمون والصلاحيات", "Permissions", "الصلاحيات الأساسية");  // قائمة الصلاحيات (مطابق لـ PermissionCodes.Security.Permissions_*)
             AddCrud("Security", "المستخدمون والصلاحيات", "RolePermissions", "صلاحيات الأدوار");
             AddCrud("Security", "المستخدمون والصلاحيات", "UserRoles", "ربط المستخدمين بالأدوار");
             AddCrud("Security", "المستخدمون والصلاحيات", "UserPermissions", "صلاحيات المستخدمين");
@@ -228,14 +232,27 @@ namespace ERP.Data.Seed
             AddDocument("Accounts", "الحسابات", "DebitNote", "إشعار خصم");
             AddDocument("Accounts", "الحسابات", "CreditNote", "إشعار إضافة");
 
+            // ================== التقارير ==================
+            Add("Reports", "التقارير", "Reports.CustomerBalances.View", "تقرير أرصدة العملاء");
+            Add("Reports", "التقارير", "Reports.ProductBalances.View", "تقرير أرصدة الأصناف");
+            Add("Reports", "التقارير", "Reports.ProductProfits.View", "تقرير أرباح الأصناف");
+            Add("Reports", "التقارير", "Reports.CustomerProfits.View", "تقرير أرباح العملاء");
+
+            // ================== توحيد أسماء الصلاحيات المكررة (مثل لوحة التحكم) ==================
+            var dashOld = await db.Permissions.FirstOrDefaultAsync(p => p.Code == "Dashboard.View");
+            if (dashOld != null)
+            {
+                dashOld.NameAr = "عرض لوحة التحكم (كود قديم)";
+                dashOld.Module = "لوحة التحكم";
+                anyModuleUpdated = true;
+            }
+
             // ================== حفظ أي تعديلات / إضافات ==================
-            // إضافة أي صلاحيات جديدة
             if (toInsert.Count > 0)
             {
                 await db.Permissions.AddRangeAsync(toInsert);
             }
 
-            // نحفظ لو فيه صلاحيات جديدة أو موديولات قديمة اتعدلت
             if (toInsert.Count > 0 || anyModuleUpdated)
             {
                 await db.SaveChangesAsync();

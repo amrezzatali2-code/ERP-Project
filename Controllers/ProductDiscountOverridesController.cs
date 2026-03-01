@@ -7,8 +7,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;
+using ERP.Filters;
 using ERP.Models;
 using ERP.Infrastructure;
+using ERP.Security;
 using ERP.Services;
 using ERP.ViewModels;
 
@@ -17,6 +19,7 @@ namespace ERP.Controllers
     /// <summary>
     /// قائمة الخصم اليدوي للبيع: كل صنف في الأرصدة مع الخصم الفعّال (يدوي أو مرجّح).
     /// </summary>
+    [RequirePermission(PermissionCodes.SalesDiscounts.DiscountOverrides_View)]
     public class ProductDiscountOverridesController : Controller
     {
         private readonly AppDbContext _db;

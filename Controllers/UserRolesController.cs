@@ -4,8 +4,10 @@ using System.Linq;                                // أوامر LINQ
 using System.Text;                                // StringBuilder للتصدير
 using System.Threading.Tasks;                     // Task و async
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult لتقسيم الصفحات
 using ERP.Models;                                 // الموديلات UserRole, User, Role
+using ERP.Security;
 using ERP.ViewModels;                             // RolePermissionEditItem
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
@@ -185,6 +187,7 @@ namespace ERP.Controllers
         /// قائمة ربط المستخدمين بالأدوار مع:
         /// بحث + ترتيب + تقسيم صفحات + فلاتر، بنظام القوائم الموحد.
         /// </summary>
+        [RequirePermission(PermissionCodes.Security.UserRoles_View)]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
@@ -428,10 +431,11 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// إرجاع كل الصلاحيات مع إمكانية التعديل (شيك بوكس) — الحالة الابتدائية من الدور.
+        /// إرجاع كل الصلاحيات مع إمكانية التعديل (شيك بوكس).
+        /// الحالة الابتدائية من الدور. إذا وُجد userId تُحمّل صلاحيات المستخدم الفعلية (دور + إضافية − ممنوعة).
         /// </summary>
         [HttpGet]
-        public async Task<IActionResult> GetRolePermissionsEditable(int roleId)
+        public async Task<IActionResult> GetRolePermissionsEditable(int roleId, int userId = 0)
         {
             if (roleId <= 0)
             {
@@ -443,6 +447,21 @@ namespace ERP.Controllers
                 .Select(rp => rp.PermissionId)
                 .ToListAsync());
 
+            var effectiveAllowed = rolePermIds;
+            if (userId > 0)
+            {
+                var userExtraIds = new HashSet<int>(await _context.UserExtraPermissions
+                    .Where(x => x.UserId == userId)
+                    .Select(x => x.PermissionId)
+                    .ToListAsync());
+                var userDeniedIds = new HashSet<int>(await _context.UserDeniedPermissions
+                    .Where(x => x.UserId == userId)
+                    .Select(x => x.PermissionId)
+                    .ToListAsync());
+                effectiveAllowed = new HashSet<int>(
+                    rolePermIds.Where(pid => !userDeniedIds.Contains(pid)).Union(userExtraIds));
+            }
+
             var allPerms = await _context.Permissions
                 .AsNoTracking()
                 .OrderBy(p => p.Module)
@@ -453,9 +472,12 @@ namespace ERP.Controllers
                     Code = p.Code,
                     NameAr = p.NameAr,
                     Module = p.Module,
-                    IsAllowed = rolePermIds.Contains(p.PermissionId)
+                    IsAllowed = false
                 })
                 .ToListAsync();
+
+            foreach (var p in allPerms)
+                p.IsAllowed = effectiveAllowed.Contains(p.PermissionId);
 
             return PartialView("_RolePermissionsEditable", allPerms);
         }
@@ -489,7 +511,8 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             int id,
-            [Bind("Id,UserId,RoleId,IsPrimary,AssignedAt")] UserRole item)
+            [Bind("Id,UserId,RoleId,IsPrimary,AssignedAt")] UserRole item,
+            int[]? selectedPermissionIds)
         {
             if (id != item.Id)
                 return NotFound();
@@ -513,7 +536,50 @@ namespace ERP.Controllers
                     _context.Update(item);
                     await _context.SaveChangesAsync();
 
-                    TempData["Success"] = "تم تعديل دور المستخدم بنجاح.";
+                    // حفظ الصلاحيات (إضافية / ممنوعة) مثل Create — يقبل صلاحيات أكثر من الدور
+                    var allowed = new HashSet<int>(selectedPermissionIds ?? Array.Empty<int>());
+                    var rolePermIds = await _context.RolePermissions
+                        .Where(rp => rp.RoleId == item.RoleId && rp.IsAllowed)
+                        .Select(rp => rp.PermissionId)
+                        .ToListAsync();
+
+                    foreach (var permId in rolePermIds.Where(pid => !allowed.Contains(pid)))
+                    {
+                        if (!await _context.UserDeniedPermissions.AnyAsync(x => x.UserId == item.UserId && x.PermissionId == permId))
+                        {
+                            _context.UserDeniedPermissions.Add(new UserDeniedPermission
+                            {
+                                UserId = item.UserId,
+                                PermissionId = permId,
+                                IsAllowed = false
+                            });
+                        }
+                    }
+                    var toRemoveDenied = await _context.UserDeniedPermissions
+                        .Where(x => x.UserId == item.UserId && rolePermIds.Contains(x.PermissionId) && allowed.Contains(x.PermissionId))
+                        .ToListAsync();
+                    _context.UserDeniedPermissions.RemoveRange(toRemoveDenied);
+
+                    var allPermIds = await _context.Permissions.Where(p => p.IsActive).Select(p => p.PermissionId).ToListAsync();
+                    foreach (var permId in allPermIds.Where(pid => allowed.Contains(pid) && !rolePermIds.Contains(pid)))
+                    {
+                        if (!await _context.UserExtraPermissions.AnyAsync(x => x.UserId == item.UserId && x.PermissionId == permId))
+                        {
+                            _context.UserExtraPermissions.Add(new UserExtraPermissions
+                            {
+                                UserId = item.UserId,
+                                PermissionId = permId
+                            });
+                        }
+                    }
+                    var toRemoveExtra = await _context.UserExtraPermissions
+                        .Where(x => x.UserId == item.UserId && !allowed.Contains(x.PermissionId) && !rolePermIds.Contains(x.PermissionId))
+                        .ToListAsync();
+                    _context.UserExtraPermissions.RemoveRange(toRemoveExtra);
+
+                    await _context.SaveChangesAsync();
+
+                    TempData["Success"] = "تم تعديل دور المستخدم وصلاحياته بنجاح.";
                 }
                 catch (DbUpdateConcurrencyException)
                 {

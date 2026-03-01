@@ -71,19 +71,24 @@
     }
     <script>
         const rolePermsUrl = '@Url.Action("GetRolePermissionsEditable", "UserRoles")';
+        const currentUserId = @(Model?.UserId ?? 0);
 
         document.addEventListener("DOMContentLoaded", function () {
             const roleSelect = document.getElementById("RoleId");
+            const userSelect = document.querySelector("select[name='UserId']");
             const box = document.getElementById("role-permissions-box");
             if (!roleSelect || !box) return;
 
             function loadPermissions() {
                 const roleId = roleSelect.value;
+                const userId = (userSelect && userSelect.value) ? parseInt(userSelect.value, 10) : currentUserId;
                 if (!roleId) {
                     box.innerHTML = "اختر دوراً من القائمة لعرض صلاحياته.";
                     return;
                 }
-                fetch(rolePermsUrl + "?roleId=" + roleId)
+                let url = rolePermsUrl + "?roleId=" + encodeURIComponent(roleId);
+                if (userId > 0) url += "&userId=" + encodeURIComponent(userId);
+                fetch(url)
                     .then(r => r.text())
                     .then(html => {
                         box.innerHTML = html;
@@ -199,6 +204,7 @@
             }
 
             roleSelect.addEventListener("change", loadPermissions);
+            if (userSelect) userSelect.addEventListener("change", loadPermissions);
             loadPermissions();
         });
     </script>

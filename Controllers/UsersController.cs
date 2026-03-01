@@ -8,8 +8,10 @@ using System.Threading.Tasks;                     // async / await
 using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // User, UserActionType
+using ERP.Security;
 using ClosedXML.Excel;                      // لتصدير Excel
 using System.IO;
 
@@ -138,6 +140,7 @@ namespace ERP.Controllers
         // =========================================================
         // Index — عرض قائمة المستخدمين (نظام القوائم الموحد)
         // =========================================================
+        [RequirePermission(PermissionCodes.Security.Users_View)]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
@@ -198,6 +201,7 @@ namespace ERP.Controllers
         // =========================================================
         // Details — عرض تفاصيل مستخدم واحد
         // =========================================================
+        [RequirePermission(PermissionCodes.Security.Users_View)]
         [HttpGet]
         public async Task<IActionResult> Details(int? id)
         {
@@ -226,6 +230,7 @@ namespace ERP.Controllers
         // =========================================================
         // Create — إضافة مستخدم جديد (GET)
         // =========================================================
+        [RequirePermission(PermissionCodes.Security.Users_Create)]
         [HttpGet]
         public IActionResult Create()
         {
@@ -251,6 +256,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Security.Users_Create)]
         public async Task<IActionResult> Create(User model)
         {
             // ======================================================
@@ -327,6 +333,7 @@ namespace ERP.Controllers
         // =========================================================
         // Edit — تعديل مستخدم (GET)
         // =========================================================
+        [RequirePermission(PermissionCodes.Security.Users_Edit)]
         [HttpGet]
         public async Task<IActionResult> Edit(int id)
         {
@@ -358,6 +365,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Security.Users_Edit)]
         public async Task<IActionResult> Edit(int id, User model)
         {
             // التأكد من تطابق المعرّف في الرابط مع الموديل
@@ -461,6 +469,7 @@ namespace ERP.Controllers
         // =========================================================
         // Delete — تأكيد الحذف (GET)
         // =========================================================
+        [RequirePermission(PermissionCodes.Security.Users_Delete)]
         [HttpGet]
         public async Task<IActionResult> Delete(int id)
         {
@@ -493,6 +502,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Security.Users_Delete)]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var user = await _context.Users.FindAsync(id);
@@ -538,6 +548,7 @@ namespace ERP.Controllers
         /// تصدير قائمة المستخدمين إلى ملف Excel
         /// بنفس فلاتر البحث الموجودة في شاشة القائمة.
         /// </summary>
+        [RequirePermission(PermissionCodes.Security.Users_Export)]
         public async Task<IActionResult> Export(
        string? search,
        string? searchBy,
@@ -757,6 +768,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Security.Users_Delete)]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _context.Users.ToListAsync();

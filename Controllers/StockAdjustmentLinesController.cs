@@ -1,6 +1,8 @@
 using ERP.Data;                             // الاتصال بقاعدة البيانات AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort
 using ERP.Models;                          // الموديلات StockAdjustmentLine, StockAdjustment
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -16,6 +18,7 @@ namespace ERP.Controllers
     /// كنترولر إدارة سطور تسويات الجرد (StockAdjustmentLines).
     /// كل سطر = صنف واحد في تسوية معينة مع الكمية قبل/بعد والفارق.
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.StockAdjustmentLines_View)]
     public class StockAdjustmentLinesController : Controller
     {
         private readonly AppDbContext _context;  // متغير: الاتصال بقاعدة البيانات

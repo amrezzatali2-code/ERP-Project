@@ -1,6 +1,8 @@
 using ERP.Data;                        // سياق قاعدة البيانات AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;              // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                      // SalesReturn, UserActionType
+using ERP.Security;
 using ERP.Services;                    // ILedgerPostingService, DocumentTotalsService
 using ERP.ViewModels;                  // SalesReturnHeaderDto
 using Microsoft.AspNetCore.Mvc;
@@ -23,6 +25,7 @@ namespace ERP.Controllers
     /// - حذف مجموعة مرتجعات / حذف الكل غير المُرحّل.
     /// - تصدير قائمة المرتجعات (Excel/CSV).
     /// </summary>
+    [RequirePermission(PermissionCodes.SalesReturns.View)]
     public class SalesReturnsController : Controller
     {
         private readonly AppDbContext context;

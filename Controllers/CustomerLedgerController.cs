@@ -6,14 +6,17 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;
+using ERP.Filters;
 using ERP.Infrastructure;
 using ERP.Models;
+using ERP.Security;
 
 namespace ERP.Controllers
 {
     /// <summary>
     /// كشف حساب عميل — يعرض كل عمليات العميل في مدة معينة بالتاريخ
     /// </summary>
+    [RequirePermission(PermissionCodes.CustomerLedger.View)]
     public class CustomerLedgerController : Controller
     {
         private readonly AppDbContext _context;

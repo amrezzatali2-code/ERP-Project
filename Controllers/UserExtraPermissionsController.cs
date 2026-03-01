@@ -1,6 +1,8 @@
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // الموديلات UserExtraPermissions, User, Permission
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
 using Microsoft.EntityFrameworkCore;              // Include, AsNoTracking, ToListAsync
@@ -357,6 +359,7 @@ namespace ERP.Controllers
         /// قائمة الصلاحيات الإضافية للمستخدمين
         /// مع بحث/ترتيب/فلترة وتجزئة صفحات بنفس النظام الثابت.
         /// </summary>
+        [RequirePermission(PermissionCodes.Security.UserExtraPermissions_View)]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,

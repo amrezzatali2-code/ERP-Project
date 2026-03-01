@@ -1,7 +1,9 @@
 using ClosedXML.Excel;
 using ERP.Data;                                   // AppDbContext (الاتصال بقاعدة البيانات)
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // Policy, UserActionType
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync, AnyAsync
 using System;                                     // متغيرات الوقت DateTime
@@ -17,6 +19,7 @@ namespace ERP.Controllers
     /// كنترولر إدارة جدول السياسات (Policies)
     /// يطبق "النظام الثابت": قائمة + بحث + ترتيب + ترقيم + CRUD + Export + BulkDelete + DeleteAll + Details.
     /// </summary>
+    [RequirePermission(PermissionCodes.Settings.Policies_View)]
     public class PoliciesController : Controller
     {
         private readonly AppDbContext _context;

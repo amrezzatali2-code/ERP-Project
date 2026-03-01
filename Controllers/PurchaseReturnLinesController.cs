@@ -10,8 +10,10 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectListItem لو احتجناه لاحقاً
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
 using ERP.Models;                                 // PurchaseReturnLine
+using ERP.Security;
 using ERP.Services;                               // DocumentTotalsService (لإجماليات المستندات مستقبلاً)
 
 namespace ERP.Controllers
@@ -20,6 +22,7 @@ namespace ERP.Controllers
     /// كنترولر سطور مرتجع الشراء:
     /// عرض / بحث / فرز / فلترة / حذف / حذف جماعي / حذف الكل / تصدير CSV و Excel.
     /// </summary>
+    [RequirePermission(PermissionCodes.Purchasing.ReturnLines_View)]
     public class PurchaseReturnLinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

@@ -8,8 +8,10 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectListItem لقوائم البحث
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // PurchaseReturn, UserActionType...
+using ERP.Security;
 using ERP.Services;                               // ILedgerPostingService, DocumentTotalsService
 using ERP.ViewModels;                             // PurchaseReturnHeaderDto
 
@@ -19,6 +21,7 @@ namespace ERP.Controllers
     /// كنترولر قائمة مرتجعات الشراء:
     /// عرض / بحث / فرز / حذف جماعي / تصدير.
     /// </summary>
+    [RequirePermission(PermissionCodes.Purchasing.Returns_View)]
     public class PurchaseReturnsController : Controller
     {
         private readonly AppDbContext _context;

@@ -9,8 +9,10 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // DebitNote, UserActionType...
+using ERP.Security;
 using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
@@ -20,6 +22,7 @@ namespace ERP.Controllers
     /// - CRUD (إنشاء/تعديل/تفاصيل/حذف).
     /// - زر حفظ وترحيل = حفظ + ترحيل محاسبي (LedgerEntries + تحديث حساب العميل + الأرباح).
     /// </summary>
+    [RequirePermission(PermissionCodes.AccountsDocuments.DebitNote_View)]
     public class DebitNotesController : Controller
     {
         private readonly AppDbContext _context;

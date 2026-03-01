@@ -9,8 +9,10 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // CashPayment + Customer + Account
+using ERP.Security;
 using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
@@ -22,6 +24,7 @@ namespace ERP.Controllers
     /// - تصدير إلى CSV (Excel).
     /// - حذف جماعي + حذف الكل (يفضل استخدامها بحذر).
     /// </summary>
+    [RequirePermission(PermissionCodes.AccountsDocuments.CashPayment_View)]
     public class CashPaymentsController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

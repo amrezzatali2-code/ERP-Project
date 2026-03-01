@@ -7,8 +7,10 @@ using System.Text;                                   // StringBuilder + Encoding
 using System.Threading.Tasks;                        // async / await
 using ClosedXML.Excel;                               // علشان نصدر Excel فعلي
 using ERP.Data;                                      // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                            // ApplySearchSort + PagedResult
 using ERP.Models;                                    // SalesReturnLine , SalesReturn
+using ERP.Security;
 using ERP.Services;                                  // DocumentTotalsService لإعادة تجميع الهيدر
 using Microsoft.AspNetCore.Mvc;                      // Controller / IActionResult
 using Microsoft.EntityFrameworkCore;                 // Include / AsNoTracking
@@ -22,6 +24,7 @@ namespace ERP.Controllers
     /// - حذف سطر/عدة أسطر بشرط أن يكون الهيدر في حالة Draft فقط.
     /// - تصدير CSV أو Excel.
     /// </summary>
+    [RequirePermission(PermissionCodes.SalesLines.ReturnLines_View)]
     public class SalesReturnLinesController : Controller
     {
         // متغير: سياق قاعدة البيانات للتعامل مع الجداول

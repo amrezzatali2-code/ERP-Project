@@ -2,8 +2,10 @@ using Azure.Core;
 using ClosedXML.Excel;                            // مكتبة Excel
 using DocumentFormat.OpenXml.Wordprocessing;
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // Governorate, UserActionType
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -113,6 +115,7 @@ namespace ERP.Controllers
         // ===========================
         // قائمة المحافظات (Index) — نظام بحث مثل سجل الحركات
         // ===========================
+        [RequirePermission(PermissionCodes.Geo.Governorates_View)]
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,
@@ -166,6 +169,7 @@ namespace ERP.Controllers
         // Details / Create / Edit / Delete (CRUD الأساسي)
         // =========================================================================
 
+        [RequirePermission(PermissionCodes.Geo.Governorates_View)]
         public async Task<IActionResult> Details(int id)
         {
             var item = await _db.Governorates
@@ -176,10 +180,12 @@ namespace ERP.Controllers
             return View(item);
         }
 
+        [RequirePermission(PermissionCodes.Geo.Governorates_Create)]
         public IActionResult Create() => View();
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Geo.Governorates_Create)]
         public async Task<IActionResult> Create([Bind("GovernorateName")] Governorate vm)
         {
             if (!ModelState.IsValid)
@@ -197,6 +203,7 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        [RequirePermission(PermissionCodes.Geo.Governorates_Edit)]
         public async Task<IActionResult> Edit(int id)
         {
             var entity = await _db.Governorates.FindAsync(id);
@@ -211,6 +218,7 @@ namespace ERP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Geo.Governorates_Edit)]
         public async Task<IActionResult> Edit(int id, [Bind("GovernorateName")] Governorate vm)
         {
             var entity = await _db.Governorates.FindAsync(id);
@@ -232,6 +240,7 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        [RequirePermission(PermissionCodes.Geo.Governorates_Delete)]
         public async Task<IActionResult> Delete(int id)
         {
             var item = await _db.Governorates
@@ -244,6 +253,7 @@ namespace ERP.Controllers
 
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Geo.Governorates_Delete)]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var entity = await _db.Governorates.FindAsync(id);
@@ -271,6 +281,7 @@ namespace ERP.Controllers
         // =========================================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Geo.Governorates_Delete)]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
             if (string.IsNullOrWhiteSpace(selectedIds))
@@ -321,6 +332,7 @@ namespace ERP.Controllers
         // =========================================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Geo.Governorates_Delete)]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _db.Governorates.ToListAsync();
@@ -348,6 +360,7 @@ namespace ERP.Controllers
         // =========================================================================
         // Export — تصدير كل المحافظات (Excel أو CSV) بدون اعتماد على الفلاتر
         // =========================================================================
+        [RequirePermission(PermissionCodes.Geo.Governorates_Export)]
         [HttpGet]
         public async Task<IActionResult> Export(string? format = "excel")
         {

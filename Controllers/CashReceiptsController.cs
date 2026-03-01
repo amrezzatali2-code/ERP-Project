@@ -9,8 +9,10 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // CashReceipt + Account + Customer
+using ERP.Security;
 using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
@@ -22,6 +24,7 @@ namespace ERP.Controllers
     /// - زر حفظ = حفظ + ترحيل محاسبي (LedgerEntries + تحديث حساب العميل)
     /// - زر فتح = فتح للتعديل (لا يعكس، الحفظ هو الذي يعكس)
     /// </summary>
+    [RequirePermission(PermissionCodes.AccountsDocuments.CashReceipt_View)]
     public class CashReceiptsController : Controller
     {
         private readonly AppDbContext _context;

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // CultureInfo للتصدير
 using System.IO;                                  // MemoryStream
@@ -10,8 +10,10 @@ using System.Threading.Tasks;
 using ClosedXML.Excel;                            // مكتبة Excel
 
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
 using ERP.Models;                                 // SOLine
+using ERP.Security;
 using ERP.Services;                               // DocumentTotalsService
 
 using Microsoft.AspNetCore.Mvc;
@@ -29,6 +31,7 @@ namespace ERP.Controllers
     /// - دعم حذف سطر/عدة أسطر/كل الأسطر مع إعادة تجميع أمر البيع
     /// - دعم تصدير البيانات إلى Excel أو CSV
     /// </summary>
+    [RequirePermission(PermissionCodes.SalesLines.OrderLines_View)]
     public class SOLinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

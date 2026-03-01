@@ -1,4 +1,4 @@
-﻿// ============================
+// ============================
 // الملف: Controllers/ProductPriceHistoryController.cs
 // الغرض: عرض سجل تغييرات سعر الجمهور مع بحث وترتيب وترقيم
 // ملاحظات هامة:
@@ -10,8 +10,10 @@
 using ClosedXML.Excel;           // مكتبة Excel
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                                         // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                               // PagedResult<T>
 using ERP.Models;                                       // ProductPriceHistory
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;               // SelectListItem لفلاتر البحث/الترتيب
 using Microsoft.EntityFrameworkCore;                    // Include / AsNoTracking / ToListAsync
@@ -29,6 +31,7 @@ namespace ERP.Controllers
     /// كنترولر عرض سجل تغييرات سعر الجمهور لكل صنف.
     /// لا يوجد إدخال يدوي؛ السجل يُكتب تلقائياً من شاشة الأصناف.
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.PriceHistory_View)]
     public class ProductPriceHistoryController : Controller
     {
         // متغير: سياق قاعدة البيانات

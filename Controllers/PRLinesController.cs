@@ -5,8 +5,10 @@ using System.Linq;                                // أوامر LINQ
 using System.Threading.Tasks;                     // async / await
 using ClosedXML.Excel;                            // مكتبة ClosedXML لتصدير Excel
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // الموديلات (PRLine, PurchaseRequest)
+using ERP.Security;
 using ERP.Services;                               // DocumentTotalsService (سيرفيس إجماليات)
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر MVC
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync
@@ -20,6 +22,7 @@ namespace ERP.Controllers
     /// - حذف مجموعة سطور
     /// - تصدير CSV أو Excel
     /// </summary>
+    [RequirePermission(PermissionCodes.Purchasing.RequestLines_View)]
     public class PRLinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

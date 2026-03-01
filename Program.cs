@@ -1,6 +1,6 @@
 using ERP.Data;
-using ERP.Data.Seed;                 // كلاس Seed للصلاحيات والأدوار
 using ERP.Filters;                   // PopulateUserPermissionsFilter
+using ERP.Models;                    // Permission (لضمان وجود صلاحيات فاتورة المبيعات)
 using ERP.Services;                  // خدمة DocumentTotalsService
 using ERP.Seed;
 using ERP.Seeders;
@@ -98,14 +98,78 @@ namespace ERP
                 // تطبيق كل الـ Migrations لو ناقصة
                 db.Database.Migrate();
 
-                // 1) صلاحيات النظام
-                await PermissionSeeder.SeedAsync(db);
+                // مزامنة الصلاحيات مع مكونات البرنامج: إضافة الناقصة وتصحيح الأسماء والموديولات
+                var syncList = ERP.Security.PermissionCodes.GetAllForSync().ToList();
+                var existingPerms = await db.Permissions.ToDictionaryAsync(p => p.Code, p => p, StringComparer.OrdinalIgnoreCase);
+                var now = DateTime.UtcNow;
+                bool anyChange = false;
+                foreach (var (Code, NameAr, Module) in syncList)
+                {
+                    if (existingPerms.TryGetValue(Code, out var p))
+                    {
+                        if (p.NameAr != NameAr || (p.Module ?? "") != Module)
+                        {
+                            p.NameAr = NameAr;
+                            p.Module = Module;
+                            p.UpdatedAt = now;
+                            anyChange = true;
+                        }
+                    }
+                    else
+                    {
+                        db.Permissions.Add(new Permission { Code = Code, NameAr = NameAr, Module = Module, IsActive = true, CreatedAt = now });
+                        anyChange = true;
+                    }
+                }
+                if (anyChange) await db.SaveChangesAsync();
 
-                // 2) الأدوار الأساسية
-                await RoleSeeder.SeedAsync(db);
+                // ضمان وجود صلاحيتي فاتورة المبيعات وقائمة المبيعات (نفس الأكواد المستخدمة في الكونترولر)
+                const string codeView = "Sales.Invoices.View";
+                const string codeCreate = "Sales.Invoices.Create";
+                var codeViewLower = codeView.ToLower();
+                var codeCreateLower = codeCreate.ToLower();
+                var permView = await db.Permissions.FirstOrDefaultAsync(p => p.Code != null && p.Code.ToLower() == codeViewLower);
+                if (permView == null)
+                {
+                    db.Permissions.Add(new Permission { Code = codeView, NameAr = "قائمة فواتير المبيعات", Module = "المبيعات", IsActive = true, CreatedAt = DateTime.UtcNow });
+                    await db.SaveChangesAsync();
+                    permView = await db.Permissions.FirstOrDefaultAsync(p => p.Code != null && p.Code.ToLower() == codeViewLower);
+                }
+                var permCreate = await db.Permissions.FirstOrDefaultAsync(p => p.Code != null && p.Code.ToLower() == codeCreateLower);
+                if (permCreate == null)
+                {
+                    db.Permissions.Add(new Permission { Code = codeCreate, NameAr = "فاتورة مبيعات جديدة", Module = "المبيعات", IsActive = true, CreatedAt = DateTime.UtcNow });
+                    await db.SaveChangesAsync();
+                    permCreate = await db.Permissions.FirstOrDefaultAsync(p => p.Code != null && p.Code.ToLower() == codeCreateLower);
+                }
 
-                // 3) ربط الأدوار بالصلاحيات
-                await RolePermissionSeeder.SeedAsync(db);
+                // ربط صلاحيات فاتورة المبيعات بأدوار المسؤول إذا لم تكونا مربوطة (حتى تعمل الصلاحيات فعلياً)
+                if (permView != null || permCreate != null)
+                {
+                    var adminRoleNames = new[] { "مسؤول النظام", "مالك النظام" };
+                    var adminRoles = await db.Roles.Where(r => adminRoleNames.Contains(r.Name ?? "")).ToListAsync();
+                    var nowRp = DateTime.UtcNow;
+                    foreach (var role in adminRoles)
+                    {
+                        if (permView != null)
+                        {
+                            var hasView = await db.RolePermissions.AnyAsync(rp => rp.RoleId == role.RoleId && rp.PermissionId == permView.PermissionId);
+                            if (!hasView)
+                            {
+                                db.RolePermissions.Add(new RolePermission { RoleId = role.RoleId, PermissionId = permView.PermissionId, IsAllowed = true, CreatedAt = nowRp });
+                            }
+                        }
+                        if (permCreate != null)
+                        {
+                            var hasCreate = await db.RolePermissions.AnyAsync(rp => rp.RoleId == role.RoleId && rp.PermissionId == permCreate.PermissionId);
+                            if (!hasCreate)
+                            {
+                                db.RolePermissions.Add(new RolePermission { RoleId = role.RoleId, PermissionId = permCreate.PermissionId, IsAllowed = true, CreatedAt = nowRp });
+                            }
+                        }
+                    }
+                    await db.SaveChangesAsync();
+                }
 
                 // 4) سياسات التسعير (لو موجودة)
                 await PolicySeeder.SeedAsync(db);

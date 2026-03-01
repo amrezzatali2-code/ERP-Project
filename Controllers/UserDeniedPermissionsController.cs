@@ -1,12 +1,14 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لتصدير CSV
 using System.Threading.Tasks;                     // Task و async
 
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // الموديلات UserDeniedPermission, User, Permission
+using ERP.Security;
 
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
@@ -173,6 +175,7 @@ namespace ERP.Controllers
         /// قائمة استثناءات الصلاحيات للمستخدمين
         /// مع بحث + ترتيب + تقسيم صفحات + فلاتر، بنظام القوائم الموحد.
         /// </summary>
+        [RequirePermission(PermissionCodes.Security.UserDeniedPermissions_View)]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,

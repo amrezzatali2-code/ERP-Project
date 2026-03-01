@@ -1,6 +1,8 @@
 using ERP.Data;                               // تعليق: سياق قاعدة البيانات AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                    // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                            // SalesOrder, UserActionType
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +21,7 @@ namespace ERP.Controllers
     /// - حذف أمر واحد + حذف مجموعة + حذف كل الأوامر.
     /// - زر تفاصيل يفتح سطور الأمر في كنترولر SOLines.
     /// </summary>
+    [RequirePermission(PermissionCodes.SalesOrders.View)]
     public class SalesOrdersController : Controller
     {
         private readonly AppDbContext _context;

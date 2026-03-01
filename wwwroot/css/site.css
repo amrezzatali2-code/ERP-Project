@@ -759,7 +759,9 @@ body {
     min-height: 0;
 }
 .erp-column-filter-panel #erpColumnFilterSearch,
-.erp-column-filter-panel #erpNumericExpr {
+.erp-column-filter-panel #erpNumericExpr,
+.erp-column-filter-panel #erpRpColumnFilterSearch,
+.erp-column-filter-panel #erpRpNumericExpr {
     width: 100%;
     min-width: 0;
     box-sizing: border-box;

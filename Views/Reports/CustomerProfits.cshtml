@@ -6,9 +6,10 @@
     var totalSalesRevenue = ViewBag.TotalSalesRevenue as decimal? ?? 0m;
     var totalSalesCost = ViewBag.TotalSalesCost as decimal? ?? 0m;
     var totalSalesProfit = ViewBag.TotalSalesProfit as decimal? ?? 0m;
-    var totalLedgerRevenue = ViewBag.TotalLedgerRevenue as decimal? ?? 0m;
-    var totalLedgerCost = ViewBag.TotalLedgerCost as decimal? ?? 0m;
-    var totalLedgerProfit = ViewBag.TotalLedgerProfit as decimal? ?? 0m;
+
+    // إجمالي عدد الفواتير ومتوسط قيمة الفاتورة على مستوى التقرير كله
+    var totalInvoiceCount = reportData.Sum(r => r.InvoiceCount);
+    var totalAvgInvoiceValue = totalInvoiceCount > 0 ? totalSalesRevenue / totalInvoiceCount : 0m;
 
     // Pagination
     var page = ViewBag.Page as int? ?? 1;
@@ -22,6 +23,7 @@
     var governorateId = ViewBag.GovernorateId as int?;
     var fromDate = ViewBag.FromDate as DateTime?;
     var toDate = ViewBag.ToDate as DateTime?;
+    var includeZeroQty = ViewBag.IncludeZeroQty as bool? ?? false;
     var profitMethod = ViewBag.ProfitMethod as string ?? "both";
     var sortBy = ViewBag.SortBy as string ?? "name";
     var sortDir = ViewBag.SortDir as string ?? "asc";
@@ -39,6 +41,7 @@
             governorateId,
             fromDate,
             toDate,
+            includeZeroQty,
             profitMethod,
             sortBy = col,
             sortDir = direction,
@@ -68,221 +71,106 @@
     };
 }
 
-<div dir="rtl" class="container-fluid" style="padding: 1rem;">
-    @* عنوان الصفحة *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">
-            عدد العملاء: @(reportData.Any() ? totalCount : 0)
-        </small>
-    </div>
-
-    @* ===== كروت الفلاتر ===== *@
-    <div class="card mb-3 d-print-none">
-        <div class="card-body">
-            <form method="get" asp-action="CustomerProfits" asp-controller="Reports" id="filtersForm">
-                <div class="row g-3 align-items-end">
-                    @* كارت البحث *@
-                    <div class="col-lg-3 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">🔍 بحث</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="text"
-                                       name="search"
-                                       class="form-control"
-                                       placeholder="اكتب اسم العميل أو جزء منه..."
-                                       autocomplete="off"
-                                       value="@search" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت فئة العميل *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📂 فئة العميل</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="text"
-                                       name="partyCategory"
-                                       class="form-control"
-                                       placeholder="فئة العميل..."
-                                       value="@partyCategory" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت المحافظة *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📍 المحافظة</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <select name="governorateId" class="form-select">
-                                    <option value="">الكل</option>
-                                    @foreach (var gov in governorates)
-                                    {
-                                        @if (governorateId?.ToString() == gov.Value)
-                                        {
-                                            <option value="@gov.Value" selected>@gov.Text</option>
-                                        }
-                                        else
-                                        {
-                                            <option value="@gov.Value">@gov.Text</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت تاريخ من *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📅 من تاريخ</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="date"
-                                       name="fromDate"
-                                       class="form-control"
-                                       value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت تاريخ إلى *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📅 إلى تاريخ</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="date"
-                                       name="toDate"
-                                       class="form-control"
-                                       value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت طريقة الحساب *@
-                    <div class="col-lg-1 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📊 طريقة</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <select name="profitMethod" class="form-select">
-                                    <option value="both"@Html.Raw(profitMethod == "both" ? " selected" : "")>الكل</option>
-                                    <option value="sales"@Html.Raw(profitMethod == "sales" ? " selected" : "")>من البيع</option>
-                                    <option value="ledger"@Html.Raw(profitMethod == "ledger" ? " selected" : "")>من الميزانية</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* أزرار التفعيل *@
-                    <div class="col-lg-auto d-flex gap-2 align-items-end">
-                        <input type="hidden" name="loadReport" value="true" />
-                        <button type="submit" class="btn btn-primary">
-                            <span>📊</span> تجميع التقرير
-                        </button>
-                        <a href="@Url.Action("CustomerProfits", "Reports")" class="btn btn-secondary btn-sm">
-                            <span>🔄</span> إعادة تعيين
-                        </a>
-                        @if (reportData.Any() && totalPages > 1)
+<div dir="rtl" class="container-fluid">
+    @* ===== شريط الفلاتر (نفس تنسيق قائمة الأصناف) ===== *@
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <form method="get" asp-action="CustomerProfits" asp-controller="Reports" id="filtersForm">
+            <input type="hidden" name="loadReport" value="true" />
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">بحث</label>
+                    <input type="text" name="search" class="form-control erp-filter-input" placeholder="اسم العميل أو جزء منه..." autocomplete="off" value="@search" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">فئة العميل</label>
+                    <input type="text" name="partyCategory" class="form-control erp-filter-input" placeholder="فئة العميل..." value="@partyCategory" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">المحافظة</label>
+                    <select name="governorateId" class="form-select erp-filter-input">
+                        <option value="">الكل</option>
+                        @foreach (var gov in governorates)
                         {
-                            <div class="d-flex align-items-center gap-2">
-                                <label class="form-label mb-0 small">حجم الصفحة:</label>
-                                <select name="pageSize" 
-                                        class="form-select form-select-sm" 
-                                        style="width: auto;"
-                                        onchange="this.form.submit()">
-                                    <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
-                                    <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
-                                    <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
-                                    <option value="5000"@Html.Raw(pageSize == 5000 ? " selected" : "")>5000</option>
-                                    <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
-                                </select>
-                            </div>
+                            <option value="@gov.Value" @(governorateId?.ToString() == gov.Value ? "selected" : null)>@gov.Text</option>
                         }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="fromDate" class="form-control erp-filter-input" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="toDate" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section d-flex align-items-end">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
+                        <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
                     </div>
                 </div>
-            </form>
-        </div>
+                <div class="col-12 col-lg-auto erp-filter-section ms-lg-auto d-flex flex-wrap gap-2 align-items-end">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
+                    <a href="@Url.Action("CustomerProfits", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none"><span>🔄</span> إعادة تعيين</a>
+                    @if (reportData.Any())
+                    {
+                        <label class="form-label mb-0 small">حجم الصفحة</label>
+                        <select name="pageSize" class="form-select form-select-sm erp-filter-input" style="width:auto" onchange="this.form.submit()">
+                            <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
+                            <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
+                            <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
+                            <option value="5000"@Html.Raw(pageSize == 5000 ? " selected" : "")>5000</option>
+                            <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
+                        </select>
+                    }
+                </div>
+            </div>
+        </form>
     </div>
 
-    @* ===== Pagination Info ===== *@
-    @if (reportData.Any() && totalPages > 1)
-    {
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <small class="text-muted">
-                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
-            </small>
-            <small class="text-muted">
-                @($"صفحة {page} من {totalPages}")
-            </small>
-        </div>
-    }
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-1">
+        <h5 class="mb-0">أرباح العملاء</h5>
+        @if (reportData.Any())
+        {
+            <small class="text-muted">إجمالي العملاء: <span id="customerProfitsItemCount">@totalCount</span></small>
+        }
+    </div>
 
-    @* ===== جدول البيانات ===== *@
+    @* ===== جدول البيانات (نفس تنسيق قائمة الأصناف + ترتيب من الهيدر) ===== *@
     @if (reportData.Any())
     {
-        <div class="card shadow-sm">
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-striped table-hover mb-0">
-                        <thead class="table-light sticky-top">
-                            <tr>
-                                <th style="min-width: 80px;">
-                                    <a href="@sortUrl("code", sortBy == "code" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الكود @if (sortBy == "code") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th style="min-width: 200px;">
-                                    <a href="@sortUrl("name", sortBy == "name" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        اسم العميل @if (sortBy == "name") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th>فئة العميل</th>
-                                <th>الهاتف</th>
-                                
-                                @* الربح من البيع *@
-                                <th class="text-end" style="min-width: 120px;">الإيرادات (بيع)</th>
-                                <th class="text-end" style="min-width: 120px;">التكلفة (بيع)</th>
-                                <th class="text-end" style="min-width: 120px;">
-                                    <a href="@sortUrl("salesprofit", sortBy == "salesprofit" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الربح (بيع) @if (sortBy == "salesprofit") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th class="text-end" style="min-width: 100px;">نسبة الربح (بيع) %</th>
-                                
-                                @* الربح من الميزانية *@
-                                <th class="text-end" style="min-width: 120px;">الإيرادات (ميزانية)</th>
-                                <th class="text-end" style="min-width: 120px;">التكلفة (ميزانية)</th>
-                                <th class="text-end" style="min-width: 120px;">
-                                    <a href="@sortUrl("ledgerprofit", sortBy == "ledgerprofit" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الربح (ميزانية) @if (sortBy == "ledgerprofit") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th class="text-end" style="min-width: 100px;">نسبة الربح (ميزانية) %</th>
-                                
-                                @* الربح من أرصدة الحسابات *@
-                                <th class="text-end" style="min-width: 120px;">رصيد الإيرادات</th>
-                                <th class="text-end" style="min-width: 120px;">رصيد التكلفة</th>
-                                <th class="text-end" style="min-width: 120px;">الربح (من الأرصدة)</th>
-                                <th class="text-end" style="min-width: 100px;">نسبة الربح (أرصدة) %</th>
-                                
-                                @* إحصائيات *@
-                                <th class="text-end" style="min-width: 100px;">عدد الفواتير</th>
-                                <th class="text-end" style="min-width: 120px;">متوسط الفاتورة</th>
-                            </tr>
-                        </thead>
+        <div class="erp-table-scroll-container mt-2">
+            <div class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+                <table id="customerProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sortBy" data-current-dir="@sortDir">
+                    <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
+                        <tr>
+                            <th style="min-width: 80px;" data-col="code">
+                                <div class="d-flex align-items-center gap-1">
+                                    <span>الكود</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="code" data-sort-key="code" data-col-title="الكود" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th style="min-width: 200px;" data-col="name">
+                                <div class="d-flex align-items-center gap-1">
+                                    <span>اسم العميل</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="name" data-sort-key="name" data-col-title="اسم العميل" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th style="min-width: 100px;">فئة العميل</th>
+                            <th style="min-width: 100px;">الهاتف</th>
+                            <th class="text-end" style="min-width: 120px;">الإيرادات</th>
+                            <th class="text-end" style="min-width: 120px;">التكلفة</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salesprofit">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>الربح</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="salesprofit" data-sort-key="salesprofit" data-col-title="الربح" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 100px;">نسبة الربح %</th>
+                            <th class="text-end" style="min-width: 100px;">عدد الفواتير</th>
+                            <th class="text-end" style="min-width: 120px;">متوسط الفاتورة</th>
+                        </tr>
+                    </thead>
                         <tbody>
                             @foreach (var item in reportData)
                             {
@@ -292,7 +180,7 @@
                                     <td><small class="text-muted">@item.PartyCategory</small></td>
                                     <td><small class="text-muted">@item.Phone1</small></td>
                                     
-                                    @* الربح من البيع *@
+                                    @* الربح من البيع فقط *@
                                     <td class="text-end">@item.SalesRevenue.ToString("N2")</td>
                                     <td class="text-end">@item.SalesCost.ToString("N2")</td>
                                     <td class="text-end">
@@ -306,34 +194,6 @@
                                         </span>
                                     </td>
                                     
-                                    @* الربح من الميزانية *@
-                                    <td class="text-end">@item.LedgerRevenue.ToString("N2")</td>
-                                    <td class="text-end">@item.LedgerCost.ToString("N2")</td>
-                                    <td class="text-end">
-                                        <strong class="@(item.LedgerProfit >= 0 ? "text-success" : "text-danger")">
-                                            @item.LedgerProfit.ToString("N2")
-                                        </strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="@(item.LedgerProfitPercent >= 0 ? "text-success" : "text-danger")">
-                                            @item.LedgerProfitPercent.ToString("N2")%
-                                        </span>
-                                    </td>
-                                    
-                                    @* الربح من أرصدة الحسابات *@
-                                    <td class="text-end">@item.AccountBalanceRevenue.ToString("N2")</td>
-                                    <td class="text-end">@item.AccountBalanceCost.ToString("N2")</td>
-                                    <td class="text-end">
-                                        <strong class="@(item.AccountBalanceProfit >= 0 ? "text-success" : "text-danger")">
-                                            @item.AccountBalanceProfit.ToString("N2")
-                                        </strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="@(item.AccountBalanceProfitPercent >= 0 ? "text-success" : "text-danger")">
-                                            @item.AccountBalanceProfitPercent.ToString("N2")%
-                                        </span>
-                                    </td>
-                                    
                                     @* إحصائيات *@
                                     <td class="text-end">@item.InvoiceCount</td>
                                     <td class="text-end">@item.AvgInvoiceValue.ToString("N2")</td>
@@ -342,9 +202,12 @@
                         </tbody>
                         <tfoot class="table-secondary fw-bold">
                             <tr>
-                                <td colspan="4" class="text-end"><strong>المجموع الإجمالي:</strong></td>
-                                
-                                @* الربح من البيع *@
+                                <td class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+
+                                @* الربح من البيع فقط *@
                                 <td class="text-end"><strong>@totalSalesRevenue.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalSalesCost.ToString("N2")</strong></td>
                                 <td class="text-end">
@@ -357,218 +220,30 @@
                                         @((totalSalesRevenue > 0 ? (totalSalesProfit / totalSalesRevenue * 100) : 0).ToString("N2"))%
                                     </strong>
                                 </td>
-                                
-                                @* الربح من الميزانية *@
-                                <td class="text-end"><strong>@totalLedgerRevenue.ToString("N2")</strong></td>
-                                <td class="text-end"><strong>@totalLedgerCost.ToString("N2")</strong></td>
-                                <td class="text-end">
-                                    <strong class="text-primary" style="font-size: 1.1rem;">
-                                        @totalLedgerProfit.ToString("N2")
-                                    </strong>
-                                </td>
-                                <td class="text-end">
-                                    <strong>
-                                        @((totalLedgerRevenue > 0 ? (totalLedgerProfit / totalLedgerRevenue * 100) : 0).ToString("N2"))%
-                                    </strong>
-                                </td>
-                                
-                                @* الربح من أرصدة الحسابات *@
-                                @{
-                                    var totalAccountBalanceRevenue = ViewBag.TotalAccountBalanceRevenue as decimal? ?? 0m;
-                                    var totalAccountBalanceCost = ViewBag.TotalAccountBalanceCost as decimal? ?? 0m;
-                                    var totalAccountBalanceProfit = ViewBag.TotalAccountBalanceProfit as decimal? ?? 0m;
-                                }
-                                <td class="text-end"><strong>@totalAccountBalanceRevenue.ToString("N2")</strong></td>
-                                <td class="text-end"><strong>@totalAccountBalanceCost.ToString("N2")</strong></td>
-                                <td class="text-end">
-                                    <strong class="text-primary" style="font-size: 1.1rem;">
-                                        @totalAccountBalanceProfit.ToString("N2")
-                                    </strong>
-                                </td>
-                                <td class="text-end">
-                                    <strong>
-                                        @((totalAccountBalanceRevenue > 0 ? (totalAccountBalanceProfit / totalAccountBalanceRevenue * 100) : 0).ToString("N2"))%
-                                    </strong>
-                                </td>
-                                
+
                                 @* إحصائيات *@
-                                <td colspan="2"></td>
+                                <td class="text-end">@totalInvoiceCount</td>
+                                <td class="text-end">@totalAvgInvoiceValue.ToString("N2")</td>
                             </tr>
                         </tfoot>
-                    </table>
-                </div>
+                </table>
             </div>
         </div>
 
-        @* ===== Pagination Controls ===== *@
-        @if (totalPages > 1)
+        @* ===== Pagination ===== *@
+        @if (reportData.Any() && totalPages > 1)
         {
-            <nav aria-label="pagination" class="mt-3 d-print-none">
-                <ul class="pagination justify-content-center">
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(1)">الأول</a>
-                    </li>
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page - 1)">السابق</a>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">@($"صفحة {page} من {totalPages}")</span>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page + 1)">التالي</a>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
-                    </li>
-                </ul>
-            </nav>
-        }
-
-        @* ===== ميزانية الربح من الميزانية ===== *@
-        @if (ViewBag.BalanceSheetData != null)
-        {
-            var balanceSheet = ViewBag.BalanceSheetData;
-            <div class="card shadow-sm mt-4">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0">📊 ميزانية الربح من الميزانية</h5>
-                    <small>توضيح طريقة حساب الربح من دفتر الأستاذ العام</small>
-                </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6 class="text-muted mb-3">الإيرادات (Revenue)</h6>
-                            <table class="table table-sm table-bordered">
-                                <tr>
-                                    <th style="width: 40%;">كود الحساب</th>
-                                    <td><strong>@balanceSheet.RevenueAccount.AccountCode</strong></td>
-                                </tr>
-                                <tr>
-                                    <th>اسم الحساب</th>
-                                    <td>@balanceSheet.RevenueAccount.AccountName</td>
-                                </tr>
-                                <tr>
-                                    <th>نوع القيد</th>
-                                    <td>دائن (Credit)</td>
-                                </tr>
-                                <tr>
-                                    <th>المصدر</th>
-                                    <td>فواتير المبيعات (LineNo = 2)</td>
-                                </tr>
-                                <tr class="table-success">
-                                    <th><strong>إجمالي الإيرادات</strong></th>
-                                    <td><strong>@balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</strong></td>
-                                </tr>
-                            </table>
-                        </div>
-                        <div class="col-md-6">
-                            <h6 class="text-muted mb-3">تكلفة البضاعة المباعة (COGS)</h6>
-                            <table class="table table-sm table-bordered">
-                                <tr>
-                                    <th style="width: 40%;">كود الحساب</th>
-                                    <td><strong>@balanceSheet.CogsAccount.AccountCode</strong></td>
-                                </tr>
-                                <tr>
-                                    <th>اسم الحساب</th>
-                                    <td>@balanceSheet.CogsAccount.AccountName</td>
-                                </tr>
-                                <tr>
-                                    <th>نوع القيد</th>
-                                    <td>مدين (Debit)</td>
-                                </tr>
-                                <tr>
-                                    <th>المصدر</th>
-                                    <td>فواتير المبيعات (LineNo = 3)</td>
-                                </tr>
-                                <tr class="table-danger">
-                                    <th><strong>إجمالي التكلفة</strong></th>
-                                    <td><strong>@balanceSheet.CogsAccount.TotalDebit.ToString("N2")</strong></td>
-                                </tr>
-                            </table>
-                        </div>
-                    </div>
-                    <hr />
-                    <div class="row mt-3">
-                        <div class="col-12">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h5 class="card-title">حساب الربح:</h5>
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <p class="mb-1"><strong>إجمالي الإيرادات:</strong> @balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</p>
-                                            <p class="mb-1"><strong>إجمالي التكلفة:</strong> <span class="text-danger">- @balanceSheet.CogsAccount.TotalDebit.ToString("N2")</span></p>
-                                            <hr class="my-2" />
-                                            <p class="mb-0"><strong>الربح الإجمالي من الميزانية:</strong></p>
-                                        </div>
-                                        <div class="text-end">
-                                            <h3 class="mb-0 @(balanceSheet.TotalProfit >= 0 ? "text-success" : "text-danger")">
-                                                @balanceSheet.TotalProfit.ToString("N2")
-                                            </h3>
-                                            <small class="text-muted">
-                                                (@((balanceSheet.RevenueAccount.TotalCredit > 0 ? (balanceSheet.TotalProfit / balanceSheet.RevenueAccount.TotalCredit * 100) : 0).ToString("N2"))%)
-                                            </small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row mt-3">
-                        <div class="col-12">
-                            <h6 class="text-muted mb-2">الطريقة الثالثة: الربح من أرصدة الحسابات (Account Balance)</h6>
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <p class="mb-2"><strong>حساب رصيد حساب الإيرادات (4100):</strong></p>
-                                    <p class="mb-1 ms-3">رصيد الإيرادات = مجموع الدائن (Credit) - مجموع المدين (Debit)</p>
-                                    <p class="mb-3 ms-3"><strong>النتيجة:</strong> @balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</p>
-                                    
-                                    <p class="mb-2"><strong>حساب رصيد حساب COGS (5100):</strong></p>
-                                    <p class="mb-1 ms-3">رصيد COGS = مجموع المدين (Debit) - مجموع الدائن (Credit)</p>
-                                    <p class="mb-3 ms-3"><strong>النتيجة:</strong> @balanceSheet.CogsAccount.TotalDebit.ToString("N2")</p>
-                                    
-                                    <hr />
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <p class="mb-1"><strong>رصيد الإيرادات:</strong> @balanceSheet.RevenueAccount.TotalCredit.ToString("N2")</p>
-                                            <p class="mb-1"><strong>رصيد COGS:</strong> <span class="text-danger">- @balanceSheet.CogsAccount.TotalDebit.ToString("N2")</span></p>
-                                            <hr class="my-2" />
-                                            <p class="mb-0"><strong>الربح من الأرصدة:</strong></p>
-                                        </div>
-                                        <div class="text-end">
-                                            @{
-                                                var accountBalanceProfit = balanceSheet.RevenueAccount.TotalCredit - balanceSheet.CogsAccount.TotalDebit;
-                                            }
-                                            <h4 class="mb-0 @(accountBalanceProfit >= 0 ? "text-success" : "text-danger")">
-                                                @accountBalanceProfit.ToString("N2")
-                                            </h4>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="alert alert-info mt-3 mb-0">
-                        <small>
-                            <strong>ملاحظة:</strong> 
-                            <ul class="mb-0">
-                                <li><strong>الطريقة الأولى (من البيع):</strong> يتم حساب الربح مباشرة من فواتير المبيعات (SalesInvoiceLines)</li>
-                                <li><strong>الطريقة الثانية (من الميزانية):</strong> يتم حساب الربح عن طريق جمع جميع القيود المحاسبية من حساب الإيرادات (4100) مطروحاً منها جميع القيود من حساب تكلفة البضاعة المباعة (5100) من دفتر الأستاذ العام.</li>
-                                <li><strong>الطريقة الثالثة (من الأرصدة):</strong> يتم حساب الربح من أرصدة الحسابات المحاسبية (رصيد حساب الإيرادات - رصيد حساب COGS) حيث رصيد الحساب = المدين - الدائن (أو العكس حسب نوع الحساب).</li>
-                            </ul>
-                            @if (fromDate.HasValue || toDate.HasValue)
-                            {
-                                <text><strong>تم تطبيق فلتر التاريخ: </strong></text>
-                                @if (fromDate.HasValue)
-                                {
-                                    <text>من @fromDate.Value.ToString("yyyy-MM-dd") </text>
-                                }
-                                @if (toDate.HasValue)
-                                {
-                                    <text>إلى @toDate.Value.ToString("yyyy-MM-dd")</text>
-                                }
-                            }
-                        </small>
-                    </div>
-                </div>
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
+                <small class="text-muted">عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount</small>
+                <nav aria-label="pagination">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(1)">الأول</a></li>
+                        <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(page - 1)">السابق</a></li>
+                        <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(totalPages)</span></li>
+                        <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(page + 1)">التالي</a></li>
+                        <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(totalPages)">الأخير</a></li>
+                    </ul>
+                </nav>
             </div>
         }
     }
@@ -580,24 +255,112 @@
     }
 </div>
 
+@* لوحة ترتيب العمود (مثل قائمة الأصناف — الزر يفتح اللوحة ثم تطبيق) *@
+<div id="erpCpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+    <div class="erp-column-filter-header">
+        <span id="erpCpColumnFilterTitle">ترتيب</span>
+        <button type="button" class="btn-close btn-sm" id="erpCpColumnFilterClose" aria-label="إغلاق"></button>
+    </div>
+    <div class="erp-column-filter-body">
+        <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+            <div class="d-flex flex-column gap-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-cp-sort-btn" data-sort-dir="asc"><span class="me-2">▲</span> ترتيب تصاعدي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-cp-sort-btn" data-sort-dir="desc"><span class="me-2">▼</span> ترتيب تنازلي</button>
+            </div>
+        </div>
+        <div class="erp-column-filter-actions mt-2">
+            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpCpColumnFilterOk">تطبيق</button>
+        </div>
+    </div>
+</div>
+
 @section Styles {
     <style>
-        .table thead th {
-            border-bottom: 2px solid #dee2e6;
-            font-weight: 600;
-            background-color: #f8f9fa !important;
-        }
-        .table tfoot {
-            background-color: #e9ecef !important;
-        }
-        .card-header {
-            font-size: 0.9rem;
-        }
-        .table tbody tr:hover {
-            background-color: #f5f5f5;
-        }
-        a.text-decoration-none:hover {
-            text-decoration: underline !important;
-        }
+        #customerProfitsTable thead th { background-color: #fafbfc !important; color: #212529; border-bottom: 1px solid #dee2e6; font-weight: 600; }
+        #customerProfitsTable tfoot { background-color: #e9ecef !important; border-top: 1px solid #dee2e6; }
+        .erp-cp-col-filter-btn { color: #64748b; }
+        .erp-cp-col-filter-btn:hover { color: #475569; }
+        .erp-cp-col-filter-btn.erp-cp-filter-active { color: #0d6efd !important; }
+        #erpCpColumnFilterPanel.erp-column-filter-panel { min-width: 260px; max-width: min(300px, 92vw); width: auto; }
     </style>
+}
+
+@section Scripts {
+    <script>
+        (function () {
+            var panel = document.getElementById('erpCpColumnFilterPanel');
+            var titleEl = document.getElementById('erpCpColumnFilterTitle');
+            var btnOk = document.getElementById('erpCpColumnFilterOk');
+            var btnClose = document.getElementById('erpCpColumnFilterClose');
+            var form = document.getElementById('filtersForm');
+            var currentSortKey = 'name';
+
+            function openPanel(btn) {
+                currentSortKey = btn.getAttribute('data-sort-key') || 'name';
+                titleEl.textContent = btn.getAttribute('data-col-title') || 'ترتيب';
+                document.querySelectorAll('.erp-cp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-cp-filter-active'); });
+                btn.classList.add('erp-cp-filter-active');
+                var table = document.getElementById('customerProfitsTable');
+                var currentDir = (table && table.getAttribute('data-current-dir')) || 'asc';
+                document.querySelectorAll('.erp-cp-sort-btn').forEach(function (b) {
+                    b.classList.toggle('active', b.getAttribute('data-sort-dir') === currentDir);
+                });
+                panel.classList.remove('d-none');
+                var rect = btn.getBoundingClientRect();
+                panel.style.position = 'fixed';
+                panel.style.left = (rect.left - (panel.offsetWidth || 280) - 4) + 'px';
+                panel.style.top = Math.max(8, rect.top) + 'px';
+                panel.style.zIndex = '1050';
+            }
+            function closePanel() {
+                panel.classList.add('d-none');
+                document.querySelectorAll('.erp-cp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-cp-filter-active'); });
+            }
+            function applySort() {
+                var sortDirBtn = document.querySelector('.erp-cp-sort-btn.active');
+                var dir = sortDirBtn ? sortDirBtn.getAttribute('data-sort-dir') : 'asc';
+                var params = new URLSearchParams(new FormData(form));
+                params.set('loadReport', 'true');
+                params.set('sortBy', currentSortKey);
+                params.set('sortDir', dir);
+                params.set('page', '1');
+                window.location.href = (form.action || window.location.pathname) + '?' + params.toString();
+            }
+            document.querySelectorAll('.erp-cp-col-filter-btn').forEach(function (btn) {
+                btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openPanel(btn); });
+            });
+            document.querySelectorAll('.erp-cp-sort-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    document.querySelectorAll('.erp-cp-sort-btn').forEach(function (b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                });
+            });
+            if (btnOk) btnOk.addEventListener('click', applySort);
+            if (btnClose) btnClose.addEventListener('click', closePanel);
+            document.addEventListener('click', function (e) {
+                if (panel && !panel.classList.contains('d-none') && !panel.contains(e.target) && !e.target.closest('.erp-cp-col-filter-btn'))
+                    closePanel();
+            });
+        })();
+
+        // ضمان إرسال includeZeroQty عند إرسال الفورم (عرض الصفر)
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.getElementById('filtersForm');
+            var includeZeroCb = document.getElementById('includeZeroQty');
+            if (form && includeZeroCb) {
+                form.addEventListener('submit', function () {
+                    var existingHidden = form.querySelector('input[name="includeZeroQty"][type="hidden"]');
+                    if (existingHidden) existingHidden.remove();
+                    if (!includeZeroCb.checked) {
+                        var hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'includeZeroQty';
+                        hidden.value = 'false';
+                        form.appendChild(hidden);
+                    }
+                });
+            }
+        });
+    </script>
 }

@@ -1,7 +1,9 @@
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                                 // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                       // كلاس PagedResult لتقسيم الصفحات
 using ERP.Models;                               // الموديل PurchaseRequest
+using ERP.Security;
 using ERP.Services;
 using ERP.ViewModels;   // علشان نقدر نستعمل PurchaseInvoiceHeaderDto
 using Microsoft.AspNetCore.Mvc;                 // أساس الكنترولر و IActionResult
@@ -33,6 +35,7 @@ namespace ERP.Controllers
     /// - تصدير CSV/Excel.
     /// - Show / Create / Edit / Delete.
     /// </summary>
+    [RequirePermission(PermissionCodes.Purchasing.Requests_View)]
     public class PurchaseRequestsController : Controller
     {
         // بعد ✅

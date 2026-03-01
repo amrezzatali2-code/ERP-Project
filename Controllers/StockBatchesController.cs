@@ -1,11 +1,13 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using ClosedXML.Excel;                 // تصدير Excel
 using ERP.Data;                        // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;              // PagedResult
 using ERP.Models;                      // StockBatch / Product / Warehouse
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +19,7 @@ namespace ERP.Controllers
     /// - BulkDelete / DeleteAll
     /// - Export (Excel / CSV)
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.StockBatches_View)]
     public class StockBatchesController : Controller
     {
         private readonly AppDbContext _db; // متغير: DbContext

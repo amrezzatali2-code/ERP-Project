@@ -8,8 +8,10 @@ using System.Threading.Tasks;                     // async / await
 using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
 using ERP.Models;                                 // LedgerEntry + Account + Customer
+using ERP.Security;
 using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
@@ -22,6 +24,7 @@ namespace ERP.Controllers
     /// - حذف جماعي / حذف الكل (يُفضّل لبيئة تجريبية أو بإذن خاص).
     /// لا يوجد إنشاء/تعديل قيود من هنا؛ القيود تُنشأ من الشاشات الأخرى (فواتير، إيصالات، قيود يدوية).
     /// </summary>
+    [RequirePermission(PermissionCodes.Ledger.View)]
     public class LedgerEntriesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

@@ -10,13 +10,16 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectListItem لقوائم البحث/الترتيب
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Models;                                 // SalesInvoiceLine
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort
+using ERP.Security;
 using ERP.Services;                               // DocumentTotalsService
 
 namespace ERP.Controllers
 {
-    // كنترولر سطور فاتورة البيع — عرض/تفاصيل + بحث/ترتيب/تقسيم + حذف/تصدير
+    /// <summary>كنترولر سطور فاتورة البيع — عرض/تفاصيل + بحث/ترتيب/تقسيم + حذف/تصدير</summary>
+    [RequirePermission(PermissionCodes.SalesLines.InvoiceLines_View)]
     public class SalesInvoiceLinesController : Controller
     {
         private readonly AppDbContext _context;            // متغير: كائن الاتصال بقاعدة البيانات

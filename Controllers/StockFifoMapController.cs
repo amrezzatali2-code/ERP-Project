@@ -1,12 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Text;                      // لبناء ملف CSV
 using System.Threading.Tasks;
 using ERP.Data;
+using ERP.Filters;
 using ERP.Infrastructure;
 using ERP.Models;
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,6 +17,7 @@ namespace ERP.Controllers
     /// <summary>
     /// تقرير ربط FIFO بين الخروج والدخول (عرض فقط).
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.FifoMap_View)]
     public class StockFifoMapController : Controller
     {
         private readonly AppDbContext context;

@@ -1,5 +1,7 @@
 using ERP.Data;
+using ERP.Filters;
 using ERP.Models;
+using ERP.Security;
 using ERP.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -8,7 +10,8 @@ using System.Security.Claims;
 namespace ERP.Controllers
 {
     /// <summary>
-    /// لوحات التحكم بمستويات متعددة: مندوب مبيعات → مدير → مالك النظام
+    /// لوحات التحكم بمستويات متعددة: مندوب مبيعات → مدير → مالك النظام.
+    /// الصفحة الرئيسية بعد الدخول — متاحة لأي مستخدم مسجّل (الصلاحيات على باقي القوائم).
     /// </summary>
     public class DashboardController : Controller
     {
@@ -43,6 +46,7 @@ namespace ERP.Controllers
         /// لوحة المبيعات الشخصية (لمندوب المبيعات)
         /// </summary>
         [HttpGet]
+        [RequirePermission(PermissionCodes.Dashboard.View)]
         public async Task<IActionResult> Sales()
         {
             var vm = new DashboardViewModel
@@ -132,6 +136,7 @@ namespace ERP.Controllers
         /// لوحة المدير (مبيعات، مشتريات، إيصالات، مدفوعات)
         /// </summary>
         [HttpGet]
+        [RequirePermission(PermissionCodes.Dashboard.View)]
         public async Task<IActionResult> Manager()
         {
             var vm = await BuildOwnerDashboardAsync();
@@ -146,6 +151,7 @@ namespace ERP.Controllers
         /// لوحة المالك الكاملة (كل البيانات + الأرباح)
         /// </summary>
         [HttpGet]
+        [RequirePermission(PermissionCodes.Dashboard.View)]
         public async Task<IActionResult> Owner()
         {
             var vm = await BuildOwnerDashboardAsync();
@@ -159,6 +165,7 @@ namespace ERP.Controllers
         /// الافتراضي: مبيعاتي الشخصية حسب المستخدم المسجّل (بعد تسجيل الدخول)
         /// </summary>
         [HttpGet]
+        [RequirePermission(PermissionCodes.Dashboard.View)]
         public IActionResult Index()
         {
             return RedirectToAction(nameof(Sales));

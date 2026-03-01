@@ -7,8 +7,10 @@ using Microsoft.AspNetCore.Mvc;                      // الكنترولر و IA
 using Microsoft.AspNetCore.Mvc.Rendering;            // SelectListItem
 using Microsoft.EntityFrameworkCore;                 // AsNoTracking / ToListAsync
 using ERP.Data;                                      // AppDbContext
+using ERP.Filters;                                   // RequirePermission
 using ERP.Infrastructure;                             // PagedResult + UserActivityLogger
 using ERP.Models;                                    // Account, UserActionType
+using ERP.Security;                                  // PermissionCodes
 
 namespace ERP.Controllers
 {
@@ -72,6 +74,7 @@ namespace ERP.Controllers
         // =========================================================
         // GET: قائمة الحسابات (نظام القوائم الموحد)
         // =========================================================
+        [RequirePermission(PermissionCodes.Accounts.Chart_View)]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",          // all|name|code|id|type|notes|level
@@ -303,6 +306,7 @@ namespace ERP.Controllers
         // GET: Accounts/Create
         // فتح شاشة إضافة حساب جديد
         // =========================================================
+        [RequirePermission(PermissionCodes.Accounts.Chart_Edit)]
         public IActionResult Create(int? parentId)
         {
             var account = new Account();                // متغير: كائن حساب جديد
@@ -337,6 +341,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Accounts.Chart_Edit)]
         public async Task<IActionResult> Create(Account account)
         {
             if (!ModelState.IsValid)
@@ -386,6 +391,7 @@ namespace ERP.Controllers
         // GET: Accounts/Edit/5
         // فتح شاشة تعديل حساب
         // =========================================================
+        [RequirePermission(PermissionCodes.Accounts.Chart_Edit)]
         public async Task<IActionResult> Edit(int id)
         {
             var account = await _context.Accounts.FindAsync(id);
@@ -402,6 +408,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Accounts.Chart_Edit)]
         public async Task<IActionResult> Edit(int id, Account account)
         {
             if (id != account.AccountId)
@@ -464,6 +471,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Accounts.Chart_Edit)]
         public async Task<IActionResult> Delete(int id)
         {
             var account = await _context.Accounts.FindAsync(id);
@@ -490,6 +498,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Accounts.Chart_Edit)]
         public async Task<IActionResult> BulkDelete(int[] ids)
         {
             if (ids == null || ids.Length == 0)
@@ -514,6 +523,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Accounts.Chart_Edit)]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _context.Accounts.ToListAsync();
@@ -528,6 +538,7 @@ namespace ERP.Controllers
         // Export: تصدير الحسابات إلى ملف CSV يفتح في Excel
         // =========================================================
         [HttpGet]
+        [RequirePermission(PermissionCodes.Accounts.Chart_View)]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",

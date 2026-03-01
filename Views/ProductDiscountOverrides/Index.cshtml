@@ -117,7 +117,8 @@
                         foreach (var x in Model.Items)
                         {
                             <tr>
-                                <td>@(x.IsManual && x.OverrideId.HasValue ? x.OverrideId.ToString() : x.ProdCode)</td>
+                                @* رقم السجل يُعرض فقط عند وجود خصم يدوي فعلي؛ otherwise نضع شرطة لعدم الخلط مع كود الصنف *@
+                                <td>@(x.IsManual && x.OverrideId.HasValue ? x.OverrideId.ToString() : "—")</td>
                                 <td>@(x.ProductName) (@(x.ProdCode))</td>
                                 <td>@x.WarehouseName</td>
                                 <td>الكل</td>

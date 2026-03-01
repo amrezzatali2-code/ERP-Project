@@ -1244,7 +1244,14 @@
 
                             decimal taxAmount = Model.TaxAmount;
                             decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
-                            decimal netTotal = totalAfterDiscountAndTax;
+
+                            // الصافي المعروض يعتمد أساسًا على قيمة NetTotal المخزنة في الهيدر
+                            // لضمان التطابق مع قائمة الفواتير وأي تقارير أخرى
+                            decimal netTotal = Model.NetTotal;
+                            if (netTotal == 0 && (totalAfterDiscount != 0 || taxAmount != 0))
+                            {
+                                netTotal = totalAfterDiscountAndTax;
+                            }
                             // نسبة الضريبة المعروضة (للإدخال): من الإجمالي بعد الخصم
                             decimal taxPercentDisplay = totalAfterDiscount > 0 ? Math.Round(taxAmount * 100m / totalAfterDiscount, 2) : 0m;
                         }
@@ -3686,8 +3693,8 @@
             async function saveTaxAjax() {
 
                 const invoiceId = parseInt('@(Model?.SIId ?? 0)', 10);
+                // لو الفاتورة لسه جديدة (بدون رقم) لا نحاول الحفظ ولا نظهر رسالة
                 if (!invoiceId || invoiceId <= 0) {
-                    alert('يجب حفظ الفاتورة أولاً قبل تعديل الضريبة.');
                     return;
                 }
 
@@ -3725,8 +3732,9 @@
 
             document.getElementById('TaxPercentInput')?.addEventListener('keydown', function (e) {
                 if (e.key === 'Enter') {
+                    // إلغاء حفظ الضريبة بالضغط على إنتر لتفادي رسالة الحفظ المزعجة
                     e.preventDefault();
-                    saveTaxAjax();
+                    return;
                 }
             });
 

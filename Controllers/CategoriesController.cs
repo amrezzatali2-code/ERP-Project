@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectListItem
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;
+using ERP.Filters;
 using ERP.Models;
 using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
+using ERP.Security;
 using System.IO;                 // MemoryStream
 using System.Text;               // StringBuilder + Encoding للـ CSV
 using System.Globalization;      // CultureInfo لو احتجنا تنسيق أرقام
@@ -19,6 +21,7 @@ namespace ERP.Controllers
     /// كنترولر فئات الأصناف — عرض/بحث/ترتيب/ترقيم + إضافة/تعديل/حذف
     /// باستخدام نظام القوائم الموحد مع فورم SHOW.
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.Categories_View)]
     public class CategoriesController : Controller
     {
         private readonly AppDbContext _db;

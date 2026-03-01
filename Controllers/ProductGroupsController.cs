@@ -1,6 +1,8 @@
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                          // ProductGroup, UserActionType
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -16,6 +18,7 @@ namespace ERP.Controllers
     /// إدارة جدول مجموعات الأصناف (ProductGroup)
     /// كل صف = مجموعة أصناف لها اسم ووصف وحالة تفعيل.
     /// </summary>
+    [RequirePermission(PermissionCodes.Settings.ProductGroups_View)]
     public class ProductGroupsController : Controller
     {
         private readonly AppDbContext _context;

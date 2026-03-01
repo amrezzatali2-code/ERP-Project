@@ -1,11 +1,13 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ
 using System.Text;                                // StringBuilder للتصدير
 using System.Threading.Tasks;                     // Task و async
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // الموديلات RolePermission, Role, Permission
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList
 using Microsoft.EntityFrameworkCore;              // Include, AsNoTracking, ToListAsync
@@ -54,26 +56,25 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            string? filterCol_id,
+            string? filterCol_role,
+            string? filterCol_permission,
+            string? filterCol_module,
+            string? filterCol_allowed,
+            string? filterCol_created,
+            string? filterCol_updated,
+            string? filterCol_idExpr)
         {
             // 1) فلتر الكود من/إلى على المعرف Id
             if (fromCode.HasValue)
-            {
                 query = query.Where(rp => rp.Id >= fromCode.Value);
-            }
-
             if (toCode.HasValue)
-            {
                 query = query.Where(rp => rp.Id <= toCode.Value);
-            }
 
-            // 2) فلتر التاريخ على CreatedAt فى جدول RolePermissions نفسه
+            // 2) فلتر التاريخ على CreatedAt
             if (useDateRange && fromDate.HasValue && toDate.HasValue)
-            {
-                query = query.Where(rp =>
-                    rp.CreatedAt >= fromDate.Value &&
-                    rp.CreatedAt <= toDate.Value);
-            }
+                query = query.Where(rp => rp.CreatedAt >= fromDate.Value && rp.CreatedAt <= toDate.Value);
 
             // 3) البحث النصّي
             if (!string.IsNullOrWhiteSpace(search))
@@ -89,52 +90,153 @@ namespace ERP.Controllers
                         else
                             query = query.Where(rp => false);
                         break;
-
                     case "permissionid":
                         if (int.TryParse(term, out int pid))
                             query = query.Where(rp => rp.PermissionId == pid);
                         else
                             query = query.Where(rp => false);
                         break;
-
                     case "role":
                     case "rolename":
+                        // البحث باسم الدور فقط (ليس الوصف) حتى لا تختلط النتائج — مثلاً بحث "مستخدم عادي" يعرض فقط الأدوار التي اسمها يحتوي على هذا النص
                         query = query.Where(rp =>
-                            rp.Role.Name.Contains(term) ||
-                            (rp.Role.Description ?? "").Contains(term));
+                            rp.Role != null &&
+                            rp.Role.Name != null &&
+                            rp.Role.Name.Contains(term));
                         break;
-
                     case "permission":
                         query = query.Where(rp =>
-                            rp.Permission.Code.Contains(term) ||
-                            (rp.Permission.NameAr ?? "").Contains(term) ||
-                            (rp.Permission.Module ?? "").Contains(term));
+                            rp.Permission != null &&
+                            ((rp.Permission.Code != null && rp.Permission.Code.Contains(term)) ||
+                             (rp.Permission.NameAr != null && rp.Permission.NameAr.Contains(term)) ||
+                             (rp.Permission.Module != null && rp.Permission.Module.Contains(term))));
                         break;
-
                     case "module":
-                        query = query.Where(rp =>
-                            (rp.Permission.Module ?? "").Contains(term));
+                        query = query.Where(rp => rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.Contains(term));
                         break;
-
                     case "id":
                         if (int.TryParse(term, out int idVal))
                             query = query.Where(rp => rp.Id == idVal);
                         else
                             query = query.Where(rp => false);
                         break;
-
-                    default: // all
+                    default:
                         query = query.Where(rp =>
                             rp.Id.ToString().Contains(term) ||
                             rp.RoleId.ToString().Contains(term) ||
                             rp.PermissionId.ToString().Contains(term) ||
-                            rp.Role.Name.Contains(term) ||
-                            (rp.Role.Description ?? "").Contains(term) ||
-                            rp.Permission.Code.Contains(term) ||
-                            (rp.Permission.NameAr ?? "").Contains(term) ||
-                            (rp.Permission.Module ?? "").Contains(term));
+                            (rp.Role != null && rp.Role.Name != null && rp.Role.Name.Contains(term)) ||
+                            (rp.Role != null && rp.Role.Description != null && rp.Role.Description.Contains(term)) ||
+                            (rp.Permission != null && rp.Permission.Code != null && rp.Permission.Code.Contains(term)) ||
+                            (rp.Permission != null && rp.Permission.NameAr != null && rp.Permission.NameAr.Contains(term)) ||
+                            (rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.Contains(term)));
                         break;
                 }
+            }
+
+            // 4) فلاتر أعمدة (بنمط Excel — مثل قائمة الأصناف)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var idFilter = filterCol_id.Trim();
+                if (idFilter.Contains('|'))
+                {
+                    var parts = idFilter.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    var ids = new List<int>();
+                    foreach (var p in parts)
+                        if (int.TryParse(p, out int idVal)) ids.Add(idVal);
+                    if (ids.Count > 0)
+                        query = query.Where(rp => ids.Contains(rp.Id));
+                }
+                else if (int.TryParse(idFilter, out int singleId))
+                    query = query.Where(rp => rp.Id == singleId);
+                else
+                    query = query.Where(rp => rp.Id.ToString().Contains(idFilter));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                var expr = filterCol_idExpr.Trim();
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var max))
+                    query = query.Where(rp => rp.Id <= max);
+                else if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var min))
+                    query = query.Where(rp => rp.Id >= min);
+                else if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var max2))
+                    query = query.Where(rp => rp.Id < max2);
+                else if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var min2))
+                    query = query.Where(rp => rp.Id > min2);
+                else if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-"))
+                {
+                    var sep = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out var fromId) && int.TryParse(parts[1].Trim(), out var toId))
+                    {
+                        if (fromId > toId) (fromId, toId) = (toId, fromId);
+                        query = query.Where(rp => rp.Id >= fromId && rp.Id <= toId);
+                    }
+                }
+                else if (int.TryParse(expr, out var exactId))
+                    query = query.Where(rp => rp.Id == exactId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_role))
+            {
+                var roleFilter = filterCol_role.Trim();
+                if (roleFilter.Contains('|'))
+                {
+                    var parts = roleFilter.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    query = query.Where(rp => parts.Contains(rp.Role.Name, StringComparer.OrdinalIgnoreCase));
+                }
+                else
+                    query = query.Where(rp => rp.Role.Name.Contains(roleFilter));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_permission))
+            {
+                var permFilter = filterCol_permission.Trim();
+                if (permFilter.Contains('|'))
+                {
+                    var parts = permFilter.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    query = query.Where(rp => parts.Contains(rp.Permission.Code, StringComparer.OrdinalIgnoreCase));
+                }
+                else
+                    query = query.Where(rp =>
+                        rp.Permission.Code.Contains(permFilter) ||
+                        (rp.Permission.NameAr != null && rp.Permission.NameAr.Contains(permFilter)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_module))
+            {
+                var modFilter = filterCol_module.Trim();
+                if (modFilter.Contains('|'))
+                {
+                    var parts = modFilter.Split('|', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                    query = query.Where(rp => parts.Contains(rp.Permission.Module ?? "", StringComparer.OrdinalIgnoreCase));
+                }
+                else
+                    query = query.Where(rp => (rp.Permission.Module ?? "").Contains(modFilter));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_allowed))
+            {
+                var allowedFilter = filterCol_allowed.Trim().ToLowerInvariant();
+                if (allowedFilter == "مسموح" || allowedFilter == "نعم" || allowedFilter == "1" || allowedFilter == "true")
+                    query = query.Where(rp => rp.IsAllowed);
+                else if (allowedFilter == "ممنوع" || allowedFilter == "لا" || allowedFilter == "0" || allowedFilter == "false")
+                    query = query.Where(rp => !rp.IsAllowed);
+                else
+                    query = query.Where(rp => (rp.IsAllowed ? "مسموح" : "ممنوع").Contains(allowedFilter));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var createdFilter = filterCol_created.Trim();
+                query = query.Where(rp => rp.CreatedAt.ToString("yyyy-MM-dd HH:mm").Contains(createdFilter));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var updatedFilter = filterCol_updated.Trim();
+                query = query.Where(rp => rp.UpdatedAt != null && rp.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm").Contains(updatedFilter));
             }
 
             return query;
@@ -155,6 +257,7 @@ namespace ERP.Controllers
 
         // ========= INDEX: قائمة صلاحيات الأدوار بنظام القوائم الموحد =========
 
+        [RequirePermission(PermissionCodes.Security.RolePermissions_View)]
         public async Task<IActionResult> Index(
       string? search,
       string? searchBy,
@@ -167,7 +270,15 @@ namespace ERP.Controllers
       DateTime? toDate = null,
       string? dateField = "CreatedAt",
       int? fromCode = null,
-      int? toCode = null)
+      int? toCode = null,
+      string? filterCol_id = null,
+      string? filterCol_role = null,
+      string? filterCol_permission = null,
+      string? filterCol_module = null,
+      string? filterCol_allowed = null,
+      string? filterCol_created = null,
+      string? filterCol_updated = null,
+      string? filterCol_idExpr = null)
         {
             // استعلام أساسي مع Include على الدور والصلاحية
             IQueryable<RolePermission> query = _context.RolePermissions
@@ -175,8 +286,10 @@ namespace ERP.Controllers
                 .Include(rp => rp.Role)
                 .Include(rp => rp.Permission);
 
-            // تطبيق البحث + فلاتر الكود + فلاتر التاريخ
-            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            // تطبيق البحث + فلاتر الكود + فلاتر التاريخ + فلاتر الأعمدة
+            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode,
+                filterCol_id, filterCol_role, filterCol_permission, filterCol_module, filterCol_allowed,
+                filterCol_created, filterCol_updated, filterCol_idExpr);
 
             // الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -242,13 +355,96 @@ namespace ERP.Controllers
                 ToDate = toDate
             };
 
-            // إرسال قيم الفلاتر للواجهة
+            // إرسال قيم الفلاتر للواجهة (لضمان ظهور البحث الحالي في الفورم)
+            ViewBag.Search = search;
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "CreatedAt";
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Role = filterCol_role;
+            ViewBag.FilterCol_Permission = filterCol_permission;
+            ViewBag.FilterCol_Module = filterCol_module;
+            ViewBag.FilterCol_Allowed = filterCol_allowed;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
 
             return View(model);
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود (للفلترة بنمط Excel — مثل قائمة الأصناف)
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim();
+            var q = _context.RolePermissions
+                .AsNoTracking()
+                .Include(rp => rp.Role)
+                .Include(rp => rp.Permission);
+
+            List<object> items;
+            switch ((column ?? "").ToLowerInvariant())
+            {
+                case "id":
+                    items = (await q.Select(rp => rp.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                        .Select(v => (object)new { value = v.ToString(), display = v.ToString() }).ToList();
+                    break;
+                case "role":
+                case "rolename":
+                    if (string.IsNullOrEmpty(searchTerm))
+                        items = (await q.Select(rp => rp.Role.Name).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                            .Select(v => (object)new { value = v ?? "", display = v ?? "" }).ToList();
+                    else
+                        items = (await q.Where(rp => rp.Role.Name.Contains(searchTerm))
+                            .Select(rp => rp.Role.Name).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                            .Select(v => (object)new { value = v ?? "", display = v ?? "" }).ToList();
+                    break;
+                case "permission":
+                case "permissioncode":
+                    if (string.IsNullOrEmpty(searchTerm))
+                        items = (await q.Select(rp => rp.Permission.Code).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                            .Select(v => (object)new { value = v ?? "", display = v ?? "" }).ToList();
+                    else
+                        items = (await q.Where(rp => rp.Permission.Code.Contains(searchTerm) || (rp.Permission.NameAr != null && rp.Permission.NameAr.Contains(searchTerm)))
+                            .Select(rp => rp.Permission.Code).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                            .Select(v => (object)new { value = v ?? "", display = v ?? "" }).ToList();
+                    break;
+                case "module":
+                    if (string.IsNullOrEmpty(searchTerm))
+                        items = (await q.Where(rp => rp.Permission.Module != null).Select(rp => rp.Permission.Module!).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                            .Select(v => (object)new { value = v ?? "", display = v ?? "" }).ToList();
+                    else
+                        items = (await q.Where(rp => rp.Permission.Module != null && rp.Permission.Module.Contains(searchTerm))
+                            .Select(rp => rp.Permission.Module).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                            .Select(v => (object)new { value = v ?? "", display = v ?? "" }).ToList();
+                    break;
+                case "allowed":
+                case "isallowed":
+                    items = new List<object>
+                    {
+                        new { value = "مسموح", display = "مسموح" },
+                        new { value = "ممنوع", display = "ممنوع" }
+                    };
+                    break;
+                case "created":
+                case "createdat":
+                    items = (await q.Select(rp => rp.CreatedAt.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                        .Select(v => (object)new { value = v, display = v }).ToList();
+                    break;
+                case "updated":
+                case "updatedat":
+                    items = (await q.Where(rp => rp.UpdatedAt != null).Select(rp => rp.UpdatedAt!.Value.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                        .Select(v => (object)new { value = v, display = v }).ToList();
+                    break;
+                default:
+                    items = new List<object>();
+                    break;
+            }
+
+            return Json(items);
         }
 
 
@@ -413,9 +609,9 @@ namespace ERP.Controllers
                 .ThenBy(p => p.NameAr)     // ثم باسم الصلاحية
                 .ToListAsync();
 
-            // 🟣 3) جلب صلاحيات هذا الدور
+            // 🟣 3) جلب صلاحيات هذا الدور (المسموح بها فقط — علامة الصح تعني مسموح)
             var currentIdsList = await _context.RolePermissions
-                .Where(rp => rp.RoleId == id)
+                .Where(rp => rp.RoleId == id && rp.IsAllowed)
                 .Select(rp => rp.PermissionId)
                 .ToListAsync();
 
@@ -447,10 +643,18 @@ namespace ERP.Controllers
         // POST: RolePermissions/Edit  (حفظ التعديلات)
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int roleId, int[] selectedPermissionIds)
+        public async Task<IActionResult> Edit(int roleId, int[]? selectedPermissionIds)
         {
-            // 🟣 تحويل المصفوفة إلى HashSet لسهولة البحث
-            var selected = selectedPermissionIds?.ToHashSet() ?? new HashSet<int>();
+            // التحقق من وجود الدور قبل أي تعديل
+            var role = await _context.Roles.FindAsync(roleId);
+            if (role == null)
+            {
+                TempData["Error"] = "الدور غير موجود.";
+                return RedirectToAction(nameof(Index));
+            }
+
+            // عند عدم اختيار أي صلاحية لا يُرسل أي عنصر من الفورم فيصبح المصفوفة null
+            var selected = selectedPermissionIds != null ? selectedPermissionIds.ToHashSet() : new HashSet<int>();
 
             // 🟣 1) الصلاحيات الحالية فى قاعدة البيانات لهذا الدور
             var existing = await _context.RolePermissions
@@ -468,6 +672,16 @@ namespace ERP.Controllers
 
             if (toDelete.Count > 0)
                 _context.RolePermissions.RemoveRange(toDelete);
+
+            // 🟣 2.5) تحديث الصفوف الموجودة لضمان IsAllowed = true عند اختيار الصلاحية (سماح فعلي)
+            var toUpdate = existing
+                .Where(rp => selected.Contains(rp.PermissionId) && !rp.IsAllowed)
+                .ToList();
+            foreach (var rp in toUpdate)
+            {
+                rp.IsAllowed = true;
+                rp.UpdatedAt = DateTime.UtcNow;
+            }
 
             // 🟣 3) إضافة الصلاحيات الجديدة التى تم تعليمها
             var now = DateTime.UtcNow;
@@ -611,6 +825,14 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_role = null,
+            string? filterCol_permission = null,
+            string? filterCol_module = null,
+            string? filterCol_allowed = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string? filterCol_idExpr = null,
             string format = "excel")
         {
             // 1) الاستعلام الأساسي: صلاحيات الأدوار + الدور + الصلاحية (قراءة فقط)
@@ -628,7 +850,15 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                filterCol_id,
+                filterCol_role,
+                filterCol_permission,
+                filterCol_module,
+                filterCol_allowed,
+                filterCol_created,
+                filterCol_updated,
+                filterCol_idExpr);
 
             // 3) ترتيب افتراضي للتصدير:
             // أولاً باسم الدور، ثم بالموديول، ثم كود الصلاحية

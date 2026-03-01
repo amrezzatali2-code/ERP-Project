@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -45,9 +45,6 @@ namespace ERP.Data.Seed
 
             foreach (var role in roles)
             {
-                // تعليق: الدور رقم (1) من الـ RoleSeeder هو "مسؤول النظام (1)"
-                bool isAdmin = role.RoleId == 1;
-
                 foreach (var perm in permissions)
                 {
                     var key = (role.RoleId, perm.PermissionId);
@@ -60,7 +57,7 @@ namespace ERP.Data.Seed
                     {
                         RoleId = role.RoleId,            // ربط بالدور
                         PermissionId = perm.PermissionId, // ربط بالصلاحية
-                        IsAllowed = isAdmin,             // مسؤول النظام له كل الصلاحيات
+                        IsAllowed = true,                // افتراضيًا مسموح لجميع الأدوار؛ التقييد من واجهة صلاحيات الأدوار
                         CreatedAt = now,                 // تاريخ الإنشاء
                         UpdatedAt = null
                     };

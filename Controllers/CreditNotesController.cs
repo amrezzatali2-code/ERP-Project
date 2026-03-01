@@ -9,8 +9,10 @@ using Microsoft.AspNetCore.Mvc;                   // Controller, IActionResult
 using Microsoft.AspNetCore.Mvc.Rendering;         // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, Include, ToListAsync
 using ERP.Data;                                   // AppDbContext الاتصال بقاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // CreditNote, UserActionType...
+using ERP.Security;
 using ERP.Services;                               // ILedgerPostingService
 
 namespace ERP.Controllers
@@ -26,6 +28,7 @@ namespace ERP.Controllers
     /// - DeleteAll: حذف كل الإشعارات (لبيئة TEST).
     /// - بالإضافة إلى CRUD الأساسي: Create / Edit / Details / Delete.
     /// </summary>
+    [RequirePermission(PermissionCodes.AccountsDocuments.CreditNote_View)]
     public class CreditNotesController : Controller
     {
         private readonly AppDbContext _context;

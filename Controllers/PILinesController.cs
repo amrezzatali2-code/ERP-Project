@@ -6,8 +6,10 @@ using System.Threading.Tasks;                   // async / await
 using Microsoft.AspNetCore.Mvc;                 // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;            // Include / AsNoTracking
 using ERP.Data;                                 // AppDbContext
+using ERP.Filters;
 using ERP.Models;                               // الموديل PILine + PurchaseInvoice
 using ERP.Infrastructure;                       // PagedResult لتقسيم الصفحات
+using ERP.Security;
 
 namespace ERP.Controllers
 {
@@ -19,6 +21,7 @@ namespace ERP.Controllers
     /// - حذف محدد / حذف الكل.
     /// - تصدير CSV/Excel.
     /// </summary>
+    [RequirePermission(PermissionCodes.Purchasing.InvoiceLines_View)]
     public class PILinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

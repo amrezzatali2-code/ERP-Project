@@ -5,8 +5,10 @@ using System.Linq.Expressions;                       // Expressions
 using System.Text;                                   // StringBuilder للتصدير
 using System.Threading.Tasks;                        // Task / async
 using ERP.Data;                                      // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                            // PagedResult + ApplySearchSort
 using ERP.Models;                                    // ProductBonusGroup
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +18,7 @@ namespace ERP.Controllers
     /// إدارة جدول مجموعات الحوافز للأصناف (ProductBonusGroup)
     /// كل صف = مجموعة حافز لها اسم وقيمة حافز لكل علبة.
     /// </summary>
+    [RequirePermission(PermissionCodes.Settings.ProductBonusGroups_View)]
     public class ProductBonusGroupsController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات

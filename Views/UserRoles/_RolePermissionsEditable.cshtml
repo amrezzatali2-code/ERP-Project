@@ -1,9 +1,14 @@
 @model IEnumerable<ERP.ViewModels.RolePermissionEditItem>
 @{
     var list = Model?.ToList() ?? new List<ERP.ViewModels.RolePermissionEditItem>();
-    var byModule = list
-        .GroupBy(x => x.Module ?? "")
-        .OrderBy(g => g.Key)
+    var moduleOrder = new[] { "لوحات التحكم", "لوحة التحكم", "الإعدادات", "المستخدمون والصلاحيات", "المناطق الجغرافية", "العملاء", "إدارة المخازن", "المبيعات", "المشتريات", "الحسابات", "التقارير", "أخرى" };
+    var grouped = list
+        .GroupBy(p => string.IsNullOrWhiteSpace(p.Module) ? "أخرى" : (p.Module ?? "أخرى"))
+        .ToDictionary(g => g.Key, g => g.ToList());
+    var byModule = moduleOrder
+        .Where(m => grouped.ContainsKey(m))
+        .Select(m => new { Key = m, Items = grouped[m] })
+        .Concat(grouped.Where(kv => !moduleOrder.Contains(kv.Key)).Select(kv => new { Key = kv.Key, Items = kv.Value }))
         .ToList();
 }
 @if (!list.Any())
@@ -41,7 +46,7 @@ else
                 @foreach (var grp in byModule)
                 {
                     var modName = string.IsNullOrWhiteSpace(grp.Key) ? "(بدون موديول)" : grp.Key;
-                    var perms = grp.ToList();
+                    var perms = grp.Items.OrderBy(x => x.NameAr).ToList();
                     var allAllowed = perms.All(p => p.IsAllowed);
                     var modId = "mod-" + (modIdx++);
                     <tr class="perm-module-row perm-collapsed" data-module="@modName" data-search="@modName" id="@modId">

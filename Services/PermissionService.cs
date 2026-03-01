@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Claims;
 using ERP.Data;
 using Microsoft.EntityFrameworkCore;
@@ -35,11 +36,25 @@ namespace ERP.Services
                     return true;
             }
 
-            var code = permissionCode.Trim();
+            var code = permissionCode?.Trim() ?? "";
+            if (string.IsNullOrEmpty(code)) return false;
 
+            // البحث عن الصلاحية بأكواد مطابقة (بدون مراعاة حالة الحروف أو مسافات زائدة)
+            var codeLower = code.ToLowerInvariant();
             var perm = await _context.Permissions
                 .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Code == code && p.IsActive);
+                .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == codeLower)
+                .FirstOrDefaultAsync();
+
+            // في حال وجود أكواد قديمة في القاعدة (مثل Sales.Invoice بدل Sales.Invoices) نبحث عنها
+            if (perm == null && (codeLower == "sales.invoices.view" || codeLower == "sales.invoices.create"))
+            {
+                var altCode = codeLower.Replace("sales.invoices.", "sales.invoice.");
+                perm = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == altCode)
+                    .FirstOrDefaultAsync();
+            }
             if (perm == null) return false;
 
             var denied = await _context.UserDeniedPermissions
@@ -114,6 +129,18 @@ namespace ERP.Services
 
             foreach (var c in codes) set.Add(c);
             return set;
+        }
+
+        public async Task<bool> HasAnyPermissionWithPrefixAsync(string codePrefix)
+        {
+            var user = _httpContextAccessor.HttpContext?.User;
+            var userIdStr = user?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdStr) || !int.TryParse(userIdStr, out int userId) || userId <= 0)
+                return false;
+            if (string.IsNullOrWhiteSpace(codePrefix)) return false;
+            var prefix = codePrefix.Trim();
+            var codes = await GetUserPermissionCodesAsync(userId);
+            return codes.Any(c => c != null && c.StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

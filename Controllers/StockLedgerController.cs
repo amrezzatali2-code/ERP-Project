@@ -1,4 +1,4 @@
-﻿using System;                                       // متغيرات: DateTime
+using System;                                       // متغيرات: DateTime
 using System.Collections.Generic;                   // Dictionary
 using System.IO;                                    // MemoryStream
 using System.Linq;                                  // LINQ
@@ -7,8 +7,10 @@ using System.Text;                                  // StringBuilder + Encoding 
 using System.Threading.Tasks;                       // Task/async
 using ClosedXML.Excel;                              // مكتبة Excel
 using ERP.Data;                                     // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                           // ApplySearchSort + PagedResult
 using ERP.Models;                                   // StockLedger
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;                     // Controller
 using Microsoft.AspNetCore.Mvc.Rendering;           // SelectListItem
 using Microsoft.EntityFrameworkCore;                // AsNoTracking, ToListAsync
@@ -19,6 +21,7 @@ namespace ERP.Controllers
     /// كنترولر دفتر الحركة المخزنية:
     /// عرض + بحث + ترتيب + ترقيم + تصدير (Excel أو CSV) حسب اختيار المستخدم.
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.StockLedger_View)]
     public class StockLedgerController : Controller
     {
         private readonly AppDbContext context;   // متغير: سياق قاعدة البيانات

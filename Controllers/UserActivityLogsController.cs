@@ -6,8 +6,10 @@ using System.Threading.Tasks;                // async / await
 using Microsoft.AspNetCore.Mvc;              // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;         // Include / AsNoTracking
 using ERP.Data;                              // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                    // PagedResult
 using ERP.Models;                            // UserActivityLog, User, UserActionType
+using ERP.Security;
 
 namespace ERP.Controllers
 {
@@ -16,6 +18,7 @@ namespace ERP.Controllers
     /// عرض + تصفية + حذف + تصدير.
     /// لا يوجد إنشاء / تعديل يدوي للسجلات.
     /// </summary>
+    [RequirePermission(PermissionCodes.Settings.MovementLog_View)]
     public class UserActivityLogsController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

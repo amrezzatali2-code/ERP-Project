@@ -26,6 +26,7 @@ namespace ERP.Controllers
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly StockAnalysisService _StockAnalysisService; // متغير: خدمة الترحيل
         private readonly IFullReturnService _fullReturnService;
+        private readonly IPermissionService _permissionService;
 
         // مصفوفة طرق الدفع الثابتة لعرضها في الفورم
         private static readonly string[] PaymentMethods = new[] { "نقدي", "شبكة", "آجل", "مختلط" };
@@ -34,7 +35,8 @@ namespace ERP.Controllers
                                         DocumentTotalsService docTotals,
                                         IUserActivityLogger activityLogger, ILedgerPostingService ledgerPosting,
                                         StockAnalysisService stockAnalysisService,
-                                        IFullReturnService fullReturnService)
+                                        IFullReturnService fullReturnService,
+                                        IPermissionService permissionService)
 
         {
             _context = context;
@@ -43,6 +45,7 @@ namespace ERP.Controllers
             _ledgerPostingService = ledgerPosting;     // ✅ متغير: خدمة الترحيل
             _StockAnalysisService = stockAnalysisService;
             _fullReturnService = fullReturnService;
+            _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
         }
 
 
@@ -2342,14 +2345,23 @@ namespace ERP.Controllers
         // Show — عرض فاتورة المبيعات (Shell كامل أو Body فقط)
         // - يدعم frag=body (لتبديل جسم الفاتورة بسرعة بدون Reload كامل)
         // - يدعم frame=1 (نمط التابات)
-        // - لو رقم الفاتورة غير موجود:
-        //   - لو frag=body => NotFound برسالة (الـ JS يتعامل)
-        //   - لو فتح عادي => يفتح أقرب فاتورة (التالي ثم السابق) بدل صفحة فاضية
+        // - عند id=0 (فاتورة جديدة): نسمح بصلاحية Create فقط ونوجّه إلى Create
+        // - لو رقم الفاتورة غير موجود: يفتح أقرب فاتورة أو Create
         // =========================================================
         [HttpGet]
-        [RequirePermission(PermissionCodes.SalesInvoices.Show)]
         public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null, bool includeZeroQty = false)
         {
+            // فاتورة جديدة (id=0): صلاحية Create مطلوبة
+            if (id == 0)
+            {
+                if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create))
+                    return RedirectToAction("AccessDenied", "Home");
+                return RedirectToAction(nameof(Create), new { frame = 1, includeZeroQty });
+            }
+
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Show))
+                return RedirectToAction("AccessDenied", "Home");
+
             // =========================================
             // متغير: هل هذا الطلب يطلب "Body فقط"؟
             // - frag=body معناها: نريد جزء الصفحة المتغير فقط (بدون Layout)
@@ -2552,9 +2564,8 @@ namespace ERP.Controllers
 
 
         // =========================
-        // Index — عرض قائمة فواتير البيع
+        // Index — عرض قائمة فواتير البيع (صلاحية View أو Create تكفي للفتح)
         // =========================
-        [RequirePermission(PermissionCodes.SalesInvoices.View)]
         public async Task<IActionResult> Index(
             string? search,                      // نص البحث
             string? searchBy,                    // نوع البحث: id / customer / warehouse / date / status
@@ -2570,6 +2581,11 @@ namespace ERP.Controllers
             int pageSize = 25                    // حجم الصفحة
         )
         {
+            bool canView = await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.View);
+            bool canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create);
+            if (!canView && !canCreate)
+                return RedirectToAction("AccessDenied", "Home");
+
             // قيم افتراضية لو مش جاية من الكويري
             searchBy ??= "id";
             sort ??= "SIDate";
@@ -2678,9 +2694,11 @@ namespace ERP.Controllers
         // =========================================================
         // Create — GET: فتح شاشة إنشاء فاتورة مبيعات جديدة
         [HttpGet]
-        [RequirePermission(PermissionCodes.SalesInvoices.Create)]
         public async Task<IActionResult> Create(bool includeZeroQty = false)
         {
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create))
+                return RedirectToAction("AccessDenied", "Home");
+
             // =========================================================
             // (1) تجهيز موديل جديد بقيم افتراضية
             // =========================================================
@@ -2741,9 +2759,11 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.SalesInvoices.Create)]
         public async Task<IActionResult> Create(SalesInvoice invoice, bool includeZeroQty = false)
         {
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create))
+                return RedirectToAction("AccessDenied", "Home");
+
             // تحقق إضافي على نسبة خصم الهيدر (0..100)
             if (invoice.HeaderDiscountPercent < 0 || invoice.HeaderDiscountPercent > 100)
             {

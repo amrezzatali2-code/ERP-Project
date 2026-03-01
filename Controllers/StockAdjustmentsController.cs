@@ -1,6 +1,8 @@
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                          // StockAdjustment, UserActionType...
+using ERP.Security;
 using ERP.Services;                        // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;  // SelectList
@@ -19,6 +21,7 @@ namespace ERP.Controllers
     /// كنترولر إدارة تسويات الجرد (رأس التسوية فقط).
     /// كل سجل = تسوية واحدة على مخزن معيّن في تاريخ معيّن.
     /// </summary>
+    [RequirePermission(PermissionCodes.Stock.StockAdjustments_View)]
     public class StockAdjustmentsController : Controller
     {
         private readonly AppDbContext _context;

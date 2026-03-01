@@ -7,8 +7,10 @@ using System.Threading.Tasks;                 // async / await
 using Microsoft.AspNetCore.Mvc;               // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;          // Include, AsNoTracking
 using ERP.Data;                               // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                     // كلاس PagedResult للنظام الموحد
 using ERP.Models;                             // الموديلات
+using ERP.Security;
 
 namespace ERP.Controllers
 {
@@ -16,6 +18,7 @@ namespace ERP.Controllers
     /// إدارة جدول سطور التحويل بين المخازن (StockTransferLines)
     /// كل صف = صنف واحد ضمن تحويل بين مخزنين.
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.StockTransferLines_View)]
     public class StockTransferLinesController : Controller
     {
         private readonly AppDbContext _context;       // كائن الاتصال بقاعدة البيانات

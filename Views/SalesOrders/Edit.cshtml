@@ -1,0 +1,138 @@
+@* Views/SalesOrders/Edit.cshtml — عرض/تعديل أمر بيع (جديد أو موجود) *@
+@model ERP.Models.SalesOrder
+@using Microsoft.AspNetCore.Mvc.Rendering
+@{
+    ViewData["Title"] = Model.SOId == 0 ? "أمر بيع جديد" : $"أمر بيع — رقم {Model.SOId}";
+    var customers = ViewBag.Customers as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var warehouseList = ViewBag.Warehouses as SelectList ?? new SelectList(Enumerable.Empty<SelectListItem>());
+    bool isNew = Model.SOId == 0;
+}
+
+<div class="container-fluid" dir="rtl">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="mb-0">@ViewData["Title"]</h2>
+        <a asp-action="Index" class="btn btn-secondary">قائمة أوامر البيع</a>
+    </div>
+
+    @if (TempData["Msg"] != null)
+    {
+        <div class="alert alert-success">@TempData["Msg"]</div>
+    }
+
+    <form method="post" asp-action="@(isNew ? "Create" : "Edit")" asp-route-id="@(isNew ? (int?)null : Model.SOId)">
+        @Html.AntiForgeryToken()
+        @if (!isNew)
+        {
+            <input type="hidden" asp-for="SOId" />
+            <input type="hidden" asp-for="RowVersion" />
+            <input type="hidden" asp-for="CreatedAt" />
+            <input type="hidden" asp-for="CreatedBy" />
+        }
+
+        <div class="card mb-3">
+            <div class="card-header"><strong>بيانات أمر البيع</strong></div>
+            <div class="card-body row g-3">
+                @if (!isNew)
+                {
+                    <div class="col-md-4">
+                        <label asp-for="SOId" class="form-label"></label>
+                        <input asp-for="SOId" class="form-control" readonly />
+                    </div>
+                }
+                <div class="col-md-4">
+                    <label asp-for="SODate" class="form-label"></label>
+                    <input asp-for="SODate" type="date" class="form-control" />
+                    <span asp-validation-for="SODate" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="CustomerId" class="form-label"></label>
+                    <select asp-for="CustomerId" class="form-select" required>
+                        <option value="">— اختر العميل —</option>
+                        @foreach (var c in customers)
+                        {
+                            <option value="@c.Id">@c.Name</option>
+                        }
+                    </select>
+                    <span asp-validation-for="CustomerId" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="WarehouseId" class="form-label"></label>
+                    <select asp-for="WarehouseId" class="form-select" asp-items="warehouseList" required></select>
+                    <span asp-validation-for="WarehouseId" class="text-danger"></span>
+                </div>
+                <div class="col-md-4">
+                    <label asp-for="Status" class="form-label"></label>
+                    <input asp-for="Status" class="form-control" />
+                    <span asp-validation-for="Status" class="text-danger"></span>
+                </div>
+                <div class="col-12">
+                    <label asp-for="Notes" class="form-label"></label>
+                    <textarea asp-for="Notes" class="form-control" rows="2"></textarea>
+                </div>
+                @if (!isNew)
+                {
+                    <div class="col-md-4">
+                        <label asp-for="TotalQtyRequested" class="form-label"></label>
+                        <input asp-for="TotalQtyRequested" class="form-control" readonly />
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="ExpectedItemsTotal" class="form-label"></label>
+                        <input asp-for="ExpectedItemsTotal" class="form-control" readonly />
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (!isNew && Model.Lines != null && Model.Lines.Any())
+        {
+            <div class="card mb-3">
+                <div class="card-header"><strong>سطور أمر البيع</strong></div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>الصنف</th>
+                                    <th>الكمية</th>
+                                    <th>السعر</th>
+                                    <th>الإجمالي</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var line in Model.Lines)
+                                {
+                                    <tr>
+                                        <td>@line.ProdId</td>
+                                        <td>@line.QtyRequested</td>
+                                        <td>@line.ExpectedUnitPrice.ToString("N2")</td>
+                                        <td>@line.ExpectedLineTotal.ToString("N2")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <a asp-controller="SOLines" asp-action="Index" asp-route-soId="@Model.SOId" class="btn btn-primary">إدارة سطور الأمر</a>
+                </div>
+            </div>
+        }
+        else if (!isNew)
+        {
+            <div class="card mb-3">
+                <div class="card-body">
+                    <a asp-controller="SOLines" asp-action="Index" asp-route-soId="@Model.SOId" class="btn btn-primary">إضافة سطور الأمر</a>
+                </div>
+            </div>
+        }
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-success">@(isNew ? "إنشاء الأمر" : "حفظ التعديلات")</button>
+            <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

@@ -5,7 +5,9 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;
+using ERP.Filters;
 using ERP.Models;
+using ERP.Security;
 
 namespace ERP.Controllers
 {
@@ -13,6 +15,7 @@ namespace ERP.Controllers
     /// الكنترولر الخاص بالخزينة الرئيسية
     /// يعرض رصيد الخزينة وأذون الاستلام والدفع
     /// </summary>
+    [RequirePermission(PermissionCodes.Accounts.Treasury_View)]
     public class TreasuryController : Controller
     {
         private readonly AppDbContext _context;

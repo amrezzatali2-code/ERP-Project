@@ -1,7 +1,9 @@
 using ClosedXML.Excel;
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                  // كلاس PagedResult لتقسيم الصفحات + الفلاتر
 using ERP.Models;                          // الموديل WarehousePolicyRule
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;   // علشان SelectList
 using Microsoft.EntityFrameworkCore;
@@ -23,6 +25,7 @@ namespace ERP.Controllers
     /// كل صف = سياسة معيّنة (PolicyId) داخل مخزن معيّن (WarehouseId)
     /// وتحدد نسبة ربح المخزن وحدّ الخصم المسموح للعميل.
     /// </summary>
+    [RequirePermission(PermissionCodes.Settings.WarehousePolicyRules_View)]
     public class WarehousePolicyRulesController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات

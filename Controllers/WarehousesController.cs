@@ -5,8 +5,10 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;     // SelectList / SelectListItem
 using Microsoft.EntityFrameworkCore;
 using ERP.Data;
+using ERP.Filters;
 using ERP.Models;
 using ERP.Infrastructure;                     // PagedResult + UserActivityLogger
+using ERP.Security;
 using System.IO;                 // MemoryStream
 using System.Text;               // StringBuilder + Encoding للـ CSV
 using System.Globalization;      // CultureInfo لو احتجنا تنسيق أرقام
@@ -22,6 +24,7 @@ namespace ERP.Controllers
     ///  - فلترة بالتاريخ/الوقت (تاريخ الإنشاء)
     ///  - اختيار الأعمدة + حذف المحدد + حذف الكل
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.Warehouses_View)]
     public class WarehousesController : Controller
     {
         private readonly AppDbContext _db;

@@ -1,6 +1,8 @@
 using ERP.Data;                                  // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                        // PagedResult + UserActivityLogger
 using ERP.Models;                                // StockTransfer, UserActionType...
+using ERP.Security;
 using ERP.Services;                              // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;                  // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;        // SelectList و SelectListItem
@@ -20,6 +22,7 @@ namespace ERP.Controllers
     /// يطبق نظام القوائم الموحد:
     /// بحث + فلترة + ترتيب + تقسيم صفحات + حذف جماعي + حذف الكل + تصدير.
     /// </summary>
+    [RequirePermission(PermissionCodes.Stock.StockTransfers_View)]
     public class StockTransfersController : Controller
     {
         private readonly AppDbContext _context;

@@ -10,6 +10,11 @@
     var totalTransferProfit = ViewBag.TotalTransferProfit as decimal? ?? 0m;
     var totalProfit = ViewBag.TotalProfit as decimal? ?? 0m;
 
+    // إجمالي الكمية ومتوسطات السعر/التكلفة على مستوى التقرير كله
+    var totalSalesQtyAll = reportData.Sum(r => r.SalesQty);
+    var totalAvgUnitPrice = totalSalesQtyAll > 0 ? totalSalesRevenue / totalSalesQtyAll : 0m;
+    var totalAvgUnitCost = totalSalesQtyAll > 0 ? totalSalesCost / totalSalesQtyAll : 0m;
+
     // Pagination
     var page = ViewBag.Page as int? ?? 1;
     var pageSize = ViewBag.PageSize as int? ?? 20;
@@ -22,9 +27,22 @@
     var warehouseId = ViewBag.WarehouseId as int?;
     var fromDate = ViewBag.FromDate as DateTime?;
     var toDate = ViewBag.ToDate as DateTime?;
+    var includeZeroQty = ViewBag.IncludeZeroQty as bool? ?? false;
     var profitMethod = ViewBag.ProfitMethod as string ?? "both";
     var sortBy = ViewBag.SortBy as string ?? "name";
     var sortDir = ViewBag.SortDir as string ?? "asc";
+    var filterCol_code = ViewBag.FilterCol_Code as string;
+    var filterCol_name = ViewBag.FilterCol_Name as string;
+    var filterCol_category = ViewBag.FilterCol_Category as string;
+    var filterCol_salesrevenueExpr = ViewBag.FilterCol_SalesrevenueExpr as string;
+    var filterCol_salescostExpr = ViewBag.FilterCol_SalescostExpr as string;
+    var filterCol_salesprofitExpr = ViewBag.FilterCol_SalesprofitExpr as string;
+    var filterCol_salesprofitpctExpr = ViewBag.FilterCol_SalesprofitpctExpr as string;
+    var filterCol_adjustmentprofitExpr = ViewBag.FilterCol_AdjustmentprofitExpr as string;
+    var filterCol_transferprofitExpr = ViewBag.FilterCol_TransferprofitExpr as string;
+    var filterCol_salesqtyExpr = ViewBag.FilterCol_SalesqtyExpr as string;
+    var filterCol_avgunitpriceExpr = ViewBag.FilterCol_AvgunitpriceExpr as string;
+    var filterCol_avgunitcostExpr = ViewBag.FilterCol_AvgunitcostExpr as string;
 
     // القوائم المنسدلة
     var categories = ViewBag.Categories as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
@@ -40,9 +58,22 @@
             warehouseId,
             fromDate,
             toDate,
+            includeZeroQty,
             profitMethod,
             sortBy = col,
             sortDir = direction,
+            filterCol_code,
+            filterCol_name,
+            filterCol_category,
+            filterCol_salesrevenueExpr,
+            filterCol_salescostExpr,
+            filterCol_salesprofitExpr,
+            filterCol_salesprofitpctExpr,
+            filterCol_adjustmentprofitExpr,
+            filterCol_transferprofitExpr,
+            filterCol_salesqtyExpr,
+            filterCol_avgunitpriceExpr,
+            filterCol_avgunitcostExpr,
             loadReport = true,
             page,
             pageSize
@@ -59,9 +90,22 @@
             warehouseId,
             fromDate,
             toDate,
+            includeZeroQty,
             profitMethod,
             sortBy,
             sortDir,
+            filterCol_code,
+            filterCol_name,
+            filterCol_category,
+            filterCol_salesrevenueExpr,
+            filterCol_salescostExpr,
+            filterCol_salesprofitExpr,
+            filterCol_salesprofitpctExpr,
+            filterCol_adjustmentprofitExpr,
+            filterCol_transferprofitExpr,
+            filterCol_salesqtyExpr,
+            filterCol_avgunitpriceExpr,
+            filterCol_avgunitcostExpr,
             loadReport = true,
             page = p,
             pageSize
@@ -69,169 +113,89 @@
     };
 }
 
-<div dir="rtl" class="container-fluid" style="padding: 1rem;">
-    @* عنوان الصفحة *@
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">
-            عدد الأصناف: @(reportData.Any() ? totalCount : 0)
-        </small>
-    </div>
-
-    @* ===== كروت الفلاتر ===== *@
-    <div class="card mb-3 d-print-none">
-        <div class="card-body">
-            <form method="get" asp-action="ProductProfits" asp-controller="Reports" id="filtersForm">
-                <div class="row g-3 align-items-end">
-                    @* كارت البحث *@
-                    <div class="col-lg-3 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">🔍 بحث</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="text"
-                                       name="search"
-                                       class="form-control"
-                                       placeholder="اكتب اسم الصنف أو جزء منه..."
-                                       autocomplete="off"
-                                       value="@search" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت الفئة *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📂 الفئة</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <select name="categoryId" class="form-select">
-                                    <option value="">الكل</option>
-                                    @foreach (var cat in categories)
-                                    {
-                                        @if (categoryId?.ToString() == cat.Value)
-                                        {
-                                            <option value="@cat.Value" selected>@cat.Text</option>
-                                        }
-                                        else
-                                        {
-                                            <option value="@cat.Value">@cat.Text</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت المخزن *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">🏪 المخزن</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <select name="warehouseId" class="form-select">
-                                    <option value="">الكل</option>
-                                    @foreach (var wh in warehouses)
-                                    {
-                                        @if (warehouseId?.ToString() == wh.Value)
-                                        {
-                                            <option value="@wh.Value" selected>@wh.Text</option>
-                                        }
-                                        else
-                                        {
-                                            <option value="@wh.Value">@wh.Text</option>
-                                        }
-                                    }
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت تاريخ من *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📅 من تاريخ</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="date"
-                                       name="fromDate"
-                                       class="form-control"
-                                       value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت تاريخ إلى *@
-                    <div class="col-lg-2 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📅 إلى تاريخ</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <input type="date"
-                                       name="toDate"
-                                       class="form-control"
-                                       value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                            </div>
-                        </div>
-                    </div>
-
-                    @* كارت طريقة الحساب *@
-                    <div class="col-lg-1 col-md-6">
-                        <div class="card shadow-sm h-100">
-                            <div class="card-header text-white py-2" style="background: linear-gradient(90deg, #4b5563, #64748b);">
-                                <span class="fw-semibold">📊 طريقة</span>
-                            </div>
-                            <div class="card-body py-2">
-                                <select name="profitMethod" class="form-select">
-                                    <option value="both"@Html.Raw(profitMethod == "both" ? " selected" : "")>الكل</option>
-                                    <option value="sales"@Html.Raw(profitMethod == "sales" ? " selected" : "")>ربح البيع</option>
-                                    <option value="balancesheet"@Html.Raw(profitMethod == "balancesheet" ? " selected" : "")>ربح الميزانية</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-
-                    @* أزرار التفعيل *@
-                    <div class="col-lg-auto d-flex gap-2 align-items-end">
-                        <input type="hidden" name="loadReport" value="true" />
-                        <button type="submit" class="btn btn-primary">
-                            <span>📊</span> تجميع التقرير
-                        </button>
-                        <a href="@Url.Action("ProductProfits", "Reports")" class="btn btn-secondary btn-sm">
-                            <span>🔄</span> إعادة تعيين
-                        </a>
-                        <form method="post" asp-action="FixOrphanedPaymentEntries" asp-controller="Reports" class="d-inline" onsubmit="return confirm('هل تريد إعادة حساب أرصدة العملاء من القيود الحالية؟ (يُصلح ظهور ربح أو التزامات خاطئة بعد حذف القيود)');">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="btn btn-warning btn-sm" title="إعادة حساب أرصدة العملاء من القيود">
-                                <span>🔧</span> إصلاح أرصدة العملاء
-                            </button>
-                        </form>
-                        @if (reportData.Any())
+<div dir="rtl" class="container-fluid">
+    @* ===== شريط الفلاتر (نفس تنسيق قائمة الأصناف) ===== *@
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <form method="get" asp-action="ProductProfits" asp-controller="Reports" id="filtersForm">
+            <input type="hidden" name="loadReport" value="true" />
+            <input type="hidden" name="filterCol_code" id="productProfitsFilterColCode" value="@(filterCol_code ?? "")" />
+            <input type="hidden" name="filterCol_name" id="productProfitsFilterColName" value="@(filterCol_name ?? "")" />
+            <input type="hidden" name="filterCol_category" id="productProfitsFilterColCategory" value="@(filterCol_category ?? "")" />
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_adjustmentprofitExpr)) { <input type="hidden" name="filterCol_adjustmentprofitExpr" value="@filterCol_adjustmentprofitExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_transferprofitExpr)) { <input type="hidden" name="filterCol_transferprofitExpr" value="@filterCol_transferprofitExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_avgunitpriceExpr)) { <input type="hidden" name="filterCol_avgunitpriceExpr" value="@filterCol_avgunitpriceExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_avgunitcostExpr)) { <input type="hidden" name="filterCol_avgunitcostExpr" value="@filterCol_avgunitcostExpr" /> }
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">بحث</label>
+                    <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب اسم الصنف أو جزء منه..." autocomplete="off" value="@search" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">الفئة</label>
+                    <select name="categoryId" class="form-select erp-filter-input">
+                        <option value="">الكل</option>
+                        @foreach (var cat in categories)
                         {
-                            <div class="d-flex align-items-center gap-2">
-                                <label class="form-label mb-0 small">حجم الصفحة:</label>
-                                <select name="pageSize" 
-                                        class="form-select form-select-sm" 
-                                        style="width: auto;"
-                                        onchange="this.form.submit()">
-                                    <option value="20"@Html.Raw(pageSize == 20 ? " selected" : "")>20</option>
-                                    <option value="50"@Html.Raw(pageSize == 50 ? " selected" : "")>50</option>
-                                    <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
-                                    <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
-                                    <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
-                                    <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
-                                </select>
-                            </div>
+                            <option value="@cat.Value" @(categoryId?.ToString() == cat.Value ? "selected" : null)>@cat.Text</option>
                         }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">المخزن</label>
+                    <select name="warehouseId" class="form-select erp-filter-input">
+                        <option value="">الكل</option>
+                        @foreach (var wh in warehouses)
+                        {
+                            <option value="@wh.Value" @(warehouseId?.ToString() == wh.Value ? "selected" : null)>@wh.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="fromDate" class="form-control erp-filter-input" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="toDate" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                </div>
+                <div class="col-12 col-lg-2 erp-filter-section d-flex align-items-end">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
+                        <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
                     </div>
                 </div>
-            </form>
-        </div>
+                <input type="hidden" name="profitMethod" value="@profitMethod" />
+                <div class="col-12 col-lg-auto erp-filter-section ms-lg-auto d-flex flex-wrap gap-2 align-items-end">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
+                    <a href="@Url.Action("ProductProfits", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none"><span>🔄</span> إعادة تعيين</a>
+                    @if (reportData.Any())
+                    {
+                        <label class="form-label mb-0 small">حجم الصفحة</label>
+                        <select name="pageSize" class="form-select form-select-sm erp-filter-input" style="width:auto" onchange="this.form.submit()">
+                            <option value="20"@Html.Raw(pageSize == 20 ? " selected" : "")>20</option>
+                            <option value="50"@Html.Raw(pageSize == 50 ? " selected" : "")>50</option>
+                            <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
+                            <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
+                            <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
+                            <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
+                        </select>
+                    }
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="d-flex justify-content-between align-items-center mt-2 mb-1">
+        <h5 class="mb-0">أرباح الأصناف</h5>
+        @if (reportData.Any())
+        {
+            <small class="text-muted">إجمالي الأصناف: <span id="productProfitsItemCount">@totalCount</span></small>
+        }
     </div>
 
     @* ===== Pagination Info ===== *@
@@ -247,57 +211,88 @@
         </div>
     }
 
-    @* ===== جدول البيانات ===== *@
+    @* ===== جدول البيانات (نفس تنسيق قائمة الأصناف + فلتر أعمدة إكسل) ===== *@
     @if (reportData.Any())
     {
-        <div class="card shadow-sm">
-            <div class="card-body p-0">
-                <div class="table-responsive product-profits-table-scroll" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
-                    <table class="table table-sm table-striped table-hover mb-0">
-                        <thead class="table-light product-profits-sticky-header">
-                            <tr>
-                                <th style="min-width: 80px;">
-                                    <a href="@sortUrl("code", sortBy == "code" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الكود @if (sortBy == "code") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th style="min-width: 200px;">
-                                    <a href="@sortUrl("name", sortBy == "name" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        اسم الصنف @if (sortBy == "name") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th>الفئة</th>
-                                
-                                @* ربح البيع *@
-                                <th class="text-end" style="min-width: 120px;">البيع</th>
-                                <th class="text-end" style="min-width: 120px;">التكلفة</th>
-                                <th class="text-end" style="min-width: 120px;">
-                                    <a href="@sortUrl("salesprofit", sortBy == "salesprofit" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الربح (بيع) @if (sortBy == "salesprofit") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                <th class="text-end" style="min-width: 100px;">نسبة الربح (بيع) %</th>
-                                
-                                @* ربح التسويات *@
-                                <th class="text-end" style="min-width: 120px;">
-                                    <a href="@sortUrl("adjustmentprofit", sortBy == "adjustmentprofit" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الربح (تسويات) @if (sortBy == "adjustmentprofit") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                
-                                @* ربح التحويلات *@
-                                <th class="text-end" style="min-width: 120px;">
-                                    <a href="@sortUrl("transferprofit", sortBy == "transferprofit" && sortDir == "asc" ? "desc" : "asc")" class="text-decoration-none text-dark">
-                                        الربح (تحويلات) @if (sortBy == "transferprofit") { <span>@(sortDir == "asc" ? "▲" : "▼")</span> }
-                                    </a>
-                                </th>
-                                
-                                @* إحصائيات *@
-                                <th class="text-end" style="min-width: 100px;">الكمية</th>
-                                <th class="text-end" style="min-width: 120px;">متوسط السعر</th>
-                                <th class="text-end" style="min-width: 120px;">متوسط التكلفة</th>
-                            </tr>
-                        </thead>
+        <div class="erp-table-scroll-container mt-2">
+            <div class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+                <table id="productProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sortBy" data-current-dir="@sortDir">
+                    <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
+                        <tr>
+                            <th style="min-width: 80px;" data-col="code">
+                                <div class="d-flex align-items-center gap-1">
+                                    <span>الكود</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="code" data-sort-key="code" data-col-title="الكود" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th style="min-width: 200px;" data-col="name">
+                                <div class="d-flex align-items-center gap-1">
+                                    <span>اسم الصنف</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="name" data-sort-key="name" data-col-title="اسم الصنف" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th style="min-width: 100px;" data-col="category">
+                                <div class="d-flex align-items-center gap-1">
+                                    <span>الفئة</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="category" data-sort-key="category" data-col-title="الفئة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salesrevenue">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>البيع</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesrevenue" data-sort-key="salesrevenue" data-col-title="البيع" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salescost">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>التكلفة</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salescost" data-sort-key="salescost" data-col-title="التكلفة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salesprofit">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>الربح (بيع)</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesprofit" data-sort-key="salesprofit" data-col-title="الربح (بيع)" title="ترتيب"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 100px;" data-col="salesprofitpct">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>نسبة الربح (بيع) %</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesprofitpct" data-sort-key="salesprofitpct" data-col-title="نسبة الربح (بيع) %" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="adjustmentprofit">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>الربح (تسويات)</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="adjustmentprofit" data-sort-key="adjustmentprofit" data-col-title="الربح (تسويات)" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="transferprofit">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>الربح (تحويلات)</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="transferprofit" data-sort-key="transferprofit" data-col-title="الربح (تحويلات)" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 100px;" data-col="salesqty">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>الكمية</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesqty" data-sort-key="salesqty" data-col-title="الكمية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="avgunitprice">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>متوسط السعر</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="avgunitprice" data-sort-key="avgunitprice" data-col-title="متوسط السعر" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="avgunitcost">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>متوسط التكلفة</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="avgunitcost" data-sort-key="avgunitcost" data-col-title="متوسط التكلفة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
+                        </tr>
+                    </thead>
                         <tbody>
                             @foreach (var item in reportData)
                             {
@@ -343,8 +338,10 @@
                         </tbody>
                         <tfoot class="table-secondary fw-bold">
                             <tr>
-                                <td colspan="3" class="text-end"><strong>المجموع الإجمالي:</strong></td>
-                                
+                                <td class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                                <td></td>
+                                <td></td>
+
                                 @* ربح البيع *@
                                 <td class="text-end"><strong>@totalSalesRevenue.ToString("N2")</strong></td>
                                 <td class="text-end"><strong>@totalSalesCost.ToString("N2")</strong></td>
@@ -358,27 +355,28 @@
                                         @((totalSalesRevenue > 0 ? (totalSalesProfit / totalSalesRevenue * 100) : 0).ToString("N2"))%
                                     </strong>
                                 </td>
-                                
+
                                 @* ربح التسويات *@
                                 <td class="text-end">
                                     <strong class="@(totalAdjustmentProfit >= 0 ? "text-success" : "text-danger")">
                                         @totalAdjustmentProfit.ToString("N2")
                                     </strong>
                                 </td>
-                                
+
                                 @* ربح التحويلات *@
                                 <td class="text-end">
                                     <strong class="@(totalTransferProfit >= 0 ? "text-success" : "text-danger")">
                                         @totalTransferProfit.ToString("N2")
                                     </strong>
                                 </td>
-                                
+
                                 @* إحصائيات *@
-                                <td colspan="3"></td>
+                                <td class="text-end">@totalSalesQtyAll.ToString("N2")</td>
+                                <td class="text-end">@totalAvgUnitPrice.ToString("N2")</td>
+                                <td class="text-end">@totalAvgUnitCost.ToString("N2")</td>
                             </tr>
                         </tfoot>
-                    </table>
-                </div>
+                </table>
             </div>
         </div>
 
@@ -469,6 +467,9 @@
                                             <p class="mb-1"><strong>− العملاء الدائنون:</strong> <span class="text-danger">@bs.CustomersCreditSum.ToString("N2")</span></p>
                                             <hr class="my-2" />
                                             <p class="mb-0"><strong>إجمالي الربح (صافي الأصول):</strong></p>
+                                            <p class="mb-2 mt-1 small text-warning"><strong>⚠ لماذا الرقم لا يساوي (ربح الأصناف + ربح التسويات)؟</strong></p>
+                                            <p class="mb-1 small text-muted"><strong>إجمالي الربح (صافي الأصول)</strong> = رصيد تراكمي: ما تمتلكه الشركة الآن (مدينون + خزنة + مخزون) − ما عليها (دائنون). ليس مجموع أرباح الفترة.</p>
+                                            <p class="mb-1 small text-muted"><strong>ربح الأصناف</strong> (ربح البيع + ربح التسويات + ربح التحويل) = ربح <strong>الفترة المحددة فقط</strong>. صافي الأصول = صافي الأصول أول المدة + ربح الفترة + تدفقات أخرى (رأس مال، سحوبات…)، لذلك لا يتساوى ربح الفترة مع صافي الأصول.</p>
                                             <p class="mb-2 mt-1 small text-muted">للعلم فقط (مُدمجة في تكلفة المخزون، لا تُضاف مرة ثانية):</p>
                                             <p class="mb-1 small"><strong>ربح التسوية:</strong> @totalAdjustmentProfit.ToString("N2")</p>
                                             <p class="mb-1 small"><strong>ربح التحويل:</strong> @totalTransferProfit.ToString("N2")</p>
@@ -519,35 +520,319 @@
     }
 </div>
 
+@* لوحة ترتيب وفلتر العمود (بنمط إكسل — مثل قائمة الأصناف) *@
+<div id="erpPpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+    <div class="erp-column-filter-header">
+        <span id="erpPpColumnFilterTitle">ترتيب وفلتر</span>
+        <button type="button" class="btn-close btn-sm" id="erpPpColumnFilterClose" aria-label="إغلاق"></button>
+    </div>
+    <div class="erp-column-filter-body">
+        <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+            <div class="d-flex flex-column gap-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-pp-sort-btn" data-sort-dir="asc"><span class="me-2">▲</span> ترتيب تصاعدي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-pp-sort-btn" data-sort-dir="desc"><span class="me-2">▼</span> ترتيب تنازلي</button>
+            </div>
+        </div>
+        <div class="erp-filter-section erp-pp-filter-content">
+            <div id="erpPpColumnFilterNumericRow" class="d-none">
+                <label class="form-label small mb-1 fw-bold">بحث رقمي:</label>
+                <input type="text" id="erpPpColumnFilterNumeric" class="form-control form-control-sm mb-2" placeholder="مثال: 100 أو &gt;500 أو &lt;200 أو 50:150" dir="ltr" />
+                <small class="text-muted d-block">أكبر من: &gt;100، أصغر من: &lt;100، من إلى: 50:150</small>
+            </div>
+            <div id="erpPpColumnFilterSearchRow">
+                <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                <input type="text" id="erpPpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+            </div>
+            <div id="erpPpColumnFilterList" class="erp-column-filter-list">
+                <div class="text-muted text-center py-3">جاري التحميل...</div>
+            </div>
+        </div>
+        <div class="erp-column-filter-actions mt-2 flex-shrink-0">
+            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpPpColumnFilterOk">تطبيق</button>
+            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpPpColumnFilterClear">مسح الفلتر</button>
+        </div>
+    </div>
+</div>
+
 @section Styles {
     <style>
-        .product-profits-table-scroll {
-            position: relative;
-        }
-        .product-profits-sticky-header th {
-            position: sticky;
-            top: 0;
-            z-index: 10;
-            background-color: #f8f9fa !important;
-            border-bottom: 2px solid #dee2e6;
-            font-weight: 600;
-            box-shadow: 0 2px 2px -1px rgba(0,0,0,0.1);
-        }
-        .product-profits-table-scroll .table thead th {
-            border-bottom: 2px solid #dee2e6;
-            font-weight: 600;
-        }
-        .product-profits-table-scroll .table tfoot {
-            background-color: #e9ecef !important;
-        }
-        .card-header {
-            font-size: 0.9rem;
-        }
-        .product-profits-table-scroll .table tbody tr:hover {
-            background-color: #f5f5f5;
-        }
-        a.text-decoration-none:hover {
-            text-decoration: underline !important;
-        }
+        #productProfitsTable thead th { background-color: #fafbfc !important; color: #212529; border-bottom: 1px solid #dee2e6; font-weight: 600; }
+        #productProfitsTable tfoot { background-color: #e9ecef !important; border-top: 1px solid #dee2e6; }
+        .erp-pp-col-filter-btn { color: #64748b; }
+        .erp-pp-col-filter-btn:hover { color: #475569; }
+        .erp-pp-col-filter-btn.erp-pp-filter-active { color: #0d6efd !important; }
+        #erpPpColumnFilterPanel.erp-column-filter-panel { min-width: 280px; max-width: min(340px, 92vw); width: auto; max-height: 90vh; display: flex; flex-direction: column; }
+        #erpPpColumnFilterPanel .erp-column-filter-body { display: flex; flex-direction: column; max-height: 75vh; min-height: 0; overflow: hidden; }
+        #erpPpColumnFilterPanel .erp-pp-filter-content { flex: 1; min-height: 0; overflow-y: auto; }
+        #erpPpColumnFilterList .erp-filter-items { max-height: 220px; overflow-y: auto; }
     </style>
+}
+
+@section Scripts {
+    <script>
+        (function () {
+            var panel = document.getElementById('erpPpColumnFilterPanel');
+            var titleEl = document.getElementById('erpPpColumnFilterTitle');
+            var searchInp = document.getElementById('erpPpColumnFilterSearch');
+            var numericInp = document.getElementById('erpPpColumnFilterNumeric');
+            var numericRowEl = document.getElementById('erpPpColumnFilterNumericRow');
+            var searchRowEl = document.getElementById('erpPpColumnFilterSearchRow');
+            var listEl = document.getElementById('erpPpColumnFilterList');
+            var btnOk = document.getElementById('erpPpColumnFilterOk');
+            var btnClear = document.getElementById('erpPpColumnFilterClear');
+            var btnClose = document.getElementById('erpPpColumnFilterClose');
+            var form = document.getElementById('filtersForm');
+            var currentCol = '';
+            var currentSortKey = 'name';
+            var allItems = [];
+            var currentSelected = new Set();
+            var numericCols = ['salesrevenue','salescost','salesprofit','salesprofitpct','adjustmentprofit','transferprofit','salesqty','avgunitprice','avgunitcost'];
+
+            function isNumericCol(col) { return numericCols.indexOf(col) >= 0; }
+
+            function getCurrentFilterValue(col) {
+                var url = new URL(window.location.href);
+                if (isNumericCol(col))
+                    return url.searchParams.get('filterCol_' + col + 'Expr') || '';
+                return url.searchParams.get('filterCol_' + col) || '';
+            }
+
+            function buildItemsForColumn(colKey) {
+                allItems = [];
+                var table = document.getElementById('productProfitsTable');
+                if (!table || !table.tHead || !table.tBodies.length) return;
+                var headerCells = table.tHead.rows[0].cells;
+                var colIndex = -1;
+                for (var i = 0; i < headerCells.length; i++) {
+                    if ((headerCells[i].getAttribute('data-col') || '') === colKey) {
+                        colIndex = i;
+                        break;
+                    }
+                }
+                if (colIndex === -1) return;
+                var rows = table.tBodies[0].rows;
+                var valuesSet = new Set();
+                for (var r = 0; r < rows.length; r++) {
+                    var cell = rows[r].cells[colIndex];
+                    if (!cell) continue;
+                    var val = (cell.textContent || '').trim();
+                    if (!val) continue;
+                    if (!valuesSet.has(val)) {
+                        valuesSet.add(val);
+                        allItems.push({ value: val, display: val });
+                    }
+                }
+            }
+
+            function renderList(search) {
+                var term = (search || '').toLowerCase();
+                var filtered = term
+                    ? allItems.filter(function (x) { return (x.display || x.value || '').toLowerCase().indexOf(term) >= 0; })
+                    : allItems.slice();
+                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
+                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
+
+                listEl.innerHTML =
+                    '<div class="form-check mb-1">' +
+                        '<input type="checkbox" class="form-check-input" id="erpPpFilterSelectAll" ' + (allChecked ? 'checked' : '') + '>' +
+                        '<label class="form-check-label small" for="erpPpFilterSelectAll">(تحديد الكل)</label>' +
+                    '</div>' +
+                    '<div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' +
+                        (filtered.length === 0
+                            ? '<div class="small text-muted py-2">لا توجد عناصر.</div>'
+                            : filtered.map(function (x) {
+                                var v = String(x.value);
+                                var checked = currentSelected.has(v);
+                                return '<div class="form-check">' +
+                                    '<input type="checkbox" class="form-check-input erp-pp-filter-item" value="' + v.replace(/"/g, '&quot;') + '" ' + (checked ? 'checked' : '') + '>' +
+                                    '<label class="form-check-label small">' + (x.display || v).replace(/</g, '&lt;') + '</label>' +
+                                    '</div>';
+                            }).join('')) +
+                    '</div>';
+
+                var selectAllCb = listEl.querySelector('#erpPpFilterSelectAll');
+                if (selectAllCb) {
+                    selectAllCb.indeterminate = someChecked && !allChecked;
+                    selectAllCb.addEventListener('change', function () {
+                        filtered.forEach(function (x) {
+                            var v = String(x.value);
+                            if (selectAllCb.checked) currentSelected.add(v);
+                            else currentSelected.delete(v);
+                        });
+                        renderList(searchInp.value);
+                    });
+                }
+                listEl.querySelectorAll('.erp-pp-filter-item').forEach(function (cb) {
+                    cb.addEventListener('change', function () {
+                        var v = cb.value;
+                        if (cb.checked) currentSelected.add(v);
+                        else currentSelected.delete(v);
+                    });
+                });
+            }
+
+            function openPanel(btn) {
+                currentCol = btn.getAttribute('data-col') || '';
+                currentSortKey = btn.getAttribute('data-sort-key') || 'name';
+                titleEl.textContent = btn.getAttribute('data-col-title') || 'ترتيب وفلتر';
+                document.querySelectorAll('.erp-pp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-pp-filter-active'); });
+                btn.classList.add('erp-pp-filter-active');
+
+                var table = document.getElementById('productProfitsTable');
+                var currentDir = (table && table.getAttribute('data-current-dir')) || 'asc';
+                document.querySelectorAll('.erp-pp-sort-btn').forEach(function (b) {
+                    var isActive = b.getAttribute('data-sort-dir') === currentDir;
+                    b.classList.toggle('active', isActive);
+                });
+
+                var currentFilter = getCurrentFilterValue(currentCol);
+                currentSelected = new Set();
+                if (currentFilter && currentFilter.indexOf('|') >= 0) {
+                    currentFilter.split('|').forEach(function (v) {
+                        if (v) currentSelected.add(v);
+                    });
+                } else if (currentFilter) {
+                    currentSelected.add(currentFilter);
+                }
+
+                if (isNumericCol(currentCol)) {
+                    if (numericRowEl) numericRowEl.classList.remove('d-none');
+                    if (searchRowEl) searchRowEl.style.display = 'none';
+                    if (listEl) listEl.style.display = 'none';
+                    if (numericInp) {
+                        numericInp.value = currentFilter || '';
+                        numericInp.focus();
+                    }
+                } else {
+                    if (numericRowEl) numericRowEl.classList.add('d-none');
+                    if (searchRowEl) searchRowEl.style.display = '';
+                    if (listEl) listEl.style.display = '';
+                    buildItemsForColumn(currentCol);
+                    renderList('');
+                    if (searchInp) {
+                        searchInp.value = '';
+                        searchInp.focus();
+                    }
+                }
+
+                panel.classList.remove('d-none');
+                var rect = btn.getBoundingClientRect();
+                panel.style.position = 'fixed';
+                panel.style.left = (rect.left - panel.offsetWidth - 4) + 'px';
+                panel.style.top = Math.max(8, rect.top) + 'px';
+                panel.style.zIndex = '1050';
+            }
+
+            function closePanel() {
+                panel.classList.add('d-none');
+                document.querySelectorAll('.erp-pp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-pp-filter-active'); });
+            }
+
+            function applyFilter() {
+                var sortDirBtn = document.querySelector('.erp-pp-sort-btn.active');
+                var dir = sortDirBtn ? sortDirBtn.getAttribute('data-sort-dir') : 'asc';
+                var params = new URLSearchParams(new FormData(form));
+                params.set('loadReport', 'true');
+                params.set('sortBy', currentSortKey);
+                params.set('sortDir', dir);
+                params.set('page', '1');
+
+                if (isNumericCol(currentCol)) {
+                    var expr = (numericInp && numericInp.value) ? numericInp.value.trim() : '';
+                    params.delete('filterCol_' + currentCol + 'Expr');
+                    if (expr) params.set('filterCol_' + currentCol + 'Expr', expr);
+                } else {
+                    var searchText = (searchInp && searchInp.value) ? searchInp.value.trim() : '';
+                    var selectedVal = Array.from(currentSelected).filter(Boolean).join('|');
+                    if (currentCol === 'code') {
+                        params.delete('filterCol_code');
+                        if (searchText) params.set('filterCol_code', searchText);
+                        else if (selectedVal) params.set('filterCol_code', selectedVal);
+                    }
+                    if (currentCol === 'name') {
+                        params.delete('filterCol_name');
+                        if (searchText) params.set('filterCol_name', searchText);
+                        else if (selectedVal) params.set('filterCol_name', selectedVal);
+                    }
+                    if (currentCol === 'category') {
+                        params.delete('filterCol_category');
+                        if (searchText) params.set('filterCol_category', searchText);
+                        else if (selectedVal) params.set('filterCol_category', selectedVal);
+                    }
+                }
+
+                window.location.href = (form.action || window.location.pathname) + '?' + params.toString();
+            }
+
+            function clearFilter() {
+                if (searchInp) searchInp.value = '';
+                if (numericInp) numericInp.value = '';
+                currentSelected = new Set();
+                var params = new URLSearchParams(new FormData(form));
+                params.set('loadReport', 'true');
+                params.set('page', '1');
+                params.delete('filterCol_code');
+                params.delete('filterCol_name');
+                params.delete('filterCol_category');
+                numericCols.forEach(function (c) { params.delete('filterCol_' + c + 'Expr'); });
+                window.location.href = (form.action || window.location.pathname) + '?' + params.toString();
+            }
+
+            document.querySelectorAll('.erp-pp-col-filter-btn').forEach(function (btn) {
+                btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openPanel(btn); });
+            });
+            document.querySelectorAll('.erp-pp-sort-btn').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    document.querySelectorAll('.erp-pp-sort-btn').forEach(function (b) { b.classList.remove('active'); });
+                    btn.classList.add('active');
+                });
+            });
+            if (searchInp) {
+                searchInp.addEventListener('input', function () {
+                    renderList(searchInp.value);
+                });
+                searchInp.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        applyFilter();
+                    }
+                });
+            }
+            if (numericInp) {
+                numericInp.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        applyFilter();
+                    }
+                });
+            }
+            if (btnOk) btnOk.addEventListener('click', function () { applyFilter(); });
+            if (btnClear) btnClear.addEventListener('click', function () { clearFilter(); });
+            if (btnClose) btnClose.addEventListener('click', closePanel);
+            document.addEventListener('click', function (e) {
+                if (panel && !panel.classList.contains('d-none') && !panel.contains(e.target) && !e.target.closest('.erp-pp-col-filter-btn'))
+                    closePanel();
+            });
+        })();
+
+        // ضمان إرسال includeZeroQty عند إرسال الفورم (عرض الصفر)
+        document.addEventListener('DOMContentLoaded', function () {
+            var form = document.getElementById('filtersForm');
+            var includeZeroCb = document.getElementById('includeZeroQty');
+            if (form && includeZeroCb) {
+                form.addEventListener('submit', function () {
+                    var existingHidden = form.querySelector('input[name="includeZeroQty"][type="hidden"]');
+                    if (existingHidden) existingHidden.remove();
+                    if (!includeZeroCb.checked) {
+                        var hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = 'includeZeroQty';
+                        hidden.value = 'false';
+                        form.appendChild(hidden);
+                    }
+                });
+            }
+        });
+    </script>
 }

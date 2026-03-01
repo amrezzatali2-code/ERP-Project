@@ -5,8 +5,10 @@ using System.Threading.Tasks;                     // async / await
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync, FindAsync
 using ERP.Data;                                   // AppDbContext كائن قاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
 using ERP.Models;                                 // Role, UserActionType
+using ERP.Security;
 using ClosedXML.Excel;                      // لتصدير Excel
 using System.IO;
 
@@ -128,6 +130,7 @@ namespace ERP.Controllers
         // ===============================================================
         // 1) INDEX: عرض قائمة الأدوار بالنظام الموحد (بحث + ترتيب + صفحات)
         // ===============================================================
+        [RequirePermission(PermissionCodes.Security.Roles_View)]
         public async Task<IActionResult> Index(
        string? search,
        string? searchBy,

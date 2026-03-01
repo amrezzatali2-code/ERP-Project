@@ -1,7 +1,9 @@
 using ClosedXML.Excel;                      // متغيرات Excel (ClosedXML)
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                   // كلاس PagedResult + ApplySearchSort
 using ERP.Models;                           // الموديل ProductGroupPolicy
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;   // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +23,7 @@ namespace ERP.Controllers
     /// كل صف = سياسة معينة تطبَّق على مجموعة أصناف محددة داخل مخزن معيّن،
     /// مع تحديد أقصى خصم للعميل وإمكانية تفعيل/إيقاف القاعدة.
     /// </summary>
+    [RequirePermission(PermissionCodes.Settings.ItemGroupPolicies_View)]
     public class ProductGroupPoliciesController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات

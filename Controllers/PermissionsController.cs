@@ -5,8 +5,10 @@ using System.Text;                                // StringBuilder لبناء CS
 using System.Threading.Tasks;                     // Task و async
 
 using ERP.Data;                                   // AppDbContext
+using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
 using ERP.Models;                                 // Permission, UserActionType
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // Include, AsNoTracking, ToListAsync
 using ClosedXML.Excel;                      // لتصدير Excel
@@ -127,6 +129,7 @@ namespace ERP.Controllers
         /// - فلتر تاريخ إنشاء من/إلى
         /// - ترتيب + تقسيم صفحات باستخدام PagedResult
         /// </summary>
+        [RequirePermission(PermissionCodes.Security.Permissions_View)]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,

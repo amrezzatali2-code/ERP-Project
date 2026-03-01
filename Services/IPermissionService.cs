@@ -20,5 +20,10 @@ namespace ERP.Services
         /// يرجع مجموعة أكواد الصلاحيات الممنوحة للمستخدم (للعرض في القائمة وغيرها).
         /// </summary>
         Task<HashSet<string>> GetUserPermissionCodesAsync(int userId);
+
+        /// <summary>
+        /// هل للمستخدم الحالي أي صلاحية يبدأ كودها بالبادئة المعطاة؟ (مثل "Sales." لفتح المبيعات)
+        /// </summary>
+        Task<bool> HasAnyPermissionWithPrefixAsync(string codePrefix);
     }
 }

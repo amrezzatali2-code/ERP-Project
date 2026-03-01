@@ -3,9 +3,11 @@ using ClosedXML.Excel;                  // مكتبة Excel
 using OfficeOpenXml;
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                         // سياق قاعدة البيانات الرئيسي
+using ERP.Filters;                      // RequirePermission
 using ERP.Infrastructure;               // PagedResult + UserActivityLogger
 using ERP.Models;                       // Product, Category, UserActionType...
-using ERP.Services;                     // StockAnalysisService
+using ERP.Security;                     // PermissionCodes
+using ERP.Services;                     // StockAnalysisService, IPermissionService
 using ERP.ViewModels;                   // ViewModels الخاصة بحركة الصنف
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -30,12 +32,14 @@ namespace ERP.Controllers
         private readonly AppDbContext _db;
         private readonly StockAnalysisService _stockAnalysisService;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IPermissionService _permissionService;
 
-        public ProductsController(AppDbContext db, StockAnalysisService stockAnalysisService, IUserActivityLogger activityLogger)
+        public ProductsController(AppDbContext db, StockAnalysisService stockAnalysisService, IUserActivityLogger activityLogger, IPermissionService permissionService)
         {
             _db = db;
             _stockAnalysisService = stockAnalysisService;
             _activityLogger = activityLogger;
+            _permissionService = permissionService;
         }
 
 
@@ -53,6 +57,7 @@ namespace ERP.Controllers
         // 1) قائمة الأصناف  (نظام القوائم الموحد)
         // =========================================================
         [HttpGet]
+        [RequirePermission(PermissionCodes.Products.View)]
         public async Task<IActionResult> Index(
       string? search,                    // متغير: نص البحث العام
       string? searchBy = "all",          // متغير: عمود البحث (all|name|id|code|gen|category|comp|price|active|imported|updated)
@@ -812,6 +817,11 @@ namespace ERP.Controllers
                 new SelectListItem("200", "200")
             };
 
+            ViewBag.CanCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Products.Create);
+            ViewBag.CanEdit = await _permissionService.HasPermissionAsync(PermissionCodes.Products.Edit);
+            ViewBag.CanDelete = await _permissionService.HasPermissionAsync(PermissionCodes.Products.Delete);
+            ViewBag.CanExport = await _permissionService.HasPermissionAsync(PermissionCodes.Products.Export);
+
             return View(model);
         }
 
@@ -1002,6 +1012,7 @@ namespace ERP.Controllers
         // 3) إضافة صنف جديد
         // =========================================================
         [HttpGet]
+        [RequirePermission(PermissionCodes.Products.Create)]
         public async Task<IActionResult> Create()
         {
             // تحميل قائمة الفئات + مجموعات الأصناف + مجموعات البونص
@@ -1031,6 +1042,7 @@ namespace ERP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Products.Create)]
         public async Task<IActionResult> Create(Product model)
         {
             if (!ModelState.IsValid)
@@ -1074,6 +1086,7 @@ namespace ERP.Controllers
         // 4) تعديل صنف
         // =========================================================
         [HttpGet]
+        [RequirePermission(PermissionCodes.Products.Edit)]
         public async Task<IActionResult> Edit(int id)
         {
             if (id <= 0) return NotFound();
@@ -1097,6 +1110,7 @@ namespace ERP.Controllers
 
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Products.Edit)]
         public async Task<IActionResult> Edit(int id, Product model)
         {
             // حماية: لو حد غيّر الـ Id في الفورم
@@ -1169,6 +1183,7 @@ namespace ERP.Controllers
         // 5) حذف صنف واحد (النموذج التقليدي)
         // =========================================================
         [HttpGet]
+        [RequirePermission(PermissionCodes.Products.Delete)]
         public async Task<IActionResult> Delete(int id)
         {
             if (id <= 0) return NotFound();
@@ -1181,6 +1196,7 @@ namespace ERP.Controllers
 
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Products.Delete)]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var m = await _db.Products.FindAsync(id);
@@ -1220,6 +1236,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Products.Delete)]
         public async Task<IActionResult> BulkDelete(string selectedIds)
         {
             // selectedIds: سلسلة IDs مفصولة بفاصلة  "1,5,7"
@@ -1273,6 +1290,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Products.Delete)]
         public async Task<IActionResult> DeleteAll()
         {
             var allProducts = await _db.Products.ToListAsync();
@@ -1302,6 +1320,7 @@ namespace ERP.Controllers
         // Export — تصدير قائمة الأصناف (Excel أو CSV)
         // =========================
         [HttpGet]
+        [RequirePermission(PermissionCodes.Products.Export)]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",      // all | name | id | barcode | gen | category | company
@@ -1971,6 +1990,7 @@ namespace ERP.Controllers
         /// - يمكن فتحها من زر "حركة الصنف" فى قائمة الأصناف مع id.
         /// تستقبل أيضاً كود مخزن + فترة من/إلى + عميل اختيارى للتصفية.
         /// </summary>
+        [RequirePermission(PermissionCodes.Products.Show)]
         public async Task<IActionResult> Show(
       int? id,                 // كود الصنف لو جاي من asp-route-id
       int? prodId,             // كود الصنف لو جاي من الفورم (الهيدن)
@@ -2381,6 +2401,7 @@ namespace ERP.Controllers
         // شاشة اختيار ملف الإكسل
         // =====================
         [HttpGet]
+        [RequirePermission(PermissionCodes.Products.Import)]
         public IActionResult Import()
         {
             // ممكن نستخدم TempData لرسائل النجاح/الخطأ بين الريدايركتات
@@ -2396,6 +2417,7 @@ namespace ERP.Controllers
         // =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission(PermissionCodes.Products.Import)]
         public async Task<IActionResult> Import(IFormFile excelFile)   // متغيّر: ملف الإكسل المرفوع من الفيو
         {
             // ===== 1) التأكد من اختيار ملف =====

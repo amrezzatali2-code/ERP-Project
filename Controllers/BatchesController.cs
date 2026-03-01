@@ -5,8 +5,10 @@ using System.Text;
 using System.Threading.Tasks;
 using ClosedXML.Excel;                          // لتصدير Excel
 using ERP.Data;                                // سياق قاعدة البيانات
+using ERP.Filters;
 using ERP.Infrastructure;                      // PagedResult + UserActivityLogger
 using ERP.Models;                              // Batch, UserActionType...
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;      // القوائم المنسدلة
 using Microsoft.EntityFrameworkCore;           // LINQ to Entities
@@ -20,6 +22,7 @@ namespace ERP.Controllers
     /// - حذف محدد / حذف الكل.
     /// - تصدير (Excel / CSV).
     /// </summary>
+    [RequirePermission(PermissionCodes.InventoryScreens.Batches_View)]
     public class BatchesController : Controller
     {
         private readonly AppDbContext _db;

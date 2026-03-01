@@ -1,114 +1,185 @@
-﻿@model ERP.Models.RolePermission   
-                                    @* موديل بسيط فيه RoleId *@
+@model ERP.Models.RolePermission
 
 @{
     ViewData["Title"] = "تعديل صلاحيات دور";
-
-    // اسم الدور
     string roleName = ViewBag.RoleName as string ?? "";
-
-    // قائمة كل الصلاحيات
-    var permissions = ViewBag.Permissions as List<ERP.Models.Permission>
-                      ?? new List<ERP.Models.Permission>();
-
-    // الصلاحيات الحالية للدور (IDs)
-    var selectedIds = ViewBag.SelectedPermissionIds as HashSet<int>
-                      ?? new HashSet<int>();
+    var permissions = ViewBag.Permissions as List<ERP.Models.Permission> ?? new List<ERP.Models.Permission>();
+    var selectedIds = ViewBag.SelectedPermissionIds as HashSet<int> ?? new HashSet<int>();
+    var moduleOrder = new[] { "لوحات التحكم", "لوحة التحكم", "الإعدادات", "المستخدمون والصلاحيات", "المناطق الجغرافية", "العملاء", "إدارة المخازن", "المبيعات", "المشتريات", "الحسابات", "التقارير", "أخرى" };
+    var grouped = permissions
+        .GroupBy(p => string.IsNullOrWhiteSpace(p.Module) ? "أخرى" : (p.Module ?? "أخرى"))
+        .ToDictionary(g => g.Key, g => g.ToList());
+    var byModule = moduleOrder
+        .Where(m => grouped.ContainsKey(m))
+        .Select(m => new { Key = m, Items = grouped[m] })
+        .Concat(grouped.Where(kv => !moduleOrder.Contains(kv.Key)).Select(kv => new { Key = kv.Key, Items = kv.Value }))
+        .ToList();
 }
 
-<div class="container" dir="rtl">
-    <h2 class="mb-3">
-        تعديل صلاحيات دور — @roleName (@Model.RoleId)
-    </h2>
+<div class="container-fluid" dir="rtl">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+        <h2 class="mb-0">تعديل صلاحيات دور — @roleName (@Model.RoleId)</h2>
+        <a asp-action="Index" class="btn btn-primary">صلاحيات الأدوار</a>
+    </div>
 
     <form asp-action="Edit" method="post" class="card">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="roleId" value="@Model.RoleId" />
+
         <div class="card-body">
-
-            @* نبعث RoleId مع الفورم *@
-            <input type="hidden" name="roleId" value="@Model.RoleId" />
-
-            @* البحث فى الصلاحيات *@
-            <div class="mb-3">
-                <label class="form-label fw-semibold">بحث فى الصلاحيات</label>
-                <input type="text"
-                       id="permSearch"
-                       class="form-control form-control-sm"
-                       placeholder="اكتب جزء من اسم الصلاحية أو الموديول..." />
+            @* بحث في الصلاحيات (مثل أدوار المستخدمين) *@
+            <div class="erp-list-filter-bar mb-3 p-2 rounded bg-light">
+                <label class="form-label fw-semibold mb-2">بحث في الصلاحيات</label>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <input type="text"
+                           id="permSearch"
+                           class="form-control"
+                           style="max-width: 320px;"
+                           placeholder="اكتب جزء من اسم الصلاحية أو الموديول أو الكود..." />
+                    <button type="button" id="btnPermSearch" class="btn btn-primary btn-sm">بحث</button>
+                    <button type="button" id="btnPermClear" class="btn btn-secondary btn-sm">مسح البحث</button>
+                </div>
             </div>
 
-            @* جدول الصلاحيات *@
-            <div class="table-responsive" style="max-height: 500px; overflow:auto;">
+            @* جدول الصلاحيات مقسم حسب الموديول *@
+            <div class="table-responsive" style="max-height: 65vh; overflow: auto;">
                 <table class="table table-sm table-hover table-striped">
-                    <thead class="table-light">
+                    <thead class="table-light sticky-top">
                         <tr>
-                            <th style="width:60px;" class="text-center">
-                                <input type="checkbox" id="chkAll" />
+                            <th style="width: 50px;" class="text-center">
+                                <input type="checkbox" id="chkAll" title="تحديد الكل / إلغاء الكل" />
                             </th>
+                            <th style="width: 42px;"></th>
                             <th>الصلاحية</th>
                             <th>الموديول</th>
                             <th>الكود</th>
                         </tr>
                     </thead>
                     <tbody id="permTableBody">
-                    @foreach (var p in permissions)
-                    {
-                        // هل هذه الصلاحية مضافة فعلاً لهذا الدور؟
-                            bool isChecked = selectedIds.Contains(p.PermissionId);
-
-                        <tr>
-                            <td class="text-center">
-                                <input type="checkbox"
-                                       name="selectedPermissionIds"
-                                           value="@p.PermissionId"
-                                       class="perm-checkbox"
-                                       @(isChecked ? "checked=\"checked\"" : "") />
-                            </td>
-                            <td>@p.NameAr</td>
-                            <td>@p.Module</td>
-                            <td>@p.Code</td>
-                        </tr>
-                    }
+                        @foreach (var group in byModule)
+                        {
+                            var moduleName = group.Key;
+                            <tr class="perm-module-row" data-module="@moduleName" style="background: linear-gradient(90deg, #e8eaf6 0%, #c5cae9 100%); font-size: 1.05em;">
+                                <td class="text-center align-middle" style="width: 42px;">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary perm-module-toggle" aria-label="فتح/إغلاق" title="فتح/إغلاق الصلاحيات">
+                                        <span class="perm-toggle-icon">−</span>
+                                    </button>
+                                </td>
+                                <td class="align-middle" colspan="4">
+                                    <strong>@moduleName</strong>
+                                </td>
+                            </tr>
+                            foreach (var p in group.Items.OrderBy(x => x.NameAr))
+                            {
+                                bool isChecked = selectedIds.Contains(p.PermissionId);
+                                var rowText = $"{p.NameAr} {p.Module} {p.Code}".ToLower();
+                                <tr class="perm-data-row perm-module-content" data-search="@rowText" data-module="@moduleName">
+                                    <td class="text-center align-middle">
+                                        <input type="checkbox"
+                                               name="selectedPermissionIds"
+                                               value="@p.PermissionId"
+                                               class="perm-checkbox" @(isChecked ? "checked" : "") />
+                                    </td>
+                                    <td></td>
+                                    <td>@p.NameAr</td>
+                                    <td>@(p.Module ?? "-")</td>
+                                    <td class="small text-muted">@p.Code</td>
+                                </tr>
+                            }
+                        }
                     </tbody>
                 </table>
             </div>
-
         </div>
 
-        <div class="card-footer d-flex justify-content-between">
-            <a asp-action="Index" class="btn btn-secondary">
-                رجوع للقائمة
-            </a>
-            <button type="submit" class="btn btn-primary">
-                حفظ التعديلات
-            </button>
+        <div class="card-footer d-flex justify-content-between flex-wrap gap-2">
+            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            <button type="submit" class="btn btn-success" id="btnSave">حفظ التعديلات</button>
         </div>
     </form>
 </div>
 
 @section Scripts {
-    @* سكربت صغير لتحديد الكل والبحث *@
     <script>
-        // ✅ تحديد / إلغاء تحديد كل الصلاحيات
-        const chkAll = document.getElementById('chkAll');
-        if (chkAll) {
-            chkAll.addEventListener('change', function () {
-                const checked = this.checked;
-                document.querySelectorAll('.perm-checkbox')
-                    .forEach(cb => cb.checked = checked);
-            });
-        }
+        (function () {
+            const tbody = document.getElementById('permTableBody');
+            const chkAll = document.getElementById('chkAll');
+            const permSearch = document.getElementById('permSearch');
+            const btnSearch = document.getElementById('btnPermSearch');
+            const btnClear = document.getElementById('btnPermClear');
 
-        // 🔍 فلترة الصفوف حسب البحث
-        const searchInput = document.getElementById('permSearch');
-        if (searchInput) {
-            searchInput.addEventListener('input', function () {
-                const term = this.value.toLowerCase();
-                document.querySelectorAll('#permTableBody tr')
-                    .forEach(tr => {
-                        const text = tr.innerText.toLowerCase();
-                        tr.style.display = text.includes(term) ? '' : 'none';
+            function applySearch() {
+                const term = (permSearch && permSearch.value) ? permSearch.value.trim().toLowerCase() : '';
+                const dataRows = tbody ? tbody.querySelectorAll('tr.perm-data-row') : [];
+                const moduleRows = tbody ? tbody.querySelectorAll('tr.perm-module-row') : [];
+                if (term === '') {
+                    dataRows.forEach(function (tr) { tr.style.display = ''; });
+                    moduleRows.forEach(function (tr) { tr.style.display = ''; });
+                    return;
+                }
+                moduleRows.forEach(function (modRow) {
+                    const moduleName = (modRow.getAttribute('data-module') || '').toLowerCase();
+                    const nextRows = [];
+                    let el = modRow.nextElementSibling;
+                    while (el && el.classList.contains('perm-data-row')) {
+                        nextRows.push(el);
+                        el = el.nextElementSibling;
+                    }
+                    const anyVisible = nextRows.some(function (r) {
+                        const text = (r.getAttribute('data-search') || '').toLowerCase();
+                        return text.indexOf(term) >= 0;
                     });
+                    nextRows.forEach(function (r) {
+                        const text = (r.getAttribute('data-search') || '').toLowerCase();
+                        r.style.display = (text.indexOf(term) >= 0) ? '' : 'none';
+                    });
+                    modRow.style.display = (anyVisible || moduleName.indexOf(term) >= 0) ? '' : 'none';
+                });
+            }
+
+            if (btnSearch) btnSearch.addEventListener('click', applySearch);
+            if (btnClear) {
+                btnClear.addEventListener('click', function () {
+                    if (permSearch) permSearch.value = '';
+                    applySearch();
+                    if (permSearch) permSearch.focus();
+                });
+            }
+            if (permSearch) {
+                permSearch.addEventListener('input', applySearch);
+                permSearch.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applySearch(); } });
+            }
+
+            if (chkAll && tbody) {
+                chkAll.addEventListener('change', function () {
+                    const checked = chkAll.checked;
+                    tbody.querySelectorAll('.perm-checkbox').forEach(function (cb) {
+                        var tr = cb.closest('tr');
+                        if (tr && tr.style.display !== 'none') cb.checked = checked;
+                    });
+                });
+            }
+
+            // فتح/إغلاق صلاحيات كل موديول بزر +
+            tbody.querySelectorAll('.perm-module-toggle').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var row = btn.closest('tr.perm-module-row');
+                    if (!row) return;
+                    var moduleName = row.getAttribute('data-module') || '';
+                    var contentRows = [];
+                    var el = row.nextElementSibling;
+                    while (el && el.classList.contains('perm-data-row')) {
+                        contentRows.push(el);
+                        el = el.nextElementSibling;
+                    }
+                    var isHidden = contentRows.length > 0 && contentRows[0].style.display === 'none';
+                    var icon = row.querySelector('.perm-toggle-icon');
+                    contentRows.forEach(function (r) {
+                        r.style.display = isHidden ? '' : 'none';
+                    });
+                    if (icon) icon.textContent = isHidden ? '−' : '+';
+                });
             });
-        }
+        })();
     </script>
 }
