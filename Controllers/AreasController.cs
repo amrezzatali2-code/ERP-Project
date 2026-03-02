@@ -1,4 +1,4 @@
-using ClosedXML.Excel;                              // تصدير Excel
+﻿using ClosedXML.Excel;                              // تصدير Excel
 using ERP.Data;                                    // كائن AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                          // PagedResult + UserActivityLogger
@@ -34,7 +34,7 @@ namespace ERP.Controllers
         // GET: /Areas
         // قائمة المناطق + بحث/ترتيب/ترقيم + فلترة بتاريخ الإنشاء
         // ===============================
-        [RequirePermission(PermissionCodes.Geo.Areas_View)]
+        [RequirePermission("Areas.Index")]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
@@ -221,7 +221,7 @@ namespace ERP.Controllers
         /// <summary>
         /// عرض تفاصيل منطقة واحدة.
         /// </summary>
-        [RequirePermission(PermissionCodes.Geo.Areas_View)]
+        [RequirePermission("Areas.Index")]
         public async Task<IActionResult> Details(int id)
         {
             var item = await _db.Areas
@@ -239,7 +239,7 @@ namespace ERP.Controllers
         /// <summary>
         /// GET: عرض فورم إضافة منطقة جديدة.
         /// </summary>
-        [RequirePermission(PermissionCodes.Geo.Areas_Create)]
+        [RequirePermission("Areas.Create")]
         public async Task<IActionResult> Create()
         {
             // تحميل القوائم المنسدلة للمحافظة والحي/المركز
@@ -260,7 +260,7 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Areas_Create)]
+        [RequirePermission("Areas.Create")]
         public async Task<IActionResult> Create(Area area)
         {
             // تحقق منطقي: الحي يتبع المحافظة المختارة
@@ -289,7 +289,7 @@ namespace ERP.Controllers
         /// <summary>
         /// GET: عرض فورم تعديل منطقة موجودة.
         /// </summary>
-        [RequirePermission(PermissionCodes.Geo.Areas_Edit)]
+        [RequirePermission("Areas.Edit")]
         public async Task<IActionResult> Edit(int id)
         {
             var item = await _db.Areas.FindAsync(id);
@@ -305,7 +305,7 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Areas_Edit)]
+        [RequirePermission("Areas.Edit")]
         public async Task<IActionResult> Edit(int id, Area area)
         {
             if (id != area.AreaId)
@@ -346,7 +346,7 @@ namespace ERP.Controllers
         /// <summary>
         /// GET: صفحة تأكيد حذف منطقة.
         /// </summary>
-        [RequirePermission(PermissionCodes.Geo.Areas_Delete)]
+        [RequirePermission("Areas.Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var item = await _db.Areas
@@ -366,7 +366,7 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Areas_Delete)]
+        [RequirePermission("Areas.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var item = await _db.Areas.FindAsync(id);
@@ -388,7 +388,7 @@ namespace ERP.Controllers
         // ====================== حذف مجموعة من المناطق (حذف المحدد) ======================
         [HttpPost]
         [ValidateAntiForgeryToken]          // حماية من طلبات مزيفة
-        [RequirePermission(PermissionCodes.Geo.Areas_Delete)]
+        [RequirePermission("Areas.Delete")]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
             // selectedIds = "1,2,3" جاية من الهيدن في الفورم
@@ -434,7 +434,7 @@ namespace ERP.Controllers
         // ====================== حذف جميع المناطق ======================
         [HttpPost]
         [ValidateAntiForgeryToken]          // حماية من طلبات مزيفة
-        [RequirePermission(PermissionCodes.Geo.Areas_Delete)]
+        [RequirePermission("Areas.Delete")]
         public async Task<IActionResult> DeleteAll()
         {
             // نحضر كل السجلات (ممكن تحط شرط لو حابب بعدين)
@@ -454,7 +454,7 @@ namespace ERP.Controllers
         }
 
         // ====================== تصدير المناطق (Excel / CSV) ======================
-        [RequirePermission(PermissionCodes.Geo.Areas_Export)]
+        [RequirePermission("Areas.Export")]
         [HttpGet]
         public async Task<IActionResult> Export(
             string? search,

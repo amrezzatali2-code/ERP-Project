@@ -1,4 +1,4 @@
-// ============================
+﻿// ============================
 // الملف: Controllers/ProductPriceHistoryController.cs
 // الغرض: عرض سجل تغييرات سعر الجمهور مع بحث وترتيب وترقيم
 // ملاحظات هامة:
@@ -31,7 +31,7 @@ namespace ERP.Controllers
     /// كنترولر عرض سجل تغييرات سعر الجمهور لكل صنف.
     /// لا يوجد إدخال يدوي؛ السجل يُكتب تلقائياً من شاشة الأصناف.
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.PriceHistory_View)]
+    [RequirePermission("ProductPriceHistory.Index")]
     public class ProductPriceHistoryController : Controller
     {
         // متغير: سياق قاعدة البيانات

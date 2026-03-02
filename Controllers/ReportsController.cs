@@ -1,4 +1,4 @@
-using ERP.Data;
+﻿using ERP.Data;
 using ERP.Filters;
 using ERP.Models;
 using ERP.Security;
@@ -330,7 +330,7 @@ namespace ERP.Controllers
         // سعر الجمهور، تكلفة العلبة، والتكلفة الإجمالية
         // =========================================================
         [HttpGet]
-        [RequirePermission(PermissionCodes.Reports.ProductBalances_View)]
+        [RequirePermission("Reports.ProductBalances")]
         public async Task<IActionResult> ProductBalances(
             string? search,
             int? categoryId,
@@ -971,7 +971,7 @@ namespace ERP.Controllers
         // يجمع مبيعات كل صنف من أصناف البونص لكل مستخدم ويعرض إجمالي المبيعات وقيمة البونص
         // =========================================================
         [HttpGet]
-        [RequirePermission(PermissionCodes.Reports.BonusSales_View)]
+        [RequirePermission("Reports.BonusReport")]
         public async Task<IActionResult> BonusReport(
             DateTime? fromDate,
             DateTime? toDate,
@@ -1058,7 +1058,7 @@ namespace ERP.Controllers
         // يعرض العميل، الرصيد الحالي، الحد الائتماني، المبيعات والمشتريات بين تاريخين
         // =========================================================
         [HttpGet]
-        [RequirePermission(PermissionCodes.Reports.CustomerBalances_View)]
+        [RequirePermission("Reports.CustomerBalances")]
         public async Task<IActionResult> CustomerBalances(
             string? search,
             string? partyCategory,
@@ -2224,7 +2224,7 @@ namespace ERP.Controllers
         // 2) ربح الميزانية: مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن - مجموع العملاء الدائنين
         // =========================================================
         [HttpGet]
-        [RequirePermission(PermissionCodes.Reports.ProductProfits_View)]
+        [RequirePermission("Reports.ProductProfits")]
         public async Task<IActionResult> ProductProfits(
             string? search,
             int? categoryId,
@@ -2943,7 +2943,7 @@ namespace ERP.Controllers
         // 2) من الميزانية (LedgerEntries): Revenue Account - COGS Account
         // =========================================================
         [HttpGet]
-        [RequirePermission(PermissionCodes.Reports.CustomerProfits_View)]
+        [RequirePermission("Reports.CustomerProfits")]
         public async Task<IActionResult> CustomerProfits(
             string? search,
             string? partyCategory,

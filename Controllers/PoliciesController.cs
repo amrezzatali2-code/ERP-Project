@@ -1,4 +1,4 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using ERP.Data;                                   // AppDbContext (الاتصال بقاعدة البيانات)
 using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
@@ -19,7 +19,7 @@ namespace ERP.Controllers
     /// كنترولر إدارة جدول السياسات (Policies)
     /// يطبق "النظام الثابت": قائمة + بحث + ترتيب + ترقيم + CRUD + Export + BulkDelete + DeleteAll + Details.
     /// </summary>
-    [RequirePermission(PermissionCodes.Settings.Policies_View)]
+    [RequirePermission("Policies.Index")]
     public class PoliciesController : Controller
     {
         private readonly AppDbContext _context;

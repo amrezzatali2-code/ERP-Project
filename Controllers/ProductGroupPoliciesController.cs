@@ -1,4 +1,4 @@
-using ClosedXML.Excel;                      // متغيرات Excel (ClosedXML)
+﻿using ClosedXML.Excel;                      // متغيرات Excel (ClosedXML)
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                   // كلاس PagedResult + ApplySearchSort
@@ -23,7 +23,7 @@ namespace ERP.Controllers
     /// كل صف = سياسة معينة تطبَّق على مجموعة أصناف محددة داخل مخزن معيّن،
     /// مع تحديد أقصى خصم للعميل وإمكانية تفعيل/إيقاف القاعدة.
     /// </summary>
-    [RequirePermission(PermissionCodes.Settings.ItemGroupPolicies_View)]
+    [RequirePermission("ProductGroupPolicies.Index")]
     public class ProductGroupPoliciesController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات

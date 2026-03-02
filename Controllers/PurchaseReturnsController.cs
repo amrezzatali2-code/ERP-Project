@@ -1,4 +1,4 @@
-using System;                                     // استخدام DateTime
+﻿using System;                                     // استخدام DateTime
 using System.Collections.Generic;                 // List, Dictionary
 using System.Linq;                                // أوامر LINQ
 using System.Linq.Expressions;                   // Expression<Func<...>>
@@ -21,20 +21,21 @@ namespace ERP.Controllers
     /// كنترولر قائمة مرتجعات الشراء:
     /// عرض / بحث / فرز / حذف جماعي / تصدير.
     /// </summary>
-    [RequirePermission(PermissionCodes.Purchasing.Returns_View)]
     public class PurchaseReturnsController : Controller
     {
         private readonly AppDbContext _context;
         private readonly ILedgerPostingService _ledgerPostingService;
         private readonly DocumentTotalsService _docTotals;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IPermissionService _permissionService;
 
-        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger)
+        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger, IPermissionService permissionService)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
+            _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
         }
 
 
@@ -78,6 +79,7 @@ namespace ERP.Controllers
         // =========================
         // Edit GET: فتح مرتجع شراء قديم للعرض/التعديل
         // =========================
+        [RequirePermission("PurchaseReturns.Edit")]
         [HttpGet]
         public async Task<IActionResult> Edit(int id)
         {
@@ -125,6 +127,7 @@ namespace ERP.Controllers
         // =========================
         // Edit POST: حفظ تعديل بيانات الهيدر
         // =========================
+        [RequirePermission("PurchaseReturns.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id, PurchaseReturn purchaseReturn)
@@ -179,6 +182,7 @@ namespace ERP.Controllers
             return RedirectToAction(nameof(Index));
         }
 
+        [RequirePermission("PurchaseReturns.Edit")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> SaveHeader([FromBody] PurchaseReturnHeaderDto dto)
@@ -312,6 +316,7 @@ namespace ERP.Controllers
         // =========================================================
         // Index — قائمة مرتجعات الشراء
         // =========================================================
+        [RequirePermission("PurchaseReturns.Index")]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
@@ -375,10 +380,16 @@ namespace ERP.Controllers
             return View(model);   // يعرض Views/PurchaseReturns/Index.cshtml
         }
 
-        // فتح شاشة "مرتجع شراء جديد"
+        // فتح شاشة "مرتجع شراء جديد" — سياسة الصلاحيات: صلاحية View (قائمة مرتجعات الشراء) خاصة بفتح الشاشات
         [HttpGet]
         public async Task<IActionResult> Create(int? refPIId)
         {
+            // صلاحية الشاشة: Create أو View (القائمة) — View مخصّصة لفتح الشاشات
+            var canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("PurchaseReturns", "Create"));
+            var canViewList = await _permissionService.HasPermissionAsync(PermissionCodes.Code("PurchaseReturns", "Index"));
+            if (!canCreate && !canViewList)
+                return RedirectToAction("AccessDenied", "Home");
+
             // متغير: كائن مرتجع جديد
             var model = new PurchaseReturn
             {
@@ -449,6 +460,7 @@ namespace ERP.Controllers
         // =========================================================
         // Export — تصدير مرتجعات الشراء (CSV بسيط يفتح في Excel)
         // =========================================================
+        [RequirePermission("PurchaseReturns.Index")]
         [HttpGet]
         public async Task<IActionResult> Export(
             string? search,
@@ -506,6 +518,7 @@ namespace ERP.Controllers
         // =========================================================
         // Delete — حذف مرتجع شراء واحد (نفس أسلوب فاتورة المشتريات)
         // =========================================================
+        [RequirePermission("PurchaseReturns.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id)
@@ -524,6 +537,7 @@ namespace ERP.Controllers
         // BulkDelete — حذف المرتجعات المحددة (حذف عميق مثل مرتجع البيع)
         // عكس المخزون + StockFifoMap + عكس القيود + حذف الهيدر
         // =========================================================
+        [RequirePermission("PurchaseReturns.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkDelete(int[] ids)
@@ -578,6 +592,7 @@ namespace ERP.Controllers
         // =========================================================
         // DeleteAll — حذف جميع مرتجعات الشراء (حذف عميق)
         // =========================================================
+        [RequirePermission("PurchaseReturns.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
@@ -720,6 +735,7 @@ namespace ERP.Controllers
         // =========================================================
         // API: جلب أصناف فاتورة الشراء عند إدخال رقم الفاتورة
         // =========================================================
+        [RequirePermission("PurchaseReturns.Create")]
         [HttpGet]
         public async Task<IActionResult> GetInvoiceItems(int invoiceId)
         {
@@ -806,6 +822,7 @@ namespace ERP.Controllers
             public int? RefPILineNo { get; set; }
         }
 
+        [RequirePermission("PurchaseReturns.Edit")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
@@ -939,6 +956,7 @@ namespace ERP.Controllers
 
         public class RemoveLineJsonDto { public int PRetId { get; set; } public int LineNo { get; set; } }
 
+        [RequirePermission("PurchaseReturns.Delete")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
@@ -984,6 +1002,7 @@ namespace ERP.Controllers
 
         public class ClearLinesJsonDto { public int PRetId { get; set; } }
 
+        [RequirePermission("PurchaseReturns.Delete")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ClearLinesJson([FromBody] ClearLinesJsonDto dto)
@@ -1027,6 +1046,7 @@ namespace ERP.Controllers
             return Json(new { ok = true, message = "تم مسح كل الأصناف.", lines = linesDto, totals = new { itemsTotal = h.ItemsTotal, discountTotal = h.DiscountTotal, taxTotal = h.TaxTotal, netTotal = h.NetTotal } });
         }
 
+        [RequirePermission("PurchaseReturns.Edit")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> OpenReturn(int id)
@@ -1050,6 +1070,7 @@ namespace ERP.Controllers
         // =========================================================
         // POST: ترحيل مرتجع الشراء
         // =========================================================
+        [RequirePermission("PurchaseReturns.Edit")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> PostReturn(int id)

@@ -35,6 +35,9 @@ int next  = Math.Min(last, page + 1);
     DateTime? toDate = Model.ToDate;
     var dateField = (string?)ViewBag.DateField ?? "CreatedAt";
 
+    var listRouteValues = new { search, searchBy, sort, dir, page, pageSize = ps, useDateRange, fromDate, toDate, dateField, fromCode, toCode };
+    string listUrl = Url.Action("Index", "Permissions", listRouteValues) ?? "";
+
     string Link(int p) => Url.Action(action, controller, new
     {
         search,
@@ -163,10 +166,12 @@ int next  = Math.Min(last, page + 1);
                     </div>
                     <form id="formBulkDelete" asp-action="BulkDelete" asp-controller="Permissions" method="post" class="d-none">
                         @Html.AntiForgeryToken()
+                        <input type="hidden" name="returnUrl" value="@listUrl" />
                         <div id="bulkDeleteIdsContainer"></div>
                     </form>
                     <form id="formDeleteAll" asp-action="DeleteAll" asp-controller="Permissions" method="post" class="d-none">
                         @Html.AntiForgeryToken()
+                        <input type="hidden" name="returnUrl" value="@listUrl" />
                     </form>
                 </div>
             </div>
@@ -231,17 +236,20 @@ int next  = Math.Min(last, page + 1);
                             <td class="text-nowrap no-print" data-col="actions">
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                    asp-action="Details"
-                                   asp-route-id="@p.PermissionId">
+                                   asp-route-id="@p.PermissionId"
+                                   asp-route-returnUrl="@listUrl">
                                     تفاصيل
                                 </a>
                                 <a class="btn btn-erp btn-erp-primary btn-erp-sm"
                                    asp-action="Edit"
-                                   asp-route-id="@p.PermissionId">
+                                   asp-route-id="@p.PermissionId"
+                                   asp-route-returnUrl="@listUrl">
                                     تعديل
                                 </a>
                                 <a class="btn btn-erp btn-erp-danger btn-erp-sm"
                                    asp-action="Delete"
-                                   asp-route-id="@p.PermissionId">
+                                   asp-route-id="@p.PermissionId"
+                                   asp-route-returnUrl="@listUrl">
                                     حذف
                                 </a>
                             </td>

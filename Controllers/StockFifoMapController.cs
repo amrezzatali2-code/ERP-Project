@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -17,7 +17,7 @@ namespace ERP.Controllers
     /// <summary>
     /// تقرير ربط FIFO بين الخروج والدخول (عرض فقط).
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.FifoMap_View)]
+    [RequirePermission("StockFifoMap.Index")]
     public class StockFifoMapController : Controller
     {
         private readonly AppDbContext context;

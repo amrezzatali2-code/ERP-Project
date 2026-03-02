@@ -1,4 +1,4 @@
-using System;                                     // للتعامل مع التواريخ DateTime
+﻿using System;                                     // للتعامل مع التواريخ DateTime
 using System.Collections.Generic;                 // القوائم Dictionary / List
 using System.Globalization;                       // تنسيق التواريخ فى التصدير
 using System.Linq;                                // أوامر LINQ مثل Where / OrderBy
@@ -24,7 +24,7 @@ namespace ERP.Controllers
     /// - زر حفظ = حفظ + ترحيل محاسبي (LedgerEntries + تحديث حساب العميل)
     /// - زر فتح = فتح للتعديل (لا يعكس، الحفظ هو الذي يعكس)
     /// </summary>
-    [RequirePermission(PermissionCodes.AccountsDocuments.CashReceipt_View)]
+    [RequirePermission("CashReceipts.Index")]
     public class CashReceiptsController : Controller
     {
         private readonly AppDbContext _context;

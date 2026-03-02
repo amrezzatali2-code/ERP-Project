@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Permission
+@model ERP.Models.Permission
 
 @{
     ViewData["Title"] = "تعديل صلاحية";
@@ -25,9 +25,13 @@
             @* فورم تعديل الصلاحية *@
             <form asp-action="Edit" asp-controller="Permissions" method="post">
 
-                @* مفاتيح مخفية: رقم الصلاحية + تاريخ الإنشاء *@
+                @* مفاتيح مخفية: رقم الصلاحية + تاريخ الإنشاء + returnUrl للرجوع لنفس منظر القائمة *@
                 <input type="hidden" asp-for="PermissionId" />
                 <input type="hidden" asp-for="CreatedAt" />
+                @if (ViewBag.ReturnUrl != null)
+                {
+                    <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+                }
 
                 @* كود الصلاحية *@
                 <div class="mb-3">
@@ -75,9 +79,14 @@
                     <button type="submit" class="btn btn-erp btn-erp-primary">
                         حفظ التعديلات
                     </button>
-                    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">
-                        رجوع للقائمة
-                    </a>
+                    @if (ViewBag.ReturnUrl != null)
+                    {
+                        <a href="@ViewBag.ReturnUrl" class="btn btn-erp btn-erp-secondary">رجوع للقائمة</a>
+                    }
+                    else
+                    {
+                        <a asp-action="Index" class="btn btn-erp btn-erp-secondary">رجوع للقائمة</a>
+                    }
                 </div>
             </form>
         </div>

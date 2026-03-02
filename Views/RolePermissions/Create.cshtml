@@ -1,52 +1,60 @@
-﻿@model ERP.Models.RolePermission
+@model ERP.Models.RolePermission
 
 @{
-    ViewData["Title"] = "ربط صلاحية بدور";
+    ViewData["Title"] = "ربط دور بصلاحياته";
 }
 
 <div class="container" dir="rtl">
-    <h2 class="mb-3">ربط صلاحية بدور جديد</h2>
+    <h2 class="mb-3">ربط دور بصلاحياته</h2>
+    <p class="text-muted mb-4">اختر الدور ثم اضغط «تعديل صلاحيات هذا الدور» لفتح صفحة تحديد الصلاحيات (نفس نظام التعديل — تحديد وإلغاء بحرية ثم حفظ).</p>
 
-    <form asp-action="Create" method="post" class="card">
+    <div class="card">
         <div class="card-body">
-
-            <div asp-validation-summary="ModelOnly" class="text-danger mb-3"></div>
-
             <div class="mb-3">
-                <label asp-for="RoleId" class="form-label"></label>
-                <select asp-for="RoleId"
-                        asp-items="ViewBag.RoleId"
-                        class="form-select">
-                    <option value="">-- اختر دور --</option>
+                <label for="roleId" class="form-label">الدور</label>
+                <select id="roleId"
+                        class="form-select"
+                        style="max-width: 400px;">
+                    <option value="">-- اختر دورًا --</option>
+                    @if (ViewBag.RoleId is SelectList roleList)
+                    {
+                        @foreach (SelectListItem item in roleList)
+                        {
+                            if (!string.IsNullOrEmpty(item.Value))
+                            {
+                                <option value="@item.Value">@item.Text</option>
+                            }
+                        }
+                    }
                 </select>
-                <span asp-validation-for="RoleId" class="text-danger"></span>
             </div>
-
-            <div class="mb-3">
-                <label asp-for="PermissionId" class="form-label"></label>
-                <select asp-for="PermissionId"
-                        asp-items="ViewBag.PermissionId"
-                        class="form-select">
-                    <option value="">-- اختر صلاحية --</option>
-                </select>
-                <span asp-validation-for="PermissionId" class="text-danger"></span>
-            </div>
-
-            <div class="mb-3 form-check">
-                <input asp-for="IsAllowed" class="form-check-input ms-2" />
-                <label asp-for="IsAllowed" class="form-check-label"></label>
-            </div>
-
+            <button type="button" id="btnGoToEdit" class="btn btn-primary" disabled>
+                تعديل صلاحيات هذا الدور
+            </button>
         </div>
-        <div class="card-footer d-flex justify-content-between">
+        <div class="card-footer">
             <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
-            <button type="submit" class="btn btn-primary">حفظ الربط</button>
         </div>
-    </form>
+    </div>
 </div>
 
 @section Scripts {
-    @{
-        await Html.RenderPartialAsync("_ValidationScriptsPartial");
-    }
+    <script>
+        (function () {
+            var roleSelect = document.getElementById('roleId');
+            var btnGo = document.getElementById('btnGoToEdit');
+            if (roleSelect) {
+                roleSelect.addEventListener('change', function () {
+                    if (btnGo) btnGo.disabled = !this.value || this.value === '';
+                });
+            }
+            if (btnGo && roleSelect) {
+                btnGo.addEventListener('click', function () {
+                    var roleId = roleSelect.value;
+                    if (!roleId) return;
+                    window.location.href = '@Url.Action("Edit", "RolePermissions")/' + roleId;
+                });
+            }
+        })();
+    </script>
 }

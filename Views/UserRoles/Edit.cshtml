@@ -129,7 +129,12 @@
                 if (searchInput) {
                     searchInput.value = "";
                     searchInput.oninput = filterRows;
+                    searchInput.addEventListener("keydown", function(e) { if (e.key === "Enter") { e.preventDefault(); filterRows(); } });
                 }
+                var btnSearch = box.querySelector("#btnPermSearch");
+                var btnClear = box.querySelector("#btnPermClear");
+                if (btnSearch) btnSearch.addEventListener("click", filterRows);
+                if (btnClear) btnClear.addEventListener("click", function() { if (searchInput) { searchInput.value = ""; filterRows(); searchInput.focus(); } });
                 function filterRows() {
                     const term = (searchInput && searchInput.value ? searchInput.value : "").trim().toLowerCase();
                     rows.forEach(function(tr) {

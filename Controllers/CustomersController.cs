@@ -1,4 +1,4 @@
-using ClosedXML.Excel;                            // مكتبة Excel لإنشاء ملف xlsx
+﻿using ClosedXML.Excel;                            // مكتبة Excel لإنشاء ملف xlsx
 using ERP.Data;                                   // AppDbContext
 using ERP.Filters;                                // RequirePermission
 using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
@@ -377,7 +377,7 @@ namespace ERP.Controllers
         // =======================================================
         //  أكشن Index — قائمة العملاء / الأطراف
         // =======================================================
-        [RequirePermission(PermissionCodes.Customers.View)]
+        [RequirePermission("Customers.Index")]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
@@ -583,7 +583,7 @@ namespace ERP.Controllers
 
         // =================== حجم تعامل عميل / مورد ===================
         [HttpGet]
-        [RequirePermission(PermissionCodes.Customers.Show)]
+        [RequirePermission("Customers.Show")]
         public async Task<IActionResult> Show(int? id, DateTime? fromDate, DateTime? toDate)
         {
             // =========================================================
@@ -1022,7 +1022,7 @@ namespace ERP.Controllers
         // ======================================================
         // GET: Customers/Create
         // ======================================================
-        [RequirePermission(PermissionCodes.Customers.Create)]
+        [RequirePermission("Customers.Create")]
         public async Task<IActionResult> Create()
         {
             // متغير: موديل عميل جديد، نجعله نشِط افتراضيًا
@@ -1047,7 +1047,7 @@ namespace ERP.Controllers
         // ======================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Customers.Create)]
+        [RequirePermission("Customers.Create")]
         public async Task<IActionResult> Create(Customer customer)
         {
             // منطق الكوتة: لو الخيار غير مفعّل نخلى المضاعِف = 1 كقيمة آمنة
@@ -1102,7 +1102,7 @@ namespace ERP.Controllers
         // ======================================================
         // GET: Customers/Edit/5
         // ======================================================
-        [RequirePermission(PermissionCodes.Customers.Edit)]
+        [RequirePermission("Customers.Edit")]
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null)
@@ -1138,7 +1138,7 @@ namespace ERP.Controllers
         // ======================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Customers.Edit)]
+        [RequirePermission("Customers.Edit")]
         public async Task<IActionResult> Edit(int id, Customer customer)
         {
             if (id != customer.CustomerId)
@@ -1259,7 +1259,7 @@ namespace ERP.Controllers
         // ======================================================
         // GET: Customers/Delete/5
         // ======================================================
-        [RequirePermission(PermissionCodes.Customers.Delete)]
+        [RequirePermission("Customers.Delete")]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
@@ -1281,7 +1281,7 @@ namespace ERP.Controllers
         // ======================================================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Customers.Delete)]
+        [RequirePermission("Customers.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var customer = await _context.Customers.FindAsync(id);
@@ -1313,7 +1313,7 @@ namespace ERP.Controllers
         // ===================== DeleteAll =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Customers.Delete)]
+        [RequirePermission("Customers.Delete")]
         public async Task<IActionResult> DeleteAll()
         {
             var allCustomers = await _context.Customers.ToListAsync();
@@ -1342,7 +1342,7 @@ namespace ERP.Controllers
         // ===================== BulkDelete =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Customers.Delete)]
+        [RequirePermission("Customers.Delete")]
         public async Task<IActionResult> BulkDelete(string selectedIds)
         {
             if (string.IsNullOrWhiteSpace(selectedIds))
@@ -1391,7 +1391,7 @@ namespace ERP.Controllers
 
         // ===================== Export =====================
         [HttpGet]
-        [RequirePermission(PermissionCodes.Customers.Export)]
+        [RequirePermission("Customers.Export")]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,

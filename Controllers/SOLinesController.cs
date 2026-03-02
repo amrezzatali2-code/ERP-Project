@@ -31,7 +31,7 @@ namespace ERP.Controllers
     /// - دعم حذف سطر/عدة أسطر/كل الأسطر مع إعادة تجميع أمر البيع
     /// - دعم تصدير البيانات إلى Excel أو CSV
     /// </summary>
-    [RequirePermission(PermissionCodes.SalesLines.OrderLines_View)]
+    [RequirePermission("SOLines.Index")]
     public class SOLinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

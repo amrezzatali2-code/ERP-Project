@@ -19,7 +19,7 @@ namespace ERP.Controllers
     /// <summary>
     /// قائمة الخصم اليدوي للبيع: كل صنف في الأرصدة مع الخصم الفعّال (يدوي أو مرجّح).
     /// </summary>
-    [RequirePermission(PermissionCodes.SalesDiscounts.DiscountOverrides_View)]
+    [RequirePermission("ProductDiscountOverrides.Index")]
     public class ProductDiscountOverridesController : Controller
     {
         private readonly AppDbContext _db;

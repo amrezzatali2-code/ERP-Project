@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لبناء CSV
@@ -129,7 +129,7 @@ namespace ERP.Controllers
         /// - فلتر تاريخ إنشاء من/إلى
         /// - ترتيب + تقسيم صفحات باستخدام PagedResult
         /// </summary>
-        [RequirePermission(PermissionCodes.Security.Permissions_View)]
+        [RequirePermission("Permissions.Index")]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
@@ -226,7 +226,7 @@ namespace ERP.Controllers
         /// عرض تفاصيل صلاحية واحدة، مع بيان الأدوار المرتبطة
         /// واستثناءات المستخدمين (إن وجدت).
         /// </summary>
-        public async Task<IActionResult> Details(int id)
+        public async Task<IActionResult> Details(int id, string? returnUrl = null)
         {
             var permission = await _context.Permissions
                 .AsNoTracking()
@@ -239,6 +239,7 @@ namespace ERP.Controllers
                 return NotFound();
             }
 
+            ViewBag.ReturnUrl = returnUrl;
             return View(permission);
         }
 
@@ -264,6 +265,17 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create([Bind("Code,NameAr,Module,Description")] Permission permission)
         {
+            // منع تكرار كود الصلاحية (بدون مراعاة حالة الحروف)
+            if (!string.IsNullOrWhiteSpace(permission?.Code))
+            {
+                var codeExists = await _context.Permissions
+                    .AnyAsync(p => p.Code != null && p.Code.Trim().ToLower() == permission.Code.Trim().ToLower());
+                if (codeExists)
+                {
+                    ModelState.AddModelError(nameof(Permission.Code), "كود الصلاحية موجود مسبقاً. لا يمكن تكرار نفس الكود (يمكنك تعديل الصلاحية الموجودة بدلاً من إضافة جديدة).");
+                }
+            }
+
             if (ModelState.IsValid)
             {
                 permission.CreatedAt = DateTime.UtcNow;   // تاريخ الإنشاء
@@ -290,7 +302,7 @@ namespace ERP.Controllers
         /// <summary>
         /// عرض بيانات صلاحية للتعديل.
         /// </summary>
-        public async Task<IActionResult> Edit(int id)
+        public async Task<IActionResult> Edit(int id, string? returnUrl = null)
         {
             var permission = await _context.Permissions.FindAsync(id);
             if (permission == null)
@@ -298,6 +310,7 @@ namespace ERP.Controllers
                 return NotFound();
             }
 
+            ViewBag.ReturnUrl = returnUrl;
             return View(permission);
         }
 
@@ -308,11 +321,23 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
             int id,
-            [Bind("PermissionId,Code,NameAr,Module,Description,CreatedAt")] Permission permission)
+            [Bind("PermissionId,Code,NameAr,Module,Description,CreatedAt")] Permission permission,
+            string? returnUrl = null)
         {
             if (id != permission.PermissionId)
             {
                 return NotFound();
+            }
+
+            // منع تعديل الكود إلى قيمة مكررة (صلاحية أخرى لها نفس الكود)
+            if (ModelState.IsValid && !string.IsNullOrWhiteSpace(permission?.Code))
+            {
+                var duplicateCode = await _context.Permissions
+                    .AnyAsync(p => p.PermissionId != id && p.Code != null && p.Code.Trim().ToLower() == permission.Code.Trim().ToLower());
+                if (duplicateCode)
+                {
+                    ModelState.AddModelError(nameof(Permission.Code), "كود الصلاحية هذا مستخدم لصلاحية أخرى. اختر كوداً فريداً.");
+                }
             }
 
             if (ModelState.IsValid)
@@ -330,6 +355,12 @@ namespace ERP.Controllers
 
                     TempData["Success"] = "تم تعديل الصلاحية بنجاح.";
                 }
+                catch (DbUpdateException ex) when (ex.InnerException?.Message?.Contains("IX_Permissions_Code") == true || ex.InnerException?.Message?.Contains("duplicate key") == true)
+                {
+                    ModelState.AddModelError(nameof(Permission.Code), "كود الصلاحية مستخدم مسبقاً. لا يمكن تكرار نفس الكود.");
+                    ViewBag.ReturnUrl = returnUrl;
+                    return View(permission);
+                }
                 catch (DbUpdateConcurrencyException)
                 {
                     if (!PermissionExists(permission.PermissionId))
@@ -342,9 +373,12 @@ namespace ERP.Controllers
                     }
                 }
 
+                if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                    return Redirect(returnUrl);
                 return RedirectToAction(nameof(Index));
             }
 
+            ViewBag.ReturnUrl = returnUrl;
             return View(permission);
         }
 
@@ -353,7 +387,7 @@ namespace ERP.Controllers
         /// <summary>
         /// شاشة تأكيد حذف لصلاحية واحدة (اختيارية).
         /// </summary>
-        public async Task<IActionResult> Delete(int id)
+        public async Task<IActionResult> Delete(int id, string? returnUrl = null)
         {
             var permission = await _context.Permissions
                 .AsNoTracking()
@@ -364,6 +398,7 @@ namespace ERP.Controllers
                 return NotFound();
             }
 
+            ViewBag.ReturnUrl = returnUrl;
             return View(permission);
         }
 
@@ -372,7 +407,7 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        public async Task<IActionResult> DeleteConfirmed(int id, string? returnUrl = null)
         {
             var permission = await _context.Permissions.FindAsync(id);
             if (permission != null)
@@ -386,6 +421,8 @@ namespace ERP.Controllers
                 TempData["Success"] = "تم حذف الصلاحية.";
             }
 
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                return Redirect(returnUrl);
             return RedirectToAction(nameof(Index));
         }
 
@@ -397,11 +434,13 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkDelete([FromForm] int[] ids)
+        public async Task<IActionResult> BulkDelete([FromForm] int[] ids, string? returnUrl = null)
         {
             if (ids == null || ids.Length == 0)
             {
                 TempData["Error"] = "من فضلك اختر على الأقل صلاحية واحدة للحذف.";
+                if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                    return Redirect(returnUrl);
                 return RedirectToAction(nameof(Index));
             }
 
@@ -412,6 +451,8 @@ namespace ERP.Controllers
             if (permissions.Count == 0)
             {
                 TempData["Error"] = "لم يتم العثور على الصلاحيات المحددة.";
+                if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                    return Redirect(returnUrl);
                 return RedirectToAction(nameof(Index));
             }
 
@@ -419,6 +460,8 @@ namespace ERP.Controllers
             await _context.SaveChangesAsync();
 
             TempData["Success"] = $"تم حذف {permissions.Count} صلاحية بنجاح.";
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                return Redirect(returnUrl);
             return RedirectToAction(nameof(Index));
         }
 
@@ -430,13 +473,15 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteAll()
+        public async Task<IActionResult> DeleteAll(string? returnUrl = null)
         {
             var all = await _context.Permissions.ToListAsync();
             _context.Permissions.RemoveRange(all);
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "تم حذف جميع الصلاحيات.";
+            if (!string.IsNullOrEmpty(returnUrl) && Url.IsLocalUrl(returnUrl))
+                return Redirect(returnUrl);
             return RedirectToAction(nameof(Index));
         }
 

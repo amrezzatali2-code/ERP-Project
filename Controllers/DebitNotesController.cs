@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -22,7 +22,7 @@ namespace ERP.Controllers
     /// - CRUD (إنشاء/تعديل/تفاصيل/حذف).
     /// - زر حفظ وترحيل = حفظ + ترحيل محاسبي (LedgerEntries + تحديث حساب العميل + الأرباح).
     /// </summary>
-    [RequirePermission(PermissionCodes.AccountsDocuments.DebitNote_View)]
+    [RequirePermission("DebitNotes.Index")]
     public class DebitNotesController : Controller
     {
         private readonly AppDbContext _context;

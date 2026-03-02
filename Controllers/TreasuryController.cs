@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -15,7 +15,7 @@ namespace ERP.Controllers
     /// الكنترولر الخاص بالخزينة الرئيسية
     /// يعرض رصيد الخزينة وأذون الاستلام والدفع
     /// </summary>
-    [RequirePermission(PermissionCodes.Accounts.Treasury_View)]
+    [RequirePermission("Treasury.Index")]
     public class TreasuryController : Controller
     {
         private readonly AppDbContext _context;

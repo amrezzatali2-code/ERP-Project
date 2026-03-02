@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -28,7 +28,7 @@ namespace ERP.Controllers
     /// - DeleteAll: حذف كل الإشعارات (لبيئة TEST).
     /// - بالإضافة إلى CRUD الأساسي: Create / Edit / Details / Delete.
     /// </summary>
-    [RequirePermission(PermissionCodes.AccountsDocuments.CreditNote_View)]
+    [RequirePermission("CreditNotes.Index")]
     public class CreditNotesController : Controller
     {
         private readonly AppDbContext _context;

@@ -25,7 +25,7 @@ namespace ERP.Controllers
     /// - حذف مجموعة مرتجعات / حذف الكل غير المُرحّل.
     /// - تصدير قائمة المرتجعات (Excel/CSV).
     /// </summary>
-    [RequirePermission(PermissionCodes.SalesReturns.View)]
+    [RequirePermission("SalesReturns.Index")]
     public class SalesReturnsController : Controller
     {
         private readonly AppDbContext context;

@@ -24,7 +24,7 @@ namespace ERP.Controllers
     /// - حذف سطر/عدة أسطر بشرط أن يكون الهيدر في حالة Draft فقط.
     /// - تصدير CSV أو Excel.
     /// </summary>
-    [RequirePermission(PermissionCodes.SalesLines.ReturnLines_View)]
+    [RequirePermission("SalesReturnLines.Index")]
     public class SalesReturnLinesController : Controller
     {
         // متغير: سياق قاعدة البيانات للتعامل مع الجداول

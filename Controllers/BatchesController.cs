@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -22,7 +22,7 @@ namespace ERP.Controllers
     /// - حذف محدد / حذف الكل.
     /// - تصدير (Excel / CSV).
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.Batches_View)]
+    [RequirePermission("Batches.Index")]
     public class BatchesController : Controller
     {
         private readonly AppDbContext _db;

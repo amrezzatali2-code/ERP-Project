@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -21,7 +21,7 @@ namespace ERP.Controllers
     /// كنترولر فئات الأصناف — عرض/بحث/ترتيب/ترقيم + إضافة/تعديل/حذف
     /// باستخدام نظام القوائم الموحد مع فورم SHOW.
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.Categories_View)]
+    [RequirePermission("Categories.Index")]
     public class CategoriesController : Controller
     {
         private readonly AppDbContext _db;

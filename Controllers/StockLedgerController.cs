@@ -1,4 +1,4 @@
-using System;                                       // متغيرات: DateTime
+﻿using System;                                       // متغيرات: DateTime
 using System.Collections.Generic;                   // Dictionary
 using System.IO;                                    // MemoryStream
 using System.Linq;                                  // LINQ
@@ -21,7 +21,7 @@ namespace ERP.Controllers
     /// كنترولر دفتر الحركة المخزنية:
     /// عرض + بحث + ترتيب + ترقيم + تصدير (Excel أو CSV) حسب اختيار المستخدم.
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.StockLedger_View)]
+    [RequirePermission("StockLedger.Index")]
     public class StockLedgerController : Controller
     {
         private readonly AppDbContext context;   // متغير: سياق قاعدة البيانات

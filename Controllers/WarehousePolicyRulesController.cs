@@ -1,4 +1,4 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                  // كلاس PagedResult لتقسيم الصفحات + الفلاتر
@@ -25,7 +25,7 @@ namespace ERP.Controllers
     /// كل صف = سياسة معيّنة (PolicyId) داخل مخزن معيّن (WarehouseId)
     /// وتحدد نسبة ربح المخزن وحدّ الخصم المسموح للعميل.
     /// </summary>
-    [RequirePermission(PermissionCodes.Settings.WarehousePolicyRules_View)]
+    [RequirePermission("WarehousePolicyRules.Index")]
     public class WarehousePolicyRulesController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات

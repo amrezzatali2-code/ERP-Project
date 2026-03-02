@@ -24,7 +24,7 @@ namespace ERP.Controllers
     /// - حذف جماعي / حذف الكل (يُفضّل لبيئة تجريبية أو بإذن خاص).
     /// لا يوجد إنشاء/تعديل قيود من هنا؛ القيود تُنشأ من الشاشات الأخرى (فواتير، إيصالات، قيود يدوية).
     /// </summary>
-    [RequirePermission(PermissionCodes.Ledger.View)]
+    [RequirePermission("LedgerEntries.Index")]
     public class LedgerEntriesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

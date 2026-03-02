@@ -46,8 +46,15 @@ namespace ERP.Services
                 .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == codeLower)
                 .FirstOrDefaultAsync();
 
-            // في حال وجود أكواد قديمة في القاعدة (مثل Sales.Invoice بدل Sales.Invoices) نبحث عنها
-            if (perm == null && (codeLower == "sales.invoices.view" || codeLower == "sales.invoices.create"))
+            // في حال وجود أكواد قديمة في القاعدة نبحث عنها
+            if (perm == null && codeLower == "sales.invoices.view.index")
+            {
+                perm = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == "sales.invoices.view")
+                    .FirstOrDefaultAsync();
+            }
+            if (perm == null && codeLower.StartsWith("sales.invoices."))
             {
                 var altCode = codeLower.Replace("sales.invoices.", "sales.invoice.");
                 perm = await _context.Permissions
@@ -55,8 +62,68 @@ namespace ERP.Services
                     .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == altCode)
                     .FirstOrDefaultAsync();
             }
+            if (perm == null && (codeLower == "customers.view.index" || codeLower == "customers.view.show"))
+            {
+                perm = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == "customers.customers.view")
+                    .FirstOrDefaultAsync();
+            }
+            if (perm == null && codeLower.StartsWith("customers.") && !codeLower.StartsWith("customers.customers.") && !codeLower.StartsWith("customers.view.") && !codeLower.StartsWith("customers.ledger.") && !codeLower.StartsWith("customers.customervolume."))
+            {
+                var altCode = "customers.customers." + codeLower.Substring("customers.".Length);
+                perm = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == altCode)
+                    .FirstOrDefaultAsync();
+            }
+            // المشتريات: كود جديد بصيغة underscore (Purchasing.Invoices_View) — إن لم يُوجد نبحث عن الأكواد القديمة
+            if (perm == null && codeLower.StartsWith("purchasing."))
+            {
+                var oldCodes = new List<string>();
+                if (codeLower == "purchasing.invoices_view")
+                    oldCodes.AddRange(new[] { "purchasing.invoices.view.index", "purchasing.invoices.view" });
+                else if (codeLower == "purchasing.requests_view")
+                    oldCodes.AddRange(new[] { "purchasing.requests.view.index", "purchasing.requests.view" });
+                else if (codeLower == "purchasing.returns_view")
+                    oldCodes.AddRange(new[] { "purchasing.returns.view.index", "purchasing.returns.view" });
+                else
+                    oldCodes.Add(codeLower
+                        .Replace("purchasing.invoices_", "purchasing.invoices.")
+                        .Replace("purchasing.requests_", "purchasing.requests.")
+                        .Replace("purchasing.returns_", "purchasing.returns.")
+                        .Replace("purchasing.invoicelines_", "purchasing.invoicelines.")
+                        .Replace("purchasing.requestlines_", "purchasing.requestlines.")
+                        .Replace("purchasing.returnlines_", "purchasing.returnlines."));
+                foreach (var old in oldCodes)
+                {
+                    perm = await _context.Permissions
+                        .AsNoTracking()
+                        .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == old)
+                        .FirstOrDefaultAsync();
+                    if (perm != null) break;
+                }
+                if (perm == null)
+                {
+                    var altCode = codeLower
+                        .Replace("purchasing.invoices.", "purchasing.invoice.")
+                        .Replace("purchasing.requests.", "purchasing.request.")
+                        .Replace("purchasing.returns.", "purchasing.return.")
+                        .Replace("purchasing.invoicelines.", "purchasing.invoiceline.")
+                        .Replace("purchasing.requestlines.", "purchasing.requestline.")
+                        .Replace("purchasing.returnlines.", "purchasing.returnline.");
+                    if (altCode != codeLower)
+                    {
+                        perm = await _context.Permissions
+                            .AsNoTracking()
+                            .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == altCode)
+                            .FirstOrDefaultAsync();
+                    }
+                }
+            }
             if (perm == null) return false;
 
+            // التحقق: ممنوع؟ من الدور؟ إضافي؟
             var denied = await _context.UserDeniedPermissions
                 .AnyAsync(x => x.UserId == userId && x.PermissionId == perm.PermissionId && !x.IsAllowed);
             if (denied) return false;
@@ -70,7 +137,208 @@ namespace ERP.Services
 
             var extra = await _context.UserExtraPermissions
                 .AnyAsync(x => x.UserId == userId && x.PermissionId == perm.PermissionId);
-            return extra;
+            if (extra) return true;
+
+            // المشتريات: لو الصلاحية بالكود الجديد (underscore) والدور مربوط بالكود القديم (نقطة) نتحقق من القديم
+            if (codeLower.StartsWith("purchasing.") && codeLower.Contains("_"))
+            {
+                var legacyCode = codeLower
+                    .Replace("purchasing.invoices_", "purchasing.invoices.")
+                    .Replace("purchasing.requests_", "purchasing.requests.")
+                    .Replace("purchasing.returns_", "purchasing.returns.")
+                    .Replace("purchasing.invoicelines_", "purchasing.invoicelines.")
+                    .Replace("purchasing.requestlines_", "purchasing.requestlines.")
+                    .Replace("purchasing.returnlines_", "purchasing.returnlines.");
+                if (legacyCode != codeLower)
+                {
+                    var permLegacy = await _context.Permissions
+                        .AsNoTracking()
+                        .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == legacyCode)
+                        .FirstOrDefaultAsync();
+                    if (permLegacy != null && permLegacy.PermissionId != perm.PermissionId)
+                    {
+                        var deniedLegacy = await _context.UserDeniedPermissions
+                            .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId && !x.IsAllowed);
+                        if (!deniedLegacy)
+                        {
+                            var fromRoleLegacy = await _context.UserRoles
+                                .Where(ur => ur.UserId == userId)
+                                .Join(_context.RolePermissions.Where(rp => rp.PermissionId == permLegacy.PermissionId && rp.IsAllowed),
+                                    ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => 1)
+                                .AnyAsync();
+                            if (fromRoleLegacy) return true;
+                            var extraLegacy = await _context.UserExtraPermissions
+                                .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId);
+                            if (extraLegacy) return true;
+                        }
+                    }
+                }
+            }
+
+            // لو الصلاحية بالكود الجديد والدور مربوط بكود قديم نتحقق من القديم أيضاً
+            if (codeLower == "sales.invoices.view.index")
+            {
+                var permLegacy = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == "sales.invoices.view")
+                    .FirstOrDefaultAsync();
+                if (permLegacy != null && permLegacy.PermissionId != perm.PermissionId)
+                {
+                    var deniedLegacy = await _context.UserDeniedPermissions
+                        .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId && !x.IsAllowed);
+                    if (!deniedLegacy)
+                    {
+                        var fromRoleLegacy = await _context.UserRoles
+                            .Where(ur => ur.UserId == userId)
+                            .Join(_context.RolePermissions.Where(rp => rp.PermissionId == permLegacy.PermissionId && rp.IsAllowed),
+                                ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => 1)
+                            .AnyAsync();
+                        if (fromRoleLegacy) return true;
+                        var extraLegacy = await _context.UserExtraPermissions
+                            .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId);
+                        if (extraLegacy) return true;
+                    }
+                }
+            }
+            if (codeLower == "customers.view.index" || codeLower == "customers.view.show")
+            {
+                var permLegacy = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == "customers.customers.view")
+                    .FirstOrDefaultAsync();
+                if (permLegacy != null && permLegacy.PermissionId != perm.PermissionId)
+                {
+                    var deniedLegacy = await _context.UserDeniedPermissions
+                        .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId && !x.IsAllowed);
+                    if (!deniedLegacy)
+                    {
+                        var fromRoleLegacy = await _context.UserRoles
+                            .Where(ur => ur.UserId == userId)
+                            .Join(_context.RolePermissions.Where(rp => rp.PermissionId == permLegacy.PermissionId && rp.IsAllowed),
+                                ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => 1)
+                            .AnyAsync();
+                        if (fromRoleLegacy) return true;
+                        var extraLegacy = await _context.UserExtraPermissions
+                            .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId);
+                        if (extraLegacy) return true;
+                    }
+                }
+            }
+            if (codeLower.StartsWith("customers.") && !codeLower.StartsWith("customers.customers.") && !codeLower.StartsWith("customers.view.") && !codeLower.StartsWith("customers.ledger.") && !codeLower.StartsWith("customers.customervolume."))
+            {
+                var altCode = "customers.customers." + codeLower.Substring("customers.".Length);
+                var permLegacy = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == altCode)
+                    .FirstOrDefaultAsync();
+                if (permLegacy != null && permLegacy.PermissionId != perm.PermissionId)
+                {
+                    var deniedLegacy = await _context.UserDeniedPermissions
+                        .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId && !x.IsAllowed);
+                    if (!deniedLegacy)
+                    {
+                        var fromRoleLegacy = await _context.UserRoles
+                            .Where(ur => ur.UserId == userId)
+                            .Join(_context.RolePermissions.Where(rp => rp.PermissionId == permLegacy.PermissionId && rp.IsAllowed),
+                                ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => 1)
+                            .AnyAsync();
+                        if (fromRoleLegacy) return true;
+                        var extraLegacy = await _context.UserExtraPermissions
+                            .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId);
+                        if (extraLegacy) return true;
+                    }
+                }
+            }
+            if (codeLower.StartsWith("sales.invoices."))
+            {
+                var altCode = codeLower.Replace("sales.invoices.", "sales.invoice.");
+                var permLegacy = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == altCode)
+                    .FirstOrDefaultAsync();
+                if (permLegacy != null && permLegacy.PermissionId != perm.PermissionId)
+                {
+                    var deniedLegacy = await _context.UserDeniedPermissions
+                        .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId && !x.IsAllowed);
+                    if (!deniedLegacy)
+                    {
+                        var fromRoleLegacy = await _context.UserRoles
+                            .Where(ur => ur.UserId == userId)
+                            .Join(_context.RolePermissions.Where(rp => rp.PermissionId == permLegacy.PermissionId && rp.IsAllowed),
+                                ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => 1)
+                            .AnyAsync();
+                        if (fromRoleLegacy) return true;
+                        var extraLegacy = await _context.UserExtraPermissions
+                            .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId);
+                        if (extraLegacy) return true;
+                    }
+                }
+            }
+            // قوائم المشتريات: لو الدور مربوط بـ View (قديم) بدون .Index نعتبره صالحاً
+            if (codeLower == "purchasing.invoices.view.index" || codeLower == "purchasing.requests.view.index" || codeLower == "purchasing.returns.view.index")
+            {
+                var legacyCode = codeLower == "purchasing.invoices.view.index" ? "purchasing.invoices.view"
+                    : codeLower == "purchasing.requests.view.index" ? "purchasing.requests.view"
+                    : "purchasing.returns.view";
+                var permLegacy = await _context.Permissions
+                    .AsNoTracking()
+                    .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == legacyCode)
+                    .FirstOrDefaultAsync();
+                if (permLegacy != null && permLegacy.PermissionId != perm.PermissionId)
+                {
+                    var deniedLegacy = await _context.UserDeniedPermissions
+                        .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId && !x.IsAllowed);
+                    if (!deniedLegacy)
+                    {
+                        var fromRoleLegacy = await _context.UserRoles
+                            .Where(ur => ur.UserId == userId)
+                            .Join(_context.RolePermissions.Where(rp => rp.PermissionId == permLegacy.PermissionId && rp.IsAllowed),
+                                ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => 1)
+                            .AnyAsync();
+                        if (fromRoleLegacy) return true;
+                        var extraLegacy = await _context.UserExtraPermissions
+                            .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId);
+                        if (extraLegacy) return true;
+                    }
+                }
+            }
+            // المشتريات: لو الدور مربوط بصلاحية قديمة (مفرد) نعتبرها صالحة
+            if (codeLower.StartsWith("purchasing."))
+            {
+                var altCode = codeLower
+                    .Replace("purchasing.invoices.", "purchasing.invoice.")
+                    .Replace("purchasing.requests.", "purchasing.request.")
+                    .Replace("purchasing.returns.", "purchasing.return.")
+                    .Replace("purchasing.invoicelines.", "purchasing.invoiceline.")
+                    .Replace("purchasing.requestlines.", "purchasing.requestline.")
+                    .Replace("purchasing.returnlines.", "purchasing.returnline.");
+                if (altCode != codeLower)
+                {
+                    var permLegacy = await _context.Permissions
+                        .AsNoTracking()
+                        .Where(p => p.IsActive && p.Code != null && p.Code.ToLower() == altCode)
+                        .FirstOrDefaultAsync();
+                    if (permLegacy != null && permLegacy.PermissionId != perm.PermissionId)
+                    {
+                        var deniedLegacy = await _context.UserDeniedPermissions
+                            .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId && !x.IsAllowed);
+                        if (!deniedLegacy)
+                        {
+                            var fromRoleLegacy = await _context.UserRoles
+                                .Where(ur => ur.UserId == userId)
+                                .Join(_context.RolePermissions.Where(rp => rp.PermissionId == permLegacy.PermissionId && rp.IsAllowed),
+                                    ur => ur.RoleId, rp => rp.RoleId, (ur, rp) => 1)
+                                .AnyAsync();
+                            if (fromRoleLegacy) return true;
+                            var extraLegacy = await _context.UserExtraPermissions
+                                .AnyAsync(x => x.UserId == userId && x.PermissionId == permLegacy.PermissionId);
+                            if (extraLegacy) return true;
+                        }
+                    }
+                }
+            }
+
+            return false;
         }
 
         public async Task<bool> HasPermissionAsync(string permissionCode)

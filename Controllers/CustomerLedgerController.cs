@@ -16,7 +16,7 @@ namespace ERP.Controllers
     /// <summary>
     /// كشف حساب عميل — يعرض كل عمليات العميل في مدة معينة بالتاريخ
     /// </summary>
-    [RequirePermission(PermissionCodes.CustomerLedger.View)]
+    [RequirePermission("CustomerLedger.Index")]
     public class CustomerLedgerController : Controller
     {
         private readonly AppDbContext _context;

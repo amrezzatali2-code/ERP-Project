@@ -1,4 +1,4 @@
-using System;                                     // لاستخدام DateTime
+﻿using System;                                     // لاستخدام DateTime
 using System.Collections.Generic;                 // List<T>
 using System.IO;                                  // MemoryStream لتجهيز ملف الإكسل
 using System.Linq;                                // أوامر LINQ
@@ -22,7 +22,7 @@ namespace ERP.Controllers
     /// - حذف مجموعة سطور
     /// - تصدير CSV أو Excel
     /// </summary>
-    [RequirePermission(PermissionCodes.Purchasing.RequestLines_View)]
+    [RequirePermission("PRLines.Index")]
     public class PRLinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

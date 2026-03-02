@@ -1,4 +1,4 @@
-using ClosedXML.Excel;
+﻿using ClosedXML.Excel;
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                         // AppDbContext
 using ERP.Filters;
@@ -34,7 +34,7 @@ namespace ERP.Controllers
         // =========================================
         // Index: قائمة الأحياء/المراكز مع الفلاتر
         // =========================================
-        [RequirePermission(PermissionCodes.Geo.Districts_View)]
+        [RequirePermission("Dstricts.Index")]
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,
@@ -206,7 +206,7 @@ namespace ERP.Controllers
         // =========================
         // GET: /Districts/Create
         // =========================
-        [RequirePermission(PermissionCodes.Geo.Districts_Create)]
+        [RequirePermission("Dstricts.Create")]
         [HttpGet]
         public async Task<IActionResult> Create()
         {
@@ -219,7 +219,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Districts_Create)]
+        [RequirePermission("Dstricts.Create")]
         public async Task<IActionResult> Create(District model)
         {
             if (!ModelState.IsValid)
@@ -244,7 +244,7 @@ namespace ERP.Controllers
         // =========================
         // GET: /Districts/Edit/5
         // =========================
-        [RequirePermission(PermissionCodes.Geo.Districts_Edit)]
+        [RequirePermission("Dstricts.Edit")]
         [HttpGet]
         public async Task<IActionResult> Edit(int id)
         {
@@ -260,7 +260,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Districts_Edit)]
+        [RequirePermission("Dstricts.Edit")]
         public async Task<IActionResult> Edit(int id, District model)
         {
             if (id != model.DistrictId) return BadRequest();
@@ -295,7 +295,7 @@ namespace ERP.Controllers
         // =========================
         // GET: /Districts/Details/5
         // =========================
-        [RequirePermission(PermissionCodes.Geo.Districts_View)]
+        [RequirePermission("Dstricts.Index")]
         [HttpGet]
         public async Task<IActionResult> Details(int id)
         {
@@ -310,7 +310,7 @@ namespace ERP.Controllers
         // =========================
         // GET: /Districts/Delete/5
         // =========================
-        [RequirePermission(PermissionCodes.Geo.Districts_Delete)]
+        [RequirePermission("Dstricts.Delete")]
         [HttpGet]
         public async Task<IActionResult> Delete(int id)
         {
@@ -327,7 +327,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Districts_Delete)]
+        [RequirePermission("Dstricts.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var item = await _db.Districts.FindAsync(id);
@@ -349,7 +349,7 @@ namespace ERP.Controllers
         // ===================== حذف جميع الأحياء/المراكز =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Districts_Delete)]
+        [RequirePermission("Dstricts.Delete")]
         public async Task<IActionResult> DeleteAll()
         {
             // نجيب كل السجلات من جدول الأحياء/المراكز
@@ -374,7 +374,7 @@ namespace ERP.Controllers
         // ===================== حذف الأحياء/المراكز المحددة من الجدول =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Districts_Delete)]
+        [RequirePermission("Dstricts.Delete")]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
             // لو المستخدم مدخلش أي صفوف
@@ -419,7 +419,7 @@ namespace ERP.Controllers
 
 
         // ===================== تصدير الأحياء/المراكز إلى ملف CSV =====================
-        [RequirePermission(PermissionCodes.Geo.Districts_Export)]
+        [RequirePermission("Dstricts.Export")]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,

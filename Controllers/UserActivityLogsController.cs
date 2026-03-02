@@ -1,4 +1,4 @@
-using System;                                // متغيرات التاريخ DateTime
+﻿using System;                                // متغيرات التاريخ DateTime
 using System.Linq;                           // أوامر LINQ مثل Where و OrderBy
 using System.Text;                           // StringBuilder لتجهيز ملف التصدير
 using ClosedXML.Excel;                       // تصدير Excel فعلي (.xlsx)
@@ -18,7 +18,7 @@ namespace ERP.Controllers
     /// عرض + تصفية + حذف + تصدير.
     /// لا يوجد إنشاء / تعديل يدوي للسجلات.
     /// </summary>
-    [RequirePermission(PermissionCodes.Settings.MovementLog_View)]
+    [RequirePermission("UserActivityLogs.Index")]
     public class UserActivityLogsController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

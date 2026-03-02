@@ -1,4 +1,4 @@
-using ERP.Data;                                   // AppDbContext
+﻿using ERP.Data;                                   // AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // الموديلات UserExtraPermissions, User, Permission
@@ -359,7 +359,7 @@ namespace ERP.Controllers
         /// قائمة الصلاحيات الإضافية للمستخدمين
         /// مع بحث/ترتيب/فلترة وتجزئة صفحات بنفس النظام الثابت.
         /// </summary>
-        [RequirePermission(PermissionCodes.Security.UserExtraPermissions_View)]
+        [RequirePermission("UserExtraPermissions.Index")]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,

@@ -19,7 +19,7 @@ using ERP.Services;                               // DocumentTotalsService
 namespace ERP.Controllers
 {
     /// <summary>كنترولر سطور فاتورة البيع — عرض/تفاصيل + بحث/ترتيب/تقسيم + حذف/تصدير</summary>
-    [RequirePermission(PermissionCodes.SalesLines.InvoiceLines_View)]
+    [RequirePermission("SalesInvoiceLines.Index")]
     public class SalesInvoiceLinesController : Controller
     {
         private readonly AppDbContext _context;            // متغير: كائن الاتصال بقاعدة البيانات

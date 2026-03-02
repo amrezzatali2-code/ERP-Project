@@ -1,4 +1,4 @@
-using Azure.Core;
+﻿using Azure.Core;
 using ClosedXML.Excel;                            // مكتبة Excel
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                                   // AppDbContext
@@ -97,7 +97,7 @@ namespace ERP.Controllers
         //  - فلترة بتاريخ الإنشاء (useDateRange + fromDate/toDate)
         //  - تقسيم صفحات (page + pageSize)
         // =========================================================
-        [RequirePermission(PermissionCodes.Geo.Branches_View)]
+        [RequirePermission("Branches.Index")]
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,
@@ -243,7 +243,7 @@ namespace ERP.Controllers
         // GET: Branches/Details/5
         // عرض تفاصيل فرع واحد
         // =========================================================
-        [RequirePermission(PermissionCodes.Geo.Branches_View)]
+        [RequirePermission("Branches.Index")]
         [HttpGet]
         public async Task<IActionResult> Details(int id)
         {
@@ -261,7 +261,7 @@ namespace ERP.Controllers
         // GET: Branches/Create
         // عرض فورم إضافة فرع جديد
         // =========================================================
-        [RequirePermission(PermissionCodes.Geo.Branches_Create)]
+        [RequirePermission("Branches.Create")]
         [HttpGet]
         public IActionResult Create()
         {
@@ -274,7 +274,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Branches_Create)]
+        [RequirePermission("Branches.Create")]
         public async Task<IActionResult> Create(Branch branch)
         {
             // التحقق من البيانات (الاسم مطلوب)
@@ -298,7 +298,7 @@ namespace ERP.Controllers
         // GET: Branches/Edit/5
         // عرض فورم تعديل فرع
         // =========================================================
-        [RequirePermission(PermissionCodes.Geo.Branches_Edit)]
+        [RequirePermission("Branches.Edit")]
         [HttpGet]
         public async Task<IActionResult> Edit(int id)
         {
@@ -315,7 +315,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Branches_Edit)]
+        [RequirePermission("Branches.Edit")]
         public async Task<IActionResult> Edit(int id, Branch branch)
         {
             if (id != branch.BranchId)
@@ -346,7 +346,7 @@ namespace ERP.Controllers
         // GET: Branches/Delete/5
         // عرض صفحة تأكيد حذف فرع
         // =========================================================
-        [RequirePermission(PermissionCodes.Geo.Branches_Delete)]
+        [RequirePermission("Branches.Delete")]
         [HttpGet]
         public async Task<IActionResult> Delete(int id)
         {
@@ -366,7 +366,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Branches_Delete)]
+        [RequirePermission("Branches.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var branch = await _db.Branches.FindAsync(id);
@@ -391,7 +391,7 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Branches_Delete)]
+        [RequirePermission("Branches.Delete")]
         public async Task<IActionResult> BulkDelete(
             int[]? selectedIds,          // IDs المختارة من الجدول
             string? search,
@@ -462,7 +462,7 @@ namespace ERP.Controllers
         /// </summary>
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.Geo.Branches_Delete)]
+        [RequirePermission("Branches.Delete")]
         public async Task<IActionResult> DeleteAll(
             string? search,
             string? searchBy,
@@ -512,7 +512,7 @@ namespace ERP.Controllers
         /// <summary>
         /// تصدير الفروع المطابقة للفلاتر الحالية (Excel أو CSV).
         /// </summary>
-        [RequirePermission(PermissionCodes.Geo.Branches_Export)]
+        [RequirePermission("Branches.Export")]
         [HttpGet]
         public async Task<IActionResult> Export(
             string? search,

@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لتصدير CSV
@@ -175,7 +175,7 @@ namespace ERP.Controllers
         /// قائمة استثناءات الصلاحيات للمستخدمين
         /// مع بحث + ترتيب + تقسيم صفحات + فلاتر، بنظام القوائم الموحد.
         /// </summary>
-        [RequirePermission(PermissionCodes.Security.UserDeniedPermissions_View)]
+        [RequirePermission("UserDeniedPermissions.Index")]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,

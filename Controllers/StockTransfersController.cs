@@ -22,7 +22,7 @@ namespace ERP.Controllers
     /// يطبق نظام القوائم الموحد:
     /// بحث + فلترة + ترتيب + تقسيم صفحات + حذف جماعي + حذف الكل + تصدير.
     /// </summary>
-    [RequirePermission(PermissionCodes.Stock.StockTransfers_View)]
+    [RequirePermission("StockTransfers.Index")]
     public class StockTransfersController : Controller
     {
         private readonly AppDbContext _context;

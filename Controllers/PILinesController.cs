@@ -1,4 +1,4 @@
-using System;                                   // تواريخ وأوقات
+﻿using System;                                   // تواريخ وأوقات
 using System.Collections.Generic;               // القوائم List
 using System.Linq;                              // LINQ: Where / OrderBy
 using System.Text;                              // لبناء ملف CSV
@@ -21,7 +21,7 @@ namespace ERP.Controllers
     /// - حذف محدد / حذف الكل.
     /// - تصدير CSV/Excel.
     /// </summary>
-    [RequirePermission(PermissionCodes.Purchasing.InvoiceLines_View)]
+    [RequirePermission("PILines.Index")]
     public class PILinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

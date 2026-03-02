@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Permission
+@model ERP.Models.Permission
 
 @{
     ViewData["Title"] = "حذف صلاحية";
@@ -39,15 +39,24 @@
     </div>
 
     <form asp-action="Delete" asp-controller="Permissions" method="post">
-        @* المفتاح الأساسي مخفي *@
+        @* المفتاح الأساسي مخفي + returnUrl للرجوع لنفس منظر القائمة *@
         <input type="hidden" asp-for="PermissionId" />
+        @if (ViewBag.ReturnUrl != null)
+        {
+            <input type="hidden" name="returnUrl" value="@ViewBag.ReturnUrl" />
+        }
 
         <button type="submit" class="btn btn-danger">
             تأكيد الحذف
         </button>
 
-        <a asp-action="Index" class="btn btn-secondary">
-            إلغاء والرجوع للقائمة
-        </a>
+        @if (ViewBag.ReturnUrl != null)
+        {
+            <a href="@ViewBag.ReturnUrl" class="btn btn-secondary">إلغاء والرجوع للقائمة</a>
+        }
+        else
+        {
+            <a asp-action="Index" class="btn btn-secondary">إلغاء والرجوع للقائمة</a>
+        }
     </form>
 </div>

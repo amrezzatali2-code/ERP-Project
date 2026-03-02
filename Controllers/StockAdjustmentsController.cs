@@ -21,7 +21,7 @@ namespace ERP.Controllers
     /// كنترولر إدارة تسويات الجرد (رأس التسوية فقط).
     /// كل سجل = تسوية واحدة على مخزن معيّن في تاريخ معيّن.
     /// </summary>
-    [RequirePermission(PermissionCodes.Stock.StockAdjustments_View)]
+    [RequirePermission("StockAdjustments.Index")]
     public class StockAdjustmentsController : Controller
     {
         private readonly AppDbContext _context;

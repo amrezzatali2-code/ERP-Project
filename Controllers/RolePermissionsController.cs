@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ
 using System.Text;                                // StringBuilder للتصدير
@@ -76,11 +76,12 @@ namespace ERP.Controllers
             if (useDateRange && fromDate.HasValue && toDate.HasValue)
                 query = query.Where(rp => rp.CreatedAt >= fromDate.Value && rp.CreatedAt <= toDate.Value);
 
-            // 3) البحث النصّي
+            // 3) البحث النصّي — غير حساس لحالة الأحرف (Contains مع ToLower ليعمل البحث صح)
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string term = search.Trim();
-                string mode = (searchBy ?? "all").ToLower();
+                string termLower = term.ToLowerInvariant();
+                string mode = (searchBy ?? "all").Trim().ToLowerInvariant();
 
                 switch (mode)
                 {
@@ -98,21 +99,23 @@ namespace ERP.Controllers
                         break;
                     case "role":
                     case "rolename":
-                        // البحث باسم الدور فقط (ليس الوصف) حتى لا تختلط النتائج — مثلاً بحث "مستخدم عادي" يعرض فقط الأدوار التي اسمها يحتوي على هذا النص
                         query = query.Where(rp =>
                             rp.Role != null &&
                             rp.Role.Name != null &&
-                            rp.Role.Name.Contains(term));
+                            rp.Role.Name.ToLower().Contains(termLower));
                         break;
                     case "permission":
                         query = query.Where(rp =>
                             rp.Permission != null &&
-                            ((rp.Permission.Code != null && rp.Permission.Code.Contains(term)) ||
-                             (rp.Permission.NameAr != null && rp.Permission.NameAr.Contains(term)) ||
-                             (rp.Permission.Module != null && rp.Permission.Module.Contains(term))));
+                            ((rp.Permission.Code != null && rp.Permission.Code.ToLower().Contains(termLower)) ||
+                             (rp.Permission.NameAr != null && rp.Permission.NameAr.ToLower().Contains(termLower)) ||
+                             (rp.Permission.Module != null && rp.Permission.Module.ToLower().Contains(termLower))));
                         break;
                     case "module":
-                        query = query.Where(rp => rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.Contains(term));
+                        query = query.Where(rp =>
+                            rp.Permission != null &&
+                            rp.Permission.Module != null &&
+                            rp.Permission.Module.ToLower().Contains(termLower));
                         break;
                     case "id":
                         if (int.TryParse(term, out int idVal))
@@ -121,15 +124,15 @@ namespace ERP.Controllers
                             query = query.Where(rp => false);
                         break;
                     default:
+                        // البحث في الكل = حقول الصلاحية والكود فقط (الموديول، اسم الصلاحية، كود الصلاحية، كود السطر) حتى تكون النتيجة سليمة
+                        // لبحث باسم الدور استخدم "اسم الدور" من القائمة
                         query = query.Where(rp =>
+                            (rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.ToLower().Contains(termLower)) ||
+                            (rp.Permission != null && rp.Permission.NameAr != null && rp.Permission.NameAr.ToLower().Contains(termLower)) ||
+                            (rp.Permission != null && rp.Permission.Code != null && rp.Permission.Code.ToLower().Contains(termLower)) ||
                             rp.Id.ToString().Contains(term) ||
                             rp.RoleId.ToString().Contains(term) ||
-                            rp.PermissionId.ToString().Contains(term) ||
-                            (rp.Role != null && rp.Role.Name != null && rp.Role.Name.Contains(term)) ||
-                            (rp.Role != null && rp.Role.Description != null && rp.Role.Description.Contains(term)) ||
-                            (rp.Permission != null && rp.Permission.Code != null && rp.Permission.Code.Contains(term)) ||
-                            (rp.Permission != null && rp.Permission.NameAr != null && rp.Permission.NameAr.Contains(term)) ||
-                            (rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.Contains(term)));
+                            rp.PermissionId.ToString().Contains(term));
                         break;
                 }
             }
@@ -257,7 +260,7 @@ namespace ERP.Controllers
 
         // ========= INDEX: قائمة صلاحيات الأدوار بنظام القوائم الموحد =========
 
-        [RequirePermission(PermissionCodes.Security.RolePermissions_View)]
+        [RequirePermission("RolePermissions.Index")]
         public async Task<IActionResult> Index(
       string? search,
       string? searchBy,
@@ -603,10 +606,11 @@ namespace ERP.Controllers
             if (role == null)
                 return NotFound();
 
-            // 🟣 2) جلب كل الصلاحيات
+            // 🟣 2) جلب كل الصلاحيات (بدون "لوحة التحكم" — لوحات التحكم = مبيعاتي الشخصية، لوحة المدير، لوحة الإدارة الكاملة فقط)
             var permissions = await _context.Permissions
-                .OrderBy(p => p.Module)    // ترتيب بالموديول
-                .ThenBy(p => p.NameAr)     // ثم باسم الصلاحية
+                .Where(p => p.Code == null || p.Code != "Dashboard.Dashboard.View")
+                .OrderBy(p => p.Module)
+                .ThenBy(p => p.NameAr)
                 .ToListAsync();
 
             // 🟣 3) جلب صلاحيات هذا الدور (المسموح بها فقط — علامة الصح تعني مسموح)

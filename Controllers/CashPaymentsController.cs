@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // List, Dictionary
 using System.Globalization;                       // CultureInfo للتواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -24,7 +24,7 @@ namespace ERP.Controllers
     /// - تصدير إلى CSV (Excel).
     /// - حذف جماعي + حذف الكل (يفضل استخدامها بحذر).
     /// </summary>
-    [RequirePermission(PermissionCodes.AccountsDocuments.CashPayment_View)]
+    [RequirePermission("CashPayments.Index")]
     public class CashPaymentsController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

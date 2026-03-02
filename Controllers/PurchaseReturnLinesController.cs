@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // List, Dictionary
 using System.Globalization;                       // CultureInfo للتصدير
 using System.Linq;                                // أوامر LINQ
@@ -22,7 +22,7 @@ namespace ERP.Controllers
     /// كنترولر سطور مرتجع الشراء:
     /// عرض / بحث / فرز / فلترة / حذف / حذف جماعي / حذف الكل / تصدير CSV و Excel.
     /// </summary>
-    [RequirePermission(PermissionCodes.Purchasing.ReturnLines_View)]
+    [RequirePermission("PurchaseReturnLines.Index")]
     public class PurchaseReturnLinesController : Controller
     {
         // كائن الاتصال بقاعدة البيانات

@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التاريخ DateTime
+﻿using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ
 using System.Text;                                // StringBuilder للتصدير
@@ -187,7 +187,7 @@ namespace ERP.Controllers
         /// قائمة ربط المستخدمين بالأدوار مع:
         /// بحث + ترتيب + تقسيم صفحات + فلاتر، بنظام القوائم الموحد.
         /// </summary>
-        [RequirePermission(PermissionCodes.Security.UserRoles_View)]
+        [RequirePermission("UserRoles.Index")]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
@@ -345,16 +345,18 @@ namespace ERP.Controllers
             }
 
             item.AssignedAt = DateTime.UtcNow;
-            _context.Add(item);
-            await _context.SaveChangesAsync();
-
-            // حفظ استثناءات الصلاحيات (تعديلات المستخدم)
             var allowed = new HashSet<int>(selectedPermissionIds ?? Array.Empty<int>());
             var rolePermIds = await _context.RolePermissions
                 .Where(rp => rp.RoleId == item.RoleId && rp.IsAllowed)
                 .Select(rp => rp.PermissionId)
                 .ToListAsync();
+            // دور افتراضي = صح فقط عندما صلاحيات المستخدم (المحددة هنا) = صلاحيات الدور بالضبط
+            item.IsPrimary = allowed.SetEquals(rolePermIds);
 
+            _context.Add(item);
+            await _context.SaveChangesAsync();
+
+            // حفظ استثناءات الصلاحيات (تعديلات المستخدم)
             foreach (var permId in rolePermIds.Where(id => !allowed.Contains(id)))
             {
                 if (!await _context.UserDeniedPermissions.AnyAsync(x => x.UserId == item.UserId && x.PermissionId == permId))
@@ -388,6 +390,15 @@ namespace ERP.Controllers
                 .Where(x => x.UserId == item.UserId && !allowed.Contains(x.PermissionId) && !rolePermIds.Contains(x.PermissionId))
                 .ToListAsync();
             _context.UserExtraPermissions.RemoveRange(toRemoveExtra);
+
+            if (item.IsPrimary)
+            {
+                foreach (var ur in await _context.UserRoles.Where(ur => ur.UserId == item.UserId && ur.Id != item.Id).ToListAsync())
+                {
+                    ur.IsPrimary = false;
+                    _context.Update(ur);
+                }
+            }
 
             await _context.SaveChangesAsync();
 
@@ -462,8 +473,10 @@ namespace ERP.Controllers
                     rolePermIds.Where(pid => !userDeniedIds.Contains(pid)).Union(userExtraIds));
             }
 
+            // استبعاد صلاحية "لوحة التحكم" — لوحات التحكم = مبيعاتي الشخصية، لوحة المدير، لوحة الإدارة الكاملة فقط
             var allPerms = await _context.Permissions
                 .AsNoTracking()
+                .Where(p => p.Code == null || p.Code != "Dashboard.Dashboard.View")
                 .OrderBy(p => p.Module)
                 .ThenBy(p => p.NameAr)
                 .Select(p => new RolePermissionEditItem
@@ -576,6 +589,18 @@ namespace ERP.Controllers
                         .Where(x => x.UserId == item.UserId && !allowed.Contains(x.PermissionId) && !rolePermIds.Contains(x.PermissionId))
                         .ToListAsync();
                     _context.UserExtraPermissions.RemoveRange(toRemoveExtra);
+
+                    // دور افتراضي = صح فقط عندما صلاحيات المستخدم = صلاحيات الدور بالضبط
+                    item.IsPrimary = allowed.SetEquals(rolePermIds);
+                    if (item.IsPrimary)
+                    {
+                        foreach (var ur in await _context.UserRoles.Where(ur => ur.UserId == item.UserId && ur.Id != item.Id).ToListAsync())
+                        {
+                            ur.IsPrimary = false;
+                            _context.Update(ur);
+                        }
+                    }
+                    _context.Update(item);
 
                     await _context.SaveChangesAsync();
 

@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Permission
+@model ERP.Models.Permission
 
 @{
     ViewData["Title"] = "تفاصيل الصلاحية";
@@ -92,10 +92,15 @@
         </div>
     </div>
 
-    <a asp-action="Edit" asp-route-id="@Model.PermissionId" class="btn btn-primary">
+    <a asp-action="Edit" asp-route-id="@Model.PermissionId" asp-route-returnUrl="@ViewBag.ReturnUrl" class="btn btn-primary">
         تعديل
     </a>
-    <a asp-action="Index" class="btn btn-secondary">
-        رجوع للقائمة
-    </a>
+    @if (ViewBag.ReturnUrl != null)
+    {
+        <a href="@ViewBag.ReturnUrl" class="btn btn-secondary">رجوع للقائمة</a>
+    }
+    else
+    {
+        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+    }
 </div>

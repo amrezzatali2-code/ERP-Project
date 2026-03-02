@@ -6,7 +6,8 @@ namespace ERP.Filters
 {
     /// <summary>
     /// فلتر يتحقق من صلاحية المستخدم قبل تنفيذ الـ Action.
-    /// إذا لم تكن الصلاحية ممنوحة يُرجع 403 Forbid ويتم توجيه المستخدم لصفحة "لا تملك صلاحية".
+    /// كود الصلاحية = ControllerName.ActionName (مثل SalesInvoices.Index).
+    /// إذا لم تكن الصلاحية ممنوحة يُوجّه المستخدم لصفحة "لا تملك صلاحية".
     /// </summary>
     public class RequirePermissionFilter : IAsyncAuthorizationFilter
     {

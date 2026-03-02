@@ -21,7 +21,7 @@ namespace ERP.Controllers
     /// - حذف أمر واحد + حذف مجموعة + حذف كل الأوامر.
     /// - زر تفاصيل يفتح سطور الأمر في كنترولر SOLines.
     /// </summary>
-    [RequirePermission(PermissionCodes.SalesOrders.View)]
+    [RequirePermission("SalesOrders.Index")]
     public class SalesOrdersController : Controller
     {
         private readonly AppDbContext _context;

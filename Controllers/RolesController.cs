@@ -1,4 +1,4 @@
-using System;                                     // متغيرات التوقيت DateTime
+﻿using System;                                     // متغيرات التوقيت DateTime
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لتكوين ملف CSV
 using System.Threading.Tasks;                     // async / await
@@ -130,7 +130,7 @@ namespace ERP.Controllers
         // ===============================================================
         // 1) INDEX: عرض قائمة الأدوار بالنظام الموحد (بحث + ترتيب + صفحات)
         // ===============================================================
-        [RequirePermission(PermissionCodes.Security.Roles_View)]
+        [RequirePermission("Roles.Index")]
         public async Task<IActionResult> Index(
        string? search,
        string? searchBy,

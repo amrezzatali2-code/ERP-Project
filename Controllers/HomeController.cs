@@ -1,5 +1,7 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
+using ERP.Filters;
 using ERP.Models;
+using ERP.Security;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;   // ✅ علشان نستخدم AllowAnonymous
 
@@ -14,14 +16,13 @@ namespace ERP.Controllers
             _logger = logger;
         }
 
-        // هنا مفيش [AllowAnonymous] ⇒ الصفحة الرئيسية هتحتاج Login
-
+        [RequirePermission("Home.Index")]
         public IActionResult Index()
         {
             return RedirectToAction("Index", "Dashboard");
         }
 
-        // نفس الكلام: صفحة Privacy للمستخدمين المسجّلين فقط
+        [RequirePermission("Home.Privacy")]
         public IActionResult Privacy()
         {
             return View();

@@ -1,4 +1,4 @@
-using DocumentFormat.OpenXml.VariantTypes;
+﻿using DocumentFormat.OpenXml.VariantTypes;
 using ERP.Data;
 using ERP.Filters;
 using ERP.Infrastructure;
@@ -1859,7 +1859,7 @@ namespace ERP.Controllers
 
         [HttpPost]
         [IgnoreAntiforgeryToken]
-        [RequirePermission(PermissionCodes.SalesInvoices.Post)]
+        [RequirePermission("SalesInvoices.PostInvoice")]
         public async Task<IActionResult> PostInvoice(int id)
         {
             // ================================
@@ -2018,7 +2018,7 @@ namespace ERP.Controllers
 
         [HttpPost]
         [IgnoreAntiforgeryToken]
-        [RequirePermission(PermissionCodes.SalesInvoices.UnPost)]
+        [RequirePermission("SalesInvoices.OpenInvoice")]
         public async Task<IActionResult> OpenInvoice(int id)
         {
             // ================================
@@ -2351,15 +2351,17 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null, bool includeZeroQty = false)
         {
-            // فاتورة جديدة (id=0): صلاحية Create مطلوبة
+            // فاتورة جديدة (id=0): نسمح بمن لديه Create أو قائمة فواتير المبيعات (View.Index)
             if (id == 0)
             {
-                if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create))
+                var canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Create"));
+                var canViewList = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index"));
+                if (!canCreate && !canViewList)
                     return RedirectToAction("AccessDenied", "Home");
                 return RedirectToAction(nameof(Create), new { frame = 1, includeZeroQty });
             }
 
-            if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Show))
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Show")))
                 return RedirectToAction("AccessDenied", "Home");
 
             // =========================================
@@ -2581,9 +2583,10 @@ namespace ERP.Controllers
             int pageSize = 25                    // حجم الصفحة
         )
         {
-            bool canView = await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.View);
-            bool canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create);
-            if (!canView && !canCreate)
+            bool canView = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index"));
+            bool canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Create"));
+            bool canMySales = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index"));
+            if (!canView && !canCreate && !canMySales)
                 return RedirectToAction("AccessDenied", "Home");
 
             // قيم افتراضية لو مش جاية من الكويري
@@ -2600,6 +2603,14 @@ namespace ERP.Controllers
                 .AsNoTracking()
                 .Include(s => s.Customer)
                 .Include(s => s.Warehouse);
+
+            // قائمة مبيعات خاصة: عرض مبيعات المستخدم الحالي فقط (بدون صلاحية عرض الكل)
+            if (canMySales && !canView)
+            {
+                var currentUser = GetCurrentUserDisplayName();
+                if (!string.IsNullOrEmpty(currentUser))
+                    query = query.Where(si => si.CreatedBy == currentUser);
+            }
 
             // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
             int? codeFrom = Request.Query.ContainsKey("codeFrom")
@@ -2696,7 +2707,10 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> Create(bool includeZeroQty = false)
         {
-            if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create))
+            // فتح شاشة إنشاء فاتورة: نسمح بمن لديه Create أو قائمة فواتير المبيعات (View.Index)
+            var canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Create"));
+            var canViewList = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index"));
+            if (!canCreate && !canViewList)
                 return RedirectToAction("AccessDenied", "Home");
 
             // =========================================================
@@ -2761,7 +2775,7 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(SalesInvoice invoice, bool includeZeroQty = false)
         {
-            if (!await _permissionService.HasPermissionAsync(PermissionCodes.SalesInvoices.Create))
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Create")))
                 return RedirectToAction("AccessDenied", "Home");
 
             // تحقق إضافي على نسبة خصم الهيدر (0..100)
@@ -2825,7 +2839,7 @@ namespace ERP.Controllers
 
 
         [HttpGet]
-        [RequirePermission(PermissionCodes.SalesInvoices.Edit)]
+        [RequirePermission("SalesInvoices.Edit")]
         public async Task<IActionResult> Edit(int id)
         {
             // تحقق بسيط من رقم الفاتورة
@@ -2859,7 +2873,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.SalesInvoices.Edit)]
+        [RequirePermission("SalesInvoices.Edit")]
         public async Task<IActionResult> Edit(int id, SalesInvoice invoice)
         {
             // تأكد أن رقم الفاتورة في الرابط هو نفس الموجود في الموديل
@@ -2925,7 +2939,7 @@ namespace ERP.Controllers
         // =========================
         // Export — تصدير فواتير المبيعات (CSV يفتح في Excel)
         [HttpGet]
-        [RequirePermission(PermissionCodes.SalesInvoices.Export)]
+        [RequirePermission("SalesInvoices.Export")]
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
@@ -3010,7 +3024,7 @@ namespace ERP.Controllers
 
 
         // =========================
-        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
+        [RequirePermission("SalesInvoices.Delete")]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
@@ -3040,7 +3054,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
+        [RequirePermission("SalesInvoices.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var result = await TryDeleteSalesInvoiceDeepAsync(id);
@@ -3071,7 +3085,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
+        [RequirePermission("SalesInvoices.Delete")]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
             if (string.IsNullOrWhiteSpace(selectedIds))
@@ -3163,7 +3177,7 @@ namespace ERP.Controllers
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission(PermissionCodes.SalesInvoices.Delete)]
+        [RequirePermission("SalesInvoices.Delete")]
         public async Task<IActionResult> DeleteAll()
         {
             var allIds = await _context.SalesInvoices

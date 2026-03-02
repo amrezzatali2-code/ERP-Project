@@ -1,4 +1,4 @@
-using System;                                        // متغيرات التاريخ DateTime
+﻿using System;                                        // متغيرات التاريخ DateTime
 using System.Collections.Generic;                    // Dictionary, List
 using System.Linq;                                   // أوامر LINQ
 using System.Linq.Expressions;                       // Expressions
@@ -18,7 +18,7 @@ namespace ERP.Controllers
     /// إدارة جدول مجموعات الحوافز للأصناف (ProductBonusGroup)
     /// كل صف = مجموعة حافز لها اسم وقيمة حافز لكل علبة.
     /// </summary>
-    [RequirePermission(PermissionCodes.Settings.ProductBonusGroups_View)]
+    [RequirePermission("ProductBonusGroups.Index")]
     public class ProductBonusGroupsController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات

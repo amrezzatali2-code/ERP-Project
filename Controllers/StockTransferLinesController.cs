@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;             // القوائم List
 using System.Globalization;                   // تنسيق التاريخ فى Export
 using System.Linq;                            // أوامر LINQ
@@ -18,7 +18,7 @@ namespace ERP.Controllers
     /// إدارة جدول سطور التحويل بين المخازن (StockTransferLines)
     /// كل صف = صنف واحد ضمن تحويل بين مخزنين.
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.StockTransferLines_View)]
+    [RequirePermission("StockTransferLines.Index")]
     public class StockTransferLinesController : Controller
     {
         private readonly AppDbContext _context;       // كائن الاتصال بقاعدة البيانات

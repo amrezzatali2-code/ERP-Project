@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -24,7 +24,7 @@ namespace ERP.Controllers
     ///  - فلترة بالتاريخ/الوقت (تاريخ الإنشاء)
     ///  - اختيار الأعمدة + حذف المحدد + حذف الكل
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.Warehouses_View)]
+    [RequirePermission("Warehouses.Index")]
     public class WarehousesController : Controller
     {
         private readonly AppDbContext _db;

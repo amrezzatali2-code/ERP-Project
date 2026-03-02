@@ -1,4 +1,4 @@
-using ERP.Data;
+﻿using ERP.Data;
 using ERP.Filters;
 using ERP.Models;
 using ERP.Security;
@@ -43,10 +43,10 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// لوحة المبيعات الشخصية (لمندوب المبيعات)
+        /// لوحة المبيعات الشخصية — تتطلب صلاحية "مبيعاتي الشخصية" أو "لوحة التحكم"
         /// </summary>
         [HttpGet]
-        [RequirePermission(PermissionCodes.Dashboard.View)]
+        [RequirePermission("Dashboard.Sales")]
         public async Task<IActionResult> Sales()
         {
             var vm = new DashboardViewModel
@@ -133,10 +133,10 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// لوحة المدير (مبيعات، مشتريات، إيصالات، مدفوعات)
+        /// لوحة المدير — تتطلب صلاحية "لوحة المدير" أو "لوحة التحكم"
         /// </summary>
         [HttpGet]
-        [RequirePermission(PermissionCodes.Dashboard.View)]
+        [RequirePermission("Dashboard.Manager")]
         public async Task<IActionResult> Manager()
         {
             var vm = await BuildOwnerDashboardAsync();
@@ -148,10 +148,10 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// لوحة المالك الكاملة (كل البيانات + الأرباح)
+        /// لوحة المالك الكاملة — تتطلب صلاحية "لوحة الإدارة الكاملة" أو "لوحة التحكم"
         /// </summary>
         [HttpGet]
-        [RequirePermission(PermissionCodes.Dashboard.View)]
+        [RequirePermission("Dashboard.Owner")]
         public async Task<IActionResult> Owner()
         {
             var vm = await BuildOwnerDashboardAsync();
@@ -162,10 +162,10 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// الافتراضي: مبيعاتي الشخصية حسب المستخدم المسجّل (بعد تسجيل الدخول)
+        /// الافتراضي: توجيه إلى مبيعاتي الشخصية. يدخل من لديه "لوحة التحكم" أو "مبيعاتي الشخصية"
         /// </summary>
         [HttpGet]
-        [RequirePermission(PermissionCodes.Dashboard.View)]
+        [RequirePermission("Dashboard.Index")]
         public IActionResult Index()
         {
             return RedirectToAction(nameof(Sales));

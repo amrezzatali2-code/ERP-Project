@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -19,7 +19,7 @@ namespace ERP.Controllers
     /// - BulkDelete / DeleteAll
     /// - Export (Excel / CSV)
     /// </summary>
-    [RequirePermission(PermissionCodes.InventoryScreens.StockBatches_View)]
+    [RequirePermission("StockBatches.Index")]
     public class StockBatchesController : Controller
     {
         private readonly AppDbContext _db; // متغير: DbContext

@@ -4,7 +4,7 @@ namespace ERP.Filters
 {
     /// <summary>
     /// سمة توضع على الـ Controller أو الـ Action لتشترط صلاحية معينة.
-    /// مثال: [RequirePermission(PermissionCodes.SalesInvoices.Show)]
+    /// مثال: [RequirePermission("SalesInvoices.Show")]
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = false)]
     public class RequirePermissionAttribute : TypeFilterAttribute

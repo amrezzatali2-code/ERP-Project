@@ -1,4 +1,4 @@
-using ERP.Data;                                 // AppDbContext
+﻿using ERP.Data;                                 // AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                       // كلاس PagedResult لتقسيم الصفحات
 using ERP.Models;                               // الموديل PurchaseInvoice
@@ -34,7 +34,6 @@ namespace ERP.Controllers
     /// - تصدير CSV/Excel.
     /// - Show / Create / Edit / Delete.
     /// </summary>
-    [RequirePermission(PermissionCodes.Purchasing.Invoices_View)]
     public class PurchaseInvoicesController : Controller
     {
         // بعد ✅
@@ -198,6 +197,7 @@ namespace ERP.Controllers
         /// <summary>
         /// عرض قائمة فواتير المشتريات بنفس نظام القوائم الموحد.
         /// </summary>
+        [RequirePermission("PurchaseInvoices.Index")]
         public async Task<IActionResult> Index(
             string? search,                      // نص البحث
             string? searchBy,                    // نوع البحث: id / vendor / warehouse / date / status
@@ -420,6 +420,7 @@ namespace ERP.Controllers
 
 
         // إرجاع بدائل الصنف (نفس الاسم العلمي) على شكل JSON
+        [RequirePermission("PurchaseInvoices.Edit")]
         [HttpGet]
         public async Task<IActionResult> GetAlternativeProducts(int prodId)
         {
@@ -470,6 +471,7 @@ namespace ERP.Controllers
             public string? expiryText { get; set; }          // متغير: الصلاحية كنص MM/YYYY
         }
 
+        [RequirePermission("PurchaseInvoices.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
@@ -888,6 +890,7 @@ namespace ERP.Controllers
             public int LineNo { get; set; }  // متغير: رقم السطر داخل الفاتورة
         }
 
+        [RequirePermission("PurchaseInvoices.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
@@ -1104,6 +1107,7 @@ namespace ERP.Controllers
             public int PIId { get; set; } // متغير: رقم فاتورة الشراء
         }
 
+        [RequirePermission("PurchaseInvoices.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ClearAllLinesJson([FromBody] ClearAllLinesJsonDto dto)
@@ -1286,6 +1290,7 @@ namespace ERP.Controllers
             public decimal taxTotal { get; set; }    // متغير: قيمة الضريبة
         }
 
+        [RequirePermission("PurchaseInvoices.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveTaxJson([FromBody] SaveTaxJsonDto dto)
@@ -1510,6 +1515,7 @@ namespace ERP.Controllers
         /// شاشة إنشاء فاتورة مشتريات جديدة.
         /// </summary>
         // GET: PurchaseInvoices/Create
+        [RequirePermission("PurchaseInvoices.Create")]
         public async Task<IActionResult> Create()
         {
             // ==============================
@@ -1593,6 +1599,7 @@ namespace ERP.Controllers
         /// <summary>
         /// استقبال بيانات إنشاء فاتورة المشتريات من الفورم.
         /// </summary>
+        [RequirePermission("PurchaseInvoices.Create")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(PurchaseInvoice model)
@@ -1654,6 +1661,7 @@ namespace ERP.Controllers
         /// <summary>
         /// شاشة تعديل فاتورة مشتريات موجودة.
         /// </summary>
+        [RequirePermission("PurchaseInvoices.Edit")]
         public async Task<IActionResult> Edit(int id)
         {
             var invoice = await _context.PurchaseInvoices
@@ -1683,6 +1691,7 @@ namespace ERP.Controllers
         /// <summary>
         /// استقبال بيانات التعديل وحفظها.
         /// </summary>
+        [RequirePermission("PurchaseInvoices.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id, PurchaseInvoice model)
@@ -1762,6 +1771,7 @@ namespace ERP.Controllers
 
 
 
+        [RequirePermission("PurchaseInvoices.Show")]
         [HttpGet]
         public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
         {
@@ -1925,6 +1935,7 @@ namespace ERP.Controllers
         /// <summary>
         /// صفحة تأكيد الحذف لفاتورة مشتريات واحدة.
         /// </summary>
+        [RequirePermission("PurchaseInvoices.Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             var invoice = await _context.PurchaseInvoices
@@ -1947,6 +1958,7 @@ namespace ERP.Controllers
         /// 5) حذف الهيدر (Cascade يحذف السطور)
         /// 6) SaveChanges + Commit مرة واحدة
         /// </summary>
+        [RequirePermission("PurchaseInvoices.Delete")]
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
@@ -2106,6 +2118,7 @@ namespace ERP.Controllers
         // - يحذف آثار المخزون + يعكس الأثر المحاسبي + يحذف الهيدر (Cascade يحذف السطور)
         // - يعرض ملخص بالأرقام: (تم حذف / تم منع / فشل بسبب خطأ)
         // ============================================================================
+        [RequirePermission("PurchaseInvoices.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
@@ -2214,6 +2227,7 @@ namespace ERP.Controllers
         // - يحذف "المسموح فقط" ويترك الممنوع/الفاشل
         // - Transaction مستقل لكل فاتورة حتى لا يضيع الشغل كله بسبب واحدة
         // ============================================================================
+        [RequirePermission("PurchaseInvoices.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
@@ -2447,6 +2461,7 @@ namespace ERP.Controllers
 
 
 
+        [RequirePermission("PurchaseInvoices.Edit")]
         [HttpPost]
     [IgnoreAntiforgeryToken]  // استدعاء من AJAX بدون AntiForgery
     public async Task<IActionResult> SaveHeader([FromBody] PurchaseInvoiceHeaderDto dto)
@@ -2588,6 +2603,7 @@ namespace ERP.Controllers
         /// - format: "excel" أو "csv" (الاتنين حالياً CSV يفتح في إكسل).
         /// </summary>
         // دالة تصدير فواتير المشتريات بعد تطبيق نفس فلاتر Index
+        [RequirePermission("PurchaseInvoices.Export")]
         [HttpGet]
         public async Task<IActionResult> Export(
             string? format,
@@ -2915,6 +2931,7 @@ namespace ERP.Controllers
 
 
 
+        [RequirePermission("PurchaseInvoices.PostInvoice")]
         [HttpPost]
         [IgnoreAntiforgeryToken] // تعليق: لو انت بتستدعيه بـ fetch بدون توكن (زي بقية أزرار AJAX عندك)
         public async Task<IActionResult> PostInvoice(int id)
@@ -3047,6 +3064,7 @@ namespace ERP.Controllers
         }
 
         /// <summary>مرتجع فاتورة بالكامل: ينشئ مرتجع شراء من كل أصناف الفاتورة ويرحّله تلقائياً. يدعم Ajax مثل زر التحويل في طلب الشراء.</summary>
+        [RequirePermission("PurchaseInvoices.Create")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> CreateFullReturn(int id)
@@ -3082,6 +3100,7 @@ namespace ERP.Controllers
         //      فتح الفاتورة المرحلة   
         // ================================
 
+        [RequirePermission("PurchaseInvoices.OpenInvoice")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> OpenInvoice(int id)

@@ -1,4 +1,4 @@
-using DocumentFormat.OpenXml.InkML;
+﻿using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                                 // AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                       // كلاس PagedResult لتقسيم الصفحات
@@ -35,7 +35,6 @@ namespace ERP.Controllers
     /// - تصدير CSV/Excel.
     /// - Show / Create / Edit / Delete.
     /// </summary>
-    [RequirePermission(PermissionCodes.Purchasing.Requests_View)]
     public class PurchaseRequestsController : Controller
     {
         // بعد ✅
@@ -43,19 +42,19 @@ namespace ERP.Controllers
         private readonly DocumentTotalsService _docTotals;    // خدمة إجماليات المستندات
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
-
-
+        private readonly IPermissionService _permissionService;
 
         public PurchaseRequestsController(AppDbContext context,
                                           DocumentTotalsService docTotals,
-                                          IUserActivityLogger activityLogger, ILedgerPostingService ledgerPosting)
-
+                                          IUserActivityLogger activityLogger,
+                                          ILedgerPostingService ledgerPosting,
+                                          IPermissionService permissionService)
         {
             _context = context;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
-            _ledgerPostingService = ledgerPosting;     // ✅ متغير: خدمة الترحيل
-
+            _ledgerPostingService = ledgerPosting;
+            _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
         }
 
 
@@ -254,6 +253,7 @@ private int? GetCurrentUserId()
         /// <summary>
         /// عرض قائمة طلبات الشراء بنفس نظام القوائم الموحد.
         /// </summary>
+        [RequirePermission("PurchaseRequests.Index")]
         public async Task<IActionResult> Index(
                 string? search,                      // متغير: نص البحث
                 string? searchBy,                    // متغير: نوع البحث: id / vendor / warehouse / date / status ...
@@ -516,6 +516,7 @@ private async Task PopulateDropDownsAsync(
         // API: إرجاع بدائل الصنف (نفس الاسم العلمي GenericName) على شكل JSON
         // ✅ مفيد في طلب الشراء لاقتراح بدائل بنفس المادة/الاسم العلمي
         // =========================================================
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpGet]
         public async Task<IActionResult> GetAlternativeProducts(int prodId)
         {
@@ -558,6 +559,7 @@ private async Task PopulateDropDownsAsync(
         // API: إرجاع المطلوب (طلبات غير محولة) التي تحتوي على الصنف المعطى
         // للعرض في جدول "المطلوب (طلبات غير محولة)" عند اختيار الصنف
         // =========================================================
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpGet]
         public async Task<IActionResult> GetProductDemandInfo(int prodId, int currentPRId = 0)
         {
@@ -608,6 +610,7 @@ private async Task PopulateDropDownsAsync(
         // API: إجمالي الكمية المبيعة والوسيط للصنف في الفترة (من - إلى)
         // الوسيط = ترتيب الكميات وأخذ الرقم في الوسط
         // =========================================================
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpGet]
         public async Task<IActionResult> GetProductSalesInPeriod(int prodId, string fromDate, string toDate)
         {
@@ -659,6 +662,7 @@ private async Task PopulateDropDownsAsync(
             public string? expiryText { get; set; }          // متغير: الصلاحية كنص MM/YYYY (مفضلة)
         }
 
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
@@ -939,6 +943,7 @@ private async Task PopulateDropDownsAsync(
             public int LineNo { get; set; }  // متغير: رقم السطر داخل الطلب
         }
 
+        [RequirePermission("PurchaseRequests.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
@@ -1082,6 +1087,7 @@ private async Task PopulateDropDownsAsync(
             public int PRId { get; set; } // متغير: رقم طلب الشراء
         }
 
+        [RequirePermission("PurchaseRequests.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> ClearAllLinesJson([FromBody] ClearAllLinesJsonDto dto)
@@ -1227,6 +1233,7 @@ private async Task PopulateDropDownsAsync(
             public decimal taxTotal { get; set; }    // متغير: قيمة الضريبة (غير مستخدمة في طلب الشراء حالياً)
         }
 
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveTaxJson([FromBody] SaveTaxJsonDto dto)
@@ -1413,11 +1420,17 @@ private async Task PopulateDropDownsAsync(
 
         /// <summary>
         /// شاشة إنشاء طلب شراء جديد.
-        /// ملاحظة: طلب الشراء لا يرحّل حسابات ولا مخزون، لكنه يُستخدم كمرحلة قبل فاتورة الشراء.
+        /// سياسة الصلاحيات: صلاحية View (قائمة طلبات الشراء) خاصة بفتح الشاشات — من لديه View أو Create يفتح هذه الشاشة.
         /// </summary>
         // GET: PurchaseRequests/Create
         public async Task<IActionResult> Create(int? frame = null)
         {
+            // صلاحية الشاشة: Create أو View (القائمة) — View مخصّصة لفتح الشاشات
+            var canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("PurchaseRequests", "Create"));
+            var canViewList = await _permissionService.HasPermissionAsync(PermissionCodes.Code("PurchaseRequests", "Index"));
+            if (!canCreate && !canViewList)
+                return RedirectToAction("AccessDenied", "Home");
+
             // ==============================
             // 1) تجهيز موديل "طلب شراء" جديد بالقيم الافتراضية
             // ==============================
@@ -1491,6 +1504,7 @@ private async Task PopulateDropDownsAsync(
         /// استقبال بيانات إنشاء "طلب الشراء" من الفورم (حفظ الهيدر فقط).
         /// ملاحظة: طلب الشراء لا يرحّل حسابات ولا مخزون.
         /// </summary>
+        [RequirePermission("PurchaseRequests.Create")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(PurchaseRequest model)
@@ -1599,6 +1613,7 @@ private async Task PopulateDropDownsAsync(
         /// شاشة تعديل طلب شراء موجود.
         /// ملاحظة: نحن نستخدم View "Show" كشاشة موحدة للعرض/التعديل.
         /// </summary>
+        [RequirePermission("PurchaseRequests.Edit")]
         public async Task<IActionResult> Edit(int id)
         {
             // =========================
@@ -1677,6 +1692,7 @@ private async Task PopulateDropDownsAsync(
         /// <summary>
         /// استقبال بيانات تعديل طلب الشراء وحفظها.
         /// </summary>
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(int id, PurchaseRequest model)
@@ -1796,6 +1812,7 @@ private async Task PopulateDropDownsAsync(
 
 
 
+        [RequirePermission("PurchaseRequests.Show")]
         [HttpGet]
         public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
         {
@@ -2007,6 +2024,7 @@ private async Task PopulateDropDownsAsync(
         /// <summary>
         /// صفحة تأكيد الحذف لطلب شراء واحد (PurchaseRequest).
         /// </summary>
+        [RequirePermission("PurchaseRequests.Delete")]
         public async Task<IActionResult> Delete(int id)
         {
             // متغير: الهيدر الخاص بطلب الشراء (قراءة فقط)
@@ -2037,6 +2055,7 @@ private async Task PopulateDropDownsAsync(
         /// 5) حذف السطور ثم حذف الهيدر
         /// 6) SaveChanges + Commit مرة واحدة
         /// </summary>
+        [RequirePermission("PurchaseRequests.Delete")]
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(int id)
@@ -2149,6 +2168,7 @@ private async Task PopulateDropDownsAsync(
         // =========================================================
         // BulkDelete: مسح مجموعة طلبات شراء محددة من شاشة القائمة
         // =========================================================
+        [RequirePermission("PurchaseRequests.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
@@ -2250,6 +2270,7 @@ private async Task PopulateDropDownsAsync(
         // =========================================================
         // DeleteAll: مسح كل طلبات الشراء (حسب نفس نمط النظام الموحد)
         // =========================================================
+        [RequirePermission("PurchaseRequests.Delete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
@@ -2485,6 +2506,7 @@ private async Task PopulateDropDownsAsync(
         // - إنشاء رقم طلب شراء رسمي PRId لو كان جديد
         // - تعديل الهيدر بسرعة عبر AJAX بدون Reload
         // =========================================================
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> SaveHeader([FromBody] PurchaseRequestHeaderDto dto)
@@ -2690,6 +2712,7 @@ private async Task PopulateDropDownsAsync(
         /// تصدير قائمة "طلبات الشراء" بعد تطبيق نفس فلاتر Index إلى ملف CSV (يفتح في Excel).
         /// ملاحظة: Excel يفتح CSV عادي، لكن لازم UTF8 BOM علشان العربي يظهر صح.
         /// </summary>
+        [RequirePermission("PurchaseRequests.Index")]
         [HttpGet]
         public async Task<IActionResult> Export(
             string? format,
@@ -3100,6 +3123,7 @@ private async Task PopulateDropDownsAsync(
         // ================================================================
         // إعادة حساب إجماليات طلب محدد
         // ================================================================
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RecalcTotals(int id)
@@ -3131,6 +3155,7 @@ private async Task PopulateDropDownsAsync(
         // - تحديث طلب الشراء: IsConverted = true + Status = "تم التحويل"
         // ملاحظة: لا نستخدم UserActionType.Convert لأنه غير موجود عندك
         // =========================================================
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpPost]
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> ConvertToPurchaseInvoice(int id)
@@ -3481,6 +3506,7 @@ private async Task PopulateDropDownsAsync(
         // ================================================================
         // إعادة حساب إجماليات جميع الطلبات
         // ================================================================
+        [RequirePermission("PurchaseRequests.Edit")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> RecalcAllTotals()
