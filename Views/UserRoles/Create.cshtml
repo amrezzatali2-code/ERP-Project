@@ -176,13 +176,15 @@
 
                 box.querySelectorAll(".perm-module-cb").forEach(cb => {
                     cb.onchange = function () {
-                        const mod = this.dataset.module;
+                        const moduleCb = this;
+                        const mod = moduleCb.dataset.module;
+                        const isChecked = moduleCb.checked;
                         const children = box.querySelectorAll(`tr.perm-child-row[data-module="${mod}"]`);
                         children.forEach(tr => {
                             const chCb = tr.querySelector(".perm-cb");
-                            if (chCb) { chCb.checked = this.checked; updateStatus(chCb); }
+                            if (chCb) { chCb.checked = isChecked; updateStatus(chCb); }
                         });
-                        updateModuleStatus(this.closest("tr"));
+                        updateModuleStatus(moduleCb.closest("tr"));
                     };
                 });
 

@@ -1,0 +1,257 @@
+@model ERP.ViewModels.SalesPerformanceReportViewModel
+@{
+    ViewData["Title"] = "تقرير أداء المبيعات (بالكاتب)";
+    var fromStr = Model.FromDate?.ToString("yyyy-MM-dd") ?? "";
+    var toStr = Model.ToDate?.ToString("yyyy-MM-dd") ?? "";
+}
+<div dir="rtl" class="container-fluid py-3">
+    <h4 class="mb-3">تقرير أداء المبيعات — بالكاتب</h4>
+
+    @* ===== الفلاتر ===== *@
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" asp-action="SalesPerformanceReport" asp-controller="Reports" id="reportForm" class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="fromDate" class="form-control form-control-sm" value="@fromStr" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="toDate" class="form-control form-control-sm" value="@toStr" />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">المحافظة</label>
+                    <select name="governorateId" id="governorateId" class="form-select form-select-sm">
+                        <option value="">الكل</option>
+                        @foreach (var g in Model.Governorates)
+                        {
+                            <option value="@g.Value" selected="@g.Selected">@g.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">الحي / المركز</label>
+                    <select name="districtId" id="districtId" class="form-select form-select-sm">
+                        <option value="">الكل</option>
+                        @foreach (var d in Model.Districts)
+                        {
+                            <option value="@d.Value" selected="@d.Selected">@d.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">المنطقة</label>
+                    <select name="areaId" id="areaId" class="form-select form-select-sm">
+                        <option value="">الكل</option>
+                        @foreach (var a in Model.Areas)
+                        {
+                            <option value="@a.Value" selected="@a.Selected">@a.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">المستخدمون (الكتّاب)</label>
+                    <select name="userIds" id="userIds" class="form-select form-select-sm" multiple size="3">
+                        @foreach (var u in Model.Users)
+                        {
+                            <option value="@u.Value" selected="@u.Selected">@u.Text</option>
+                        }
+                    </select>
+                    <small class="text-muted">اختيار متعدد — اترك بدون تحديد للكل</small>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">العملاء</label>
+                    <select name="customerIds" id="customerIds" class="form-select form-select-sm" multiple size="3">
+                        @foreach (var c in Model.Customers)
+                        {
+                            <option value="@c.Value" selected="@c.Selected">@c.Text</option>
+                        }
+                    </select>
+                    <small class="text-muted">اختيار متعدد — اترك بدون تحديد للكل</small>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100">تجميع التقرير</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ===== بطاقات المؤشرات (KPIs) ===== *@
+    <div class="row g-3 mb-4">
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-primary text-white">
+                <div class="card-body py-3">
+                    <small class="d-block opacity-90">الخصم المقدم للعميل %</small>
+                    <h4 class="mb-0">@Model.DiscountPctAvg.ToString("N1")%</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-success text-white">
+                <div class="card-body py-3">
+                    <small class="d-block opacity-90">صافي الربح</small>
+                    <h4 class="mb-0">@((Model.NetProfit / 1_000_000m).ToString("N1"))M</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-info text-white">
+                <div class="card-body py-3">
+                    <small class="d-block opacity-90">صافي المبيعات</small>
+                    <h4 class="mb-0">@((Model.NetSales / 1_000_000m).ToString("N1"))M</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-secondary text-white">
+                <div class="card-body py-3">
+                    <small class="d-block opacity-90">عدد الفواتير</small>
+                    <h4 class="mb-0">@Model.InvoiceCount.ToString("N0")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-dark text-white">
+                <div class="card-body py-3">
+                    <small class="d-block opacity-90">متوسط سعر القطعة</small>
+                    <h4 class="mb-0">@Model.AvgItemPrice.ToString("N0")</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-warning text-dark">
+                <div class="card-body py-3">
+                    <small class="d-block opacity-90">متوسط قيمة الفاتورة</small>
+                    <h4 class="mb-0">@((Model.AvgInvoiceValue / 1000m).ToString("N1"))K</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ===== رسم صافي المبيعات بالكاتب ===== *@
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white"><strong>صافي المبيعات (بالكاتب)</strong></div>
+        <div class="card-body">
+            <div style="height: 320px;">
+                <canvas id="salesChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    @* ===== جدول التفاصيل ===== *@
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white"><strong>تفاصيل بالكاتب</strong></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>الكاتب</th>
+                            <th class="text-end">إجمالي المبيعات</th>
+                            <th class="text-end">نسبة المبيعات %</th>
+                            <th class="text-end">إجمالي المردودات</th>
+                            <th class="text-end">نسبة المردودات %</th>
+                            <th class="text-end">صافي الربح</th>
+                            <th class="text-end">نسبة صافي الربح %</th>
+                            <th class="text-end">عدد الفواتير</th>
+                            <th class="text-end">متوسط قيمة الفاتورة</th>
+                            <th class="text-end">كمية الوحدات المباعة</th>
+                            <th class="text-end">الخصم المقدم للعميل %</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Model.Rows.Any())
+                        {
+                            @foreach (var r in Model.Rows)
+                            {
+                                <tr>
+                                    <td>@r.WriterName</td>
+                                    <td class="text-end">@r.TotalSales.ToString("N2")</td>
+                                    <td class="text-end">@r.SalesPct.ToString("N2")</td>
+                                    <td class="text-end">@r.TotalReturns.ToString("N2")</td>
+                                    <td class="text-end">@r.ReturnsPct.ToString("N2")</td>
+                                    <td class="text-end">@r.NetProfit.ToString("N2")</td>
+                                    <td class="text-end">@r.NetProfitPct.ToString("N2")</td>
+                                    <td class="text-end">@r.InvoiceCount.ToString("N0")</td>
+                                    <td class="text-end">@r.AvgInvoiceValue.ToString("N2")</td>
+                                    <td class="text-end">@r.QtySold.ToString("N0")</td>
+                                    <td class="text-end">@r.DiscountPct.ToString("N1")</td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr><td colspan="11" class="text-center py-4 text-muted">لا توجد بيانات حسب الفلتر المحدد.</td></tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        (function () {
+            var chartData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartData));
+            if (!chartData || chartData.length === 0) return;
+            var ctx = document.getElementById('salesChart');
+            if (!ctx) return;
+            new Chart(ctx.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: chartData.map(function (x) { return x.writerName; }),
+                    datasets: [{
+                        label: 'صافي المبيعات',
+                        data: chartData.map(function (x) { return x.netSales; }),
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: { beginAtZero: true, ticks: { callback: function (v) { return (v / 1e6).toFixed(1) + 'M'; } } }
+                    }
+                }
+            });
+        })();
+        document.getElementById('reportForm').addEventListener('submit', function () {
+            var u = document.getElementById('userIds');
+            var c = document.getElementById('customerIds');
+            if (u && u.multiple) {
+                var v = Array.from(u.selectedOptions).map(function (o) { return o.value; }).filter(Boolean);
+                var existing = this.querySelector('input[name="userIds"]');
+                if (existing) existing.remove();
+                if (v.length) {
+                    var h = document.createElement('input');
+                    h.type = 'hidden';
+                    h.name = 'userIds';
+                    h.value = v.join(',');
+                    this.appendChild(h);
+                }
+                u.removeAttribute('name');
+            }
+            if (c && c.multiple) {
+                var v = Array.from(c.selectedOptions).map(function (o) { return o.value; }).filter(Boolean);
+                var existing = this.querySelector('input[name="customerIds"]');
+                if (existing) existing.remove();
+                if (v.length) {
+                    var h = document.createElement('input');
+                    h.type = 'hidden';
+                    h.name = 'customerIds';
+                    h.value = v.join(',');
+                    this.appendChild(h);
+                }
+                c.removeAttribute('name');
+            }
+        });
+    </script>
+}

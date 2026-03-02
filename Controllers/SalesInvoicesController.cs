@@ -1,4 +1,4 @@
-﻿using DocumentFormat.OpenXml.VariantTypes;
+using DocumentFormat.OpenXml.VariantTypes;
 using ERP.Data;
 using ERP.Filters;
 using ERP.Infrastructure;
@@ -13,6 +13,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Security.Claims;
 using System.Text;               // لاستخدام StringBuilder في التصدير
 using System.Threading.Tasks;
 
@@ -3024,11 +3025,20 @@ namespace ERP.Controllers
 
 
         // =========================
-        [RequirePermission("SalesInvoices.Delete")]
-        public async Task<IActionResult> Delete(int? id)
+        // حذف فاتورة واحدة: التفرقة بين "من القائمة" و "من داخل الشاشة" عبر معامل from (قيمة list أو show).
+        public async Task<IActionResult> Delete(int? id, string? from)
         {
             if (id == null)
                 return NotFound();
+
+            var source = string.Equals(from, "show", StringComparison.OrdinalIgnoreCase) ? "show" : "list";
+            var permCode = source == "show" ? "SalesInvoices.DeleteOneFromShow" : "SalesInvoices.DeleteOneFromList";
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue || !await _permissionService.HasPermissionAsync(userId.Value, permCode))
+            {
+                TempData["PermissionDeniedMessage"] = "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
+                return RedirectToAction(nameof(Index));
+            }
 
             var invoice = await _context.SalesInvoices
                                         .AsNoTracking()
@@ -3036,6 +3046,7 @@ namespace ERP.Controllers
             if (invoice == null)
                 return NotFound();
 
+            ViewBag.From = source;
             return View(invoice);
         }
 
@@ -3045,18 +3056,21 @@ namespace ERP.Controllers
 
         // =========================
         // Delete — POST: تنفيذ الحذف لفاتورة واحدة (حذف عميق)
-        // ✅ نفس منطق فاتورة المشتريات:
-        // 1) تحديث StockBatches (إرجاع الكمية للمخزن)
-        // 2) حذف StockFifoMap + إرجاع RemainingQty
-        // 3) حذف StockLedger الخاص بالفاتورة
-        // 4) عكس الأثر المحاسبي (Reverse) بدل حذف LedgerEntries
-        // 5) حذف الهيدر (Cascade يحذف السطور)
+        // التفرقة بين من القائمة ومن الشاشة عبر معامل from (قيمة list أو show).
         // =========================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        [RequirePermission("SalesInvoices.Delete")]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        public async Task<IActionResult> DeleteConfirmed(int id, [FromForm] string? from)
         {
+            var source = string.Equals(from, "show", StringComparison.OrdinalIgnoreCase) ? "show" : "list";
+            var permCode = source == "show" ? "SalesInvoices.DeleteOneFromShow" : "SalesInvoices.DeleteOneFromList";
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue || !await _permissionService.HasPermissionAsync(userId.Value, permCode))
+            {
+                TempData["PermissionDeniedMessage"] = "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
+                return RedirectToAction(nameof(Index));
+            }
+
             var result = await TryDeleteSalesInvoiceDeepAsync(id);
 
             if (result.Status == DeleteInvoiceStatus.Deleted)
@@ -3081,13 +3095,18 @@ namespace ERP.Controllers
 
         // =========================
         // BulkDelete — حذف مجموعة فواتير مختارة (حذف عميق)
-        // ✅ نفس منطق فاتورة المشتريات: يحذف "المسموح فقط" ويترك الممنوع/الفاشل
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission("SalesInvoices.Delete")]
+        [RequirePermission("SalesInvoices.BulkDelete")]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
         {
+            if (!await _permissionService.HasPermissionAsync("SalesInvoices.BulkDelete"))
+            {
+                TempData["PermissionDeniedMessage"] = "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
+                return RedirectToAction(nameof(Index));
+            }
+
             if (string.IsNullOrWhiteSpace(selectedIds))
             {
                 TempData["ErrorMessage"] = "لم يتم اختيار أي فواتير للحذف.";
@@ -3173,13 +3192,18 @@ namespace ERP.Controllers
 
         // =========================
         // DeleteAll — حذف جميع فواتير المبيعات (حذف عميق)
-        // ✅ نفس منطق فاتورة المشتريات: يحذف "المسموح فقط" ويترك الممنوع/الفاشل
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission("SalesInvoices.Delete")]
+        [RequirePermission("SalesInvoices.DeleteAll")]
         public async Task<IActionResult> DeleteAll()
         {
+            if (!await _permissionService.HasPermissionAsync("SalesInvoices.DeleteAll"))
+            {
+                TempData["PermissionDeniedMessage"] = "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
+                return RedirectToAction(nameof(Index));
+            }
+
             var allIds = await _context.SalesInvoices
                 .Select(x => x.SIId)
                 .ToListAsync();
@@ -3235,6 +3259,17 @@ namespace ERP.Controllers
             }
 
             return RedirectToAction(nameof(Index));
+        }
+
+        private int? GetCurrentUserId()
+        {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                var idStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (int.TryParse(idStr, out var id))
+                    return id;
+            }
+            return null;
         }
 
         // ============================================================================

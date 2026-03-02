@@ -182,6 +182,9 @@
                             <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع">
                                 <span>💾</span> حفظ الخصم اليدوي
                             </button>
+                            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbCopyWeightedToManual" title="ينقل الخصم المرجّح (بعد التقريب لخانتين عشريتين) إلى خانة الخصم اليدوي لكل صف ظاهر ثم يحفظ">
+                                <span>📋</span> نقل المرجّح → يدوي (بعد التقريب)
+                            </button>
                         }
                     </div>
                 </div>
@@ -285,7 +288,7 @@
                         @foreach (var item in reportData)
                         {
                             var hasBatches = item.Batches != null && item.Batches.Count >= 2;
-                            <tr data-pb-row data-prod-id="@item.ProdId" data-qty="@item.CurrentQty" data-has-batches="@(hasBatches ? "1" : "0")">
+                            <tr data-pb-row data-prod-id="@item.ProdId" data-qty="@item.CurrentQty" data-has-batches="@(hasBatches ? "1" : "0")" data-weighted-discount="@(hasBatches ? "" : item.WeightedDiscount.ToString("G", System.Globalization.CultureInfo.InvariantCulture))">
                                 <td data-col="code" class="align-middle">
                                     @if (hasBatches)
                                     {
@@ -330,7 +333,7 @@
                             {
                                 @foreach (var batch in item.Batches!)
                                 {
-                                    <tr class="erp-pb-batch-row erp-pb-batches-for" data-pb-batch-row data-prod-id="@item.ProdId" data-batch-id="@(batch.BatchId ?? 0)" data-qty="@batch.CurrentQty" data-pb-batches-for="@item.ProdId" style="display: none;">
+                                    <tr class="erp-pb-batch-row erp-pb-batches-for" data-pb-batch-row data-prod-id="@item.ProdId" data-batch-id="@(batch.BatchId ?? 0)" data-qty="@batch.CurrentQty" data-pb-batches-for="@item.ProdId" data-weighted-discount="@batch.WeightedDiscount.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" style="display: none;">
                                         <td></td>
                                         <td class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
                                         <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
@@ -723,6 +726,35 @@
                             btnAll.disabled = false;
                         }).catch(function () {
                             btnAll.disabled = false;
+                        });
+                    });
+                }
+
+                // زر نقل المرجّح → يدوي (بعد التقريب): يملأ خانة الخصم اليدوي من الخصم المرجّح مقرّباً ثم يحفظ
+                var btnCopy = document.getElementById('erpPbCopyWeightedToManual');
+                if (btnCopy) {
+                    btnCopy.addEventListener('click', function () {
+                        var inputs = getOrderedManualDiscountInputs();
+                        if (inputs.length === 0) return;
+                        btnCopy.disabled = true;
+                        var rounded = function (val) {
+                            var n = parseFloat(val);
+                            if (isNaN(n)) return 0;
+                            return Math.round(n * 100) / 100;
+                        };
+                        inputs.forEach(function (inp) {
+                            var row = inp.closest('tr');
+                            var w = (row && row.getAttribute('data-weighted-discount')) ? row.getAttribute('data-weighted-discount').trim() : '';
+                            if (w !== '') {
+                                var r = rounded(w);
+                                inp.value = r.toFixed(2);
+                            }
+                        });
+                        var promises = inputs.map(function (inp) { return saveOneRow(inp); });
+                        Promise.all(promises).then(function () {
+                            btnCopy.disabled = false;
+                        }).catch(function () {
+                            btnCopy.disabled = false;
                         });
                     });
                 }

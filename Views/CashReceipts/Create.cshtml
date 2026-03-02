@@ -3,6 +3,7 @@
 @{
     ViewData["Title"] = "إضافة إذن استلام نقدية";
     bool lockCustomer = ViewBag.LockCustomer is bool b && b;
+    bool isPosted = Model.CashReceiptId > 0 && (Model.IsPosted || (Model.Status != null && Model.Status.Contains("مرحلة")));
 }
 
 <div class="container" dir="rtl">
@@ -59,7 +60,14 @@
                     <!-- التاريخ -->
                     <div class="col-md-4">
                         <label asp-for="ReceiptDate" class="form-label"></label>
-                        <input asp-for="ReceiptDate" type="date" class="form-control" />
+                        @if (isPosted)
+                        {
+                            <input asp-for="ReceiptDate" type="date" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="ReceiptDate" type="date" class="form-control" />
+                        }
                         <span asp-validation-for="ReceiptDate" class="text-danger"></span>
                     </div>
 
@@ -100,10 +108,19 @@
                     <!-- حساب الصندوق/البنك (يتم تعبئته تلقائياً) -->
                     <div class="col-md-4">
                         <label asp-for="CashAccountId" class="form-label"></label>
-                        @* ✅ دائماً نستخدم select عادي مع asp-for لضمان إرسال القيمة *@
-                        <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId">
-                            <option value="">-- اختر حساب الصندوق/البنك --</option>
-                        </select>
+                        @if (isPosted)
+                        {
+                            <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId" disabled>
+                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                            </select>
+                            <input type="hidden" asp-for="CashAccountId" />
+                        }
+                        else
+                        {
+                            <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId">
+                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                            </select>
+                        }
                         <small class="text-muted">سيتم اختيار حساب الخزينة تلقائياً</small>
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
@@ -139,14 +156,28 @@
                     <!-- المبلغ -->
                     <div class="col-md-4">
                         <label asp-for="Amount" class="form-label"></label>
-                        <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" required />
+                        @if (isPosted)
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="Amount" class="form-control" type="number" step="0.01" min="0" required />
+                        }
                         <span asp-validation-for="Amount" class="text-danger"></span>
                     </div>
 
                     <!-- البيان -->
                     <div class="col-md-8">
                         <label asp-for="Description" class="form-label"></label>
-                        <input asp-for="Description" class="form-control" />
+                        @if (isPosted)
+                        {
+                            <input asp-for="Description" class="form-control" readonly />
+                        }
+                        else
+                        {
+                            <input asp-for="Description" class="form-control" />
+                        }
                         <span asp-validation-for="Description" class="text-danger"></span>
                     </div>
                 </div>
@@ -161,7 +192,18 @@
                             🖨️ طباعة الإذن
                         </a>
                     }
-                    <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
+                    @if (isPosted)
+                    {
+                        <form asp-action="Open" method="post" style="display: inline;" asp-route-id="@Model.CashReceiptId">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-warning btn-sm">فتح للتعديل</button>
+                        </form>
+                        <a asp-action="Edit" asp-route-id="@Model.CashReceiptId" class="btn btn-primary btn-sm">تعديل</a>
+                    }
+                    @if (!isPosted)
+                    {
+                        <button type="submit" class="btn btn-primary btn-sm">حفظ وترحيل</button>
+                    }
                 </div>
             </div>
         </div>

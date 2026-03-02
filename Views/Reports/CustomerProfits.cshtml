@@ -6,6 +6,8 @@
     var totalSalesRevenue = ViewBag.TotalSalesRevenue as decimal? ?? 0m;
     var totalSalesCost = ViewBag.TotalSalesCost as decimal? ?? 0m;
     var totalSalesProfit = ViewBag.TotalSalesProfit as decimal? ?? 0m;
+    var totalReturnProfit = ViewBag.TotalReturnProfit as decimal? ?? 0m;
+    var totalNetProfit = ViewBag.TotalNetProfit as decimal? ?? 0m;
 
     // إجمالي عدد الفواتير ومتوسط قيمة الفاتورة على مستوى التقرير كله
     var totalInvoiceCount = reportData.Sum(r => r.InvoiceCount);
@@ -167,6 +169,8 @@
                                 </div>
                             </th>
                             <th class="text-end" style="min-width: 100px;">نسبة الربح %</th>
+                            <th class="text-end" style="min-width: 140px;">ربح المرتجعات (يُخصم من ربح البيع)</th>
+                            <th class="text-end" style="min-width: 130px;">صافي الربح</th>
                             <th class="text-end" style="min-width: 100px;">عدد الفواتير</th>
                             <th class="text-end" style="min-width: 120px;">متوسط الفاتورة</th>
                         </tr>
@@ -193,6 +197,20 @@
                                             @item.SalesProfitPercent.ToString("N2")%
                                         </span>
                                     </td>
+
+                                    @* ربح المرتجعات *@
+                                    <td class="text-end">
+                                        <strong class="@(item.ReturnProfit >= 0 ? "text-success" : "text-danger")">
+                                            @item.ReturnProfit.ToString("N2")
+                                        </strong>
+                                    </td>
+
+                                    @* صافي الربح *@
+                                    <td class="text-end">
+                                        <strong class="@(item.NetProfit >= 0 ? "text-success" : "text-danger")">
+                                            @item.NetProfit.ToString("N2")
+                                        </strong>
+                                    </td>
                                     
                                     @* إحصائيات *@
                                     <td class="text-end">@item.InvoiceCount</td>
@@ -218,6 +236,20 @@
                                 <td class="text-end">
                                     <strong>
                                         @((totalSalesRevenue > 0 ? (totalSalesProfit / totalSalesRevenue * 100) : 0).ToString("N2"))%
+                                    </strong>
+                                </td>
+
+                                @* ربح المرتجعات *@
+                                <td class="text-end">
+                                    <strong class="@(totalReturnProfit >= 0 ? "text-success" : "text-danger")">
+                                        @totalReturnProfit.ToString("N2")
+                                    </strong>
+                                </td>
+
+                                @* صافي الربح *@
+                                <td class="text-end">
+                                    <strong class="@(totalNetProfit >= 0 ? "text-success" : "text-danger")">
+                                        @totalNetProfit.ToString("N2")
                                     </strong>
                                 </td>
 

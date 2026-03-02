@@ -292,6 +292,20 @@
                 </div>
             </a>
         </div>
+        @if (Model.Level == "owner" || Model.Level == "manager")
+        {
+            <div class="col-md-3 col-sm-6">
+                <a asp-controller="Reports" asp-action="SalesPerformanceReport" class="text-decoration-none">
+                    <div class="card border-0 shadow-sm h-100 card-hover">
+                        <div class="card-body text-center">
+                            <h5 class="mb-1">تقرير أداء المبيعات</h5>
+                            <small class="text-muted d-block mb-2">بالكاتب — فلاتر تاريخ ومنطقة ومحافظة وعملاء</small>
+                            <span class="badge bg-success bg-opacity-10 text-success border rounded-pill px-3 py-1">فتح</span>
+                        </div>
+                    </div>
+                </a>
+            </div>
+        }
     </div>
 </div>
 <style>

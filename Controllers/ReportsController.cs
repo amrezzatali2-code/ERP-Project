@@ -1,4 +1,4 @@
-﻿using ERP.Data;
+using ERP.Data;
 using ERP.Filters;
 using ERP.Models;
 using ERP.Security;
@@ -6,6 +6,7 @@ using ERP.Services;
 using ERP.ViewModels;
 using ERP.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -2242,11 +2243,11 @@ namespace ERP.Controllers
             string? filterCol_salescostExpr = null,
             string? filterCol_salesprofitExpr = null,
             string? filterCol_salesprofitpctExpr = null,
+            string? filterCol_returnprofitExpr = null,
             string? filterCol_adjustmentprofitExpr = null,
             string? filterCol_transferprofitExpr = null,
+            string? filterCol_netprofitExpr = null,
             string? filterCol_salesqtyExpr = null,
-            string? filterCol_avgunitpriceExpr = null,
-            string? filterCol_avgunitcostExpr = null,
             bool loadReport = false,
             int page = 1,
             int pageSize = 20)
@@ -2296,11 +2297,11 @@ namespace ERP.Controllers
             ViewBag.FilterCol_SalescostExpr = filterCol_salescostExpr;
             ViewBag.FilterCol_SalesprofitExpr = filterCol_salesprofitExpr;
             ViewBag.FilterCol_SalesprofitpctExpr = filterCol_salesprofitpctExpr;
+            ViewBag.FilterCol_ReturnprofitExpr = filterCol_returnprofitExpr;
             ViewBag.FilterCol_AdjustmentprofitExpr = filterCol_adjustmentprofitExpr;
             ViewBag.FilterCol_TransferprofitExpr = filterCol_transferprofitExpr;
+            ViewBag.FilterCol_NetprofitExpr = filterCol_netprofitExpr;
             ViewBag.FilterCol_SalesqtyExpr = filterCol_salesqtyExpr;
-            ViewBag.FilterCol_AvgunitpriceExpr = filterCol_avgunitpriceExpr;
-            ViewBag.FilterCol_AvgunitcostExpr = filterCol_avgunitcostExpr;
 
             // =========================================================
             // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
@@ -2407,7 +2408,7 @@ namespace ERP.Controllers
             var salesReturnProfitQuery = _context.SalesReturnLines
                 .AsNoTracking()
                 .Include(srl => srl.SalesReturn)
-                .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null);
+                .Where(srl => productIds.Contains(srl.ProdId) && srl.SalesReturn != null && srl.SalesReturn.IsPosted);
 
             if (warehouseId.HasValue && warehouseId.Value > 0)
                 salesReturnProfitQuery = salesReturnProfitQuery.Where(srl => srl.SalesReturn!.WarehouseId == warehouseId.Value);
@@ -2630,20 +2631,22 @@ namespace ERP.Controllers
             {
                 if (!productsDict.TryGetValue(prodId, out var product)) continue;
 
-                // الربح من البيع (بعد خصم مرتجعات البيع)
+                // ========= فواتير البيع (Gross) =========
                 // التكلفة من StockLedger (FIFO) لتطابق فواتير الشراء
                 decimal salesRevenue = salesProfitData.TryGetValue(prodId, out var salesData) ? salesData.SalesRevenue : 0m;
                 decimal salesCost = salesCostFromLedger.TryGetValue(prodId, out var costVal) ? costVal : 0m;
-                decimal salesQty = salesProfitData.TryGetValue(prodId, out var salesData3) ? salesData3.SalesQty : 0m;
-                if (returnRevenueQty.TryGetValue(prodId, out var ret))
-                {
-                    salesRevenue = Math.Max(0m, salesRevenue - ret.ReturnRevenue);
-                    salesQty = Math.Max(0m, salesQty - ret.ReturnQty);
-                }
-                if (returnCostData.TryGetValue(prodId, out var retCost))
-                    salesCost = Math.Max(0m, salesCost - retCost);
+                decimal salesQtyGross = salesProfitData.TryGetValue(prodId, out var salesData3) ? salesData3.SalesQty : 0m;
                 decimal salesProfit = salesRevenue - salesCost;
-                decimal salesProfitPercent = salesRevenue > 0 ? (salesProfit / salesRevenue) * 100m : 0m;
+                decimal salesProfitPercent = salesRevenue != 0 ? (salesProfit / salesRevenue) * 100m : 0m;
+
+                // ========= مرتجعات البيع =========
+                decimal returnRevenue = returnRevenueQty.TryGetValue(prodId, out var ret) ? ret.ReturnRevenue : 0m;
+                decimal returnQty = returnRevenueQty.TryGetValue(prodId, out var retQty) ? retQty.ReturnQty : 0m;
+                decimal returnCost = returnCostData.TryGetValue(prodId, out var retCost) ? retCost : 0m;
+                decimal returnProfit = returnRevenue - returnCost; // يُخصم من ربح البيع
+
+                // صافي كمية البيع بعد المرتجعات
+                decimal salesQty = salesQtyGross - returnQty;
 
                 // ربح التسويات (فائض جرد - عجز جرد)
                 decimal adjustmentProfit = adjustmentProfitData.TryGetValue(prodId, out var adjProfit) ? adjProfit : 0m;
@@ -2661,12 +2664,11 @@ namespace ERP.Controllers
                 decimal accountBalanceProfit = 0m;
                 decimal accountBalanceProfitPercent = 0m;
 
-                // متوسطات (بعد خصم المرتجعات)
-                decimal avgUnitPrice = salesQty > 0 ? salesRevenue / salesQty : 0m;
-                decimal avgUnitCost = salesQty > 0 ? salesCost / salesQty : 0m;
+                // صافي الربح النهائي
+                decimal netProfit = (salesProfit - returnProfit) + adjustmentProfit + transferProfit;
 
-                // عرض الصفر: عند عدم التفعيل نستبعد الأصناف التي ليس لها مبيعات ولا تسويات ولا تحويلات
-                if (!includeZeroQty && salesRevenue == 0m && adjustmentProfit == 0m && transferProfit == 0m)
+                // عرض الصفر: عند عدم التفعيل نستبعد الأصناف التي ليس لها بيع ولا مرتجعات ولا تسويات ولا تحويلات
+                if (!includeZeroQty && salesRevenue == 0m && returnRevenue == 0m && adjustmentProfit == 0m && transferProfit == 0m)
                     continue;
 
                 reportData.Add(new ProductProfitReportDto
@@ -2679,6 +2681,7 @@ namespace ERP.Controllers
                     SalesCost = salesCost,
                     SalesProfit = salesProfit,
                     SalesProfitPercent = salesProfitPercent,
+                    ReturnProfit = returnProfit,
                     LedgerRevenue = ledgerRevenue,
                     LedgerCost = ledgerCost,
                     LedgerProfit = ledgerProfit,
@@ -2689,9 +2692,8 @@ namespace ERP.Controllers
                     AccountBalanceProfitPercent = accountBalanceProfitPercent,
                     AdjustmentProfit = adjustmentProfit,
                     TransferProfit = transferProfit,
-                    SalesQty = salesQty,
-                    AvgUnitPrice = avgUnitPrice,
-                    AvgUnitCost = avgUnitCost
+                    NetProfit = netProfit,
+                    SalesQty = salesQty
                 });
             }
 
@@ -2796,11 +2798,11 @@ namespace ERP.Controllers
             ApplyDecimalExpr(filterCol_salescostExpr, r => r.SalesCost);
             ApplyDecimalExpr(filterCol_salesprofitExpr, r => r.SalesProfit);
             ApplyDecimalExpr(filterCol_salesprofitpctExpr, r => r.SalesProfitPercent);
+            ApplyDecimalExpr(filterCol_returnprofitExpr, r => r.ReturnProfit);
             ApplyDecimalExpr(filterCol_adjustmentprofitExpr, r => r.AdjustmentProfit);
             ApplyDecimalExpr(filterCol_transferprofitExpr, r => r.TransferProfit);
+            ApplyDecimalExpr(filterCol_netprofitExpr, r => r.NetProfit);
             ApplyDecimalExpr(filterCol_salesqtyExpr, r => r.SalesQty);
-            ApplyDecimalExpr(filterCol_avgunitpriceExpr, r => r.AvgUnitPrice);
-            ApplyDecimalExpr(filterCol_avgunitcostExpr, r => r.AvgUnitCost);
 
             // =========================================================
             // 8) الترتيب
@@ -2853,15 +2855,15 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.SalesQty).ToList()
                         : reportData.OrderBy(r => r.SalesQty).ToList();
                     break;
-                case "avgunitprice":
+                case "returnprofit":
                     reportData = isDesc
-                        ? reportData.OrderByDescending(r => r.AvgUnitPrice).ToList()
-                        : reportData.OrderBy(r => r.AvgUnitPrice).ToList();
+                        ? reportData.OrderByDescending(r => r.ReturnProfit).ToList()
+                        : reportData.OrderBy(r => r.ReturnProfit).ToList();
                     break;
-                case "avgunitcost":
+                case "netprofit":
                     reportData = isDesc
-                        ? reportData.OrderByDescending(r => r.AvgUnitCost).ToList()
-                        : reportData.OrderBy(r => r.AvgUnitCost).ToList();
+                        ? reportData.OrderByDescending(r => r.NetProfit).ToList()
+                        : reportData.OrderBy(r => r.NetProfit).ToList();
                     break;
                 case "category":
                     reportData = isDesc
@@ -2881,9 +2883,10 @@ namespace ERP.Controllers
             decimal totalSalesRevenue = reportData.Sum(r => r.SalesRevenue);
             decimal totalSalesCost = reportData.Sum(r => r.SalesCost);
             decimal totalSalesProfit = totalSalesRevenue - totalSalesCost;
+            decimal totalReturnProfit = reportData.Sum(r => r.ReturnProfit);
             decimal totalAdjustmentProfit = reportData.Sum(r => r.AdjustmentProfit);
             decimal totalTransferProfit = reportData.Sum(r => r.TransferProfit);
-            decimal totalProfit = totalSalesProfit + totalAdjustmentProfit + totalTransferProfit;
+            decimal totalNetProfit = reportData.Sum(r => r.NetProfit);
 
             int totalCount = reportData.Count;
 
@@ -2916,9 +2919,10 @@ namespace ERP.Controllers
             ViewBag.TotalSalesRevenue = totalSalesRevenue;
             ViewBag.TotalSalesCost = totalSalesCost;
             ViewBag.TotalSalesProfit = totalSalesProfit;
+            ViewBag.TotalReturnProfit = totalReturnProfit;
             ViewBag.TotalAdjustmentProfit = totalAdjustmentProfit;
             ViewBag.TotalTransferProfit = totalTransferProfit;
-            ViewBag.TotalProfit = totalProfit;
+            ViewBag.TotalNetProfit = totalNetProfit;
 
             // =========================================================
             // 11) بيانات ربح الميزانية (للعرض تحت الجدول) - ProductProfits
@@ -3317,6 +3321,36 @@ namespace ERP.Controllers
             }
 
             // =========================================================
+            // 6.75) مرتجعات البيع: ربح المرتجعات لكل عميل (ReturnRevenue - ReturnCost)
+            // =========================================================
+            var salesReturnLinesQ = _context.SalesReturnLines
+                .AsNoTracking()
+                .Include(srl => srl.SalesReturn)
+                .Where(srl => srl.SalesReturn != null && srl.SalesReturn.IsPosted && customerIds.Contains(srl.SalesReturn.CustomerId));
+
+            if (fromDate.HasValue)
+                salesReturnLinesQ = salesReturnLinesQ.Where(srl => srl.SalesReturn!.SRDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                salesReturnLinesQ = salesReturnLinesQ.Where(srl => srl.SalesReturn!.SRDate < toDate.Value.Date.AddDays(1));
+
+            var returnRevenueByCustomer = await salesReturnLinesQ
+                .GroupBy(srl => srl.SalesReturn!.CustomerId)
+                .Select(g => new { CustomerId = g.Key, ReturnRevenue = g.Sum(x => x.LineNetTotal) })
+                .ToDictionaryAsync(x => x.CustomerId, x => x.ReturnRevenue);
+
+            var returnCostByCustomer = await (from sl in _context.StockLedger.AsNoTracking()
+                                              join sr in _context.SalesReturns.AsNoTracking() on sl.SourceId equals sr.SRId
+                                              where sl.SourceType == "SalesReturn"
+                                                    && sr.IsPosted
+                                                    && customerIds.Contains(sr.CustomerId)
+                                              select new { sr.CustomerId, sr.SRDate, sl.UnitCost, sl.QtyIn })
+                .Where(x => (!fromDate.HasValue || x.SRDate >= fromDate.Value.Date) &&
+                            (!toDate.HasValue || x.SRDate < toDate.Value.Date.AddDays(1)))
+                .GroupBy(x => x.CustomerId)
+                .Select(g => new { CustomerId = g.Key, ReturnCost = g.Sum(x => x.UnitCost * x.QtyIn) })
+                .ToDictionaryAsync(x => x.CustomerId, x => x.ReturnCost);
+
+            // =========================================================
             // 7) بناء reportData
             // =========================================================
             var customersDict = await customersQuery
@@ -3343,8 +3377,14 @@ namespace ERP.Controllers
                 int invoiceCount = salesProfitData.TryGetValue(customerId, out var salesData3) ? salesData3.InvoiceCount : 0;
                 decimal avgInvoiceValue = invoiceCount > 0 ? salesRevenue / invoiceCount : 0m;
 
-                // عرض الصفر: عند عدم التفعيل نستبعد العملاء الذين ليس لهم مبيعات في الفترة
-                if (!includeZeroQty && salesRevenue == 0m)
+                // مرتجعات البيع + صافي الربح
+                decimal returnRevenue = returnRevenueByCustomer.TryGetValue(customerId, out var rr) ? rr : 0m;
+                decimal returnCost = returnCostByCustomer.TryGetValue(customerId, out var rc) ? rc : 0m;
+                decimal returnProfit = returnRevenue - returnCost;
+                decimal netProfit = salesProfit - returnProfit;
+
+                // عرض الصفر: عند عدم التفعيل نستبعد العملاء الذين ليس لهم مبيعات ولا مرتجعات في الفترة
+                if (!includeZeroQty && salesRevenue == 0m && returnRevenue == 0m)
                     continue;
 
                 // الربح من الميزانية
@@ -3357,7 +3397,7 @@ namespace ERP.Controllers
                 decimal debitNotes = debitNotesAmount.TryGetValue(customerId, out var dn) ? dn : 0m;
                 decimal creditNotes = creditNotesAmount.TryGetValue(customerId, out var cn) ? cn : 0m;
                 decimal netNotesAdjustment = creditNotes - debitNotes; // صافي الإشعارات (الإضافة - الخصم)
-                decimal adjustedProfit = salesProfit + netNotesAdjustment; // الربح المعدل
+                decimal adjustedProfit = netProfit + netNotesAdjustment; // الربح المعدل (بعد المرتجعات)
                 decimal adjustedProfitPercent = salesRevenue > 0 ? (adjustedProfit / salesRevenue) * 100m : 0m;
 
                 // الربح من أرصدة الحسابات (Account Balance) - سيتم حسابه لاحقاً لكل عميل
@@ -3377,6 +3417,8 @@ namespace ERP.Controllers
                     SalesCost = salesCost,
                     SalesProfit = salesProfit,
                     SalesProfitPercent = salesProfitPercent,
+                    ReturnProfit = returnProfit,
+                    NetProfit = netProfit,
                     LedgerRevenue = ledgerRevenue,
                     LedgerCost = ledgerCost,
                     LedgerProfit = ledgerProfit,
@@ -3576,6 +3618,8 @@ namespace ERP.Controllers
             decimal totalSalesRevenue = reportData.Sum(r => r.SalesRevenue);
             decimal totalSalesCost = reportData.Sum(r => r.SalesCost);
             decimal totalSalesProfit = totalSalesRevenue - totalSalesCost;
+            decimal totalReturnProfit = reportData.Sum(r => r.ReturnProfit);
+            decimal totalNetProfit = reportData.Sum(r => r.NetProfit);
             decimal totalLedgerRevenue = reportData.Sum(r => r.LedgerRevenue);
             decimal totalLedgerCost = reportData.Sum(r => r.LedgerCost);
             decimal totalLedgerProfit = totalLedgerRevenue - totalLedgerCost;
@@ -3589,7 +3633,7 @@ namespace ERP.Controllers
             decimal totalDebitNotes = reportData.Sum(r => r.DebitNotesAmount);
             decimal totalCreditNotes = reportData.Sum(r => r.CreditNotesAmount);
             decimal totalNetNotesAdjustment = totalCreditNotes - totalDebitNotes;
-            decimal totalAdjustedProfit = totalSalesProfit + totalNetNotesAdjustment;
+            decimal totalAdjustedProfit = totalNetProfit + totalNetNotesAdjustment;
 
             int totalCount = reportData.Count;
 
@@ -3622,6 +3666,8 @@ namespace ERP.Controllers
             ViewBag.TotalSalesRevenue = totalSalesRevenue;
             ViewBag.TotalSalesCost = totalSalesCost;
             ViewBag.TotalSalesProfit = totalSalesProfit;
+            ViewBag.TotalReturnProfit = totalReturnProfit;
+            ViewBag.TotalNetProfit = totalNetProfit;
             ViewBag.TotalLedgerRevenue = totalLedgerRevenue;
             ViewBag.TotalLedgerCost = totalLedgerCost;
             ViewBag.TotalLedgerProfit = totalLedgerProfit;
@@ -3637,6 +3683,193 @@ namespace ERP.Controllers
             ViewBag.BalanceSheetData = null;
 
             return View();
+        }
+
+        /// <summary>
+        /// تقرير أداء المبيعات (بالكاتب): KPIs + رسم بياني + جدول تفصيلي مع فلاتر التاريخ والمستخدمين والمنطقة والمحافظة والعملاء.
+        /// </summary>
+        [HttpGet]
+        [RequirePermission("Reports.SalesPerformanceReport")]
+        public async Task<IActionResult> SalesPerformanceReport(
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? userIds,
+            int? governorateId,
+            int? districtId,
+            int? areaId,
+            string? customerIds)
+        {
+            var vm = new SalesPerformanceReportViewModel();
+            var today = DateTime.Today;
+            vm.FromDate = fromDate ?? new DateTime(today.Year, today.Month, 1);
+            vm.ToDate = toDate ?? today;
+            vm.GovernorateId = governorateId;
+            vm.DistrictId = districtId;
+            vm.AreaId = areaId;
+
+            var from = vm.FromDate.Value.Date;
+            var to = vm.ToDate.Value.Date.AddDays(1);
+
+            // قائمة العملاء حسب الفلتر الجغرافي والعميل
+            var customerIdsList = new List<int>();
+            var custQ = _context.Customers.AsNoTracking().Where(c => c.IsActive);
+            if (governorateId.HasValue && governorateId.Value > 0)
+                custQ = custQ.Where(c => c.GovernorateId == governorateId.Value);
+            if (districtId.HasValue && districtId.Value > 0)
+                custQ = custQ.Where(c => c.DistrictId == districtId.Value);
+            if (areaId.HasValue && areaId.Value > 0)
+                custQ = custQ.Where(c => c.AreaId == areaId.Value);
+            if (!string.IsNullOrWhiteSpace(customerIds))
+            {
+                var ids = customerIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var n) ? n : (int?)null).Where(n => n.HasValue).Select(n => n!.Value).ToList();
+                if (ids.Any())
+                {
+                    custQ = custQ.Where(c => ids.Contains(c.CustomerId));
+                    vm.CustomerIds = ids;
+                }
+            }
+            customerIdsList = await custQ.Select(c => c.CustomerId).ToListAsync();
+            if (!customerIdsList.Any())
+                customerIdsList = await _context.Customers.Where(c => c.IsActive).Select(c => c.CustomerId).ToListAsync();
+
+            // أسماء المستخدمين من فلتر المستخدمين (CreatedBy يُخزن اسم المستخدم)
+            var creatorNames = new List<string>();
+            if (!string.IsNullOrWhiteSpace(userIds))
+            {
+                var uids = userIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var n) ? n : (int?)null).Where(n => n.HasValue).Select(n => n!.Value).Distinct().ToList();
+                if (uids.Any())
+                {
+                    vm.UserIds = uids;
+                    var users = await _context.Users.AsNoTracking().Where(u => uids.Contains(u.UserId)).Select(u => new { u.UserId, u.UserName, u.DisplayName }).ToListAsync();
+                    creatorNames = users.Select(u => !string.IsNullOrWhiteSpace(u.DisplayName) ? u.DisplayName : u.UserName).Distinct().ToList();
+                    vm.UserNames = creatorNames;
+                }
+            }
+
+            // فواتير البيع في الفترة (مرحّلة، ضمن العملاء المفلترين، واختياراً بالكاتب)
+            var salesQ = _context.SalesInvoices.AsNoTracking()
+                .Where(si => si.IsPosted && si.SIDate >= from && si.SIDate < to && customerIdsList.Contains(si.CustomerId));
+            if (creatorNames.Any())
+                salesQ = salesQ.Where(si => creatorNames.Contains(si.CreatedBy));
+
+            var salesByWriter = await salesQ
+                .GroupBy(si => si.CreatedBy)
+                .Select(g => new
+                {
+                    WriterName = g.Key,
+                    TotalSales = g.Sum(si => si.NetTotal),
+                    InvoiceCount = g.Count(),
+                    TotalBeforeDiscount = g.Sum(si => si.TotalBeforeDiscount),
+                    TotalAfterDiscountBeforeTax = g.Sum(si => si.TotalAfterDiscountBeforeTax)
+                })
+                .ToListAsync();
+
+            var siIdsInRange = await salesQ.Select(si => si.SIId).ToListAsync();
+            var costBySi = new Dictionary<int, decimal>();
+            var qtyBySi = new Dictionary<int, decimal>();
+            if (siIdsInRange.Any())
+            {
+                var lineAgg = await _context.SalesInvoiceLines.AsNoTracking()
+                    .Where(l => siIdsInRange.Contains(l.SIId))
+                    .GroupBy(l => l.SIId)
+                    .Select(g => new { SIId = g.Key, Cost = g.Sum(l => l.CostTotal), Qty = g.Sum(l => l.Qty) })
+                    .ToListAsync();
+                foreach (var x in lineAgg)
+                {
+                    costBySi[x.SIId] = x.Cost;
+                    qtyBySi[x.SIId] = x.Qty;
+                }
+            }
+
+            var siToWriter = await salesQ.Select(si => new { si.SIId, si.CreatedBy }).ToDictionaryAsync(x => x.SIId, x => x.CreatedBy);
+            var costByWriter = salesByWriter.ToDictionary(x => x.WriterName, _ => 0m);
+            var qtyByWriter = salesByWriter.ToDictionary(x => x.WriterName, _ => 0m);
+            foreach (var si in siToWriter)
+            {
+                if (costBySi.TryGetValue(si.Key, out var c)) costByWriter[si.Value] = costByWriter.GetValueOrDefault(si.Value) + c;
+                if (qtyBySi.TryGetValue(si.Key, out var q)) qtyByWriter[si.Value] = qtyByWriter.GetValueOrDefault(si.Value) + q;
+            }
+
+            // مرتجعات البيع في الفترة (نفس العملاء واختياراً نفس الكتّاب)
+            var returnsQ = _context.SalesReturns.AsNoTracking()
+                .Where(sr => sr.IsPosted && sr.SRDate >= from && sr.SRDate < to && customerIdsList.Contains(sr.CustomerId));
+            if (creatorNames.Any())
+                returnsQ = returnsQ.Where(sr => creatorNames.Contains(sr.CreatedBy));
+
+            var returnsByWriter = await returnsQ
+                .GroupBy(sr => sr.CreatedBy)
+                .Select(g => new { WriterName = g.Key, TotalReturns = g.Sum(sr => sr.NetTotal) })
+                .ToDictionaryAsync(x => x.WriterName, x => x.TotalReturns);
+
+            decimal totalNetSales = 0m, totalReturns = 0m, totalCost = 0m, totalDiscountWeighted = 0m, totalQtyForDiscount = 0m;
+            int totalInvoices = 0;
+            foreach (var s in salesByWriter)
+            {
+                totalNetSales += s.TotalSales;
+                totalCost += costByWriter.GetValueOrDefault(s.WriterName);
+                totalInvoices += s.InvoiceCount;
+                decimal ret = returnsByWriter.GetValueOrDefault(s.WriterName);
+                totalReturns += ret;
+                if (s.TotalBeforeDiscount > 0)
+                {
+                    decimal discPct = (s.TotalBeforeDiscount - s.TotalAfterDiscountBeforeTax) / s.TotalBeforeDiscount * 100m;
+                    totalDiscountWeighted += discPct * s.TotalSales;
+                    totalQtyForDiscount += s.TotalSales;
+                }
+            }
+
+            vm.NetSales = totalNetSales - totalReturns;
+            vm.NetProfit = (totalNetSales - totalCost) - totalReturns;
+            vm.InvoiceCount = totalInvoices;
+            vm.AvgInvoiceValue = totalInvoices > 0 ? (totalNetSales - totalReturns) / totalInvoices : 0m;
+            decimal totalQtySold = qtyByWriter.Values.Sum();
+            vm.AvgItemPrice = totalQtySold > 0 ? (totalNetSales - totalReturns) / totalQtySold : 0m;
+            vm.DiscountPctAvg = totalQtyForDiscount > 0 ? totalDiscountWeighted / totalQtyForDiscount : 0m;
+
+            foreach (var s in salesByWriter.OrderByDescending(x => x.TotalSales))
+            {
+                decimal ret = returnsByWriter.GetValueOrDefault(s.WriterName);
+                decimal netSalesRow = s.TotalSales - ret;
+                decimal cost = costByWriter.GetValueOrDefault(s.WriterName);
+                decimal profit = s.TotalSales - cost - ret;
+                decimal salesPct = vm.NetSales != 0 ? (netSalesRow / vm.NetSales) * 100m : 0m;
+                decimal returnsPct = s.TotalSales != 0 ? (ret / s.TotalSales) * 100m : 0m;
+                decimal profitPct = netSalesRow != 0 ? (profit / netSalesRow) * 100m : 0m;
+                decimal discPct = 0m;
+                if (s.TotalBeforeDiscount > 0)
+                    discPct = (s.TotalBeforeDiscount - s.TotalAfterDiscountBeforeTax) / s.TotalBeforeDiscount * 100m;
+
+                vm.Rows.Add(new SalesPerformanceRow
+                {
+                    WriterName = s.WriterName ?? "—",
+                    TotalSales = s.TotalSales,
+                    SalesPct = salesPct,
+                    TotalReturns = ret,
+                    ReturnsPct = returnsPct,
+                    NetProfit = profit,
+                    NetProfitPct = profitPct,
+                    InvoiceCount = s.InvoiceCount,
+                    AvgInvoiceValue = s.InvoiceCount > 0 ? netSalesRow / s.InvoiceCount : 0m,
+                    QtySold = qtyByWriter.GetValueOrDefault(s.WriterName ?? ""),
+                    DiscountPct = discPct
+                });
+                vm.ChartData.Add(new SalesPerformanceChartPoint { WriterName = s.WriterName ?? "—", NetSales = netSalesRow });
+            }
+
+            vm.Governorates = (await _context.Governorates.AsNoTracking().OrderBy(g => g.GovernorateName).Select(g => new { g.GovernorateId, g.GovernorateName }).ToListAsync())
+                .Select(g => new SelectListItem(g.GovernorateName, g.GovernorateId.ToString(), governorateId == g.GovernorateId)).ToList();
+            vm.Districts = (await _context.Districts.AsNoTracking().Where(d => !governorateId.HasValue || d.GovernorateId == governorateId).OrderBy(d => d.DistrictName).Select(d => new { d.DistrictId, d.DistrictName }).ToListAsync())
+                .Select(d => new SelectListItem(d.DistrictName, d.DistrictId.ToString(), districtId == d.DistrictId)).ToList();
+            vm.Areas = (await _context.Areas.AsNoTracking().Where(a => (!governorateId.HasValue || a.GovernorateId == governorateId) && (!districtId.HasValue || a.DistrictId == districtId)).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync())
+                .Select(a => new SelectListItem(a.AreaName, a.AreaId.ToString(), areaId == a.AreaId)).ToList();
+            vm.Users = (await _context.Users.AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.DisplayName ?? u.UserName).Select(u => new { u.UserId, u.DisplayName, u.UserName }).ToListAsync())
+                .Select(u => new SelectListItem((u.DisplayName ?? u.UserName) ?? u.UserId.ToString(), u.UserId.ToString(), vm.UserIds != null && vm.UserIds.Contains(u.UserId))).ToList();
+            vm.Customers = (await custQ.OrderBy(c => c.CustomerName).Take(500).Select(c => new { c.CustomerId, c.CustomerName }).ToListAsync())
+                .Select(c => new SelectListItem(c.CustomerName ?? c.CustomerId.ToString(), c.CustomerId.ToString(), vm.CustomerIds != null && vm.CustomerIds.Contains(c.CustomerId))).ToList();
+
+            return View(vm);
         }
     }
 }

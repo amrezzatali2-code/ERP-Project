@@ -1,0 +1,29 @@
+@model ERP.Models.ProductDiscountOverride
+@{
+    ViewData["Title"] = "تعديل الخصم اليدوي";
+    Layout = "_Layout";
+}
+<div dir="rtl" class="container mt-3">
+    <h3 class="mb-3">تعديل الخصم اليدوي للبيع</h3>
+    <dl class="row mb-3">
+        <dt class="col-sm-3">المنتج</dt>
+        <dd class="col-sm-9">@(Model.Product?.ProdName ?? Model.ProductId.ToString())</dd>
+        <dt class="col-sm-3">المخزن</dt>
+        <dd class="col-sm-9">@(Model.Warehouse?.WarehouseName ?? "الكل")</dd>
+    </dl>
+    <form asp-action="Edit" asp-route-id="@Model.Id" method="post" class="row g-3">
+        @Html.AntiForgeryToken()
+        <div class="col-md-4">
+            <label class="form-label">الخصم %</label>
+            <input type="number" name="overrideDiscountPct" class="form-control" step="0.01" min="0" max="100" value="@Model.OverrideDiscountPct.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)" required />
+        </div>
+        <div class="col-md-8">
+            <label class="form-label">السبب / ملاحظة</label>
+            <input type="text" name="reason" class="form-control" maxlength="200" value="@Model.Reason" />
+        </div>
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">حفظ</button>
+            <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+        </div>
+    </form>
+</div>

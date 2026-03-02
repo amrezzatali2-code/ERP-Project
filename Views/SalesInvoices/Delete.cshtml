@@ -1,4 +1,4 @@
-﻿@model ERP.Models.SalesInvoice
+@model ERP.Models.SalesInvoice
 @{
     ViewData["Title"] = "حذف فاتورة";
     Layout = "_Layout";
@@ -21,6 +21,7 @@
     <form asp-action="Delete" method="post">
         @Html.AntiForgeryToken()
         <input type="hidden" asp-for="SIId" />
+        <input type="hidden" name="from" value="@(ViewBag.From ?? "list")" />
         <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
         <a asp-action="Index" class="btn btn-secondary">رجوع</a>
     </form>

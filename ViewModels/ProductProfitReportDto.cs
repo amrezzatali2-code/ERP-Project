@@ -10,11 +10,14 @@ namespace ERP.ViewModels
         public string ProdName { get; set; } = "";
         public string CategoryName { get; set; } = "";
         
-        // الربح من البيع (من SalesInvoiceLines)
-        public decimal SalesRevenue { get; set; }      // إجمالي الإيرادات من المبيعات
-        public decimal SalesCost { get; set; }         // إجمالي التكلفة من المبيعات
-        public decimal SalesProfit { get; set; }       // الربح من المبيعات = Revenue - Cost
+        // الربح من البيع (فواتير البيع فقط)
+        public decimal SalesRevenue { get; set; }      // إجمالي الإيرادات من فواتير البيع
+        public decimal SalesCost { get; set; }         // إجمالي التكلفة من فواتير البيع
+        public decimal SalesProfit { get; set; }       // الربح من فواتير البيع = Revenue - Cost
         public decimal SalesProfitPercent { get; set; } // نسبة الربح من المبيعات
+
+        // مرتجعات البيع (تُخصم من ربح البيع)
+        public decimal ReturnProfit { get; set; }      // ربح المرتجعات = ReturnRevenue - ReturnCost
         
         // الربح من الميزانية (من LedgerEntries)
         public decimal LedgerRevenue { get; set; }    // الإيرادات من الميزانية
@@ -34,9 +37,10 @@ namespace ERP.ViewModels
         // الربح من التحويلات (من StockTransferLines — خصم أقل من المرجح)
         public decimal TransferProfit { get; set; }     // ربح التحويلات بين المخازن
 
+        // صافي الربح النهائي
+        public decimal NetProfit { get; set; }          // صافي الربح = (SalesProfit - ReturnProfit) + AdjustmentProfit + TransferProfit
+
         // إحصائيات إضافية
-        public decimal SalesQty { get; set; }          // كمية المبيعات
-        public decimal AvgUnitPrice { get; set; }      // متوسط سعر الوحدة
-        public decimal AvgUnitCost { get; set; }        // متوسط تكلفة الوحدة
+        public decimal SalesQty { get; set; }          // كمية صافي المبيعات (بعد المرتجعات)
     }
 }

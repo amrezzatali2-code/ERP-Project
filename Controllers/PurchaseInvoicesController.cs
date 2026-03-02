@@ -1,4 +1,4 @@
-﻿using ERP.Data;                                 // AppDbContext
+using ERP.Data;                                 // AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                       // كلاس PagedResult لتقسيم الصفحات
 using ERP.Models;                               // الموديل PurchaseInvoice
@@ -42,18 +42,21 @@ namespace ERP.Controllers
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IFullReturnService _fullReturnService;
+        private readonly IPermissionService _permissionService;
 
         public PurchaseInvoicesController(AppDbContext context,
                                           DocumentTotalsService docTotals,
                                           IUserActivityLogger activityLogger,
                                           ILedgerPostingService ledgerPosting,
-                                          IFullReturnService fullReturnService)
+                                          IFullReturnService fullReturnService,
+                                          IPermissionService permissionService)
         {
             _context = context;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
             _ledgerPostingService = ledgerPosting;
             _fullReturnService = fullReturnService;
+            _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
         }
 
 
@@ -1933,11 +1936,16 @@ namespace ERP.Controllers
         #region Delete / DeleteConfirmed (حذف فاتورة واحدة)
 
         /// <summary>
-        /// صفحة تأكيد الحذف لفاتورة مشتريات واحدة.
+        /// صفحة تأكيد الحذف لفاتورة مشتريات واحدة. التفرقة بين من القائمة ومن الشاشة عبر from (list|show).
         /// </summary>
-        [RequirePermission("PurchaseInvoices.Delete")]
-        public async Task<IActionResult> Delete(int id)
+        public async Task<IActionResult> Delete(int id, string? from)
         {
+            var source = string.Equals(from, "show", StringComparison.OrdinalIgnoreCase) ? "show" : "list";
+            var permCode = source == "show" ? "PurchaseInvoices.DeleteOneFromShow" : "PurchaseInvoices.DeleteOneFromList";
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue || !await _permissionService.HasPermissionAsync(userId.Value, permCode))
+                return Forbid();
+
             var invoice = await _context.PurchaseInvoices
                 .AsNoTracking()
                 .FirstOrDefaultAsync(p => p.PIId == id);
@@ -1945,24 +1953,23 @@ namespace ERP.Controllers
             if (invoice == null)
                 return NotFound();
 
+            ViewBag.From = source;
             return View(invoice);   // View: Views/PurchaseInvoices/Delete.cshtml
         }
 
         /// <summary>
-        /// تنفيذ الحذف الفعلي بعد التأكيد (حذف عميق من الهيدر).
-        /// ✅ نفس المبدأ:
-        /// 1) (اختياري) شرط أمان FIFO
-        /// 2) تحديث StockBatches (إنقاص) بدون حذف صف الباتش
-        /// 3) حذف StockLedger الخاص بالفاتورة
-        /// 4) عكس الأثر المحاسبي (Reverse) بدل حذف LedgerEntries
-        /// 5) حذف الهيدر (Cascade يحذف السطور)
-        /// 6) SaveChanges + Commit مرة واحدة
+        /// تنفيذ الحذف الفعلي بعد التأكيد (حذف عميق من الهيدر). التفرقة بين من القائمة ومن الشاشة عبر from.
         /// </summary>
-        [RequirePermission("PurchaseInvoices.Delete")]
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> DeleteConfirmed(int id)
+        public async Task<IActionResult> DeleteConfirmed(int id, [FromForm] string? from)
         {
+            var source = string.Equals(from, "show", StringComparison.OrdinalIgnoreCase) ? "show" : "list";
+            var permCode = source == "show" ? "PurchaseInvoices.DeleteOneFromShow" : "PurchaseInvoices.DeleteOneFromList";
+            var userId = GetCurrentUserId();
+            if (!userId.HasValue || !await _permissionService.HasPermissionAsync(userId.Value, permCode))
+                return Forbid();
+
             // =========================
             // 0) تحميل الفاتورة (Tracked)
             // =========================
@@ -2118,7 +2125,7 @@ namespace ERP.Controllers
         // - يحذف آثار المخزون + يعكس الأثر المحاسبي + يحذف الهيدر (Cascade يحذف السطور)
         // - يعرض ملخص بالأرقام: (تم حذف / تم منع / فشل بسبب خطأ)
         // ============================================================================
-        [RequirePermission("PurchaseInvoices.Delete")]
+        [RequirePermission("PurchaseInvoices.BulkDelete")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> BulkDelete(string? selectedIds)
@@ -2227,7 +2234,7 @@ namespace ERP.Controllers
         // - يحذف "المسموح فقط" ويترك الممنوع/الفاشل
         // - Transaction مستقل لكل فاتورة حتى لا يضيع الشغل كله بسبب واحدة
         // ============================================================================
-        [RequirePermission("PurchaseInvoices.Delete")]
+        [RequirePermission("PurchaseInvoices.DeleteAll")]
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()

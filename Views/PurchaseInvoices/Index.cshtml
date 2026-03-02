@@ -425,6 +425,7 @@
                                       class="d-inline"
                                       onsubmit="return confirm('تأكيد حذف الفاتورة رقم @pi.PIId ؟');">
                                     @Html.AntiForgeryToken()
+                                    <input type="hidden" name="from" value="list" />
                                     <button type="submit" class="btn btn-danger btn-sm">
                                         حذف
                                     </button>

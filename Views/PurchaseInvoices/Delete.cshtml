@@ -1,4 +1,4 @@
-﻿@model ERP.Models.PurchaseInvoice
+@model ERP.Models.PurchaseInvoice
 @{
     ViewData["Title"] = "حذف فاتورة شراء";
 }
@@ -20,6 +20,7 @@
 
 <form method="post" asp-action="Delete" asp-route-id="@Model.PIId">
     @Html.AntiForgeryToken()
+    <input type="hidden" name="from" value="@(ViewBag.From ?? "list")" />
     <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
     <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
 </form>

@@ -1,0 +1,24 @@
+@model ERP.Models.ProductDiscountOverride
+@{
+    ViewData["Title"] = "حذف الخصم اليدوي";
+    Layout = "_Layout";
+}
+<div dir="rtl" class="container mt-3">
+    <h3 class="mb-3 text-danger">حذف سجل الخصم اليدوي</h3>
+    <p>هل أنت متأكد من حذف هذا السجل؟</p>
+    <dl class="row">
+        <dt class="col-sm-3">رقم السجل</dt>
+        <dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">المنتج</dt>
+        <dd class="col-sm-9">@(Model.Product?.ProdName ?? Model.ProductId.ToString())</dd>
+        <dt class="col-sm-3">المخزن</dt>
+        <dd class="col-sm-9">@(Model.Warehouse?.WarehouseName ?? "الكل")</dd>
+        <dt class="col-sm-3">الخصم %</dt>
+        <dd class="col-sm-9">@Model.OverrideDiscountPct.ToString("N2")</dd>
+    </dl>
+    <form asp-action="Delete" asp-route-id="@Model.Id" method="post">
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-danger">تأكيد الحذف</button>
+        <a asp-action="Index" class="btn btn-secondary">إلغاء</a>
+    </form>
+</div>

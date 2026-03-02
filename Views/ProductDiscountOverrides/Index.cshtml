@@ -105,28 +105,66 @@
                         <th data-col="reason">السبب</th>
                         <th data-col="createdby">أنشأه</th>
                         <th data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
+                        <th class="no-print" data-col="actions">أوامر</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (!Model.Items.Any())
                     {
-                        <tr><td colspan="9" class="text-center text-muted py-4">لا توجد بيانات.</td></tr>
+                        <tr><td colspan="10" class="text-center text-muted py-4">لا توجد بيانات.</td></tr>
                     }
                     else
                     {
                         foreach (var x in Model.Items)
                         {
+                            var isManual = x.IsManual && x.OverrideId.HasValue;
                             <tr>
-                                @* رقم السجل يُعرض فقط عند وجود خصم يدوي فعلي؛ otherwise نضع شرطة لعدم الخلط مع كود الصنف *@
-                                <td>@(x.IsManual && x.OverrideId.HasValue ? x.OverrideId.ToString() : "—")</td>
+                                <td>@(isManual ? x.OverrideId!.ToString() : "—")</td>
                                 <td>@(x.ProductName) (@(x.ProdCode))</td>
                                 <td>@x.WarehouseName</td>
                                 <td>الكل</td>
-                                <td class="text-end">@x.EffectiveDiscountPct.ToString("N2")</td>
+                                <td class="text-end">
+                                    @if (isManual)
+                                    {
+                                        <input form="formUpdate_@(x.OverrideId)" type="number" name="overrideDiscountPct" step="0.01" min="0" max="100" value="@x.EffectiveDiscountPct.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm text-end" style="width:70px; margin-left:auto;" />
+                                    }
+                                    else
+                                    {
+                                        @x.EffectiveDiscountPct.ToString("N2")
+                                    }
+                                </td>
                                 <td>@(x.IsManual ? "يدوي" : "مرجّح")</td>
-                                <td>@(x.Reason ?? "—")</td>
+                                <td>
+                                    @if (isManual)
+                                    {
+                                        <input form="formUpdate_@(x.OverrideId)" type="text" name="reason" value="@(x.Reason ?? "")" class="form-control form-control-sm" maxlength="200" style="max-width:140px;" />
+                                    }
+                                    else
+                                    {
+                                        @(x.Reason ?? "—")
+                                    }
+                                </td>
                                 <td>@(x.CreatedBy ?? "—")</td>
                                 <td>@(x.CreatedAt.HasValue ? x.CreatedAt.Value.ToString("yyyy/MM/dd HH:mm") : "—")</td>
+                                <td class="no-print">
+                                    @if (isManual)
+                                    {
+                                        <form id="formUpdate_@(x.OverrideId)" method="post" asp-action="Update" asp-route-id="@(x.OverrideId)" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">حفظ</button>
+                                        </form>
+                                        <a asp-action="Edit" asp-route-id="@(x.OverrideId)" class="btn btn-erp btn-erp-secondary btn-erp-sm">تعديل</a>
+                                        <form method="post" asp-action="Delete" asp-route-id="@(x.OverrideId)" class="d-inline" onsubmit="return confirm('حذف سجل الخصم اليدوي لهذا الصنف؟');">
+                                            @Html.AntiForgeryToken()
+                                            <input type="hidden" name="id" value="@(x.OverrideId)" />
+                                            <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">مسح</button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
                             </tr>
                         }
                     }
@@ -135,7 +173,7 @@
                 {
                     <tfoot class="table-secondary fw-bold">
                         <tr>
-                            <td colspan="8" class="text-end">عدد السجلات (حسب الفلتر):</td>
+                            <td colspan="9" class="text-end">عدد السجلات (حسب الفلتر):</td>
                             <td class="text-end">@total</td>
                         </tr>
                     </tfoot>

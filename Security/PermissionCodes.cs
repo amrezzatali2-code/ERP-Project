@@ -13,18 +13,19 @@ namespace ERP.Security
         /// <summary>
         /// تعريف الصلاحيات: (اسم الكونترولر بدون Controller، مصفوفة الأكشنات، الموديول بالعربي).
         /// كل أكشن يُنتج كود صلاحية = ControllerName.ActionName
+        /// حذف من القائمة vs من داخل الشاشة: DeleteOneFromList و DeleteOneFromShow لكل من فواتير المبيعات والمشتريات.
         /// </summary>
         private static readonly (string Controller, string[] Actions, string Module)[] Definitions =
         {
             ("Dashboard", new[] { "Index", "Sales", "Manager", "Owner" }, "لوحات التحكم"),
             ("Home", new[] { "Index", "Privacy" }, "لوحات التحكم"),
-            ("SalesInvoices", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "GetProductsForDatalist", "GetAlternativeProducts", "GetSalesProductInfo", "DiagnosePolicy", "AddLineJson", "RemoveLineJson", "ClearAllLinesJson", "SaveTaxJson", "PostInvoice", "CreateFullReturn", "OpenInvoice", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المبيعات"),
+            ("SalesInvoices", new[] { "Index", "Show", "Create", "Edit", "Export", "SaveHeader", "GetProductsForDatalist", "GetAlternativeProducts", "GetSalesProductInfo", "DiagnosePolicy", "AddLineJson", "RemoveLineJson", "ClearAllLinesJson", "SaveTaxJson", "PostInvoice", "CreateFullReturn", "OpenInvoice", "Delete", "DeleteConfirmed", "DeleteOneFromList", "DeleteOneFromShow", "BulkDelete", "DeleteAll" }, "المبيعات"),
             ("SalesReturns", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetInvoiceItems", "AddLineJson", "RemoveLineJson", "ClearLinesJson", "OpenReturn", "PostReturn" }, "المبيعات"),
             ("SalesOrders", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المبيعات"),
             ("SalesInvoiceLines", new[] { "Index", "Details", "Delete", "BulkDelete", "DeleteAll", "Export" }, "المبيعات"),
             ("SalesReturnLines", new[] { "Index", "Delete", "BulkDelete", "DeleteAll", "Export" }, "المبيعات"),
             ("SOLines", new[] { "Index", "Details", "Delete", "BulkDelete", "DeleteAll", "Export" }, "المبيعات"),
-            ("ProductDiscountOverrides", new[] { "Index" }, "المبيعات"),
+            ("ProductDiscountOverrides", new[] { "Index", "Edit", "Delete", "DeleteConfirmed", "Update" }, "المبيعات"),
             ("Customers", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "GetDefaultAccountForParty", "GetDistrictsByGovernorate", "GetAreasByDistrict", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "العملاء"),
             ("CustomerLedger", new[] { "Index" }, "العملاء"),
             ("Products", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "Show", "Import", "GetColumnValues", "DeleteConfirmed", "BulkDelete", "DeleteAll", "SearchProducts", "SearchProductsByCode", "SearchParties" }, "إدارة المخازن"),
@@ -39,7 +40,7 @@ namespace ERP.Security
             ("StockBatches", new[] { "Index", "BulkDelete", "DeleteAll", "Export" }, "إدارة المخازن"),
             ("Batches", new[] { "Index", "Create", "Edit", "Show", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "إدارة المخازن"),
             ("ProductPriceHistory", new[] { "Index", "Export", "BulkDelete", "DeleteAll" }, "إدارة المخازن"),
-            ("PurchaseInvoices", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "AddLineJson", "RemoveLineJson", "ClearAllLinesJson", "SaveTaxJson", "PostInvoice", "CreateFullReturn", "OpenInvoice", "GetAlternativeProducts", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المشتريات"),
+            ("PurchaseInvoices", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "AddLineJson", "RemoveLineJson", "ClearAllLinesJson", "SaveTaxJson", "PostInvoice", "CreateFullReturn", "OpenInvoice", "GetAlternativeProducts", "DeleteConfirmed", "DeleteOneFromList", "DeleteOneFromShow", "BulkDelete", "DeleteAll" }, "المشتريات"),
             ("PurchaseRequests", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "AddLineJson", "RemoveLineJson", "ClearAllLinesJson", "SaveTaxJson", "GetAlternativeProducts", "GetProductDemandInfo", "GetProductSalesInPeriod", "DeleteConfirmed", "BulkDelete", "DeleteAll", "RecalcTotals", "ConvertToPurchaseInvoice", "RecalcAllTotals" }, "المشتريات"),
             ("PurchaseReturns", new[] { "Index", "Create", "Edit", "Delete", "Export", "SaveHeader", "BulkDelete", "DeleteAll", "GetInvoiceItems", "AddLineJson", "RemoveLineJson", "ClearLinesJson", "OpenReturn", "PostReturn" }, "المشتريات"),
             ("PILines", new[] { "Index", "BulkDelete", "DeleteAll", "Export" }, "المشتريات"),
@@ -52,7 +53,7 @@ namespace ERP.Security
             ("DebitNotes", new[] { "Index", "Show", "Details", "Create", "Edit", "Delete", "Export", "Unlock", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetCustomerAccount" }, "الحسابات"),
             ("CreditNotes", new[] { "Index", "Show", "Details", "Create", "Edit", "Delete", "Export", "Unlock", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetCustomerAccount" }, "الحسابات"),
             ("Treasury", new[] { "Index", "ZeroTreasuryBalance" }, "الحسابات"),
-            ("Reports", new[] { "ProductBalances", "BonusReport", "CustomerBalances", "ExportCustomerBalances", "ExportProductBalances", "ProductProfits", "CustomerProfits", "FixOrphanedPaymentEntries", "ZeroCustomerBalance", "SyncStockBatchesFromLedger", "CleanOrphanedStockLedger", "ZeroProductBalance", "SaveManualDiscount" }, "التقارير"),
+            ("Reports", new[] { "ProductBalances", "BonusReport", "CustomerBalances", "ExportCustomerBalances", "ExportProductBalances", "ProductProfits", "CustomerProfits", "SalesPerformanceReport", "FixOrphanedPaymentEntries", "ZeroCustomerBalance", "SyncStockBatchesFromLedger", "CleanOrphanedStockLedger", "ZeroProductBalance", "SaveManualDiscount" }, "التقارير"),
             ("Governorates", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المناطق الجغرافية"),
             ("Dstricts", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المناطق الجغرافية"),
             ("Areas", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المناطق الجغرافية"),
@@ -72,6 +73,133 @@ namespace ERP.Security
             ("UserRoles", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetRolePermissionsPreview", "GetRolePermissionsEditable" }, "المستخدمون والصلاحيات"),
             ("UserExtraPermissions", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المستخدمون والصلاحيات"),
             ("UserDeniedPermissions", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المستخدمون والصلاحيات"),
+        };
+
+        /// <summary>
+        /// أسماء الصلاحيات بالعربي المعبرة (للعرض في واجهة الصلاحيات والأدوار).
+        /// إذا لم يُذكر الكود يُستخدم الافتراضي: الموديول + الكود.
+        /// </summary>
+        private static readonly Dictionary<string, string> NameArByCode = new(StringComparer.OrdinalIgnoreCase)
+        {
+            // لوحات التحكم
+            ["Dashboard.Index"] = "لوحة التحكم الرئيسية",
+            ["Dashboard.Sales"] = "لوحة تحكم المبيعات",
+            ["Dashboard.Manager"] = "لوحة تحكم المدير",
+            ["Dashboard.Owner"] = "لوحة تحكم المالك",
+            ["Home.Index"] = "الصفحة الرئيسية",
+            ["Home.Privacy"] = "الخصوصية",
+            // فواتير المبيعات
+            ["SalesInvoices.Index"] = "قائمة فواتير المبيعات",
+            ["SalesInvoices.Show"] = "عرض فاتورة مبيعات",
+            ["SalesInvoices.Create"] = "إنشاء فاتورة مبيعات",
+            ["SalesInvoices.Edit"] = "تعديل فاتورة مبيعات",
+            ["SalesInvoices.Delete"] = "حذف فاتورة مبيعات (صفحة التأكيد)",
+            ["SalesInvoices.DeleteConfirmed"] = "تنفيذ حذف فاتورة مبيعات",
+            ["SalesInvoices.DeleteOneFromList"] = "مسح فاتورة واحدة من قائمة البيع",
+            ["SalesInvoices.DeleteOneFromShow"] = "مسح فاتورة من داخل شاشة الفاتورة",
+            ["SalesInvoices.BulkDelete"] = "مسح مجموعة فواتير من قائمة البيع",
+            ["SalesInvoices.DeleteAll"] = "مسح كل فواتير قائمة البيع",
+            ["SalesInvoices.Export"] = "تصدير فواتير المبيعات",
+            ["SalesInvoices.PostInvoice"] = "ترحيل فاتورة المبيعات",
+            ["SalesInvoices.OpenInvoice"] = "فتح فاتورة المبيعات",
+            ["SalesInvoices.CreateFullReturn"] = "إنشاء مرتجع كامل",
+            // قائمة الخصم اليدوي للبيع
+            ["ProductDiscountOverrides.Index"] = "قائمة الخصم اليدوي للبيع",
+            ["ProductDiscountOverrides.Edit"] = "تعديل سجل الخصم اليدوي",
+            ["ProductDiscountOverrides.Delete"] = "حذف سجل الخصم اليدوي",
+            ["ProductDiscountOverrides.Update"] = "حفظ التعديل من داخل الجدول",
+            // فواتير المشتريات
+            ["PurchaseInvoices.Index"] = "قائمة فواتير المشتريات",
+            ["PurchaseInvoices.Show"] = "عرض فاتورة مشتريات",
+            ["PurchaseInvoices.Create"] = "إنشاء فاتورة مشتريات",
+            ["PurchaseInvoices.Edit"] = "تعديل فاتورة مشتريات",
+            ["PurchaseInvoices.Delete"] = "حذف فاتورة مشتريات (صفحة التأكيد)",
+            ["PurchaseInvoices.DeleteConfirmed"] = "تنفيذ حذف فاتورة مشتريات",
+            ["PurchaseInvoices.DeleteOneFromList"] = "مسح فاتورة واحدة من قائمة المشتريات",
+            ["PurchaseInvoices.DeleteOneFromShow"] = "مسح فاتورة من داخل شاشة الفاتورة",
+            ["PurchaseInvoices.BulkDelete"] = "مسح مجموعة فواتير من قائمة المشتريات",
+            ["PurchaseInvoices.DeleteAll"] = "مسح كل فواتير قائمة المشتريات",
+            ["PurchaseInvoices.Export"] = "تصدير فواتير المشتريات",
+            ["PurchaseInvoices.PostInvoice"] = "ترحيل فاتورة المشتريات",
+            ["PurchaseInvoices.OpenInvoice"] = "فتح فاتورة المشتريات",
+            ["PurchaseInvoices.CreateFullReturn"] = "إنشاء مرتجع كامل للمشتريات",
+            // العملاء
+            ["Customers.Index"] = "قائمة العملاء",
+            ["Customers.Show"] = "عرض عميل",
+            ["Customers.Create"] = "إنشاء عميل",
+            ["Customers.Edit"] = "تعديل عميل",
+            ["Customers.Delete"] = "حذف عميل",
+            ["Customers.DeleteOneFromList"] = "مسح عميل من القائمة",
+            ["Customers.BulkDelete"] = "مسح مجموعة عملاء من القائمة",
+            ["Customers.DeleteAll"] = "مسح كل العملاء من القائمة",
+            ["Customers.Export"] = "تصدير العملاء",
+            // المخازن والمنتجات
+            ["Products.Index"] = "قائمة المنتجات",
+            ["Products.Create"] = "إنشاء منتج",
+            ["Products.Edit"] = "تعديل منتج",
+            ["Products.Delete"] = "حذف منتج",
+            ["Products.BulkDelete"] = "مسح مجموعة منتجات من القائمة",
+            ["Products.DeleteAll"] = "مسح كل المنتجات من القائمة",
+            ["Products.Export"] = "تصدير المنتجات",
+            ["Categories.Index"] = "قائمة التصنيفات",
+            ["Categories.BulkDelete"] = "مسح مجموعة تصنيفات من القائمة",
+            ["Categories.DeleteAll"] = "مسح كل التصنيفات من القائمة",
+            ["Warehouses.Index"] = "قائمة المخازن",
+            ["Warehouses.BulkDelete"] = "مسح مجموعة مخازن من القائمة",
+            ["Warehouses.DeleteAll"] = "مسح كل المخازن من القائمة",
+            // المستخدمون والصلاحيات
+            ["Users.Index"] = "قائمة المستخدمين",
+            ["Users.Create"] = "إنشاء مستخدم",
+            ["Users.Edit"] = "تعديل مستخدم",
+            ["Users.Delete"] = "حذف مستخدم",
+            ["Users.BulkDelete"] = "مسح مجموعة مستخدمين من القائمة",
+            ["Users.DeleteAll"] = "مسح كل المستخدمين من القائمة",
+            ["Roles.Index"] = "قائمة الأدوار",
+            ["Roles.BulkDelete"] = "مسح مجموعة أدوار من القائمة",
+            ["Roles.DeleteAll"] = "مسح كل الأدوار من القائمة",
+            ["Permissions.Index"] = "قائمة الصلاحيات",
+            ["RolePermissions.Index"] = "ربط الصلاحيات بالأدوار",
+            ["UserRoles.Index"] = "ربط المستخدمين بالأدوار",
+            // سطور أوامر البيع (SOLines)
+            ["SOLines.Index"] = "قائمة سطور أوامر البيع",
+            ["SOLines.Details"] = "تفاصيل سطر أمر بيع",
+            ["SOLines.Delete"] = "حذف سطر أمر بيع",
+            ["SOLines.BulkDelete"] = "مسح مجموعة سطور أوامر البيع",
+            ["SOLines.DeleteAll"] = "مسح كل سطور أوامر البيع",
+            ["SOLines.Export"] = "تصدير سطور أوامر البيع",
+            // سطور فواتير المبيعات
+            ["SalesInvoiceLines.Index"] = "قائمة سطور فواتير المبيعات",
+            ["SalesInvoiceLines.Details"] = "تفاصيل سطر فاتورة مبيعات",
+            ["SalesInvoiceLines.Delete"] = "حذف سطر فاتورة مبيعات",
+            ["SalesInvoiceLines.BulkDelete"] = "مسح مجموعة سطور فواتير المبيعات",
+            ["SalesInvoiceLines.DeleteAll"] = "مسح كل سطور فواتير المبيعات",
+            ["SalesInvoiceLines.Export"] = "تصدير سطور فواتير المبيعات",
+            // مرتجعات المبيعات
+            ["SalesReturns.Index"] = "قائمة مرتجعات المبيعات",
+            ["SalesReturns.Show"] = "عرض مرتجع مبيعات",
+            ["SalesReturns.Create"] = "إنشاء مرتجع مبيعات",
+            ["SalesReturns.Edit"] = "تعديل مرتجع مبيعات",
+            ["SalesReturns.Delete"] = "حذف مرتجع مبيعات",
+            ["SalesReturns.Export"] = "تصدير مرتجعات المبيعات",
+            ["SalesReturns.BulkDelete"] = "مسح مجموعة مرتجعات من القائمة",
+            ["SalesReturns.DeleteAll"] = "مسح كل مرتجعات المبيعات",
+            ["SalesReturns.PostReturn"] = "ترحيل مرتجع المبيعات",
+            ["SalesReturns.OpenReturn"] = "فتح مرتجع المبيعات",
+            // أوامر البيع
+            ["SalesOrders.Index"] = "قائمة أوامر البيع",
+            ["SalesOrders.Show"] = "عرض أمر بيع",
+            ["SalesOrders.Create"] = "إنشاء أمر بيع",
+            ["SalesOrders.Edit"] = "تعديل أمر بيع",
+            ["SalesOrders.Delete"] = "حذف أمر بيع",
+            ["SalesOrders.Export"] = "تصدير أوامر البيع",
+            ["SalesOrders.BulkDelete"] = "مسح مجموعة أوامر بيع من القائمة",
+            ["SalesOrders.DeleteAll"] = "مسح كل أوامر البيع",
+            // سطور مرتجعات المبيعات
+            ["SalesReturnLines.Index"] = "قائمة سطور مرتجعات المبيعات",
+            ["SalesReturnLines.Delete"] = "حذف سطر مرتجع مبيعات",
+            ["SalesReturnLines.BulkDelete"] = "مسح مجموعة سطور مرتجعات",
+            ["SalesReturnLines.DeleteAll"] = "مسح كل سطور مرتجعات المبيعات",
+            ["SalesReturnLines.Export"] = "تصدير سطور مرتجعات المبيعات",
         };
 
         /// <summary>
@@ -96,7 +224,8 @@ namespace ERP.Security
                 foreach (var action in actions.Distinct(StringComparer.OrdinalIgnoreCase))
                 {
                     var code = $"{controller}.{action}";
-                    yield return (code, $"{module} - {code}", module);
+                    var nameAr = NameArByCode.TryGetValue(code, out var name) ? name : $"{module} - {code}";
+                    yield return (code, nameAr, module);
                 }
             }
         }

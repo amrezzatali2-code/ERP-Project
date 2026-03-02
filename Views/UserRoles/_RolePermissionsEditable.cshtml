@@ -40,7 +40,8 @@ else
                         <input type="checkbox" id="chkAllPerms" class="form-check-input" title="تحديد الكل" />
                     </th>
                     <th style="width: 42px;" class="text-center"></th>
-                    <th>الموديول / الصلاحية</th>
+                    <th>الصلاحية (عربي)</th>
+                    <th class="text-start small">كود الصلاحية</th>
                     <th style="width: 80px;" class="text-center">مسموح؟</th>
                 </tr>
             </thead>
@@ -61,6 +62,7 @@ else
                             <button type="button" class="btn btn-sm btn-outline-secondary p-0 perm-expand" style="width:24px;height:24px;font-size:14px;line-height:1;" title="فتح/إغلاق الصلاحيات" aria-expanded="false">+</button>
                         </td>
                         <td class="fw-semibold align-middle">@modName</td>
+                        <td class="small text-muted"></td>
                         <td class="text-center align-middle">
                             <span class="perm-module-status @(allAllowed ? "text-success" : "text-danger")">@(allAllowed ? "✔" : "✖")</span>
                         </td>
@@ -74,6 +76,7 @@ else
                             </td>
                             <td class="text-center align-middle"></td>
                             <td class="ps-4 align-middle"><span class="text-muted small">↳</span> @(p.NameAr ?? p.Code ?? "")</td>
+                            <td class="text-start align-middle small text-muted">@(p.Code ?? "")</td>
                             <td class="text-center align-middle">
                                 <span class="perm-status @(p.IsAllowed ? "text-success" : "text-danger")">@(p.IsAllowed ? "✔" : "✖")</span>
                             </td>

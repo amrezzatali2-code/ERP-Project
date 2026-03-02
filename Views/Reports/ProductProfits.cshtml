@@ -6,14 +6,13 @@
     var totalSalesRevenue = ViewBag.TotalSalesRevenue as decimal? ?? 0m;
     var totalSalesCost = ViewBag.TotalSalesCost as decimal? ?? 0m;
     var totalSalesProfit = ViewBag.TotalSalesProfit as decimal? ?? 0m;
+    var totalReturnProfit = ViewBag.TotalReturnProfit as decimal? ?? 0m;
     var totalAdjustmentProfit = ViewBag.TotalAdjustmentProfit as decimal? ?? 0m;
     var totalTransferProfit = ViewBag.TotalTransferProfit as decimal? ?? 0m;
-    var totalProfit = ViewBag.TotalProfit as decimal? ?? 0m;
+    var totalNetProfit = ViewBag.TotalNetProfit as decimal? ?? 0m;
 
-    // إجمالي الكمية ومتوسطات السعر/التكلفة على مستوى التقرير كله
+    // إجمالي الكمية على مستوى التقرير كله
     var totalSalesQtyAll = reportData.Sum(r => r.SalesQty);
-    var totalAvgUnitPrice = totalSalesQtyAll > 0 ? totalSalesRevenue / totalSalesQtyAll : 0m;
-    var totalAvgUnitCost = totalSalesQtyAll > 0 ? totalSalesCost / totalSalesQtyAll : 0m;
 
     // Pagination
     var page = ViewBag.Page as int? ?? 1;
@@ -41,8 +40,8 @@
     var filterCol_adjustmentprofitExpr = ViewBag.FilterCol_AdjustmentprofitExpr as string;
     var filterCol_transferprofitExpr = ViewBag.FilterCol_TransferprofitExpr as string;
     var filterCol_salesqtyExpr = ViewBag.FilterCol_SalesqtyExpr as string;
-    var filterCol_avgunitpriceExpr = ViewBag.FilterCol_AvgunitpriceExpr as string;
-    var filterCol_avgunitcostExpr = ViewBag.FilterCol_AvgunitcostExpr as string;
+    var filterCol_returnprofitExpr = ViewBag.FilterCol_ReturnprofitExpr as string;
+    var filterCol_netprofitExpr = ViewBag.FilterCol_NetprofitExpr as string;
 
     // القوائم المنسدلة
     var categories = ViewBag.Categories as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
@@ -69,11 +68,11 @@
             filterCol_salescostExpr,
             filterCol_salesprofitExpr,
             filterCol_salesprofitpctExpr,
+            filterCol_returnprofitExpr,
             filterCol_adjustmentprofitExpr,
             filterCol_transferprofitExpr,
+            filterCol_netprofitExpr,
             filterCol_salesqtyExpr,
-            filterCol_avgunitpriceExpr,
-            filterCol_avgunitcostExpr,
             loadReport = true,
             page,
             pageSize
@@ -101,11 +100,11 @@
             filterCol_salescostExpr,
             filterCol_salesprofitExpr,
             filterCol_salesprofitpctExpr,
+            filterCol_returnprofitExpr,
             filterCol_adjustmentprofitExpr,
             filterCol_transferprofitExpr,
+            filterCol_netprofitExpr,
             filterCol_salesqtyExpr,
-            filterCol_avgunitpriceExpr,
-            filterCol_avgunitcostExpr,
             loadReport = true,
             page = p,
             pageSize
@@ -125,11 +124,11 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_adjustmentprofitExpr)) { <input type="hidden" name="filterCol_adjustmentprofitExpr" value="@filterCol_adjustmentprofitExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_transferprofitExpr)) { <input type="hidden" name="filterCol_transferprofitExpr" value="@filterCol_transferprofitExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_avgunitpriceExpr)) { <input type="hidden" name="filterCol_avgunitpriceExpr" value="@filterCol_avgunitpriceExpr" /> }
-            @if (!string.IsNullOrWhiteSpace(filterCol_avgunitcostExpr)) { <input type="hidden" name="filterCol_avgunitcostExpr" value="@filterCol_avgunitcostExpr" /> }
             <div class="row g-3 align-items-end">
                 <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">بحث</label>
@@ -261,6 +260,12 @@
                                     <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesprofitpct" data-sort-key="salesprofitpct" data-col-title="نسبة الربح (بيع) %" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
                                 </div>
                             </th>
+                            <th class="text-end" style="min-width: 120px;" data-col="returnprofit">
+                                <div class="d-flex align-items-center justify-content-end gap-1">
+                                    <span>ربح المرتجعات (يُخصم من ربح البيع)</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="returnprofit" data-sort-key="returnprofit" data-col-title="ربح المرتجعات (يُخصم)" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                </div>
+                            </th>
                             <th class="text-end" style="min-width: 120px;" data-col="adjustmentprofit">
                                 <div class="d-flex align-items-center justify-content-end gap-1">
                                     <span>الربح (تسويات)</span>
@@ -279,16 +284,10 @@
                                     <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesqty" data-sort-key="salesqty" data-col-title="الكمية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
                                 </div>
                             </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="avgunitprice">
+                            <th class="text-end" style="min-width: 140px;" data-col="netprofit">
                                 <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>متوسط السعر</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="avgunitprice" data-sort-key="avgunitprice" data-col-title="متوسط السعر" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="avgunitcost">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>متوسط التكلفة</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="avgunitcost" data-sort-key="avgunitcost" data-col-title="متوسط التكلفة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
+                                    <span>صافي الربح</span>
+                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="netprofit" data-sort-key="netprofit" data-col-title="صافي الربح" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
                                 </div>
                             </th>
                         </tr>
@@ -314,6 +313,13 @@
                                             @item.SalesProfitPercent.ToString("N2")%
                                         </span>
                                     </td>
+
+                                    @* ربح المرتجعات *@
+                                    <td class="text-end">
+                                        <strong class="@(item.ReturnProfit >= 0 ? "text-success" : "text-danger")">
+                                            @item.ReturnProfit.ToString("N2")
+                                        </strong>
+                                    </td>
                                     
                                     @* ربح التسويات *@
                                     <td class="text-end">
@@ -331,8 +337,11 @@
                                     
                                     @* إحصائيات *@
                                     <td class="text-end">@item.SalesQty.ToString("N2")</td>
-                                    <td class="text-end">@item.AvgUnitPrice.ToString("N2")</td>
-                                    <td class="text-end">@item.AvgUnitCost.ToString("N2")</td>
+                                    <td class="text-end">
+                                        <strong class="@(item.NetProfit >= 0 ? "text-success" : "text-danger")">
+                                            @item.NetProfit.ToString("N2")
+                                        </strong>
+                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -356,6 +365,13 @@
                                     </strong>
                                 </td>
 
+                                @* ربح المرتجعات *@
+                                <td class="text-end">
+                                    <strong class="@(totalReturnProfit >= 0 ? "text-success" : "text-danger")">
+                                        @totalReturnProfit.ToString("N2")
+                                    </strong>
+                                </td>
+
                                 @* ربح التسويات *@
                                 <td class="text-end">
                                     <strong class="@(totalAdjustmentProfit >= 0 ? "text-success" : "text-danger")">
@@ -372,8 +388,11 @@
 
                                 @* إحصائيات *@
                                 <td class="text-end">@totalSalesQtyAll.ToString("N2")</td>
-                                <td class="text-end">@totalAvgUnitPrice.ToString("N2")</td>
-                                <td class="text-end">@totalAvgUnitCost.ToString("N2")</td>
+                                <td class="text-end">
+                                    <strong class="@(totalNetProfit >= 0 ? "text-success" : "text-danger")">
+                                        @totalNetProfit.ToString("N2")
+                                    </strong>
+                                </td>
                             </tr>
                         </tfoot>
                 </table>
@@ -587,7 +606,7 @@
             var currentSortKey = 'name';
             var allItems = [];
             var currentSelected = new Set();
-            var numericCols = ['salesrevenue','salescost','salesprofit','salesprofitpct','adjustmentprofit','transferprofit','salesqty','avgunitprice','avgunitcost'];
+            var numericCols = ['salesrevenue','salescost','salesprofit','salesprofitpct','returnprofit','adjustmentprofit','transferprofit','salesqty','netprofit'];
 
             function isNumericCol(col) { return numericCols.indexOf(col) >= 0; }
 

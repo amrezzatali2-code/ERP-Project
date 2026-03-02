@@ -19,7 +19,6 @@ namespace ERP.Controllers
     /// <summary>
     /// قائمة الخصم اليدوي للبيع: كل صنف في الأرصدة مع الخصم الفعّال (يدوي أو مرجّح).
     /// </summary>
-    [RequirePermission("ProductDiscountOverrides.Index")]
     public class ProductDiscountOverridesController : Controller
     {
         private readonly AppDbContext _db;
@@ -35,6 +34,8 @@ namespace ERP.Controllers
         /// قائمة: كل (صنف + مخزن) له رصيد، مع الخصم الفعّال (يدوي إن وُجد، وإلا المرجّح).
         /// </summary>
         [HttpGet]
+        [RequirePermission("ProductDiscountOverrides.Index")]
+        [ResponseCache(Location = ResponseCacheLocation.None, NoStore = true)]
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "product",
@@ -214,6 +215,85 @@ namespace ERP.Controllers
                 new SelectListItem("أنشأه", "createdby", sb == "createdby"),
                 new SelectListItem("الكل", "all", sb == "all")
             };
+        }
+
+        /// <summary>عرض نموذج تعديل سجل خصم يدوي.</summary>
+        [HttpGet]
+        [RequirePermission("ProductDiscountOverrides.Edit")]
+        public async Task<IActionResult> Edit(int id)
+        {
+            var entity = await _db.ProductDiscountOverrides
+                .AsNoTracking()
+                .Include(o => o.Product)
+                .Include(o => o.Warehouse)
+                .FirstOrDefaultAsync(o => o.Id == id);
+            if (entity == null)
+                return NotFound();
+            return View(entity);
+        }
+
+        /// <summary>حفظ تعديل سجل الخصم اليدوي.</summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("ProductDiscountOverrides.Edit")]
+        public async Task<IActionResult> Edit(int id, [FromForm] decimal overrideDiscountPct, [FromForm] string? reason)
+        {
+            var entity = await _db.ProductDiscountOverrides.FindAsync(id);
+            if (entity == null)
+                return NotFound();
+            entity.OverrideDiscountPct = Math.Min(100m, Math.Max(0m, overrideDiscountPct));
+            entity.Reason = reason?.Length > 200 ? reason.Substring(0, 200) : reason;
+            await _db.SaveChangesAsync();
+            TempData["SuccessMessage"] = "تم تحديث الخصم اليدوي.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        /// <summary>تحديث من داخل الجدول (نموذج داخل الصف).</summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("ProductDiscountOverrides.Edit")]
+        public async Task<IActionResult> Update(int id, [FromForm] decimal overrideDiscountPct, [FromForm] string? reason)
+        {
+            var entity = await _db.ProductDiscountOverrides.FindAsync(id);
+            if (entity == null)
+                return NotFound();
+            entity.OverrideDiscountPct = Math.Min(100m, Math.Max(0m, overrideDiscountPct));
+            entity.Reason = reason?.Length > 200 ? reason.Substring(0, 200) : reason;
+            await _db.SaveChangesAsync();
+            TempData["SuccessMessage"] = "تم حفظ التعديل.";
+            return RedirectToAction(nameof(Index));
+        }
+
+        /// <summary>صفحة تأكيد حذف سجل الخصم اليدوي.</summary>
+        [HttpGet]
+        [RequirePermission("ProductDiscountOverrides.Delete")]
+        public async Task<IActionResult> Delete(int id)
+        {
+            var entity = await _db.ProductDiscountOverrides
+                .AsNoTracking()
+                .Include(o => o.Product)
+                .Include(o => o.Warehouse)
+                .FirstOrDefaultAsync(o => o.Id == id);
+            if (entity == null)
+                return NotFound();
+            return View(entity);
+        }
+
+        /// <summary>تنفيذ الحذف.</summary>
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("ProductDiscountOverrides.Delete")]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            if (id <= 0)
+                return NotFound();
+            var entity = await _db.ProductDiscountOverrides.FindAsync(id);
+            if (entity == null)
+                return NotFound();
+            _db.ProductDiscountOverrides.Remove(entity);
+            await _db.SaveChangesAsync();
+            TempData["SuccessMessage"] = "تم حذف سجل الخصم اليدوي.";
+            return RedirectToAction(nameof(Index), new { _t = DateTime.UtcNow.Ticks });
         }
     }
 }

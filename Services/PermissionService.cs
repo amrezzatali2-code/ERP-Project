@@ -21,12 +21,26 @@ namespace ERP.Services
             _httpContextAccessor = httpContextAccessor;
         }
 
+        /// <summary>
+        /// صلاحيات خطيرة: لا نمنحها تلقائياً لمالك/مسؤول النظام، بل نتحقق من الربط الفعلي في الأدوار.
+        /// </summary>
+        private static readonly HashSet<string> AlwaysCheckPermissions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "SalesInvoices.DeleteAll",
+            "SalesInvoices.BulkDelete",
+            "PurchaseInvoices.DeleteAll",
+            "PurchaseInvoices.BulkDelete"
+        };
+
         public async Task<bool> HasPermissionAsync(int userId, string permissionCode)
         {
             if (userId <= 0 || string.IsNullOrWhiteSpace(permissionCode)) return false;
 
+            var code = permissionCode?.Trim() ?? "";
+            var bypassAdmin = !AlwaysCheckPermissions.Contains(code);
+
             var user = _httpContextAccessor.HttpContext?.User;
-            if (user != null)
+            if (bypassAdmin && user != null)
             {
                 if (string.Equals(user.FindFirst("IsAdmin")?.Value, "true", StringComparison.OrdinalIgnoreCase))
                     return true;
@@ -36,7 +50,6 @@ namespace ERP.Services
                     return true;
             }
 
-            var code = permissionCode?.Trim() ?? "";
             if (string.IsNullOrEmpty(code)) return false;
 
             // البحث عن الصلاحية بأكواد مطابقة (بدون مراعاة حالة الحروف أو مسافات زائدة)
@@ -343,8 +356,11 @@ namespace ERP.Services
 
         public async Task<bool> HasPermissionAsync(string permissionCode)
         {
+            var code = permissionCode?.Trim() ?? "";
+            var bypassAdmin = !AlwaysCheckPermissions.Contains(code);
+
             var user = _httpContextAccessor.HttpContext?.User;
-            if (user != null)
+            if (bypassAdmin && user != null)
             {
                 if (string.Equals(user.FindFirst("IsAdmin")?.Value, "true", StringComparison.OrdinalIgnoreCase))
                     return true;

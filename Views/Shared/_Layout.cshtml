@@ -870,8 +870,16 @@
                                         🎁 تقرير مبيعات البونص لكل مستخدم
                                     </a>
                                 </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Reports" asp-action="SalesPerformanceReport"
+                                       data-tab-id="sales-performance-report"
+                                       data-tab-title="تقرير أداء المبيعات">
+                                        📈 تقرير أداء المبيعات (بالكاتب)
+                                    </a>
+                                </li>
 
-                              
+
                             </ul>
                         </li>
 
@@ -978,6 +986,39 @@
             @RenderBody()
         </div>
     </main>
+
+    @* رسالة صلاحية داخل الصفحة (بدلاً من صفحة كاملة) *@
+    @{
+        var permissionDeniedMessage = TempData["PermissionDeniedMessage"]?.ToString();
+    }
+    @if (!string.IsNullOrEmpty(permissionDeniedMessage))
+    {
+        <div class="modal show d-block" id="permDeniedModal" tabindex="-1" aria-modal="true" style="background: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">تنبيه</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                    </div>
+                    <div class="modal-body">@permissionDeniedMessage</div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" id="permDeniedOkBtn">موافق</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <script>
+            (function () {
+                var modal = document.getElementById('permDeniedModal');
+                var btn = document.getElementById('permDeniedOkBtn');
+                function closeModal() {
+                    if (modal) { modal.classList.remove('show', 'd-block'); modal.style.display = 'none'; modal.style.background = 'none'; }
+                }
+                if (btn) btn.addEventListener('click', closeModal);
+                if (modal) modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+            })();
+        </script>
+    }
 
     @* ================= سكربتات JS ================= *@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>

@@ -16,6 +16,12 @@ namespace ERP.ViewModels
         public decimal SalesCost { get; set; }         // إجمالي التكلفة من المبيعات
         public decimal SalesProfit { get; set; }       // الربح من المبيعات = Revenue - Cost
         public decimal SalesProfitPercent { get; set; } // نسبة الربح من المبيعات
+
+        // مرتجعات البيع (تُخصم من ربح البيع)
+        public decimal ReturnProfit { get; set; }      // ربح المرتجعات = ReturnRevenue - ReturnCost
+
+        // صافي الربح بعد المرتجعات (بدون الإشعارات)
+        public decimal NetProfit { get; set; }         // صافي الربح = SalesProfit - ReturnProfit
         
         // الربح من الميزانية (من LedgerEntries)
         public decimal LedgerRevenue { get; set; }    // الإيرادات من الميزانية
