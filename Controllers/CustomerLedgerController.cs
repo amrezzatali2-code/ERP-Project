@@ -35,9 +35,21 @@ namespace ERP.Controllers
             int? customerId,
             DateTime? fromDate,
             DateTime? toDate,
+            string? sort = "entryDate",
+            string? dir = "asc",
+            string? filterCol_id = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_entryDate = null,
+            string? filterCol_sourceType = null,
+            string? filterCol_voucherNo = null,
+            string? filterCol_account = null,
+            string? filterCol_debit = null,
+            string? filterCol_credit = null,
+            string? filterCol_description = null,
             int page = 1,
             int pageSize = 50)
         {
+            var sep = new[] { '|', ',' };
             // تجهيز قائمة العملاء للأوتوكومبليت (مثل فاتورة البيع / حجم التعامل)
             var customersList = await _context.Customers
                 .AsNoTracking()
@@ -54,6 +66,17 @@ namespace ERP.Controllers
                 ViewBag.TotalDebit = 0m;
                 ViewBag.TotalCredit = 0m;
                 ViewBag.NetBalance = 0m;
+                ViewBag.Sort = (sort ?? "entryDate").Trim().ToLowerInvariant();
+                ViewBag.Dir = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase) ? "desc" : "asc";
+                ViewBag.FilterCol_Id = filterCol_id;
+                ViewBag.FilterCol_IdExpr = filterCol_idExpr;
+                ViewBag.FilterCol_EntryDate = filterCol_entryDate;
+                ViewBag.FilterCol_SourceType = filterCol_sourceType;
+                ViewBag.FilterCol_VoucherNo = filterCol_voucherNo;
+                ViewBag.FilterCol_Account = filterCol_account;
+                ViewBag.FilterCol_Debit = filterCol_debit;
+                ViewBag.FilterCol_Credit = filterCol_credit;
+                ViewBag.FilterCol_Description = filterCol_description;
                 var emptyModel = await PagedResult<LedgerEntry>.CreateAsync(
                     _context.LedgerEntries.Where(e => false), 1, pageSize);
                 return View(emptyModel);
@@ -98,7 +121,99 @@ namespace ERP.Controllers
             if (toDate.HasValue)
                 q = q.Where(e => e.EntryDate <= toDate.Value.Date.AddDays(1));
 
-            q = q.OrderBy(e => e.EntryDate).ThenBy(e => e.Id);
+            // فلاتر أعمدة بنمط Excel
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var id) ? id : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(e => ids.Contains(e.Id));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                var expr = filterCol_idExpr.Trim();
+                if (expr.StartsWith("<") && int.TryParse(expr.AsSpan(1).Trim(), out var maxId))
+                    q = q.Where(e => e.Id < maxId);
+                else if (expr.StartsWith(">") && int.TryParse(expr.AsSpan(1).Trim(), out var minId))
+                    q = q.Where(e => e.Id > minId);
+                else if (expr.Contains(":") && int.TryParse(expr.Split(':')[0].Trim(), out var fromId) && int.TryParse(expr.Split(':')[1].Trim(), out var toId))
+                    q = q.Where(e => e.Id >= fromId && e.Id <= toId);
+                else if (int.TryParse(expr, out var exactId))
+                    q = q.Where(e => e.Id == exactId);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_entryDate))
+            {
+                var dateParts = filterCol_entryDate.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length >= 7).ToList();
+                foreach (var part in dateParts)
+                {
+                    if (part.Length >= 7 && part.Contains("-") && int.TryParse(part.AsSpan(0, 4), out var y) && int.TryParse(part.AsSpan(5, 2), out var m))
+                    {
+                        var from = new DateTime(y, m, 1, 0, 0, 0);
+                        var to = from.AddMonths(1).AddTicks(-1);
+                        q = q.Where(e => e.EntryDate >= from && e.EntryDate <= to);
+                        break;
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_sourceType))
+            {
+                var vals = filterCol_sourceType.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                var types = new List<LedgerSourceType>();
+                foreach (var v in vals)
+                {
+                    if (Enum.TryParse<LedgerSourceType>(v, ignoreCase: true, out var t))
+                        types.Add(t);
+                }
+                if (types.Count > 0)
+                    q = q.Where(e => types.Contains(e.SourceType));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_voucherNo))
+            {
+                var vals = filterCol_voucherNo.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(e => e.VoucherNo != null && vals.Any(v => e.VoucherNo.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_account))
+            {
+                var vals = filterCol_account.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(e => e.Account != null && vals.Any(v => (e.Account.AccountCode != null && e.Account.AccountCode.Contains(v)) || (e.Account.AccountName != null && e.Account.AccountName.Contains(v))));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_debit))
+            {
+                var vals = filterCol_debit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (decimals.Count > 0)
+                    q = q.Where(e => e.Debit > 0 && decimals.Contains(e.Debit));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_credit))
+            {
+                var vals = filterCol_credit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (decimals.Count > 0)
+                    q = q.Where(e => e.Credit > 0 && decimals.Contains(e.Credit));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_description))
+            {
+                var vals = filterCol_description.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(e => e.Description != null && vals.Any(v => e.Description.Contains(v)));
+            }
+
+            bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var so = (sort ?? "entryDate").Trim().ToLowerInvariant();
+            q = so switch
+            {
+                "id" => desc ? q.OrderByDescending(e => e.Id) : q.OrderBy(e => e.Id),
+                "entrydate" => desc ? q.OrderByDescending(e => e.EntryDate).ThenByDescending(e => e.Id) : q.OrderBy(e => e.EntryDate).ThenBy(e => e.Id),
+                "sourcetype" => desc ? q.OrderByDescending(e => e.SourceType) : q.OrderBy(e => e.SourceType),
+                "voucherno" => desc ? q.OrderByDescending(e => e.VoucherNo ?? "") : q.OrderBy(e => e.VoucherNo ?? ""),
+                "account" => desc ? q.OrderByDescending(e => e.Account != null ? e.Account.AccountCode : "") : q.OrderBy(e => e.Account != null ? e.Account.AccountCode : ""),
+                "debit" => desc ? q.OrderByDescending(e => e.Debit) : q.OrderBy(e => e.Debit),
+                "credit" => desc ? q.OrderByDescending(e => e.Credit) : q.OrderBy(e => e.Credit),
+                "description" => desc ? q.OrderByDescending(e => e.Description ?? "") : q.OrderBy(e => e.Description ?? ""),
+                _ => desc ? q.OrderByDescending(e => e.EntryDate).ThenByDescending(e => e.Id) : q.OrderBy(e => e.EntryDate).ThenBy(e => e.Id)
+            };
 
             decimal totalDebit = await q.SumAsync(e => (decimal?)e.Debit) ?? 0m;
             decimal totalCredit = await q.SumAsync(e => (decimal?)e.Credit) ?? 0m;
@@ -112,8 +227,56 @@ namespace ERP.Controllers
             ViewBag.TotalDebit = totalDebit;
             ViewBag.TotalCredit = totalCredit;
             ViewBag.NetBalance = netBalance;
+            ViewBag.Sort = so;
+            ViewBag.Dir = desc ? "desc" : "asc";
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
+            ViewBag.FilterCol_EntryDate = filterCol_entryDate;
+            ViewBag.FilterCol_SourceType = filterCol_sourceType;
+            ViewBag.FilterCol_VoucherNo = filterCol_voucherNo;
+            ViewBag.FilterCol_Account = filterCol_account;
+            ViewBag.FilterCol_Debit = filterCol_debit;
+            ViewBag.FilterCol_Credit = filterCol_credit;
+            ViewBag.FilterCol_Description = filterCol_description;
 
             return View(model);
+        }
+
+        /// <summary>جلب القيم المميزة لعمود في كشف حساب عميل (للفلترة بنمط Excel)</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(int? customerId, string column, string? search = null)
+        {
+            if (!customerId.HasValue || customerId.Value <= 0)
+                return Json(Array.Empty<object>());
+
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var q = _context.LedgerEntries
+                .AsNoTracking()
+                .Include(e => e.Account)
+                .Where(e => e.CustomerId == customerId.Value);
+
+            List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
+            {
+                "id" => (await q.Select(e => e.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "entrydate" => (await q.Select(e => new { e.EntryDate.Year, Month = e.EntryDate.Month }).Distinct().OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "sourcetype" => Enum.GetNames(typeof(LedgerSourceType)).Select(n => (n, n)).ToList(),
+                "voucherno" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(e => e.VoucherNo != null).Select(e => e.VoucherNo!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(e => e.VoucherNo != null && EF.Functions.Like(e.VoucherNo, "%" + searchTerm + "%")).Select(e => e.VoucherNo!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "account" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(e => e.Account != null).Select(e => e.Account!.AccountCode + " - " + e.Account!.AccountName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(e => e.Account != null && (EF.Functions.Like(e.Account.AccountCode, "%" + searchTerm + "%") || EF.Functions.Like(e.Account.AccountName, "%" + searchTerm + "%"))).Select(e => e.Account!.AccountCode + " - " + e.Account!.AccountName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "debit" => (await q.Where(e => e.Debit > 0).Select(e => e.Debit).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString("N2"), v.ToString("N2"))).ToList(),
+                "credit" => (await q.Where(e => e.Credit > 0).Select(e => e.Credit).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString("N2"), v.ToString("N2"))).ToList(),
+                "description" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(e => e.Description != null).Select(e => e.Description!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList()
+                    : (await q.Where(e => e.Description != null && EF.Functions.Like(e.Description, "%" + searchTerm + "%")).Select(e => e.Description!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                _ => new List<(string, string)>()
+            };
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
     }
 }

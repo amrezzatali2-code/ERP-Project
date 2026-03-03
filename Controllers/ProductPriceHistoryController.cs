@@ -1,4 +1,4 @@
-﻿// ============================
+// ============================
 // الملف: Controllers/ProductPriceHistoryController.cs
 // الغرض: عرض سجل تغييرات سعر الجمهور مع بحث وترتيب وترقيم
 // ملاحظات هامة:
@@ -46,6 +46,8 @@ namespace ERP.Controllers
         // =========================================================
         // Index — قائمة سجل تغييرات الأسعار
         // =========================================================
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,                 // نص البحث المكتوب في صندوق البحث
@@ -56,7 +58,14 @@ namespace ERP.Controllers
             int pageSize = 50,        // عدد السطور في الصفحة
             bool useDateRange = false,     // هل فلترة التاريخ مفعّلة؟
             DateTime? fromDate = null,      // من تاريخ (ChangeDate)
-            DateTime? toDate = null       // إلى تاريخ
+            DateTime? toDate = null,       // إلى تاريخ
+            string? filterCol_code = null,
+            string? filterCol_date = null,
+            string? filterCol_prod = null,
+            string? filterCol_oldprice = null,
+            string? filterCol_newprice = null,
+            string? filterCol_user = null,
+            string? filterCol_reason = null
         )
         {
             // (1) مصدر البيانات — IQueryable للسماح بالبناء التدريجي
@@ -132,10 +141,93 @@ namespace ERP.Controllers
             }
 
             // =====================================================
+            // (3b) فلاتر الأعمدة (بنمط Excel)
+            // =====================================================
+            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            {
+                var ids = filterCol_code.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(h => ids.Contains(h.PriceChangeId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length >= 6) // yyyy-MM
+                    .ToList();
+                if (parts.Count > 0)
+                {
+                    var dateFilters = new List<(int Year, int Month)>();
+                    foreach (var p in parts)
+                    {
+                        if (p.Length == 7 && p[4] == '-' && int.TryParse(p.Substring(0, 4), out var y) && int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                            dateFilters.Add((y, m));
+                    }
+                    if (dateFilters.Count > 0)
+                        q = q.Where(h => dateFilters.Any(df => h.ChangeDate.Year == df.Year && h.ChangeDate.Month == df.Month));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            {
+                var prodIds = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (prodIds.Count > 0)
+                    q = q.Where(h => prodIds.Contains(h.ProdId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_oldprice))
+            {
+                var prices = filterCol_oldprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (prices.Count > 0)
+                    q = q.Where(h => prices.Contains(h.OldPrice));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_newprice))
+            {
+                var prices = filterCol_newprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (prices.Count > 0)
+                    q = q.Where(h => prices.Contains(h.NewPrice));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_user))
+            {
+                var vals = filterCol_user.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(h => h.ChangedBy != null && vals.Contains(h.ChangedBy));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_reason))
+            {
+                var vals = filterCol_reason.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(h => h.Reason != null && vals.Contains(h.Reason));
+            }
+
+            // =====================================================
             // (4) الترتيب
             // =====================================================
             switch (so)
             {
+                case "id":     // ترتيب بكود التغيير (PriceChangeId)
+                    q = (desc ? q.OrderByDescending(h => h.PriceChangeId) : q.OrderBy(h => h.PriceChangeId));
+                    break;
                 case "prod":   // ترتيب باسم الصنف
                     q = (desc
                             ? q.OrderByDescending(h => h.Product != null ? h.Product.ProdName : "")
@@ -226,7 +318,6 @@ namespace ERP.Controllers
                 new SelectListItem("المستخدم",      "user",  so == "user"),
             };
 
-            // تمرير بعض القيم للواجهة (لو احتاجناها مباشرة من ViewBag)
             ViewBag.Search = term;
             ViewBag.SearchBy = sb;
             ViewBag.Sort = so;
@@ -235,8 +326,55 @@ namespace ERP.Controllers
             ViewBag.UseDateRange = useDateRange;
             ViewBag.FromDate = fromDate;
             ViewBag.ToDate = toDate;
+            ViewBag.FilterCol_Code = filterCol_code;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Prod = filterCol_prod;
+            ViewBag.FilterCol_OldPrice = filterCol_oldprice;
+            ViewBag.FilterCol_NewPrice = filterCol_newprice;
+            ViewBag.FilterCol_User = filterCol_user;
+            ViewBag.FilterCol_Reason = filterCol_reason;
 
             return View(model);
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود (للفلترة بنمط Excel).
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var q = _ctx.ProductPriceHistories
+                .AsNoTracking()
+                .Include(h => h.Product);
+
+            List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
+            {
+                "code" => (await q.Select(h => h.PriceChangeId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "date" => (await q.Select(h => new { h.ChangeDate.Year, h.ChangeDate.Month }).Distinct()
+                    .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "prod" => (await q.Where(h => h.Product != null).Select(h => new { h.ProdId, Name = h.Product!.ProdName ?? "" })
+                    .Distinct().OrderBy(x => x.Name).Take(500).ToListAsync())
+                    .Select(x => (x.ProdId.ToString(), string.IsNullOrEmpty(x.Name) ? x.ProdId.ToString() : x.Name)).ToList(),
+                "oldprice" => (await q.Select(h => h.OldPrice).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(CultureInfo.InvariantCulture), v.ToString("N2"))).ToList(),
+                "newprice" => (await q.Select(h => h.NewPrice).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(CultureInfo.InvariantCulture), v.ToString("N2"))).ToList(),
+                "user" => (await q.Where(h => h.ChangedBy != null && h.ChangedBy != "").Select(h => h.ChangedBy!).Distinct()
+                    .OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c!, c)).ToList(),
+                "reason" => (await q.Where(h => h.Reason != null && h.Reason != "").Select(h => h.Reason!).Distinct()
+                    .OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c!, c)).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                items = items.Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm)).ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================
@@ -245,20 +383,28 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> Export(
             string? search,
-            string searchBy = "prod",   // prod | code | user | reason
-            string sort = "date",   // date | prod | code | old | new | user
-            string dir = "desc",   // asc | desc
-            string? format = "excel"   // excel | csv
+            string searchBy = "prod",
+            string sort = "date",
+            string dir = "desc",
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? filterCol_code = null,
+            string? filterCol_date = null,
+            string? filterCol_prod = null,
+            string? filterCol_oldprice = null,
+            string? filterCol_newprice = null,
+            string? filterCol_user = null,
+            string? filterCol_reason = null,
+            string? format = "excel"
         )
         {
-            // (1) مصدر البيانات — مع تضمين اسم الصنف
             IQueryable<ProductPriceHistory> q =
                 _ctx.ProductPriceHistories
                     .AsNoTracking()
-                    .Include(h => h.Product);   // للوصول لاسم الصنف
+                    .Include(h => h.Product);
 
-            // (2) البحث — نفس منطق Index
-            var term = (search ?? string.Empty).Trim();          // متغير: نص البحث بعد التنظيف
+            var term = (search ?? string.Empty).Trim();
             bool hasSearch = !string.IsNullOrEmpty(term);
 
             if (hasSearch)
@@ -298,18 +444,71 @@ namespace ERP.Controllers
                 }
             }
 
-            // (3) الترتيب — نفس منطق Index
-            bool desc = dir.Equals("desc", StringComparison.OrdinalIgnoreCase);  // متغير: هل الترتيب تنازلي؟
+            if (useDateRange)
+            {
+                if (fromDate.HasValue) q = q.Where(h => h.ChangeDate >= fromDate.Value);
+                if (toDate.HasValue) q = q.Where(h => h.ChangeDate <= toDate.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            {
+                var ids = filterCol_code.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) q = q.Where(h => ids.Contains(h.PriceChangeId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length >= 6).ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length == 7 && p[4] == '-' && int.TryParse(p.Substring(0, 4), out var y) && int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                        dateFilters.Add((y, m));
+                }
+                if (dateFilters.Count > 0) q = q.Where(h => dateFilters.Any(df => h.ChangeDate.Year == df.Year && h.ChangeDate.Month == df.Month));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            {
+                var prodIds = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (prodIds.Count > 0) q = q.Where(h => prodIds.Contains(h.ProdId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_oldprice))
+            {
+                var prices = filterCol_oldprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (prices.Count > 0) q = q.Where(h => prices.Contains(h.OldPrice));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_newprice))
+            {
+                var prices = filterCol_newprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (prices.Count > 0) q = q.Where(h => prices.Contains(h.NewPrice));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_user))
+            {
+                var vals = filterCol_user.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) q = q.Where(h => h.ChangedBy != null && vals.Contains(h.ChangedBy));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_reason))
+            {
+                var vals = filterCol_reason.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) q = q.Where(h => h.Reason != null && vals.Contains(h.Reason));
+            }
+
+            bool desc = dir.Equals("desc", StringComparison.OrdinalIgnoreCase);
 
             switch (sort.ToLowerInvariant())
             {
+                case "id":
+                    q = (desc ? q.OrderByDescending(h => h.PriceChangeId) : q.OrderBy(h => h.PriceChangeId));
+                    break;
                 case "prod":   // ترتيب باسم الصنف
                     q = (desc
                             ? q.OrderByDescending(h => h.Product != null ? h.Product.ProdName : "")
                             : q.OrderBy(h => h.Product != null ? h.Product.ProdName : ""))
-                        .ThenByDescending(h => h.ChangeDate);   // كسر التعادل بالتاريخ الأحدث
+                        .ThenByDescending(h => h.ChangeDate);
                     break;
-
                 case "code":   // ترتيب برقم الصنف
                     q = (desc
                             ? q.OrderByDescending(h => h.ProdId)

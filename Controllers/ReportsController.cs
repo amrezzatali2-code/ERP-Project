@@ -1069,10 +1069,22 @@ namespace ERP.Controllers
             bool includeZeroBalance = false,
             string? sortBy = "name",
             string? sortDir = "asc",
+            string? filterCol_code = null,
+            string? filterCol_name = null,
+            string? filterCol_category = null,
+            string? filterCol_phone = null,
+            string? filterCol_debit = null,
+            string? filterCol_credit = null,
+            string? filterCol_creditlimit = null,
+            string? filterCol_sales = null,
+            string? filterCol_purchases = null,
+            string? filterCol_returns = null,
+            string? filterCol_availablecredit = null,
             bool loadReport = false,
             int page = 1,
             int pageSize = 200)
         {
+            var sep = new[] { '|', ',' };
             // =========================================================
             // 1) تجهيز القوائم المنسدلة (Governorates)
             // =========================================================
@@ -1115,6 +1127,17 @@ namespace ERP.Controllers
             ViewBag.IncludeZeroBalance = includeZeroBalance;
             ViewBag.SortBy = sortBy;
             ViewBag.SortDir = sortDir;
+            ViewBag.FilterCol_Code = filterCol_code;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Category = filterCol_category;
+            ViewBag.FilterCol_Phone = filterCol_phone;
+            ViewBag.FilterCol_Debit = filterCol_debit;
+            ViewBag.FilterCol_Credit = filterCol_credit;
+            ViewBag.FilterCol_CreditLimit = filterCol_creditlimit;
+            ViewBag.FilterCol_Sales = filterCol_sales;
+            ViewBag.FilterCol_Purchases = filterCol_purchases;
+            ViewBag.FilterCol_Returns = filterCol_returns;
+            ViewBag.FilterCol_AvailableCredit = filterCol_availablecredit;
 
             // =========================================================
             // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
@@ -1394,6 +1417,104 @@ namespace ERP.Controllers
             }
 
             // =========================================================
+            // 6.5) فلاتر أعمدة بنمط Excel (في الذاكرة)
+            // =========================================================
+            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            {
+                var vals = filterCol_code.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.CustomerCode ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.CustomerName ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_category))
+            {
+                var vals = filterCol_category.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.PartyCategory ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_phone))
+            {
+                var vals = filterCol_phone.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.Phone1 ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_debit))
+            {
+                var vals = filterCol_debit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => r.CurrentBalance > 0 && decimals.Contains(r.CurrentBalance)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_credit))
+            {
+                var vals = filterCol_credit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => r.CurrentBalance < 0 && decimals.Contains(Math.Abs(r.CurrentBalance))).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_creditlimit))
+            {
+                var vals = filterCol_creditlimit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.CreditLimit)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_sales))
+            {
+                var vals = filterCol_sales.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.TotalSales)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_purchases))
+            {
+                var vals = filterCol_purchases.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.TotalPurchases)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_returns))
+            {
+                var vals = filterCol_returns.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.TotalReturns)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_availablecredit))
+            {
+                var vals = filterCol_availablecredit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.AvailableCredit)).ToList();
+                }
+            }
+
+            // =========================================================
             // 7) الترتيب
             // =========================================================
             bool isDesc = string.Equals(sortDir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -1499,8 +1620,56 @@ namespace ERP.Controllers
             ViewBag.TotalReturns = totalReturnsSum;
             ViewBag.TotalCreditLimit = totalCreditLimit;
             ViewBag.TotalAvailableCredit = totalAvailableCredit;
+            ViewBag.FilterCol_Code = filterCol_code;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Category = filterCol_category;
+            ViewBag.FilterCol_Phone = filterCol_phone;
+            ViewBag.FilterCol_Debit = filterCol_debit;
+            ViewBag.FilterCol_Credit = filterCol_credit;
+            ViewBag.FilterCol_CreditLimit = filterCol_creditlimit;
+            ViewBag.FilterCol_Sales = filterCol_sales;
+            ViewBag.FilterCol_Purchases = filterCol_purchases;
+            ViewBag.FilterCol_Returns = filterCol_returns;
+            ViewBag.FilterCol_AvailableCredit = filterCol_availablecredit;
 
             return View();
+        }
+
+        /// <summary>جلب القيم المميزة لعمود في تقرير أرصدة العملاء (للفلترة بنمط Excel)</summary>
+        [HttpGet]
+        [RequirePermission("Reports.CustomerBalances")]
+        public async Task<IActionResult> GetCustomerBalancesColumnValues(
+            string? search,
+            string? partyCategory,
+            int? governorateId,
+            string column,
+            string? searchTerm = null)
+        {
+            var q = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                var s = search.Trim();
+                q = q.Where(c => (c.CustomerName != null && c.CustomerName.Contains(s)) || (c.Phone1 != null && c.Phone1.Contains(s)) || (c.CustomerId.ToString() == s));
+            }
+            if (!string.IsNullOrWhiteSpace(partyCategory))
+                q = q.Where(c => c.PartyCategory == partyCategory);
+            if (governorateId.HasValue && governorateId.Value > 0)
+                q = q.Where(c => c.GovernorateId == governorateId.Value);
+
+            var term = (searchTerm ?? "").Trim().ToLowerInvariant();
+            List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
+            {
+                "code" => (await q.Select(c => c.CustomerId.ToString()).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList(),
+                "name" => string.IsNullOrEmpty(term)
+                    ? (await q.Where(c => c.CustomerName != null).Select(c => c.CustomerName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList()
+                    : (await q.Where(c => c.CustomerName != null && EF.Functions.Like(c.CustomerName, "%" + term + "%")).Select(c => c.CustomerName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                "category" => (await q.Where(c => c.PartyCategory != null).Select(c => c.PartyCategory!).Distinct().OrderBy(v => v).Take(200).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                "phone" => string.IsNullOrEmpty(term)
+                    ? (await q.Where(c => c.Phone1 != null).Select(c => c.Phone1!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList()
+                    : (await q.Where(c => c.Phone1 != null && EF.Functions.Like(c.Phone1, "%" + term + "%")).Select(c => c.Phone1!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                _ => new List<(string, string)>()
+            };
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================================================
@@ -1515,7 +1684,18 @@ namespace ERP.Controllers
             DateTime? toDate,
             bool includeZeroBalance = false,
             string? sortBy = "name",
-            string? sortDir = "asc")
+            string? sortDir = "asc",
+            string? filterCol_code = null,
+            string? filterCol_name = null,
+            string? filterCol_category = null,
+            string? filterCol_phone = null,
+            string? filterCol_debit = null,
+            string? filterCol_credit = null,
+            string? filterCol_creditlimit = null,
+            string? filterCol_sales = null,
+            string? filterCol_purchases = null,
+            string? filterCol_returns = null,
+            string? filterCol_availablecredit = null)
         {
             // عند التصدير: إذا لم يتم تحديد includeZeroBalance، اجعله false افتراضياً
             string? includeZeroBalanceStr = Request.Query["includeZeroBalance"].FirstOrDefault();
@@ -1730,6 +1910,103 @@ namespace ERP.Controllers
                     TotalReturns = totalReturns,
                     AvailableCredit = availableCredit
                 });
+            }
+
+            // فلاتر أعمدة (نفس منطق CustomerBalances)
+            var sep = new[] { '|', ',' };
+            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            {
+                var vals = filterCol_code.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.CustomerCode ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.CustomerName ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_category))
+            {
+                var vals = filterCol_category.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.PartyCategory ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_phone))
+            {
+                var vals = filterCol_phone.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.Phone1 ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_debit))
+            {
+                var vals = filterCol_debit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => r.CurrentBalance > 0 && decimals.Contains(r.CurrentBalance)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_credit))
+            {
+                var vals = filterCol_credit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => r.CurrentBalance < 0 && decimals.Contains(Math.Abs(r.CurrentBalance))).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_creditlimit))
+            {
+                var vals = filterCol_creditlimit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.CreditLimit)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_sales))
+            {
+                var vals = filterCol_sales.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.TotalSales)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_purchases))
+            {
+                var vals = filterCol_purchases.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.TotalPurchases)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_returns))
+            {
+                var vals = filterCol_returns.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.TotalReturns)).ToList();
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_availablecredit))
+            {
+                var vals = filterCol_availablecredit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        reportData = reportData.Where(r => decimals.Contains(r.AvailableCredit)).ToList();
+                }
             }
 
             // الترتيب (نفس منطق CustomerBalances)

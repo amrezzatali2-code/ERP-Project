@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;                            // مكتبة Excel لإنشاء ملف xlsx
+using ClosedXML.Excel;                            // مكتبة Excel لإنشاء ملف xlsx
 using ERP.Data;                                   // AppDbContext
 using ERP.Filters;                                // RequirePermission
 using ERP.Infrastructure;                         // PagedResult + UserActivityLogger
@@ -388,10 +388,29 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,   // من كود عميل
             int? toCode = null,     // إلى كود عميل
+            string? filterCol_id = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_name = null,
+            string? filterCol_type = null,
+            string? filterCol_phone = null,
+            string? filterCol_Address = null,
+            string? filterCol_governorate = null,
+            string? filterCol_district = null,
+            string? filterCol_area = null,
+            string? filterCol_account = null,
+            string? filterCol_PolicyId = null,
+            string? filterCol_credit = null,
+            string? filterCol_isactive = null,
+            string? filterCol_CurrentBalance = null,
+            string? filterCol_ordercontact = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string? filterCol_quota = null,
             int page = 1,
             int pageSize = 50
         )
         {
+            var sep = new[] { '|', ',' };
             // 1) الاستعلام الأساسى + الحساب المحاسبى
             IQueryable<Customer> q = _context.Customers
                                               .Include(c => c.Account)
@@ -481,6 +500,158 @@ namespace ERP.Controllers
             if (toCode.HasValue)
                 q = q.Where(c => c.CustomerId <= toCode.Value);
 
+            // 4b) فلاتر أعمدة بنمط Excel (قيم متعددة مفصولة بـ | أو ,)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var id) ? id : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(c => ids.Contains(c.CustomerId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                var expr = filterCol_idExpr.Trim();
+                if (expr.StartsWith("<") && int.TryParse(expr.AsSpan(1).Trim(), out var maxId))
+                    q = q.Where(c => c.CustomerId < maxId);
+                else if (expr.StartsWith(">") && int.TryParse(expr.AsSpan(1).Trim(), out var minId))
+                    q = q.Where(c => c.CustomerId > minId);
+                else if (expr.Contains(":") && int.TryParse(expr.Split(':')[0].Trim(), out var fromId) && int.TryParse(expr.Split(':')[1].Trim(), out var toId))
+                    q = q.Where(c => c.CustomerId >= fromId && c.CustomerId <= toId);
+                else if (int.TryParse(expr, out var exactId))
+                    q = q.Where(c => c.CustomerId == exactId);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.CustomerName != null && vals.Any(v => c.CustomerName.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_type))
+            {
+                var vals = filterCol_type.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.PartyCategory != null && vals.Contains(c.PartyCategory));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_phone))
+            {
+                var vals = filterCol_phone.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => vals.Any(v => (c.Phone1 != null && c.Phone1.Contains(v)) || (c.Phone2 != null && c.Phone2.Contains(v)) || (c.Whatsapp != null && c.Whatsapp.Contains(v))));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_Address))
+            {
+                var vals = filterCol_Address.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.Address != null && vals.Any(v => c.Address.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_governorate))
+            {
+                var vals = filterCol_governorate.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.Governorate != null && c.Governorate.GovernorateName != null && vals.Any(v => c.Governorate.GovernorateName.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_district))
+            {
+                var vals = filterCol_district.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.District != null && c.District.DistrictName != null && vals.Any(v => c.District.DistrictName.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_area))
+            {
+                var vals = filterCol_area.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.Area != null && c.Area.AreaName != null && vals.Any(v => c.Area.AreaName.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_account))
+            {
+                var vals = filterCol_account.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.Account != null && vals.Any(v => (c.Account.AccountCode != null && c.Account.AccountCode.Contains(v)) || (c.Account.AccountName != null && c.Account.AccountName.Contains(v))));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_PolicyId))
+            {
+                var vals = filterCol_PolicyId.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.PolicyId.HasValue && vals.Contains(c.PolicyId.Value.ToString()));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_credit))
+            {
+                var vals = filterCol_credit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        q = q.Where(c => decimals.Contains(c.CreditLimit));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_isactive))
+            {
+                var vals = filterCol_isactive.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                var activeList = new List<bool>();
+                foreach (var v in vals)
+                {
+                    if (new[] { "نشط", "1", "yes", "true" }.Contains(v, StringComparer.OrdinalIgnoreCase)) activeList.Add(true);
+                    else if (new[] { "موقوف", "0", "no", "false" }.Contains(v, StringComparer.OrdinalIgnoreCase)) activeList.Add(false);
+                }
+                if (activeList.Count > 0)
+                    q = q.Where(c => activeList.Contains(c.IsActive));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_CurrentBalance))
+            {
+                var vals = filterCol_CurrentBalance.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                    if (decimals.Count > 0)
+                        q = q.Where(c => decimals.Contains(c.CurrentBalance));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_ordercontact))
+            {
+                var vals = filterCol_ordercontact.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(c => c.OrderContactName != null && vals.Any(v => c.OrderContactName.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var dateParts = filterCol_created.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                foreach (var part in dateParts)
+                {
+                    if (part.Length >= 7 && part.Contains("-") && int.TryParse(part.AsSpan(0, 4), out var y) && int.TryParse(part.AsSpan(5, 2), out var m))
+                    {
+                        var from = new DateTime(y, m, 1, 0, 0, 0);
+                        var to = from.AddMonths(1).AddTicks(-1);
+                        q = q.Where(c => c.CreatedAt >= from && c.CreatedAt <= to);
+                        break;
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var dateParts = filterCol_updated.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                foreach (var part in dateParts)
+                {
+                    if (part.Length >= 7 && part.Contains("-") && int.TryParse(part.AsSpan(0, 4), out var y) && int.TryParse(part.AsSpan(5, 2), out var m))
+                    {
+                        var from = new DateTime(y, m, 1, 0, 0, 0);
+                        var to = from.AddMonths(1).AddTicks(-1);
+                        q = q.Where(c => c.UpdatedAt >= from && c.UpdatedAt <= to);
+                        break;
+                    }
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_quota))
+            {
+                var vals = filterCol_quota.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                {
+                    var hasMulti = vals.Any(v => new[] { "مفعّل", "مفعّلة", "نعم", "yes", "1" }.Contains(v, StringComparer.OrdinalIgnoreCase));
+                    var hasNone = vals.Any(v => new[] { "غير مفعّلة", "لا", "no", "0" }.Contains(v, StringComparer.OrdinalIgnoreCase));
+                    if (hasMulti && !hasNone) q = q.Where(c => c.IsQuotaMultiplierEnabled);
+                    else if (hasNone && !hasMulti) q = q.Where(c => !c.IsQuotaMultiplierEnabled);
+                }
+            }
+
             // 5) فلترة بالتاريخ (تاريخ الإنشاء)
             if (useDateRange)
             {
@@ -502,6 +673,13 @@ namespace ERP.Controllers
 
                 "type" => desc ? q.OrderByDescending(c => c.PartyCategory)
                                : q.OrderBy(c => c.PartyCategory),
+
+                "governorate" => desc ? q.OrderByDescending(c => c.Governorate != null ? c.Governorate.GovernorateName : "")
+                                      : q.OrderBy(c => c.Governorate != null ? c.Governorate.GovernorateName : ""),
+                "district" => desc ? q.OrderByDescending(c => c.District != null ? c.District.DistrictName : "")
+                                   : q.OrderBy(c => c.District != null ? c.District.DistrictName : ""),
+                "area" => desc ? q.OrderByDescending(c => c.Area != null ? c.Area.AreaName : "")
+                              : q.OrderBy(c => c.Area != null ? c.Area.AreaName : ""),
 
                 "account" => desc
                     ? q.OrderByDescending(c => c.Account != null ? c.Account.AccountCode : "")
@@ -571,10 +749,78 @@ namespace ERP.Controllers
             ViewBag.CodeTo = toCode;
             ViewBag.DateField = "created";
 
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Type = filterCol_type;
+            ViewBag.FilterCol_Phone = filterCol_phone;
+            ViewBag.FilterCol_Address = filterCol_Address;
+            ViewBag.FilterCol_Governorate = filterCol_governorate;
+            ViewBag.FilterCol_District = filterCol_district;
+            ViewBag.FilterCol_Area = filterCol_area;
+            ViewBag.FilterCol_Account = filterCol_account;
+            ViewBag.FilterCol_PolicyId = filterCol_PolicyId;
+            ViewBag.FilterCol_Credit = filterCol_credit;
+            ViewBag.FilterCol_IsActive = filterCol_isactive;
+            ViewBag.FilterCol_CurrentBalance = filterCol_CurrentBalance;
+            ViewBag.FilterCol_OrderContact = filterCol_ordercontact;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.FilterCol_Quota = filterCol_quota;
+
             return View(model);
         }
 
+        /// <summary>جلب القيم المميزة لعمود (للفلترة بنمط Excel)</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var q = _context.Customers
+                .Include(c => c.Governorate).Include(c => c.District).Include(c => c.Area).Include(c => c.Account)
+                .AsNoTracking();
 
+            List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
+            {
+                "id" => (await q.Select(c => c.CustomerId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "name" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.CustomerName != null).Select(c => c.CustomerName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(c => c.CustomerName != null && EF.Functions.Like(c.CustomerName, "%" + searchTerm + "%")).Select(c => c.CustomerName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "type" => PartyCategoryOptions.Select(pc => (pc, pc)).ToList(),
+                "phone" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.Phone1 != null || c.Phone2 != null || c.Whatsapp != null).Select(c => c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "").Distinct().Where(x => x != "").OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(c => (c.Phone1 != null && EF.Functions.Like(c.Phone1, "%" + searchTerm + "%")) || (c.Phone2 != null && EF.Functions.Like(c.Phone2, "%" + searchTerm + "%")) || (c.Whatsapp != null && EF.Functions.Like(c.Whatsapp, "%" + searchTerm + "%"))).Select(c => c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "").Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "address" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.Address != null).Select(c => c.Address!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(c => c.Address != null && EF.Functions.Like(c.Address, "%" + searchTerm + "%")).Select(c => c.Address!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "governorate" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.Governorate != null).Select(c => c.Governorate!.GovernorateName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList()
+                    : (await q.Where(c => c.Governorate != null && c.Governorate.GovernorateName != null && EF.Functions.Like(c.Governorate.GovernorateName, "%" + searchTerm + "%")).Select(c => c.Governorate!.GovernorateName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                "district" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.District != null).Select(c => c.District!.DistrictName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList()
+                    : (await q.Where(c => c.District != null && c.District.DistrictName != null && EF.Functions.Like(c.District.DistrictName, "%" + searchTerm + "%")).Select(c => c.District!.DistrictName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                "area" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.Area != null).Select(c => c.Area!.AreaName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList()
+                    : (await q.Where(c => c.Area != null && c.Area.AreaName != null && EF.Functions.Like(c.Area.AreaName, "%" + searchTerm + "%")).Select(c => c.Area!.AreaName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                "account" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.Account != null).Select(c => c.Account!.AccountCode + " — " + c.Account!.AccountName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(c => c.Account != null && (EF.Functions.Like(c.Account.AccountCode, "%" + searchTerm + "%") || EF.Functions.Like(c.Account.AccountName, "%" + searchTerm + "%"))).Select(c => c.Account!.AccountCode + " — " + c.Account!.AccountName).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "policyid" => (await q.Where(c => c.PolicyId.HasValue).Select(c => c.PolicyId!.Value).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString(), v.ToString())).ToList(),
+                "credit" => (await q.Select(c => c.CreditLimit).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString("0.00"), v.ToString("0.00"))).ToList(),
+                "isactive" => new List<(string, string)> { ("نشط", "نشط"), ("موقوف", "موقوف") },
+                "currentbalance" => (await q.Select(c => c.CurrentBalance).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString("0.00"), v.ToString("0.00"))).ToList(),
+                "ordercontact" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(c => c.OrderContactName != null).Select(c => c.OrderContactName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(c => c.OrderContactName != null && EF.Functions.Like(c.OrderContactName, "%" + searchTerm + "%")).Select(c => c.OrderContactName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "created" => (await q.Select(c => new { c.CreatedAt.Year, Month = c.CreatedAt.Month }).Distinct().OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync()).Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "updated" => (await q.Select(c => new { c.UpdatedAt.Year, Month = c.UpdatedAt.Month }).Distinct().OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync()).Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "quota" => new List<(string, string)> { ("مفعّلة ×1", "مفعّلة ×1"), ("مفعّلة ×2", "مفعّلة ×2"), ("غير مفعّلة", "غير مفعّلة") },
+                _ => new List<(string, string)>()
+            };
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
+        }
 
 
 

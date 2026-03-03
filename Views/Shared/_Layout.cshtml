@@ -943,7 +943,7 @@
 
 
     @* ================= التابات + محتوى الصفحة الرئيسية ================= *@
-    <main role="main" class="container-fluid py-3">
+    <main role="main" class="container-fluid py-3 @(ViewData["ErpListPage"] is true ? "erp-list-page-layout" : "")">
         <div id="appTabsBar" class="app-tabs-bar">
             @* يتم ملؤه من site.js *@
         </div>

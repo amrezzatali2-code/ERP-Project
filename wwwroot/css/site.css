@@ -494,13 +494,38 @@ body {
 
 /* ================== تنسيق جداول الـ ERP (هيدر ثابت + شكل موحد) ================== */
 
+/* صفحات القوائم: المحتوى يملأ عرض الشاشة بالكامل (يمين ويسار) بدون فراغ أبيض */
+main.erp-list-page-layout {
+    padding-inline: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+}
+#homeContent .erp-list-page {
+    padding-inline: 0 !important;
+    width: 100%;
+    max-width: 100%;
+}
+/* منطقة الجدول تملأ العرض بالكامل وتأخذ إطار الغلاف */
+#homeContent .erp-list-page .erp-table-scroll-container {
+    width: 100%;
+    max-width: 100%;
+}
+#homeContent .erp-list-page .erp-table-wrapper {
+    width: 100%;
+    min-height: 200px;
+}
+
 /* غلاف السكرول: اتجاه LTR حتى يظهر شريط التمرير على اليمين ولا يظهر جزء أبيض على اليسار */
 .erp-table-scroll-container {
     direction: ltr;
     width: 100%;
+    max-width: 100%;
     overflow-x: auto;
     margin-left: 0;
+    margin-right: 0;
     padding-left: 0;
+    padding-right: 0;
 }
 
 /* الغلاف الخارجي للجدول — LTR حتى يكون شريط التمرير العمودي على اليمين ويزول الشريط الأبيض عن اليسار */
@@ -512,19 +537,21 @@ body {
     border-radius: .5rem;
     background-color: #fff;
     direction: ltr;
-    padding: 0;
+    padding: 0 !important;
     margin: 0;
     width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
 }
 
-    /* منع مسافة تحت الجدول جوة الـ wrapper */
+    /* الجدول يملأ عرض الغلاف (لا فراغ على يسار الكارت) — ترتيب الأعمدة RTL يبقى "الشركة" على اليمين */
     .erp-table-wrapper table {
         margin-bottom: 0;
+        margin-inline-start: 0;
         border-collapse: separate;
         border-spacing: 0;
         width: 100%;
-        min-width: max-content; /* الجدول لا يتقلص عن عرض المحتوى فيظهر الشريط الأفقي عند الحاجة */
+        min-width: max-content; /* عند اتساع المحتوى يظهر الشريط الأفقي */
     }
     
     /* الجدول: RTL لعرض الأعمدة من اليمين لليسار، بدون حدود داخلية */

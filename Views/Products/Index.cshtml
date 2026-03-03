@@ -353,7 +353,7 @@
     </form>
 
     @* ===== جدول الأصناف (هو الذى يتطبع) - مع هيدر ثابت ===== *@
-    <div class="erp-table-scroll-container mt-3">
+    <div class="erp-table-scroll-container mt-3 ps-0 pe-0">
         <div class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="productsTable" class="table table-striped table-hover erp-table erp-table-sortable erp-products-table">
             <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
@@ -768,6 +768,15 @@
 
 @section Scripts {
     <script>
+        // جعل الشريط الأفقي يفتح من جهة اليمين (بداية الجدول في RTL)
+        (function () {
+            var table = document.getElementById("productsTable");
+            if (!table) return;
+            var wrapper = table.closest(".erp-table-wrapper");
+            if (!wrapper) return;
+            wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
+        })();
+
         // =========================
         // حركة الصنف: فتح في نفس التاب (مثل فاتورة البيع) — عند النقر من داخل iframe نرسل postMessage للوالد
         // =========================

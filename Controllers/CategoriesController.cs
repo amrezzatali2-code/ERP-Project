@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -26,6 +26,7 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IUserActivityLogger _activityLogger;
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public CategoriesController(AppDbContext db, IUserActivityLogger activityLogger)
         {
@@ -39,14 +40,20 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,               // نص البحث
-            string? searchBy = "name", // name | id | all
-            string? sort = "name", // name | id | created | modified
-            string? dir = "asc",  // asc | desc
-            int page = 1,      // رقم الصفحة
-            int pageSize = 25,     // حجم الصفحة
-            bool useDateRange = false, // تفعيل فلترة التاريخ
-            DateTime? fromDate = null,   // من تاريخ (CreatedAt)
-            DateTime? toDate = null    // إلى تاريخ
+            string? searchBy = "name",    // name | id | all
+            string? sort = "name",        // name | id | created | modified
+            string? dir = "asc",          // asc | desc
+            int page = 1,                 // رقم الصفحة
+            int pageSize = 25,            // حجم الصفحة
+            bool useDateRange = false,    // تفعيل فلترة التاريخ
+            DateTime? fromDate = null,    // من تاريخ (CreatedAt)
+            DateTime? toDate = null,      // إلى تاريخ
+            int? fromCode = null,         // فلتر كود من
+            int? toCode = null,           // فلتر كود إلى
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_created = null,
+            string? filterCol_modified = null
         )
         {
             // (1) الاستعلام الأساسي من جدول الفئات بدون تتبّع لزيادة سرعة القراءة
@@ -103,6 +110,83 @@ namespace ERP.Controllers
                 {
                     q = q.Where(x => x.CreatedAt <= toDate.Value);
                 }
+            }
+
+            // (4b) فلتر كود من/إلى
+            if (fromCode.HasValue)
+            {
+                q = q.Where(x => x.CategoryId >= fromCode.Value);
+            }
+            if (toCode.HasValue)
+            {
+                q = q.Where(x => x.CategoryId <= toCode.Value);
+            }
+
+            // (4c) فلاتر الأعمدة (بنمط Excel)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.CategoryId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => vals.Contains(x.CategoryName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length >= 7)
+                    .ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length == 7 && p[4] == '-' &&
+                        int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+                if (dateFilters.Count > 0)
+                    q = q.Where(x => dateFilters.Any(df => x.CreatedAt.Year == df.Year && x.CreatedAt.Month == df.Month));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_modified))
+            {
+                var parts = filterCol_modified.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length >= 7)
+                    .ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length == 7 && p[4] == '-' &&
+                        int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+                if (dateFilters.Count > 0)
+                    q = q.Where(x =>
+                        dateFilters.Any(df =>
+                            (x.UpdatedAt ?? x.CreatedAt).Year == df.Year &&
+                            (x.UpdatedAt ?? x.CreatedAt).Month == df.Month));
             }
 
             // (5) الترتيب
@@ -175,8 +259,48 @@ namespace ERP.Controllers
             ViewBag.UseDateRange = useDateRange;
             ViewBag.FromDate = fromDate;
             ViewBag.ToDate = toDate;
+            ViewBag.FromCode = fromCode;
+            ViewBag.ToCode = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Modified = filterCol_modified;
 
             return View(model);
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود (للفلترة بنمط Excel).
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var q = _db.Categories.AsNoTracking();
+
+            List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
+            {
+                "id" => (await q.Select(x => x.CategoryId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "name" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(x => x.CategoryName != null).Select(x => x.CategoryName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(x => x.CategoryName != null && x.CategoryName.ToLower().Contains(searchTerm)).Select(x => x.CategoryName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
+                "created" => (await q.Select(x => new { x.CreatedAt.Year, x.CreatedAt.Month }).Distinct()
+                    .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "modified" => (await q.Where(x => x.UpdatedAt.HasValue)
+                    .Select(x => new { Year = x.UpdatedAt!.Value.Year, Month = x.UpdatedAt.Value.Month }).Distinct()
+                    .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm) && column?.ToLowerInvariant() == "name")
+            {
+                items = items.Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm)).ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================
@@ -414,66 +538,166 @@ namespace ERP.Controllers
 
 
         // =========================
-// Export — تصدير قائمة الفئات (Excel أو CSV)
-// =========================
-[HttpGet]
-public async Task<IActionResult> Export(
-    string? search,
-    string? searchBy = "name",   // name | id | all
-    string? sort     = "name",   // name | id
-    string? dir      = "asc",    // asc | desc
-    string? format   = "excel"   // excel | csv
-)
-{
-    // الاستعلام الأساسي
-    IQueryable<Category> q = _db.Categories.AsNoTracking();
-
-    // ===== تنظيف الفلاتر =====
-    var s  = (search   ?? "").Trim();                     // نص البحث بعد التنظيف
-    var sb = (searchBy ?? "name").Trim().ToLower();       // نوع البحث
-    var so = (sort     ?? "name").Trim().ToLower();       // عمود الترتيب
-    bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase); // ترتيب تنازلي؟
-
-    // ===== البحث (نفس منطق Index) =====
-    if (!string.IsNullOrEmpty(s))
-    {
-        switch (sb)
+        // =========================
+        // Export — تصدير قائمة الفئات (Excel أو CSV)
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> Export(
+            string? search,
+            string? searchBy = "name",   // name | id | all
+            string? sort = "name",       // name | id | created | modified
+            string? dir = "asc",         // asc | desc
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_created = null,
+            string? filterCol_modified = null,
+            string? format = "excel"     // excel | csv
+        )
         {
-            case "id":
-                if (int.TryParse(s, out int idValue))
+    // الاستعلام الأساسي
+            IQueryable<Category> q = _db.Categories.AsNoTracking();
+
+            // ===== تنظيف الفلاتر =====
+            var s  = (search   ?? "").Trim();                     // نص البحث بعد التنظيف
+            var sb = (searchBy ?? "name").Trim().ToLower();       // نوع البحث
+            var so = (sort     ?? "name").Trim().ToLower();       // عمود الترتيب
+            bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase); // ترتيب تنازلي؟
+
+            // ===== البحث (نفس منطق Index) =====
+            if (!string.IsNullOrEmpty(s))
+            {
+                switch (sb)
                 {
-                    q = q.Where(x => x.CategoryId == idValue);
+                    case "id":
+                        if (int.TryParse(s, out int idValue))
+                        {
+                            q = q.Where(x => x.CategoryId == idValue);
+                        }
+                        else
+                        {
+                            q = q.Where(x => x.CategoryId.ToString().Contains(s));
+                        }
+                        break;
+
+                    case "all":
+                        q = q.Where(x =>
+                            x.CategoryName.Contains(s) ||
+                            x.CategoryId.ToString().Contains(s));
+                        break;
+
+                    case "name":
+                    default:
+                        q = q.Where(x => x.CategoryName.Contains(s));
+                        break;
                 }
-                else
+            }
+
+            // فلترة بالتاريخ
+            if (useDateRange)
+            {
+                if (fromDate.HasValue)
+                    q = q.Where(x => x.CreatedAt >= fromDate.Value);
+                if (toDate.HasValue)
+                    q = q.Where(x => x.CreatedAt <= toDate.Value);
+            }
+
+            // فلتر كود من/إلى
+            if (fromCode.HasValue)
+                q = q.Where(x => x.CategoryId >= fromCode.Value);
+            if (toCode.HasValue)
+                q = q.Where(x => x.CategoryId <= toCode.Value);
+
+            // فلاتر الأعمدة (نفس منطق Index)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.CategoryId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => vals.Contains(x.CategoryName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length >= 7)
+                    .ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
                 {
-                    q = q.Where(x => x.CategoryId.ToString().Contains(s));
+                    if (p.Length == 7 && p[4] == '-' &&
+                        int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
                 }
-                break;
+                if (dateFilters.Count > 0)
+                    q = q.Where(x => dateFilters.Any(df => x.CreatedAt.Year == df.Year && x.CreatedAt.Month == df.Month));
+            }
 
-            case "all":
-                q = q.Where(x =>
-                    x.CategoryName.Contains(s) ||
-                    x.CategoryId.ToString().Contains(s));
-                break;
+            if (!string.IsNullOrWhiteSpace(filterCol_modified))
+            {
+                var parts = filterCol_modified.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length >= 7)
+                    .ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length == 7 && p[4] == '-' &&
+                        int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+                if (dateFilters.Count > 0)
+                    q = q.Where(x =>
+                        dateFilters.Any(df =>
+                            (x.UpdatedAt ?? x.CreatedAt).Year == df.Year &&
+                            (x.UpdatedAt ?? x.CreatedAt).Month == df.Month));
+            }
 
-            case "name":
-            default:
-                q = q.Where(x => x.CategoryName.Contains(s));
-                break;
-        }
-    }
+            // ===== الترتيب (نفس منطق Index) =====
+            q = so switch
+            {
+                "id" => (desc
+                            ? q.OrderByDescending(x => x.CategoryId)
+                            : q.OrderBy(x => x.CategoryId)),
 
-    // ===== الترتيب (نفس منطق Index) =====
-    q = so switch
-    {
-        "id" => (desc
-                    ? q.OrderByDescending(x => x.CategoryId)
-                    : q.OrderBy(x => x.CategoryId)),
+                "created" => (desc
+                            ? q.OrderByDescending(x => x.CreatedAt)
+                            : q.OrderBy(x => x.CreatedAt)),
 
-        "name" or _ => (desc
-                    ? q.OrderByDescending(x => x.CategoryName)
-                    : q.OrderBy(x => x.CategoryName)),
-    };
+                "modified" => (desc
+                            ? q.OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+                            : q.OrderBy(x => x.UpdatedAt ?? x.CreatedAt)),
+
+                "name" or _ => (desc
+                            ? q.OrderByDescending(x => x.CategoryName)
+                            : q.OrderBy(x => x.CategoryName)),
+            };
 
     // ===== جلب كل السجلات (بدون Paging) =====
     var rows = await q.ToListAsync();   // متغير: قائمة الفئات للتصدير

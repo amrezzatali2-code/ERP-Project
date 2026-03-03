@@ -39,6 +39,26 @@
 
     var dateField = (string?)ViewBag.DateField ?? "created";   // للاستخدام فى اللينكات لو حبيت توسّع لاحقاً
 
+    // فلاتر أعمدة بنمط Excel (من ViewBag أو من الطلب)
+    string? filterCol_id = ViewBag.FilterCol_Id as string ?? Context.Request.Query["filterCol_id"].ToString();
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string ?? Context.Request.Query["filterCol_idExpr"].ToString();
+    string? filterCol_name = ViewBag.FilterCol_Name as string ?? Context.Request.Query["filterCol_name"].ToString();
+    string? filterCol_type = ViewBag.FilterCol_Type as string ?? Context.Request.Query["filterCol_type"].ToString();
+    string? filterCol_phone = ViewBag.FilterCol_Phone as string ?? Context.Request.Query["filterCol_phone"].ToString();
+    string? filterCol_Address = ViewBag.FilterCol_Address as string ?? Context.Request.Query["filterCol_Address"].ToString();
+    string? filterCol_governorate = ViewBag.FilterCol_Governorate as string ?? Context.Request.Query["filterCol_governorate"].ToString();
+    string? filterCol_district = ViewBag.FilterCol_District as string ?? Context.Request.Query["filterCol_district"].ToString();
+    string? filterCol_area = ViewBag.FilterCol_Area as string ?? Context.Request.Query["filterCol_area"].ToString();
+    string? filterCol_account = ViewBag.FilterCol_Account as string ?? Context.Request.Query["filterCol_account"].ToString();
+    string? filterCol_PolicyId = ViewBag.FilterCol_PolicyId as string ?? Context.Request.Query["filterCol_PolicyId"].ToString();
+    string? filterCol_credit = ViewBag.FilterCol_Credit as string ?? Context.Request.Query["filterCol_credit"].ToString();
+    string? filterCol_isactive = ViewBag.FilterCol_IsActive as string ?? Context.Request.Query["filterCol_isactive"].ToString();
+    string? filterCol_CurrentBalance = ViewBag.FilterCol_CurrentBalance as string ?? Context.Request.Query["filterCol_CurrentBalance"].ToString();
+    string? filterCol_ordercontact = ViewBag.FilterCol_OrderContact as string ?? Context.Request.Query["filterCol_ordercontact"].ToString();
+    string? filterCol_created = ViewBag.FilterCol_Created as string ?? Context.Request.Query["filterCol_created"].ToString();
+    string? filterCol_updated = ViewBag.FilterCol_Updated as string ?? Context.Request.Query["filterCol_updated"].ToString();
+    string? filterCol_quota = ViewBag.FilterCol_Quota as string ?? Context.Request.Query["filterCol_quota"].ToString();
+
     // دالة توليد لينكات الترقيم مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
     {
@@ -53,38 +73,39 @@
         toDate,
         fromCode,
         toCode,
-        dateField
+        dateField,
+        filterCol_id, filterCol_idExpr, filterCol_name, filterCol_type, filterCol_phone, filterCol_Address,
+        filterCol_governorate, filterCol_district, filterCol_area, filterCol_account, filterCol_PolicyId,
+        filterCol_credit, filterCol_isactive, filterCol_CurrentBalance, filterCol_ordercontact,
+        filterCol_created, filterCol_updated, filterCol_quota
     })!;
 
-    // دالة لإنشاء لينك الترتيب فى رأس الجدول + أيقونة السهم
-    Func<string, string, IHtmlContent> sortLink = (col, caption) =>
+    // دالة عمود قابل للفلترة (بنمط Excel — ترتيب + فلترة)
+    Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
-        var isCurrent = string.Equals(sort, col, StringComparison.OrdinalIgnoreCase);
-        var newDir = (isCurrent && dir == "asc") ? "desc" : "asc";
-
-        var url = Url.Action(action, controller, new
-        {
-            search,
-            searchBy,
-            sort = col,
-            dir = newDir,
-            page = 1,
-            pageSize = ps,
-            useDateRange,
-            fromDate,
-            toDate,
-            fromCode,
-            toCode,
-            dateField
-        }) ?? "#";
-
-        string icon = "⇅";
-        if (isCurrent)
-            icon = dir == "asc" ? "▲" : "▼";
-
-        return new HtmlString(
-            $@"<a href=""{url}"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>"
-        );
+        var currentFilter = colKey == "id" ? (filterCol_id ?? filterCol_idExpr) : colKey == "name" ? filterCol_name :
+            colKey == "type" ? filterCol_type : colKey == "phone" ? filterCol_phone : colKey == "Address" ? filterCol_Address :
+            colKey == "governorate" ? filterCol_governorate : colKey == "district" ? filterCol_district : colKey == "area" ? filterCol_area :
+            colKey == "account" ? filterCol_account : colKey == "PolicyId" ? filterCol_PolicyId : colKey == "credit" ? filterCol_credit :
+            colKey == "isactive" ? filterCol_isactive : colKey == "CurrentBalance" ? filterCol_CurrentBalance : colKey == "ordercontact" ? filterCol_ordercontact :
+            colKey == "created" ? filterCol_created : colKey == "updated" ? filterCol_updated : colKey == "quota" ? filterCol_quota : null;
+        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
+        var sortDir = isCurrentSort ? dir : "asc";
+        var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
+        return new HtmlString($@"
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"">
+                <span class=""erp-col-title"">{caption}</span>
+                <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
+                        data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
+                        data-current-sort=""{sortKey}"" data-current-dir=""{sortDir}""
+                        title=""ترتيب وفلتر العمود"" style=""min-width:22px;"">
+                    <svg xmlns=""http://www.w3.org/2000/svg"" width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""currentColor"">
+                        <path d=""M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z""/>
+                        <path d=""M7 8l4-4 4 4H7zm0 8l4 4 4-4H7z"" opacity=""0.3""/>
+                    </svg>
+                </button>
+            </div>");
     };
 }
 
@@ -197,31 +218,25 @@
                         <input type="checkbox" id="selectAll" class="form-check-input" />
                     </th>
 
-                    <th data-col="id">@sortLink("id", "كود العميل")</th>
-                    <th data-col="name">@sortLink("name", "اسم العميل")</th>
-                    <th data-col="type">@sortLink("type", "نوع الطرف")</th>
-                    <th data-col="phone">هاتف</th>
-                    <th data-col="Address">العنوان</th>
+                    <th style="width:100px;" data-col="id">@filterableCol("id", "id", "كود العميل")</th>
+                    <th data-col="name">@filterableCol("name", "name", "اسم العميل")</th>
+                    <th data-col="type">@filterableCol("type", "type", "نوع الطرف")</th>
+                    <th data-col="phone">@filterableCol("phone", "name", "هاتف")</th>
+                    <th data-col="Address">@filterableCol("Address", "name", "العنوان")</th>
 
-                    @* الأعمدة الجديدة: المحافظة / الحي / المنطقة *@
-                    <th data-col="governorate">@sortLink("governorate", "المحافظة")</th>
-                    <th data-col="district">@sortLink("district", "الحي")</th>
-                    <th data-col="area">@sortLink("area", "المنطقة")</th>
+                    <th data-col="governorate">@filterableCol("governorate", "governorate", "المحافظة")</th>
+                    <th data-col="district">@filterableCol("district", "district", "الحي")</th>
+                    <th data-col="area">@filterableCol("area", "area", "المنطقة")</th>
 
-                    <th data-col="account">@sortLink("account", "الحساب المحاسبي")</th>
-
-                    <th data-col="PolicyId">سياسة العميل</th>
-                    
-                    
-                    <th data-col="credit">الحد الائتماني</th>
-
-                    <th data-col="isactive">@sortLink("isactive", "الحالة")</th>
-                    <th data-col="CurrentBalance">مديونية العميل</th>
-                   
-                    <th data-col="ordercontact">مسئول الطلب</th>
-                    <th data-col="created">@sortLink("created", "تاريخ الإنشاء")</th>
-                    <th data-col="updated">@sortLink("updated", "آخر تعديل")</th>
-                    <th data-col="quota">الكوتة</th>
+                    <th data-col="account">@filterableCol("account", "account", "الحساب المحاسبي")</th>
+                    <th data-col="PolicyId">@filterableCol("PolicyId", "name", "سياسة العميل")</th>
+                    <th data-col="credit">@filterableCol("credit", "name", "الحد الائتماني")</th>
+                    <th data-col="isactive">@filterableCol("isactive", "isactive", "الحالة")</th>
+                    <th data-col="CurrentBalance">@filterableCol("CurrentBalance", "name", "مديونية العميل")</th>
+                    <th data-col="ordercontact">@filterableCol("ordercontact", "name", "مسئول الطلب")</th>
+                    <th style="width:140px;" data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
+                    <th style="width:140px;" data-col="updated">@filterableCol("updated", "updated", "آخر تعديل")</th>
+                    <th data-col="quota">@filterableCol("quota", "name", "الكوتة")</th>
                    
                     
                    
@@ -379,6 +394,24 @@
             {
                 <input type="hidden" name="toCode" value="@toCode" />
             }
+            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_type)) { <input type="hidden" name="filterCol_type" value="@filterCol_type" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_phone)) { <input type="hidden" name="filterCol_phone" value="@filterCol_phone" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_Address)) { <input type="hidden" name="filterCol_Address" value="@filterCol_Address" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_governorate)) { <input type="hidden" name="filterCol_governorate" value="@filterCol_governorate" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_district)) { <input type="hidden" name="filterCol_district" value="@filterCol_district" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_area)) { <input type="hidden" name="filterCol_area" value="@filterCol_area" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_PolicyId)) { <input type="hidden" name="filterCol_PolicyId" value="@filterCol_PolicyId" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_credit)) { <input type="hidden" name="filterCol_credit" value="@filterCol_credit" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_CurrentBalance)) { <input type="hidden" name="filterCol_CurrentBalance" value="@filterCol_CurrentBalance" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_ordercontact)) { <input type="hidden" name="filterCol_ordercontact" value="@filterCol_ordercontact" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_quota)) { <input type="hidden" name="filterCol_quota" value="@filterCol_quota" /> }
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize"
@@ -415,6 +448,36 @@
     </nav>
 </div>
 
+@* ===== لوحة فلتر العمود (بنمط Excel) ===== *@
+<div id="erpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+    <div class="erp-column-filter-header">
+        <span id="erpColumnFilterTitle">ترتيب وفلتر</span>
+        <button type="button" class="btn-close btn-sm" id="erpColumnFilterClose" aria-label="إغلاق"></button>
+    </div>
+    <div class="erp-column-filter-body">
+        <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+            <div class="d-flex flex-column gap-1">
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
+            </div>
+        </div>
+        <div class="erp-filter-section">
+            <div id="erpColumnFilterSearchRow">
+                <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+            </div>
+            <div id="erpColumnFilterList" class="erp-column-filter-list">
+                <div class="text-muted text-center py-3">جاري التحميل...</div>
+            </div>
+        </div>
+        <div class="erp-column-filter-actions">
+            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOk">تطبيق</button>
+            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClear">مسح الفلتر</button>
+        </div>
+    </div>
+</div>
+
 @* ===== Modal فلترة التاريخ/الوقت ===== *@
 <div class="modal fade no-print"
      id="dateFilterModal"
@@ -443,6 +506,24 @@
                     <input type="hidden" name="pageSize" value="@ps" />
                     <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
+                    @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_type)) { <input type="hidden" name="filterCol_type" value="@filterCol_type" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_phone)) { <input type="hidden" name="filterCol_phone" value="@filterCol_phone" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_Address)) { <input type="hidden" name="filterCol_Address" value="@filterCol_Address" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_governorate)) { <input type="hidden" name="filterCol_governorate" value="@filterCol_governorate" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_district)) { <input type="hidden" name="filterCol_district" value="@filterCol_district" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_area)) { <input type="hidden" name="filterCol_area" value="@filterCol_area" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_PolicyId)) { <input type="hidden" name="filterCol_PolicyId" value="@filterCol_PolicyId" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_credit)) { <input type="hidden" name="filterCol_credit" value="@filterCol_credit" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_CurrentBalance)) { <input type="hidden" name="filterCol_CurrentBalance" value="@filterCol_CurrentBalance" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_ordercontact)) { <input type="hidden" name="filterCol_ordercontact" value="@filterCol_ordercontact" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_quota)) { <input type="hidden" name="filterCol_quota" value="@filterCol_quota" /> }
 
                     <div class="mb-3">
                         <div class="form-check d-flex align-items-center">
@@ -529,6 +610,224 @@
 
 @section Scripts {
     <script>
+        // جعل الشريط الأفقي يفتح من جهة اليمين (بداية الجدول في RTL)
+        (function () {
+            var table = document.getElementById("customersTable");
+            if (!table) return;
+            var wrapper = table.closest(".erp-table-wrapper");
+            if (!wrapper) return;
+            wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
+        })();
+
+        // =========================
+        // فلتر الأعمدة بنمط Excel (ترتيب + فلترة على كل الأعمدة)
+        // =========================
+        (function () {
+            const panel = document.getElementById("erpColumnFilterPanel");
+            const titleEl = document.getElementById("erpColumnFilterTitle");
+            const searchInp = document.getElementById("erpColumnFilterSearch");
+            const searchRowEl = document.getElementById("erpColumnFilterSearchRow");
+            const listEl = document.getElementById("erpColumnFilterList");
+            const btnOk = document.getElementById("erpColumnFilterOk");
+            const btnClear = document.getElementById("erpColumnFilterClear");
+            const btnClose = document.getElementById("erpColumnFilterClose");
+
+            let currentCol = null;
+            let currentSortKey = null;
+            let allItems = [];
+            let currentSelected = new Set();
+            let filterListLoading = false;
+            let anchorRect = null;
+            const numericColumns = ["id"];
+            const columnToSearchBy = {
+                name: "name", type: "type", phone: "phone", Address: "address", governorate: "all", district: "all", area: "all",
+                account: "account", PolicyId: "all", credit: "all", isactive: "active", CurrentBalance: "all", ordercontact: "all",
+                created: "all", updated: "all", quota: "all"
+            };
+
+            function getCurrentFilterValue(col) {
+                if (numericColumns.includes(col)) {
+                    var url = new URL(window.location.href);
+                    return url.searchParams.get("filterCol_" + col + "Expr") || url.searchParams.get("filterCol_" + col) || "";
+                }
+                return new URL(window.location.href).searchParams.get("filterCol_" + col) || "";
+            }
+            function getCurrentSort() {
+                var url = new URL(window.location.href);
+                return { sort: url.searchParams.get("sort") || "name", dir: url.searchParams.get("dir") || "asc" };
+            }
+            function adjustPanelPosition() {
+                if (!panel || !anchorRect) return;
+                setTimeout(function () {
+                    var panelRect = panel.getBoundingClientRect();
+                    var margin = 8;
+                    var top = anchorRect.bottom + 4;
+                    var left = anchorRect.left;
+                    if (top + panelRect.height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - panelRect.height);
+                    if (left + panelRect.width > window.innerWidth - margin) left = Math.max(margin, window.innerWidth - margin - panelRect.width);
+                    panel.style.top = top + "px";
+                    panel.style.left = left + "px";
+                }, 50);
+            }
+
+            function showPanel(btn) {
+                currentCol = btn.dataset.col;
+                currentSortKey = btn.dataset.sortKey || currentCol;
+                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
+                searchInp.value = "";
+                currentSelected = new Set();
+                anchorRect = btn.getBoundingClientRect();
+                panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
+                panel.classList.remove("d-none");
+                var currentSort = getCurrentSort();
+                var isCurrent = currentSort.sort.toLowerCase() === currentSortKey.toLowerCase();
+                var currentDir = isCurrent ? currentSort.dir : "asc";
+                document.querySelectorAll("#erpColumnFilterPanel .erp-sort-btn").forEach(function (sortBtn) {
+                    if (isCurrent && sortBtn.dataset.sortDir === currentDir) {
+                        sortBtn.classList.add("active", "btn-primary");
+                        sortBtn.classList.remove("btn-outline-secondary");
+                    } else {
+                        sortBtn.classList.remove("active", "btn-primary");
+                        sortBtn.classList.add("btn-outline-secondary");
+                    }
+                });
+                adjustPanelPosition();
+
+                if (numericColumns.includes(currentCol)) {
+                    if (searchRowEl) searchRowEl.style.display = "none";
+                    var currentExpr = getCurrentFilterValue(currentCol);
+                    listEl.innerHTML = '<div class="mb-2"><label class="form-label small mb-1">بحث رقمي:</label><input type="text" id="erpNumericExpr" class="form-control form-control-sm" placeholder="مثال: 10 أو &lt;100 أو 10:200" value="' + (currentExpr || "").replace(/</g, "&lt;").replace(/>/g, "&gt;") + '"></div>';
+                    adjustPanelPosition();
+                    setTimeout(function () {
+                        var exprInput = document.getElementById("erpNumericExpr");
+                        if (exprInput) {
+                            exprInput.onkeydown = function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } };
+                            exprInput.focus();
+                        }
+                    }, 100);
+                    return;
+                }
+                if (searchRowEl) searchRowEl.style.display = "";
+                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
+                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split("|").filter(Boolean));
+                var url = "/Customers/GetColumnValues?column=" + encodeURIComponent(currentCol);
+                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
+                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
+                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
+                    allItems = items;
+                    renderList("");
+                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
+            }
+
+            function renderList(search) {
+                var term = (search || "").toLowerCase();
+                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().includes(term); }) : allItems;
+                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
+                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAll" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAll">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
+                    var v = String(x.value);
+                    var checked = currentSelected.has(v);
+                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
+                }).join("") + "</div>";
+                var selectAllCb = listEl.querySelector("#erpFilterSelectAll");
+                if (selectAllCb) {
+                    selectAllCb.indeterminate = filtered.some(function (x) { return currentSelected.has(String(x.value)); }) && !allChecked;
+                    selectAllCb.onchange = function () {
+                        filtered.forEach(function (x) {
+                            if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value));
+                        }.bind(this));
+                        renderList(searchInp.value);
+                    };
+                }
+                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
+                    cb.onchange = function () {
+                        if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value);
+                        renderList(searchInp.value);
+                    };
+                });
+                adjustPanelPosition();
+            }
+
+            function applyFilter(applySort, sortDir) {
+                if (!currentCol) return;
+                var url = new URL(window.location.href);
+                url.searchParams.forEach(function (_, key) {
+                    if (key.startsWith("filterCol_")) url.searchParams.delete(key);
+                });
+                if (applySort !== undefined && applySort !== null && sortDir !== undefined && sortDir !== null) {
+                    url.searchParams.set("sort", applySort);
+                    url.searchParams.set("dir", sortDir);
+                } else if (currentSortKey) {
+                    var cur = getCurrentSort();
+                    url.searchParams.set("sort", cur.sort);
+                    url.searchParams.set("dir", cur.dir);
+                }
+                if (numericColumns.includes(currentCol)) {
+                    var exprInput = document.getElementById("erpNumericExpr");
+                    var expr = exprInput ? String(exprInput.value || "").trim() : "";
+                    if (expr) url.searchParams.set("filterCol_" + currentCol + "Expr", expr);
+                } else {
+                    var filterBoxText = (searchInp && searchInp.value) ? String(searchInp.value).trim() : "";
+                    if (filterBoxText) {
+                        url.searchParams.set("search", filterBoxText);
+                        url.searchParams.set("searchBy", columnToSearchBy[currentCol] || "all");
+                    } else {
+                        var val = Array.from(currentSelected).filter(Boolean).join("|");
+                        if (val) url.searchParams.set("filterCol_" + currentCol, val);
+                    }
+                }
+                url.searchParams.set("page", "1");
+                window.location.href = url.toString();
+            }
+            function clearFilter() {
+                if (!currentCol) return;
+                var url = new URL(window.location.href);
+                url.searchParams.delete("filterCol_" + currentCol);
+                url.searchParams.delete("filterCol_" + currentCol + "Expr");
+                var searchByVal = url.searchParams.get("searchBy") || "";
+                if (columnToSearchBy[currentCol] && searchByVal === columnToSearchBy[currentCol]) {
+                    url.searchParams.delete("search");
+                    url.searchParams.delete("searchBy");
+                }
+                url.searchParams.set("page", "1");
+                window.location.href = url.toString();
+            }
+
+            document.querySelectorAll(".erp-col-filter-btn").forEach(function (btn) {
+                btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); });
+            });
+            document.addEventListener("click", function (e) {
+                if (e.target.closest(".erp-sort-btn")) {
+                    var sortBtn = e.target.closest(".erp-sort-btn");
+                    if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir);
+                }
+            });
+            var fetchDebounce = null;
+            searchInp && searchInp.addEventListener("input", function () {
+                if (numericColumns.includes(currentCol)) return;
+                renderList(this.value);
+                if (fetchDebounce) clearTimeout(fetchDebounce);
+                fetchDebounce = setTimeout(function () {
+                    fetchDebounce = null;
+                    if (!currentCol) return;
+                    var url = "/Customers/GetColumnValues?column=" + encodeURIComponent(currentCol);
+                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
+                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
+                    fetch(url).then(function (r) { return r.json(); }).then(function (items) {
+                        allItems = items;
+                        renderList(searchInp ? searchInp.value : "");
+                    }).catch(function () { });
+                }, 400);
+            });
+            searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
+            btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
+            btnClear && btnClear.addEventListener("click", clearFilter);
+            btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
+            document.addEventListener("click", function (e) {
+                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
+                    panel.classList.add("d-none");
+            });
+        })();
+
         // طباعة
         document.getElementById("btnPrintCustomers")?.addEventListener("click", function () {
             window.print();
