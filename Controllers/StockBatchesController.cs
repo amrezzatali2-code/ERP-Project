@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -24,9 +24,63 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _db; // متغير: DbContext
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
         public StockBatchesController(AppDbContext context)
         {
             _db = context;
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود معين لاستخدامها في فلترة الأعمدة بنمط Excel.
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = (column ?? "").Trim().ToLowerInvariant();
+
+            IQueryable<StockBatch> q = _db.Set<StockBatch>().AsNoTracking();
+
+            List<(string Value, string Display)> items = col switch
+            {
+                "id" => (await q.Select(x => x.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "wh" => (await q.Select(x => x.WarehouseId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "prod" => (await q.Select(x => x.ProdId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "batchno" => (await q.Where(x => x.BatchNo != null).Select(x => x.BatchNo!).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                "expiry" => (await q.Where(x => x.Expiry.HasValue)
+                        .Select(x => new { x.Expiry!.Value.Year, x.Expiry.Value.Month })
+                        .Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
+                        .Take(200)
+                        .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "qty" => (await q.Select(x => x.QtyOnHand).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "reserved" => (await q.Select(x => x.QtyReserved).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "updated" => (await q.Select(x => new { x.UpdatedAt.Year, x.UpdatedAt.Month }).Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
+                        .Take(200)
+                        .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "note" => (await q.Where(x => x.Note != null).Select(x => x.Note!).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+            {
+                items = items
+                    .Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm))
+                    .ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================================================
@@ -41,12 +95,151 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            string? filterCol_id = null,
+            string? filterCol_wh = null,
+            string? filterCol_prod = null,
+            string? filterCol_batchno = null,
+            string? filterCol_expiry = null,
+            string? filterCol_qty = null,
+            string? filterCol_reserved = null,
+            string? filterCol_updated = null,
+            string? filterCol_note = null)
         {
             // الاستعلام الأساسي (AsNoTracking للسرعة)
             var q = _db.Set<StockBatch>()
                 .AsNoTracking()
                 .AsQueryable();
+
+            // ------------------------------
+            // فلاتر أعمدة بنمط Excel (id, wh, prod, batchno, expiry, qty, reserved, updated, note)
+            // ------------------------------
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_wh))
+            {
+                var ids = filterCol_wh.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.WarehouseId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            {
+                var ids = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.ProdId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_batchno))
+            {
+                var vals = filterCol_batchno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => x.BatchNo != null && vals.Contains(x.BatchNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_expiry))
+            {
+                // القيم تأتي في صورة yyyy-MM
+                var parts = filterCol_expiry.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length == 7 && x[4] == '-')
+                    .ToList();
+
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+
+                if (dateFilters.Count > 0)
+                {
+                    q = q.Where(x => x.Expiry.HasValue &&
+                        dateFilters.Any(df => x.Expiry.Value.Year == df.Year && x.Expiry.Value.Month == df.Month));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            {
+                var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.QtyOnHand));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_reserved))
+            {
+                var ids = filterCol_reserved.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.QtyReserved));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                // القيم تأتي في صورة yyyy-MM
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length == 7 && x[4] == '-')
+                    .ToList();
+
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+
+                if (dateFilters.Count > 0)
+                {
+                    q = q.Where(x =>
+                        dateFilters.Any(df => x.UpdatedAt.Year == df.Year && x.UpdatedAt.Month == df.Month));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_note))
+            {
+                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => x.Note != null && vals.Any(v => x.Note.Contains(v)));
+            }
 
             // ------------------------------
             // فلتر التاريخ/الوقت (UpdatedAt فقط لأن الجدول Cache)
@@ -200,7 +393,16 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             int? fromCode = null,
-            int? toCode = null)
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_wh = null,
+            string? filterCol_prod = null,
+            string? filterCol_batchno = null,
+            string? filterCol_expiry = null,
+            string? filterCol_qty = null,
+            string? filterCol_reserved = null,
+            string? filterCol_updated = null,
+            string? filterCol_note = null)
         {
             // (1) Defaults + حماية paging
             searchBy ??= "all";
@@ -216,7 +418,16 @@ namespace ERP.Controllers
             var query = SearchSortFilter(
                 search, searchBy, sort, dir,
                 useDateRange, fromDate, toDate,
-                fromCode, toCode);
+                fromCode, toCode,
+                filterCol_id,
+                filterCol_wh,
+                filterCol_prod,
+                filterCol_batchno,
+                filterCol_expiry,
+                filterCol_qty,
+                filterCol_reserved,
+                filterCol_updated,
+                filterCol_note);
 
             // (3) Count
             int totalCount = await query.CountAsync();
@@ -275,6 +486,15 @@ namespace ERP.Controllers
             ViewBag.Dir = sortDesc ? "desc" : "asc";
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Wh = filterCol_wh;
+            ViewBag.FilterCol_Prod = filterCol_prod;
+            ViewBag.FilterCol_BatchNo = filterCol_batchno;
+            ViewBag.FilterCol_Expiry = filterCol_expiry;
+            ViewBag.FilterCol_Qty = filterCol_qty;
+            ViewBag.FilterCol_Reserved = filterCol_reserved;
+            ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.FilterCol_Note = filterCol_note;
 
             return View(model);
         }
@@ -348,12 +568,30 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_wh = null,
+            string? filterCol_prod = null,
+            string? filterCol_batchno = null,
+            string? filterCol_expiry = null,
+            string? filterCol_qty = null,
+            string? filterCol_reserved = null,
+            string? filterCol_updated = null,
+            string? filterCol_note = null,
             string format = "excel")
         {
             var query = SearchSortFilter(
                 search, searchBy, sort, dir,
                 useDateRange, fromDate, toDate,
-                fromCode, toCode);
+                fromCode, toCode,
+                filterCol_id,
+                filterCol_wh,
+                filterCol_prod,
+                filterCol_batchno,
+                filterCol_expiry,
+                filterCol_qty,
+                filterCol_reserved,
+                filterCol_updated,
+                filterCol_note);
 
             var data = await query.ToListAsync();
 

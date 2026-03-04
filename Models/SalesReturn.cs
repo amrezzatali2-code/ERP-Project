@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;        // علشان [Key] و [Required] و [Timestamp]
 using System.ComponentModel.DataAnnotations.Schema;
@@ -101,8 +101,11 @@ namespace ERP.Models
         public virtual ICollection<SalesReturnLine> Lines { get; set; }
             = new List<SalesReturnLine>();                      // كل سطور المرتجع (أصناف + كميات + أسعار)
 
-        // ===== علاقة الملاحة مع العميل =====
+        // ===== علاقات الملاحة مع العميل والمخزن =====
         [Display(Name = "العميل")]
         public virtual Customer Customer { get; set; } = null!; // العميل الذي تم عمل المرتجع له
+
+        [Display(Name = "المخزن")]
+        public virtual Warehouse Warehouse { get; set; } = null!; // المخزن المرتبط بالمرتجع
     }
 }

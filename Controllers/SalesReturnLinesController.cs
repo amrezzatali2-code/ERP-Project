@@ -33,6 +33,9 @@ namespace ERP.Controllers
         // متغير: خدمة إعادة تجميع إجماليات الهيدر (SalesReturn)
         private readonly DocumentTotalsService _docTotals;
 
+        // فاصل لقيم فلاتر الأعمدة (نفسه المستخدم فى القوائم الأخرى)
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
         public SalesReturnLinesController(AppDbContext context,
                                           DocumentTotalsService docTotals)
         {
@@ -159,17 +162,139 @@ namespace ERP.Controllers
             DateTime? toDate = null,        // إلى تاريخ
             int? fromCode = null,           // من رقم سطر
             int? toCode = null,             // إلى رقم سطر
+            string? filterCol_srid = null,
+            string? filterCol_siid = null,
+            string? filterCol_lineno = null,
+            string? filterCol_prod = null,
+            string? filterCol_qty = null,
+            string? filterCol_priceretail = null,
+            string? filterCol_unitprice = null,
+            string? filterCol_net = null,
+            string? filterCol_batch = null,
+            string? filterCol_expiry = null,
+            string? filterCol_status = null,
             int page = 1,                   // رقم الصفحة
             int pageSize = 50               // حجم الصفحة
         )
         {
-            // تجهيز الاستعلام الموحد
+            // تجهيز الاستعلام الموحد (بحث + ترتيب + فلاتر أساسية)
             var q = BuildQuery(
                 srId,
                 search, searchBy,
                 sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
+
+            // تطبيق فلاتر الأعمدة بنمط Excel
+            if (!string.IsNullOrWhiteSpace(filterCol_srid))
+            {
+                var ids = filterCol_srid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(l => ids.Contains(l.SRId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_siid))
+            {
+                var ids = filterCol_siid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(l => l.SalesInvoiceId.HasValue && ids.Contains(l.SalesInvoiceId.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            {
+                var lines = filterCol_lineno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (lines.Count > 0)
+                    q = q.Where(l => lines.Contains(l.LineNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            {
+                var prods = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (prods.Count > 0)
+                    q = q.Where(l => prods.Contains(l.ProdId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            {
+                var qtys = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (qtys.Count > 0)
+                    q = q.Where(l => qtys.Contains(l.Qty));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_priceretail))
+            {
+                var vals = filterCol_priceretail.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.PriceRetail));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_unitprice))
+            {
+                var vals = filterCol_unitprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.UnitSalePrice));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            {
+                var vals = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.LineNetTotal));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_batch))
+            {
+                var vals = filterCol_batch.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.BatchNo ?? ""));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_expiry))
+            {
+                var dates = filterCol_expiry.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => DateTime.TryParse(v.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(d => d.HasValue).Select(d => d!.Value)
+                    .ToList();
+                if (dates.Count > 0)
+                    q = q.Where(l => l.Expiry.HasValue && dates.Contains(l.Expiry.Value.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => l.SalesReturn != null && l.SalesReturn.Status != null && vals.Contains(l.SalesReturn.Status));
+            }
 
             // تطبيع اتجاه الترتيب
             var dirNorm = (dir?.ToLower() == "asc") ? "asc" : "desc";
@@ -201,6 +326,19 @@ namespace ERP.Controllers
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "SRId";
             ViewBag.Dir = dirNorm;
+
+            // فلاتر الأعمدة الحالية
+            ViewBag.FilterCol_srid = filterCol_srid ?? string.Empty;
+            ViewBag.FilterCol_siid = filterCol_siid ?? string.Empty;
+            ViewBag.FilterCol_lineno = filterCol_lineno ?? string.Empty;
+            ViewBag.FilterCol_prod = filterCol_prod ?? string.Empty;
+            ViewBag.FilterCol_qty = filterCol_qty ?? string.Empty;
+            ViewBag.FilterCol_priceretail = filterCol_priceretail ?? string.Empty;
+            ViewBag.FilterCol_unitprice = filterCol_unitprice ?? string.Empty;
+            ViewBag.FilterCol_net = filterCol_net ?? string.Empty;
+            ViewBag.FilterCol_batch = filterCol_batch ?? string.Empty;
+            ViewBag.FilterCol_expiry = filterCol_expiry ?? string.Empty;
+            ViewBag.FilterCol_status = filterCol_status ?? string.Empty;
 
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
@@ -418,6 +556,17 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? filterCol_srid = null,
+            string? filterCol_siid = null,
+            string? filterCol_lineno = null,
+            string? filterCol_prod = null,
+            string? filterCol_qty = null,
+            string? filterCol_priceretail = null,
+            string? filterCol_unitprice = null,
+            string? filterCol_net = null,
+            string? filterCol_batch = null,
+            string? filterCol_expiry = null,
+            string? filterCol_status = null,
             string format = "excel"
         )
         {
@@ -427,6 +576,117 @@ namespace ERP.Controllers
                 sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
+
+            // نفس منطق فلاتر الأعمدة المستخدم فى Index
+            if (!string.IsNullOrWhiteSpace(filterCol_srid))
+            {
+                var ids = filterCol_srid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(l => ids.Contains(l.SRId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_siid))
+            {
+                var ids = filterCol_siid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(l => l.SalesInvoiceId.HasValue && ids.Contains(l.SalesInvoiceId.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            {
+                var lines = filterCol_lineno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (lines.Count > 0)
+                    q = q.Where(l => lines.Contains(l.LineNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            {
+                var prods = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (prods.Count > 0)
+                    q = q.Where(l => prods.Contains(l.ProdId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            {
+                var qtys = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (qtys.Count > 0)
+                    q = q.Where(l => qtys.Contains(l.Qty));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_priceretail))
+            {
+                var vals = filterCol_priceretail.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.PriceRetail));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_unitprice))
+            {
+                var vals = filterCol_unitprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.UnitSalePrice));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            {
+                var vals = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.LineNetTotal));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_batch))
+            {
+                var vals = filterCol_batch.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => vals.Contains(l.BatchNo ?? ""));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_expiry))
+            {
+                var dates = filterCol_expiry.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => DateTime.TryParse(v.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(d => d.HasValue).Select(d => d!.Value)
+                    .ToList();
+                if (dates.Count > 0)
+                    q = q.Where(l => l.Expiry.HasValue && dates.Contains(l.Expiry.Value.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => l.SalesReturn != null && l.SalesReturn.Status != null && vals.Contains(l.SalesReturn.Status));
+            }
 
             var data = await q
                 .OrderBy(l => l.SRId)
@@ -537,6 +797,125 @@ namespace ERP.Controllers
             }
 
             return value;
+        }
+
+        // =========================
+        // GetColumnValues — قيم مميزة لكل عمود لنمط فلترة الأعمدة (Excel-like)
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            if (string.IsNullOrWhiteSpace(column))
+                return Json(Array.Empty<string>());
+
+            column = column.ToLowerInvariant();
+            search = (search ?? string.Empty).Trim();
+
+            IQueryable<SalesReturnLine> q = _context.SalesReturnLines
+                .AsNoTracking()
+                .Include(l => l.SalesReturn);
+
+            if (column == "srid")
+            {
+                var query = q.Select(l => l.SRId.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "siid")
+            {
+                var query = q.Where(l => l.SalesInvoiceId.HasValue)
+                             .Select(l => l.SalesInvoiceId!.Value.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "lineno")
+            {
+                var query = q.Select(l => l.LineNo.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "prod")
+            {
+                var query = q.Select(l => l.ProdId.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "qty")
+            {
+                var query = q.Select(l => l.Qty.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "priceretail")
+            {
+                var query = q.Select(l => l.PriceRetail.ToString("0.00"));
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "unitprice")
+            {
+                var query = q.Select(l => l.UnitSalePrice.ToString("0.00"));
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "net")
+            {
+                var query = q.Select(l => l.LineNetTotal.ToString("0.00"));
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "batch")
+            {
+                var query = q.Select(l => l.BatchNo ?? "");
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "expiry")
+            {
+                var query = q.Select(l => l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "");
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "status")
+            {
+                var query = q.Select(l => l.SalesReturn != null ? (l.SalesReturn.Status ?? "") : "");
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            return Json(Array.Empty<string>());
         }
     }
 }

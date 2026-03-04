@@ -1,4 +1,4 @@
-﻿@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
+@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
 @using Microsoft.AspNetCore.Html          @* لاستخدام HtmlString *@
 @using ERP.Infrastructure                 @* لاستخدام PagedResult *@
 @using ERP.Models                         @* لاستخدام الموديل PRLine *@
@@ -77,155 +77,74 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @* ===== الكارت العلوي: بحث + فلتر كود + أزرار التحكم ===== *@
-    <div class="card mb-3 d-print-none">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
+    @* ===== شريط الفلاتر الموحد (بنفس قائمة المبيعات) ===== *@
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
-                @* العمود الأول: نموذج البحث *@
-                <div class="col-lg-4">
-                    <form method="get"
-                          action="@Url.Action(action, controller)"
-                          class="row g-2 align-items-end">
+            @* --- القسم الأول: البحث --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                    <label class="form-label w-100 text-center">بحث في أصناف طلبات الشراء</label>
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
+                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px">
+                            <option value="all"@Html.Raw(searchBy == "" || searchBy == "all" ? " selected" : "")>الكل</option>
+                            <option value="pr"@Html.Raw(searchBy == "pr" ? " selected" : "")>رقم طلب الشراء</option>
+                            <option value="line"@Html.Raw(searchBy == "line" ? " selected" : "")>رقم السطر</option>
+                            <option value="prod"@Html.Raw(searchBy == "prod" ? " selected" : "")>كود الصنف</option>
+                            <option value="qty"@Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية المطلوبة</option>
+                        </select>
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
+                    </div>
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
+                    <input type="hidden" name="page" value="1" />
+                    <input type="hidden" name="pageSize" value="@ps" />
+                    @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                    @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                </form>
+            </div>
 
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">بحث</label>
+            @* --- القسم الثاني: فلتر كود الصنف --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label w-100 text-center">فلتر كود الصنف</label>
+                <div class="erp-list-code-filter justify-content-center">
+                    <input id="codeFromInput" type="number" class="form-control erp-filter-input" placeholder="من" value="@(fromCode?.ToString() ?? "")" />
+                    <input id="codeToInput" type="number" class="form-control erp-filter-input" placeholder="إلى" value="@(toCode?.ToString() ?? "")" />
+                    <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                    <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
+                </div>
+            </div>
+
+            @* --- القسم الثالث: أزرار التحكم --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
+                <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
+                        <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <div class="dropdown d-inline">
+                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
+                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
+                                <li><button type="button" class="dropdown-item text-danger" id="btnBulkDelete">حذف المحدد</button></li>
+                            </ul>
                         </div>
-
-                        <div class="col-sm-4">
-                            <input type="text"
-                                   name="search"
-                                   class="form-control form-control-sm"
-                                   placeholder="اكتب نص البحث..."
-                                   value="@search" />
-                        </div>
-
-                        <div class="col-sm-4">
-                            <select name="searchBy"
-                                    class="form-select form-select-sm">
-                                <option value="all"
-                                       @Html.Raw(searchBy == "" || searchBy == "all" ? " selected" : "")>
-                                    الكل
-                                </option>
-
-                                <option value="pr"
-                                       @Html.Raw(searchBy == "pr" ? " selected" : "")>
-                                    رقم طلب الشراء
-                                </option>
-
-                                <option value="line"
-                                       @Html.Raw(searchBy == "line" ? " selected" : "")>
-                                    رقم السطر
-                                </option>
-
-                                <option value="prod"
-                                       @Html.Raw(searchBy == "prod" ? " selected" : "")>
-                                    كود الصنف
-                                </option>
-
-                                <option value="qty"
-                                       @Html.Raw(searchBy == "qty" ? " selected" : "")>
-                                    الكمية المطلوبة
-                                </option>
+                        <form method="get" asp-action="Export" asp-controller="PRLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
+                            <input type="hidden" name="search" value="@search" />
+                            <input type="hidden" name="searchBy" value="@searchBy" />
+                            @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                            @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
+                                <option value="csv">CSV</option>
+                                <option value="excel" selected>Excel</option>
                             </select>
-                        </div>
-
-                        @* الحفاظ على حالة الترتيب والفلاتر مع البحث *@
-                        <input type="hidden" name="sort"     value="@sort" />
-                        <input type="hidden" name="dir"      value="@dir" />
-                        <input type="hidden" name="page"     value="1" />
-                        <input type="hidden" name="pageSize" value="@ps" />
-                        @if (fromCode.HasValue)
-                        {
-                            <input type="hidden" name="fromCode" value="@fromCode" />
-                        }
-                        @if (toCode.HasValue)
-                        {
-                            <input type="hidden" name="toCode" value="@toCode" />
-                        }
-
-                        <div class="col-auto mt-1">
-                            <button type="submit"
-                                    class="btn btn-erp btn-erp-primary btn-erp-sm px-3">
-                                بحث
-                            </button>
-                        </div>
-
-                        <div class="col-auto mt-1">
-                            <a class="btn btn-erp btn-erp-ghost btn-erp-sm"
-                               href="@Url.Action(action, controller)">
-                                إلغاء
-                            </a>
-                        </div>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
+                        </form>
+                    </div>
+                    <form id="bulkDeleteForm" asp-action="BulkDelete" asp-controller="PRLines" method="post" class="d-none">
+                        @Html.AntiForgeryToken()
                     </form>
                 </div>
-
-                @* العمود الثاني: فلتر كود الصنف من/إلى *@
-                <div class="col-lg-4">
-                    <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="fw-semibold">من كود</span>
-                        <input id="codeFromInput"
-                               type="number"
-                               class="form-control form-control-sm"
-                               style="width:110px"
-                               value="@(fromCode?.ToString() ?? "")" />
-
-                        <span class="fw-semibold">إلى كود</span>
-                        <input id="codeToInput"
-                               type="number"
-                               class="form-control form-control-sm"
-                               style="width:110px"
-                               value="@(toCode?.ToString() ?? "")" />
-
-                        <button type="button"
-                                id="btnApplyCodeFilter"
-                                class="btn btn-erp btn-erp-primary btn-erp-sm">
-                            تطبيق فلتر الكود
-                        </button>
-
-                        <button type="button"
-                                id="btnClearCodeFilter"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm">
-                            مسح
-                        </button>
-                    </div>
-                </div>
-
-                @* العمود الثالث: أزرار التحكم (حذف محدد + طباعة + تصدير) *@
-                <div class="col-lg-4">
-                    <div class="erp-toolbar justify-content-lg-end">
-
-                        <button type="button"
-                                id="btnBulkDelete"
-                                class="btn btn-erp btn-erp-danger btn-erp-sm">
-                            حذف المحدد
-                        </button>
-
-                        <button type="button"
-                                id="btnPrint"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm">
-                            🖨️ طباعة
-                        </button>
-
-                        <form method="get"
-                              asp-action="Export"
-                              asp-controller="PRLines"
-                              class="d-flex flex-wrap gap-2 align-items-center">
-
-                            <input type="hidden" name="search"   value="@search" />
-                            <input type="hidden" name="searchBy" value="@searchBy" />
-                            <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
-                            <input type="hidden" name="toCode"   value="@(toCode?.ToString() ?? "")" />
-
-                            <button type="submit"
-                                    class="btn btn-erp btn-erp-primary btn-erp-sm">
-                                تصدير CSV
-                            </button>
-                        </form>
-
-                    </div>
-                </div>
-
             </div>
         </div>
     </div>
@@ -247,17 +166,16 @@
     }
 
     @* ===== جدول سطور طلبات الشراء ===== *@
-    <div class="erp-table-wrapper mt-3 erp-print-area">
-        <table id="prLinesTable"
-               class="table table-striped table-hover erp-table">
-            <thead class="table-light">
-                <tr>
-                    @* تشيك بوكس اختيار الكل للحذف الجماعي *@
-                    <th class="text-center no-print" style="width:40px;">
-                        <input type="checkbox" id="selectAll" />
-                    </th>
+    <div class="erp-table-scroll-container mt-3 erp-print-area" id="prLinesTableScrollContainer">
+        <div class="erp-table-wrapper" id="prLinesTableWrapper">
+            <table id="prLinesTable" class="table table-striped table-hover erp-table">
+                <thead class="table-light sticky-top">
+                    <tr>
+                        <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
+                            <input type="checkbox" id="selectAll" />
+                        </th>
 
-                    <th data-col="prid">@sortLink("PRId", "رقم طلب الشراء")</th>
+                        <th data-col="prid">@sortLink("PRId", "رقم طلب الشراء")</th>
                     <th data-col="lineno">@sortLink("LineNo", "رقم السطر")</th>
                     <th data-col="prodid">@sortLink("ProdId", "كود الصنف")</th>
                     <th data-col="prodname">@sortLink("prodname", "اسم الصنف")</th>
@@ -270,11 +188,11 @@
                     <th data-col="linevalue">@sortLink("linevalue", "قيمة السطر")</th>
                     <th data-col="batch">التشغيلة المفضلة</th>
                     <th data-col="expiry">الصلاحية المفضلة</th>
-                    <th data-col="qtyConv">الكمية المحوّلة</th>
+                        <th data-col="qtyConv">الكمية المحوّلة</th>
 
-                    <th class="text-center no-print" style="width:140px;">إجراءات</th>
-                </tr>
-            </thead>
+                        <th class="text-center no-print" style="width:140px;" data-col="actions" data-col-fixed="true">إجراءات</th>
+                    </tr>
+                </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
@@ -364,13 +282,14 @@
                     <td data-col="qtyConv"></td>
                     <td class="text-center no-print" data-col="actions"></td>
                 </tr>
-            </tfoot>
-        </table>
+                </tfoot>
+            </table>
+        </div>
     </div>
 
-    @* ===== الشريط السفلي: عرض X–Y من Z + تغيير حجم الصفحة ===== *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
-        <small class="text-muted">
+    @* ===== الشريط السفلي ===== *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted text-start">
             عرض @start - @end من @total
         </small>
 
@@ -419,22 +338,14 @@
             </li>
         </ul>
     </nav>
-
-    @* فورم الحذف الجماعي (مخفي) *@
-    <form id="bulkDeleteForm"
-          asp-action="BulkDelete"
-          asp-controller="@controller"
-          method="post"
-          class="d-none">
-        @Html.AntiForgeryToken()
-    </form>
 </div>
 
 @section Scripts {
     <script>
-        // =========================
-        // زر الطباعة — يطبع الشاشة
-        // =========================
+        (function () {
+            var el = document.getElementById("prLinesTableScrollContainer");
+            if (el) requestAnimationFrame(function () { el.scrollLeft = el.scrollWidth - el.clientWidth; });
+        })();
         document.getElementById("btnPrint")?.addEventListener("click", function () {
             window.print();
         });

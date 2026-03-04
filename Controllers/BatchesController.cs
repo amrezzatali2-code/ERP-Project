@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -26,12 +26,75 @@ namespace ERP.Controllers
     public class BatchesController : Controller
     {
         private readonly AppDbContext _db;
+
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
         private readonly IUserActivityLogger _activityLogger;
 
         public BatchesController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _db = context;
             _activityLogger = activityLogger;
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود في قائمة التشغيلات (لنمط فلترة الأعمدة مثل Excel).
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+
+            IQueryable<Batch> q = _db.Batches.AsNoTracking().Include(b => b.Product);
+
+            List<(string Value, string Display)> items = col switch
+            {
+                "id" => (await q.Select(b => b.BatchId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "prod" => (await q.Where(b => b.Product != null && b.Product.ProdName != null)
+                        .Select(b => b.Product!.ProdName!)
+                        .Distinct()
+                        .OrderBy(v => v)
+                        .Take(500)
+                        .ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                "batchno" => (await q.Select(b => b.BatchNo).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                "expiry" => (await q.Select(b => new { b.Expiry.Year, b.Expiry.Month }).Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
+                        .Take(200)
+                        .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "price" => (await q.Where(b => b.PriceRetailBatch.HasValue).Select(b => b.PriceRetailBatch!.Value).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.00"))).ToList(),
+                "cost" => (await q.Where(b => b.UnitCostDefault.HasValue).Select(b => b.UnitCostDefault!.Value).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.####"))).ToList(),
+                "active" => new List<(string, string)>
+                {
+                    ("true", "نشطة"),
+                    ("false", "موقوفة")
+                },
+                "created" => (await q.Select(b => new { b.CreatedAt.Year, b.CreatedAt.Month }).Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
+                        .Take(200)
+                        .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                "updated" => (await q.Where(b => b.UpdatedAt.HasValue)
+                        .Select(b => new { b.UpdatedAt!.Value.Year, b.UpdatedAt.Value.Month })
+                        .Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
+                        .Take(200)
+                        .ToListAsync())
+                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+            {
+                items = items.Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm)).ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================================================
@@ -70,13 +133,172 @@ namespace ERP.Controllers
             DateTime? toDate,
             string? dateField,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            string? filterCol_id = null,
+            string? filterCol_prod = null,
+            string? filterCol_batchno = null,
+            string? filterCol_expiry = null,
+            string? filterCol_price = null,
+            string? filterCol_cost = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
             // الاستعلام الأساسي من جدول Batch مع ربط اسم الصنف
             var q = _db.Batches
                 .Include(b => b.Product)
                 .AsNoTracking()
                 .AsQueryable();
+
+            // ------------------------------
+            // فلاتر أعمدة بنمط Excel
+            // ------------------------------
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(b => ids.Contains(b.BatchId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            {
+                var vals = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(b => b.Product != null && b.Product.ProdName != null && vals.Contains(b.Product.ProdName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_batchno))
+            {
+                var vals = filterCol_batchno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(b => vals.Contains(b.BatchNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_expiry))
+            {
+                var parts = filterCol_expiry.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length == 7 && x[4] == '-')
+                    .ToList();
+
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+
+                if (dateFilters.Count > 0)
+                {
+                    q = q.Where(b =>
+                        dateFilters.Any(df => b.Expiry.Year == df.Year && b.Expiry.Month == df.Month));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_price))
+            {
+                var vals = filterCol_price.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(b => b.PriceRetailBatch.HasValue && vals.Contains(b.PriceRetailBatch.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_cost))
+            {
+                var vals = filterCol_cost.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue)
+                    .Select(v => v!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(b => b.UnitCostDefault.HasValue && vals.Contains(b.UnitCostDefault.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_active))
+            {
+                var vals = filterCol_active.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant())
+                    .Where(x => x == "1" || x == "0" || x == "true" || x == "false" || x == "نشطة" || x == "موقوفة")
+                    .ToList();
+
+                if (vals.Count > 0)
+                {
+                    bool includeActive = vals.Any(x => x == "1" || x == "true" || x == "نشطة");
+                    bool includeInactive = vals.Any(x => x == "0" || x == "false" || x == "موقوفة");
+                    if (includeActive && !includeInactive)
+                        q = q.Where(b => b.IsActive);
+                    else if (!includeActive && includeInactive)
+                        q = q.Where(b => !b.IsActive);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length == 7 && x[4] == '-')
+                    .ToList();
+
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+
+                if (dateFilters.Count > 0)
+                {
+                    q = q.Where(b =>
+                        dateFilters.Any(df => b.CreatedAt.Year == df.Year && b.CreatedAt.Month == df.Month));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length == 7 && x[4] == '-')
+                    .ToList();
+
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) &&
+                        m >= 1 && m <= 12)
+                    {
+                        dateFilters.Add((y, m));
+                    }
+                }
+
+                if (dateFilters.Count > 0)
+                {
+                    q = q.Where(b =>
+                        b.UpdatedAt.HasValue &&
+                        dateFilters.Any(df => b.UpdatedAt.Value.Year == df.Year && b.UpdatedAt.Value.Month == df.Month));
+                }
+            }
 
             // ------------------------------
             // فلتر التاريخ (CreatedAt / UpdatedAt)
@@ -257,7 +479,16 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             int? fromCode = null,
-            int? toCode = null)
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_prod = null,
+            string? filterCol_batchno = null,
+            string? filterCol_expiry = null,
+            string? filterCol_price = null,
+            string? filterCol_cost = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
             // =========================
             // (1) قيم افتراضية + حماية Paging
@@ -286,7 +517,16 @@ namespace ERP.Controllers
                 toDate,
                 "CreatedAt",   // ثابت عندك
                 fromCode,
-                toCode);
+                toCode,
+                filterCol_id,
+                filterCol_prod,
+                filterCol_batchno,
+                filterCol_expiry,
+                filterCol_price,
+                filterCol_cost,
+                filterCol_active,
+                filterCol_created,
+                filterCol_updated);
 
             // =========================
             // (3) إجمالي العدد بعد الفلاتر
@@ -340,6 +580,15 @@ namespace ERP.Controllers
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Prod = filterCol_prod;
+            ViewBag.FilterCol_BatchNo = filterCol_batchno;
+            ViewBag.FilterCol_Expiry = filterCol_expiry;
+            ViewBag.FilterCol_Price = filterCol_price;
+            ViewBag.FilterCol_Cost = filterCol_cost;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             return View(model);
         }

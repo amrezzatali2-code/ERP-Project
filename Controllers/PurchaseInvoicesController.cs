@@ -43,6 +43,7 @@ namespace ERP.Controllers
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IFullReturnService _fullReturnService;
         private readonly IPermissionService _permissionService;
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public PurchaseInvoicesController(AppDbContext context,
                                           DocumentTotalsService docTotals,
@@ -212,6 +213,19 @@ namespace ERP.Controllers
             string? dateField = "PIDate",        // الحقل المستخدم في فلتر التاريخ (PIDate أو CreatedAt)
             int? fromCode = null,                // من رقم فاتورة
             int? toCode = null,                  // إلى رقم فاتورة
+            string? filterCol_id = null,
+            string? filterCol_status = null,
+            string? filterCol_vendor = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_refprid = null,
+            string? filterCol_pidate = null,
+            string? filterCol_customerid = null,
+            string? filterCol_itemstotal = null,
+            string? filterCol_discounttotal = null,
+            string? filterCol_nettotal = null,
+            string? filterCol_isposted = null,
+            string? filterCol_postedby = null,
+            string? filterCol_createdby = null,
             int page = 1,                        // رقم الصفحة
             int pageSize = 25                    // حجم الصفحة
         )
@@ -225,8 +239,10 @@ namespace ERP.Controllers
             if (page < 1) page = 1;
             if (pageSize <= 0) pageSize = 25;
 
-            // نبدأ بالاستعلام الأساسي بدون تنفيذ فعلي (IQueryable)
-            IQueryable<PurchaseInvoice> query = _context.PurchaseInvoices.AsNoTracking();
+            // نبدأ بالاستعلام الأساسي مع تحميل المورد (للعرض ولفلتر العمود vendor)
+            IQueryable<PurchaseInvoice> query = _context.PurchaseInvoices
+                .AsNoTracking()
+                .Include(p => p.Customer);
 
             // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
             int? codeFrom = Request.Query.ContainsKey("codeFrom")
@@ -253,6 +269,9 @@ namespace ERP.Controllers
                 toDate,
                 dateField
             );
+
+            // 1b) تطبيق فلاتر الأعمدة (بنمط Excel)
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_status, filterCol_vendor, filterCol_warehouse, filterCol_refprid, filterCol_pidate, filterCol_customerid, filterCol_itemstotal, filterCol_discounttotal, filterCol_nettotal, filterCol_isposted, filterCol_postedby, filterCol_createdby);
 
             // 2) تطبيق الترتيب
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -305,10 +324,126 @@ namespace ERP.Controllers
             ViewBag.CodeFrom = finalFromCode;
             ViewBag.CodeTo = finalToCode;
 
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Status = filterCol_status;
+            ViewBag.FilterCol_Vendor = filterCol_vendor;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_Refprid = filterCol_refprid;
+            ViewBag.FilterCol_Pidate = filterCol_pidate;
+            ViewBag.FilterCol_Customerid = filterCol_customerid;
+            ViewBag.FilterCol_Itemstotal = filterCol_itemstotal;
+            ViewBag.FilterCol_Discounttotal = filterCol_discounttotal;
+            ViewBag.FilterCol_Nettotal = filterCol_nettotal;
+            ViewBag.FilterCol_Isposted = filterCol_isposted;
+            ViewBag.FilterCol_Postedby = filterCol_postedby;
+            ViewBag.FilterCol_Createdby = filterCol_createdby;
+
             // إجمالي الصافي
             ViewBag.TotalNet = totalNet;
 
             return View(model);
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود (للفلترة بنمط Excel).
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+
+            if (columnLower == "id")
+            {
+                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                    .Select(p => p.PIId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                var items = ids.Select(v => new { value = v.ToString(), display = v.ToString() });
+                return Json(items);
+            }
+            if (columnLower == "status")
+            {
+                var q = _context.PurchaseInvoices.AsNoTracking().Where(p => p.Status != null).Select(p => p.Status!).Distinct();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "vendor")
+            {
+                var q = _context.Customers.AsNoTracking()
+                    .Where(c => _context.PurchaseInvoices.Any(pi => pi.CustomerId == c.CustomerId))
+                    .Select(c => c.CustomerName ?? "");
+                if (!string.IsNullOrEmpty(searchTerm))
+                    q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "warehouse")
+            {
+                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                    .Select(p => p.WarehouseId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "refprid")
+            {
+                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                    .Where(p => p.RefPRId.HasValue)
+                    .Select(p => p.RefPRId!.Value).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "pidate")
+            {
+                var dates = await _context.PurchaseInvoices.AsNoTracking()
+                    .Select(p => p.PIDate.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "customerid")
+            {
+                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                    .Select(p => p.CustomerId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "itemstotal")
+            {
+                var vals = await _context.PurchaseInvoices.AsNoTracking()
+                    .Select(p => p.ItemsTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
+            }
+            if (columnLower == "discounttotal")
+            {
+                var vals = await _context.PurchaseInvoices.AsNoTracking()
+                    .Select(p => p.DiscountTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
+            }
+            if (columnLower == "nettotal")
+            {
+                var vals = await _context.PurchaseInvoices.AsNoTracking()
+                    .Select(p => p.NetTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
+            }
+            if (columnLower == "isposted")
+            {
+                var items = new[] { new { value = "true", display = "نعم" }, new { value = "false", display = "لا" } };
+                return Json(items);
+            }
+            if (columnLower == "postedby")
+            {
+                var q = _context.PurchaseInvoices.AsNoTracking().Where(p => p.PostedBy != null).Select(p => p.PostedBy!).Distinct();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "createdby")
+            {
+                var q = _context.PurchaseInvoices.AsNoTracking().Where(p => p.CreatedBy != null).Select(p => p.CreatedBy!).Distinct();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+
+            return Json(Array.Empty<object>());
         }
 
 
@@ -2623,7 +2758,20 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             string? dateField = "PIDate",
             int? codeFrom = null,
-            int? codeTo = null
+            int? codeTo = null,
+            string? filterCol_id = null,
+            string? filterCol_status = null,
+            string? filterCol_vendor = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_refprid = null,
+            string? filterCol_pidate = null,
+            string? filterCol_customerid = null,
+            string? filterCol_itemstotal = null,
+            string? filterCol_discounttotal = null,
+            string? filterCol_nettotal = null,
+            string? filterCol_isposted = null,
+            string? filterCol_postedby = null,
+            string? filterCol_createdby = null
         )
         {
             // ✅ تجهيز القيم الافتراضية
@@ -2650,6 +2798,7 @@ namespace ERP.Controllers
                 toDate,
                 dateField
             );
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_status, filterCol_vendor, filterCol_warehouse, filterCol_refprid, filterCol_pidate, filterCol_customerid, filterCol_itemstotal, filterCol_discounttotal, filterCol_nettotal, filterCol_isposted, filterCol_postedby, filterCol_createdby);
 
             // ✅ تطبيق نفس الترتيب
             query = ApplySort(query, sort, sortDesc);
@@ -2828,12 +2977,166 @@ namespace ERP.Controllers
             return query;
         }
 
-       
-        
-        
-        
-        
-        
+        /// <summary>
+        /// تطبيق فلاتر الأعمدة (بنمط Excel) على استعلام فواتير المشتريات.
+        /// </summary>
+        private static IQueryable<PurchaseInvoice> ApplyColumnFilters(
+            IQueryable<PurchaseInvoice> query,
+            string? filterCol_id,
+            string? filterCol_status,
+            string? filterCol_vendor,
+            string? filterCol_warehouse,
+            string? filterCol_refprid,
+            string? filterCol_pidate,
+            string? filterCol_customerid,
+            string? filterCol_itemstotal,
+            string? filterCol_discounttotal,
+            string? filterCol_nettotal,
+            string? filterCol_isposted,
+            string? filterCol_postedby,
+            string? filterCol_createdby
+        )
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    query = query.Where(p => ids.Contains(p.PIId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => p.Status != null && vals.Contains(p.Status));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_vendor))
+            {
+                var vals = filterCol_vendor.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => p.Customer != null && p.Customer.CustomerName != null && vals.Contains(p.Customer.CustomerName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    query = query.Where(p => ids.Contains(p.WarehouseId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_refprid))
+            {
+                var ids = filterCol_refprid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    query = query.Where(p => p.RefPRId.HasValue && ids.Contains(p.RefPRId!.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_pidate))
+            {
+                var parts = filterCol_pidate.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length >= 8)
+                    .ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d))
+                            dates.Add(d.Date);
+                    if (dates.Count > 0)
+                        query = query.Where(pi => dates.Contains(pi.PIDate.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customerid))
+            {
+                var ids = filterCol_customerid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    query = query.Where(p => ids.Contains(p.CustomerId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_itemstotal))
+            {
+                var vals = filterCol_itemstotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => vals.Contains(p.ItemsTotal));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_discounttotal))
+            {
+                var vals = filterCol_discounttotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => vals.Contains(p.DiscountTotal));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_nettotal))
+            {
+                var vals = filterCol_nettotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => vals.Contains(p.NetTotal));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_isposted))
+            {
+                var parts = filterCol_isposted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant())
+                    .Where(x => x == "true" || x == "false" || x == "1" || x == "0" || x == "نعم" || x == "لا")
+                    .ToList();
+                var includeTrue = parts.Any(x => x == "true" || x == "1" || x == "نعم");
+                var includeFalse = parts.Any(x => x == "false" || x == "0" || x == "لا");
+                if (includeTrue && !includeFalse)
+                    query = query.Where(p => p.IsPosted);
+                else if (includeFalse && !includeTrue)
+                    query = query.Where(p => !p.IsPosted);
+                else if (includeTrue && includeFalse)
+                    { /* الكل = لا فلتر */ }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_postedby))
+            {
+                var vals = filterCol_postedby.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => p.PostedBy != null && vals.Contains(p.PostedBy));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_createdby))
+            {
+                var vals = filterCol_createdby.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => p.CreatedBy != null && vals.Contains(p.CreatedBy));
+            }
+            return query;
+        }
+
         /// <summary>
         /// دالة الترتيب الموحدة بحسب اسم العمود المنطقي القادم من الواجهة.
         /// </summary>
@@ -2862,6 +3165,7 @@ namespace ERP.Controllers
 
                 case "vendor":
                 case "customer":
+                case "customerid":
                     query = desc
                         ? query.OrderByDescending(p => p.CustomerId).ThenByDescending(p => p.PIId)
                         : query.OrderBy(p => p.CustomerId).ThenBy(p => p.PIId);
@@ -2873,10 +3177,29 @@ namespace ERP.Controllers
                         : query.OrderBy(p => p.WarehouseId).ThenBy(p => p.PIId);
                     break;
 
+                case "refprid":
+                    query = desc
+                        ? query.OrderByDescending(p => p.RefPRId ?? 0).ThenByDescending(p => p.PIId)
+                        : query.OrderBy(p => p.RefPRId ?? 0).ThenBy(p => p.PIId);
+                    break;
+
                 case "net":
+                case "nettotal":
                     query = desc
                         ? query.OrderByDescending(p => p.NetTotal).ThenByDescending(p => p.PIId)
                         : query.OrderBy(p => p.NetTotal).ThenBy(p => p.PIId);
+                    break;
+
+                case "itemstotal":
+                    query = desc
+                        ? query.OrderByDescending(p => p.ItemsTotal).ThenByDescending(p => p.PIId)
+                        : query.OrderBy(p => p.ItemsTotal).ThenBy(p => p.PIId);
+                    break;
+
+                case "discounttotal":
+                    query = desc
+                        ? query.OrderByDescending(p => p.DiscountTotal).ThenByDescending(p => p.PIId)
+                        : query.OrderBy(p => p.DiscountTotal).ThenBy(p => p.PIId);
                     break;
 
                 case "status":
@@ -2891,10 +3214,22 @@ namespace ERP.Controllers
                         : query.OrderBy(p => p.IsPosted).ThenBy(p => p.PIId);
                     break;
 
+                case "postedby":
+                    query = desc
+                        ? query.OrderByDescending(p => p.PostedBy ?? "").ThenByDescending(p => p.PIId)
+                        : query.OrderBy(p => p.PostedBy ?? "").ThenBy(p => p.PIId);
+                    break;
+
                 case "createdat":
                     query = desc
                         ? query.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.PIId)
                         : query.OrderBy(p => p.CreatedAt).ThenBy(p => p.PIId);
+                    break;
+
+                case "createdby":
+                    query = desc
+                        ? query.OrderByDescending(p => p.CreatedBy ?? "").ThenByDescending(p => p.PIId)
+                        : query.OrderBy(p => p.CreatedBy ?? "").ThenBy(p => p.PIId);
                     break;
 
                 default:

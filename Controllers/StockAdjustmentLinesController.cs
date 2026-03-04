@@ -1,4 +1,4 @@
-﻿using ERP.Data;                             // الاتصال بقاعدة البيانات AppDbContext
+using ERP.Data;                             // الاتصال بقاعدة البيانات AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort
 using ERP.Models;                          // الموديلات StockAdjustmentLine, StockAdjustment
@@ -22,6 +22,7 @@ namespace ERP.Controllers
     public class StockAdjustmentLinesController : Controller
     {
         private readonly AppDbContext _context;  // متغير: الاتصال بقاعدة البيانات
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public StockAdjustmentLinesController(AppDbContext context)
         {
@@ -122,9 +123,19 @@ namespace ERP.Controllers
             int pageSize = 25,
             int? fromCode = null,
             int? toCode = null,
-            int? stockAdjustmentId = null)    // فلتر اختياري برقم رأس التسوية
+            int? stockAdjustmentId = null,    // فلتر اختياري برقم رأس التسوية
+            string? filterCol_id = null,
+            string? filterCol_stock = null,
+            string? filterCol_product = null,
+            string? filterCol_batch = null,
+            string? filterCol_qtyBefore = null,
+            string? filterCol_qtyAfter = null,
+            string? filterCol_qtyDiff = null,
+            string? filterCol_costUnit = null,
+            string? filterCol_costDiff = null,
+            string? filterCol_note = null)
         {
-            var q = BuildLinesQuery(
+            var qBase = BuildLinesQuery(
                 search,
                 searchBy,
                 sort,
@@ -132,6 +143,98 @@ namespace ERP.Controllers
                 fromCode,
                 toCode,
                 stockAdjustmentId);
+
+            // فلاتر الأعمدة بنمط Excel
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_stock))
+            {
+                var ids = filterCol_stock.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.StockAdjustmentId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_product))
+            {
+                var ids = filterCol_product.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.ProductId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_batch))
+            {
+                var ids = filterCol_batch.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => l.BatchId.HasValue && ids.Contains(l.BatchId.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyBefore))
+            {
+                var ids = filterCol_qtyBefore.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.QtyBefore));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyAfter))
+            {
+                var ids = filterCol_qtyAfter.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.QtyAfter));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyDiff))
+            {
+                var ids = filterCol_qtyDiff.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.QtyDiff));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_costUnit))
+            {
+                var vals = filterCol_costUnit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(l => l.CostPerUnit.HasValue && vals.Contains(l.CostPerUnit.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_costDiff))
+            {
+                var vals = filterCol_costDiff.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(l => l.CostDiff.HasValue && vals.Contains(l.CostDiff.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_note))
+            {
+                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(l => l.Note != null && vals.Contains(l.Note));
+            }
+
+            var q = qBase;
 
             var model = await PagedResult<StockAdjustmentLine>.CreateAsync(q, page, pageSize);
 
@@ -148,6 +251,18 @@ namespace ERP.Controllers
             ViewBag.CodeTo = toCode;
             ViewBag.StockAdjustmentId = stockAdjustmentId;
 
+            // تمرير فلاتر الأعمدة للواجهة
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Stock = filterCol_stock;
+            ViewBag.FilterCol_Product = filterCol_product;
+            ViewBag.FilterCol_Batch = filterCol_batch;
+            ViewBag.FilterCol_QtyBefore = filterCol_qtyBefore;
+            ViewBag.FilterCol_QtyAfter = filterCol_qtyAfter;
+            ViewBag.FilterCol_QtyDiff = filterCol_qtyDiff;
+            ViewBag.FilterCol_CostUnit = filterCol_costUnit;
+            ViewBag.FilterCol_CostDiff = filterCol_costDiff;
+            ViewBag.FilterCol_Note = filterCol_note;
+
             return View(model);
         }
 
@@ -163,12 +278,22 @@ namespace ERP.Controllers
             int? codeFrom,
             int? codeTo,
             int? stockAdjustmentId,
+            string? filterCol_id = null,
+            string? filterCol_stock = null,
+            string? filterCol_product = null,
+            string? filterCol_batch = null,
+            string? filterCol_qtyBefore = null,
+            string? filterCol_qtyAfter = null,
+            string? filterCol_qtyDiff = null,
+            string? filterCol_costUnit = null,
+            string? filterCol_costDiff = null,
+            string? filterCol_note = null,
             string? format = "excel")
         {
             int? fromCode = codeFrom;
             int? toCode = codeTo;
 
-            var q = BuildLinesQuery(
+            var qBase = BuildLinesQuery(
                 search,
                 searchBy,
                 sort,
@@ -176,6 +301,98 @@ namespace ERP.Controllers
                 fromCode,
                 toCode,
                 stockAdjustmentId);
+
+            // نفس منطق فلاتر الأعمدة المستخدم في Index
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_stock))
+            {
+                var ids = filterCol_stock.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.StockAdjustmentId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_product))
+            {
+                var ids = filterCol_product.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.ProductId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_batch))
+            {
+                var ids = filterCol_batch.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => l.BatchId.HasValue && ids.Contains(l.BatchId.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyBefore))
+            {
+                var ids = filterCol_qtyBefore.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.QtyBefore));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyAfter))
+            {
+                var ids = filterCol_qtyAfter.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.QtyAfter));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyDiff))
+            {
+                var ids = filterCol_qtyDiff.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(l => ids.Contains(l.QtyDiff));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_costUnit))
+            {
+                var vals = filterCol_costUnit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(l => l.CostPerUnit.HasValue && vals.Contains(l.CostPerUnit.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_costDiff))
+            {
+                var vals = filterCol_costDiff.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(l => l.CostDiff.HasValue && vals.Contains(l.CostDiff.Value));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_note))
+            {
+                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(l => l.Note != null && vals.Contains(l.Note));
+            }
+
+            var q = qBase;
 
             var list = await q.ToListAsync();
 
@@ -205,6 +422,52 @@ namespace ERP.Controllers
             var fileName = $"StockAdjustmentLines_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
 
             return File(bytes, "text/csv", fileName);
+        }
+
+        // =========================
+        // GetColumnValues — قيم أعمدة للفلاتر بنمط Excel
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = column?.Trim().ToLowerInvariant() ?? "";
+
+            IQueryable<StockAdjustmentLine> q = _context.StockAdjustmentLines.AsNoTracking();
+
+            List<(string Value, string Display)> items = col switch
+            {
+                "id" => (await q.Select(l => l.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "stock" => (await q.Select(l => l.StockAdjustmentId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "product" => (await q.Select(l => l.ProductId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "batch" => (await q.Where(l => l.BatchId.HasValue).Select(l => l.BatchId!.Value).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "qtybefore" => (await q.Select(l => l.QtyBefore).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "qtyafter" => (await q.Select(l => l.QtyAfter).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "qtydiff" => (await q.Select(l => l.QtyDiff).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "costunit" => (await q.Where(l => l.CostPerUnit.HasValue).Select(l => l.CostPerUnit!.Value).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.0000"))).ToList(),
+                "costdiff" => (await q.Where(l => l.CostDiff.HasValue).Select(l => l.CostDiff!.Value).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.00"))).ToList(),
+                "note" => (await q.Where(l => l.Note != null).Select(l => l.Note!).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+            {
+                items = items
+                    .Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm))
+                    .ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================

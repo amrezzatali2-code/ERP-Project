@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;        // علشان [Key] و [Required] و [Timestamp]
@@ -69,6 +69,9 @@ namespace ERP.Models
 
         [Display(Name = "العميل")]
         public virtual Customer Customer { get; set; } = null!; // كيان العميل المرتبط بهذا الأمر
+
+        [Display(Name = "المخزن")]
+        public virtual Warehouse Warehouse { get; set; } = null!; // المخزن المرتبط بأمر البيع
 
         [Display(Name = "سطور أمر البيع")]
         public virtual ICollection<SOLine> Lines { get; set; }  // كل سطور أمر البيع

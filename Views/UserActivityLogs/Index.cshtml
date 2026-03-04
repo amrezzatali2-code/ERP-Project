@@ -82,6 +82,76 @@
     };
 }
 
+@functions {
+    private string FormatActivityValues(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+            return "-";
+
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                var parts = new List<string>();
+
+                foreach (var prop in root.EnumerateObject())
+                {
+                    string key = prop.Name;
+                    var valEl = prop.Value;
+
+                    // تخطي الحقول غير المهمة في أغلب الكيانات (DisplayName / Email)
+                    if (string.Equals(key, "DisplayName", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(key, "Email", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (valEl.ValueKind == System.Text.Json.JsonValueKind.Null)
+                        continue;
+
+                    string valueText = valEl.ValueKind switch
+                    {
+                        System.Text.Json.JsonValueKind.String => valEl.GetString() ?? "",
+                        System.Text.Json.JsonValueKind.Number => valEl.GetRawText(),
+                        System.Text.Json.JsonValueKind.True => "نعم",
+                        System.Text.Json.JsonValueKind.False => "لا",
+                        _ => valEl.GetRawText()
+                    };
+
+                    if (string.IsNullOrWhiteSpace(valueText) || string.Equals(valueText, "null", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // أسماء عربية أبسط للحقول المعروفة (خاصة المستخدمين)
+                    string label = key switch
+                    {
+                        "UserName" => "الاسم",
+                        "IsActive" => "نشط؟",
+                        "IsAdmin" => "أدمن؟",
+                        _ => key
+                    };
+
+                    parts.Add($"{label}: {valueText}");
+                }
+
+                if (parts.Count == 0)
+                    return "-";
+
+                var joined = string.Join(" | ", parts);
+                return joined.Length > 80 ? joined.Substring(0, 80) + "..." : joined;
+            }
+
+            // لو مش Object (مثلاً نص عادي) نرجعه كما هو مع اختصار
+            return json.Length > 80 ? json.Substring(0, 80) + "..." : json;
+        }
+        catch
+        {
+            // فى حالة JSON غير صالح نعرض النص الخام مختصرًا
+            return json.Length > 140 ? json.Substring(0, 140) + "..." : json;
+        }
+    }
+}
+
 <div dir="rtl" class="container-fluid">
 
     @* ===== شريط الفلاتر الموحد: بحث + فلتر كود + أزرار التحكم (ثلاثة أقسام متساوية ومتوازنة) ===== *@
@@ -229,27 +299,19 @@
                             <td data-col="action">@r.ActionType</td>
                             <td data-col="entity">@r.EntityName</td>
                             <td data-col="entityId">@r.EntityId</td>
-                            <td data-col="time">@r.ActionTime.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td data-col="time">@r.ActionTime.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
 
                             <td data-col="ip">@r.IpAddress</td>
                             <td data-col="agent">@r.UserAgent</td>
                             <td data-col="desc">@r.Description</td>
 
-                            @* ✅ جديد: قبل / بعد (ملخص سريع بدل JSON كامل) *@
+                            @* ✅ قبل / بعد: ملخص مقروء للقيم بدلاً من JSON خام *@
                             <td data-col="old" class="text-muted small">
-                                @(
-                                                        string.IsNullOrWhiteSpace(r.OldValues)
-                                                        ? "-"
-                                                        : (r.OldValues!.Length > 40 ? r.OldValues.Substring(0, 40) + "..." : r.OldValues)
-                                                        )
+                                @FormatActivityValues(r.OldValues)
                             </td>
 
                             <td data-col="new" class="text-muted small">
-                                @(
-                                                        string.IsNullOrWhiteSpace(r.NewValues)
-                                                        ? "-"
-                                                        : (r.NewValues!.Length > 40 ? r.NewValues.Substring(0, 40) + "..." : r.NewValues)
-                                                        )
+                                @FormatActivityValues(r.NewValues)
                             </td>
                         </tr>
                     }

@@ -27,6 +27,8 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
         public StockAdjustmentsController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
@@ -126,10 +128,16 @@ namespace ERP.Controllers
             int? toCode = null,             // فلتر كود إلى
             bool useDateRange = false,      // تفعيل فلتر التاريخ
             DateTime? fromDate = null,
-            DateTime? toDate = null)
+            DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_reference = null,
+            string? filterCol_reason = null,
+            string? filterCol_created = null)
         {
-            // بناء الاستعلام طبقاً للفلاتر + تضمين السطور لعرض معلومات التسوية
-            var q = BuildAdjustmentsQuery(
+            // بناء الاستعلام طبقاً للفلاتر العامة (بحث + كود + تاريخ)
+            var qBase = BuildAdjustmentsQuery(
                 search,
                 searchBy,
                 sort,
@@ -138,7 +146,63 @@ namespace ERP.Controllers
                 toCode,
                 useDateRange,
                 fromDate,
-                toDate)
+                toDate);
+
+            // فلاتر الأعمدة (بنمط Excel) على رأس التسوية
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(x => ids.Contains(x.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(x => ids.Contains(x.WarehouseId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_reference))
+            {
+                var vals = filterCol_reference.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(x => x.ReferenceNo != null && vals.Contains(x.ReferenceNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_reason))
+            {
+                var vals = filterCol_reason.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(x => x.Reason != null && vals.Contains(x.Reason));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    qBase = qBase.Where(x => dates.Contains(x.AdjustmentDate.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var dates = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    qBase = qBase.Where(x => x.CreatedAt.Date != DateTime.MinValue && dates.Contains(x.CreatedAt.Date));
+            }
+
+            // تضمين السطور بعد تطبيق الفلاتر
+            var q = qBase
                 .Include(a => a.Lines)
                 .ThenInclude(l => l.Product);
 
@@ -163,6 +227,14 @@ namespace ERP.Controllers
             // حقل التاريخ المستخدم في الفلترة (للعرض فقط في المودال)
             ViewBag.DateField = "AdjustmentDate";
 
+            // تمرير فلاتر الأعمدة إلى الواجهة
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_Reference = filterCol_reference;
+            ViewBag.FilterCol_Reason = filterCol_reason;
+            ViewBag.FilterCol_Created = filterCol_created;
+
             return View(model);
         }
 
@@ -180,12 +252,18 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_reference = null,
+            string? filterCol_reason = null,
+            string? filterCol_created = null,
             string? format = "excel")   // excel | csv (الاثنين CSV حالياً)
         {
             int? fromCode = codeFrom;
             int? toCode = codeTo;
 
-            var q = BuildAdjustmentsQuery(
+            var qBase = BuildAdjustmentsQuery(
                 search,
                 searchBy,
                 sort,
@@ -195,6 +273,61 @@ namespace ERP.Controllers
                 useDateRange,
                 fromDate,
                 toDate);
+
+            // نفس منطق فلاتر الأعمدة المستخدم في Index
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(x => ids.Contains(x.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    qBase = qBase.Where(x => ids.Contains(x.WarehouseId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_reference))
+            {
+                var vals = filterCol_reference.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(x => x.ReferenceNo != null && vals.Contains(x.ReferenceNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_reason))
+            {
+                var vals = filterCol_reason.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    qBase = qBase.Where(x => x.Reason != null && vals.Contains(x.Reason));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    qBase = qBase.Where(x => dates.Contains(x.AdjustmentDate.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var dates = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    qBase = qBase.Where(x => x.CreatedAt.Date != DateTime.MinValue && dates.Contains(x.CreatedAt.Date));
+            }
+
+            var q = qBase;
 
             var list = await q.ToListAsync();
 
@@ -226,6 +359,62 @@ namespace ERP.Controllers
             var fileName = $"StockAdjustments_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
 
             return File(bytes, "text/csv", fileName);
+        }
+
+        // =========================
+        // GetColumnValues — فلاتر الأعمدة بنمط Excel
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = column?.Trim().ToLowerInvariant() ?? "";
+
+            IQueryable<StockAdjustment> q = _context.StockAdjustments.AsNoTracking();
+
+            List<(string Value, string Display)> items = col switch
+            {
+                "id" => (await q.Select(x => x.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "warehouse" => (await q.Select(x => x.WarehouseId).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "reference" => (await q.Where(x => x.ReferenceNo != null)
+                        .Select(x => x.ReferenceNo!)
+                        .Distinct()
+                        .OrderBy(v => v)
+                        .Take(300)
+                        .ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                "reason" => (await q.Where(x => x.Reason != null)
+                        .Select(x => x.Reason!)
+                        .Distinct()
+                        .OrderBy(v => v)
+                        .Take(300)
+                        .ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                "date" => (await q.Select(x => x.AdjustmentDate.Date)
+                        .Distinct()
+                        .OrderByDescending(d => d)
+                        .Take(200)
+                        .ToListAsync())
+                    .Select(d => (d.ToString("yyyy-MM-dd"), d.ToString("yyyy/MM/dd"))).ToList(),
+                "created" => (await q.Select(x => x.CreatedAt.Date)
+                        .Distinct()
+                        .OrderByDescending(d => d)
+                        .Take(200)
+                        .ToListAsync())
+                    .Select(d => (d.ToString("yyyy-MM-dd"), d.ToString("yyyy/MM/dd"))).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+            {
+                items = items
+                    .Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm))
+                    .ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================

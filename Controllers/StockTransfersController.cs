@@ -11,9 +11,11 @@ using Microsoft.Extensions.DependencyInjection;  // GetRequiredService
 using System;                                     // متغيرات التوقيت DateTime
 using System.Collections.Generic;                // القوائم List و ICollection
 using System.Globalization;
+using System.IO;                                  // MemoryStream لتصدير Excel
 using System.Linq;                               // أوامر LINQ مثل Where و OrderBy
 using System.Text;                               // لبناء نص ملف التصدير StringBuilder
 using System.Threading.Tasks;                    // Task و async
+using ClosedXML.Excel;                           // تصدير Excel
 
 namespace ERP.Controllers
 {
@@ -28,6 +30,7 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly StockAnalysisService _stockAnalysisService;
         private readonly IUserActivityLogger _activityLogger;
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public StockTransfersController(AppDbContext context, StockAnalysisService stockAnalysisService, IUserActivityLogger activityLogger)
         {
@@ -57,7 +60,14 @@ namespace ERP.Controllers
             DateTime? fromDate = null,   // متغير: تاريخ من
             DateTime? toDate = null,     // متغير: تاريخ إلى
             int? fromCode = null,        // متغير: كود من
-            int? toCode = null           // متغير: كود إلى
+            int? toCode = null,          // متغير: كود إلى
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_fromwarehouse = null,
+            string? filterCol_towarehouse = null,
+            string? filterCol_note = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null
         )
         {
             // قيم افتراضية
@@ -69,7 +79,7 @@ namespace ERP.Controllers
             IQueryable<StockTransfer> baseQuery = _context.StockTransfers
                 .AsNoTracking(); // متغير: استعلام أساسي على جدول التحويلات
 
-            // نطبق الفلاتر والبحث والترتيب على الاستعلام الأساسي
+            // نطبق الفلاتر العامة (بحث + كود + تاريخ + ترتيب)
             var filteredQuery = ApplyFiltersAndSorting(
                 baseQuery,
                 search,
@@ -82,6 +92,69 @@ namespace ERP.Controllers
                 fromCode,
                 toCode
             );
+
+            // فلاتر الأعمدة (بنمط Excel)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    filteredQuery = filteredQuery.Where(t => ids.Contains(t.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_fromwarehouse))
+            {
+                var ids = filterCol_fromwarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    filteredQuery = filteredQuery.Where(t => ids.Contains(t.FromWarehouseId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_towarehouse))
+            {
+                var ids = filterCol_towarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    filteredQuery = filteredQuery.Where(t => ids.Contains(t.ToWarehouseId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_note))
+            {
+                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    filteredQuery = filteredQuery.Where(t => t.Note != null && vals.Contains(t.Note));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    filteredQuery = filteredQuery.Where(t => dates.Contains(t.TransferDate.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var dates = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    filteredQuery = filteredQuery.Where(t => dates.Contains(t.CreatedAt.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var dates = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    filteredQuery = filteredQuery.Where(t => t.UpdatedAt.HasValue && dates.Contains(t.UpdatedAt.Value.Date));
+            }
 
             // بعد الفلاتر نضيف الـ Include (مش هتأثر على نوع المتغير)
             var query = filteredQuery
@@ -115,6 +188,15 @@ namespace ERP.Controllers
             // حفظ قيم الترتيب في ViewBag عشان الـ sortLink في الواجهة
             ViewBag.Sort = sort;
             ViewBag.Dir = descending ? "desc" : "asc";
+
+            // تمرير فلاتر الأعمدة إلى الواجهة
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_FromWarehouse = filterCol_fromwarehouse;
+            ViewBag.FilterCol_ToWarehouse = filterCol_towarehouse;
+            ViewBag.FilterCol_Note = filterCol_note;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             return View(result);
         }
@@ -694,6 +776,13 @@ namespace ERP.Controllers
             DateTime? toDate = null,      // متغير: تاريخ إلى
             int? fromCode = null,         // متغير: فلتر من كود
             int? toCode = null,           // متغير: فلتر إلى كود
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_fromwarehouse = null,
+            string? filterCol_towarehouse = null,
+            string? filterCol_note = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
             string format = "excel")      // excel | csv (الاثنين حالياً يخرجوا CSV)
         {
             // متغير: هل الترتيب تنازلي؟
@@ -703,7 +792,7 @@ namespace ERP.Controllers
             IQueryable<StockTransfer> baseQuery = _context.StockTransfers
                 .AsNoTracking();
 
-            // 2) نطبق الفلاتر والترتيب بنفس دالة Index (نفس النتائج تماماً)
+            // 2) نطبق الفلاتر والترتيب بنفس دالة Index (نفس النتائج العامة تماماً)
             var filtered = ApplyFiltersAndSorting(
                 baseQuery,
                 search,
@@ -716,6 +805,69 @@ namespace ERP.Controllers
                 fromCode,
                 toCode);
 
+            // 2.1 فلاتر الأعمدة (بنفس منطق Index)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    filtered = filtered.Where(t => ids.Contains(t.Id));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_fromwarehouse))
+            {
+                var ids = filterCol_fromwarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    filtered = filtered.Where(t => ids.Contains(t.FromWarehouseId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_towarehouse))
+            {
+                var ids = filterCol_towarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    filtered = filtered.Where(t => ids.Contains(t.ToWarehouseId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_note))
+            {
+                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    filtered = filtered.Where(t => t.Note != null && vals.Contains(t.Note));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    filtered = filtered.Where(t => dates.Contains(t.TransferDate.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var dates = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    filtered = filtered.Where(t => dates.Contains(t.CreatedAt.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var dates = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (dates.Count > 0)
+                    filtered = filtered.Where(t => t.UpdatedAt.HasValue && dates.Contains(t.UpdatedAt.Value.Date));
+            }
+
             // 3) نضيف Include لجلب أسماء/أكواد المخازن (من/إلى)
             var query = filtered
                 .Include(t => t.FromWarehouse)   // متغير: المخزن المحوَّل منه
@@ -724,45 +876,139 @@ namespace ERP.Controllers
             // 4) نحصل على كل النتائج فى قائمة
             var list = await query.ToListAsync();
 
-            // 5) نبني محتوى CSV فى StringBuilder
-            var sb = new StringBuilder();
+            // 5) نقرر الصيغة بناءً على format
+            format = (format ?? "excel").Trim().ToLowerInvariant();
 
-            // عناوين الأعمدة في ملف CSV
-            sb.AppendLine("Id,TransferDate,FromWarehouseId,ToWarehouseId,FromWarehouseName,ToWarehouseName,Note,CreatedAt,UpdatedAt");
-
-            // كل تحويل في سطر CSV
-            foreach (var t in list)
+            if (format == "csv")
             {
-                // متغير: اسم مخزن من / إلى بدون فواصل
-                var fromName = (t.FromWarehouse?.WarehouseName ?? "").Replace(",", " ");
-                var toName = (t.ToWarehouse?.WarehouseName ?? "").Replace(",", " ");
-                var note = (t.Note ?? "").Replace(",", " ");
+                // ===== فرع CSV =====
+                var sb = new StringBuilder();
 
-                string line = string.Join(",",
-                    t.Id,   // كود التحويل
-                    t.TransferDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), // تاريخ التحويل
-                    t.FromWarehouseId,   // كود من مخزن
-                    t.ToWarehouseId,     // كود إلى مخزن
-                    fromName,            // اسم من مخزن
-                    toName,              // اسم إلى مخزن
-                    note,                // الملاحظات
-                    t.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),    // تاريخ الإنشاء
-                    t.UpdatedAt.HasValue
-                        ? t.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
-                        : ""              // آخر تعديل (فارغ لو مفيش)
-                );
+                // عناوين الأعمدة في ملف CSV
+                sb.AppendLine("Id,TransferDate,FromWarehouseId,ToWarehouseId,FromWarehouseName,ToWarehouseName,Note,CreatedAt,UpdatedAt");
 
-                sb.AppendLine(line);
+                // كل تحويل في سطر CSV
+                foreach (var t in list)
+                {
+                    // متغير: اسم مخزن من / إلى بدون فواصل
+                    var fromName = (t.FromWarehouse?.WarehouseName ?? "").Replace(",", " ");
+                    var toName = (t.ToWarehouse?.WarehouseName ?? "").Replace(",", " ");
+                    var note = (t.Note ?? "").Replace(",", " ");
+
+                    string line = string.Join(",",
+                        t.Id,   // كود التحويل
+                        t.TransferDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), // تاريخ التحويل
+                        t.FromWarehouseId,   // كود من مخزن
+                        t.ToWarehouseId,     // كود إلى مخزن
+                        fromName,            // اسم من مخزن
+                        toName,              // اسم إلى مخزن
+                        note,                // الملاحظات
+                        t.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),    // تاريخ الإنشاء
+                        t.UpdatedAt.HasValue
+                            ? t.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                            : ""              // آخر تعديل (فارغ لو مفيش)
+                    );
+
+                    sb.AppendLine(line);
+                }
+
+                // استخدام UTF-8 مع BOM علشان Excel يقرأ عربى صح
+                var utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+                var bytesCsv = utf8Bom.GetBytes(sb.ToString());
+                var fileNameCsv = $"StockTransfers_{DateTime.Now:yyyyMMdd_HHmm}.csv";
+                const string contentTypeCsv = "text/csv; charset=utf-8";
+
+                return File(bytesCsv, contentTypeCsv, fileNameCsv);
+            }
+            else
+            {
+                // ===== فرع Excel (XLSX) =====
+                using var workbook = new XLWorkbook();
+                var ws = workbook.Worksheets.Add("StockTransfers");
+
+                int r = 1;
+                ws.Cell(r, 1).Value = "كود التحويل";
+                ws.Cell(r, 2).Value = "تاريخ التحويل";
+                ws.Cell(r, 3).Value = "كود من مخزن";
+                ws.Cell(r, 4).Value = "كود إلى مخزن";
+                ws.Cell(r, 5).Value = "من مخزن";
+                ws.Cell(r, 6).Value = "إلى مخزن";
+                ws.Cell(r, 7).Value = "الملاحظات";
+                ws.Cell(r, 8).Value = "تاريخ الإنشاء";
+                ws.Cell(r, 9).Value = "آخر تعديل";
+
+                var headerRange = ws.Range(r, 1, r, 9);
+                headerRange.Style.Font.Bold = true;
+                headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                foreach (var t in list)
+                {
+                    r++;
+                    ws.Cell(r, 1).Value = t.Id;
+                    ws.Cell(r, 2).Value = t.TransferDate;
+                    ws.Cell(r, 3).Value = t.FromWarehouseId;
+                    ws.Cell(r, 4).Value = t.ToWarehouseId;
+                    ws.Cell(r, 5).Value = t.FromWarehouse?.WarehouseName ?? "";
+                    ws.Cell(r, 6).Value = t.ToWarehouse?.WarehouseName ?? "";
+                    ws.Cell(r, 7).Value = t.Note ?? "";
+                    ws.Cell(r, 8).Value = t.CreatedAt;
+                    ws.Cell(r, 9).Value = t.UpdatedAt;
+                }
+
+                ws.Columns().AdjustToContents();
+                ws.Column(2).Style.DateFormat.Format = "yyyy-mm-dd hh:mm";
+                ws.Column(8).Style.DateFormat.Format = "yyyy-mm-dd hh:mm";
+                ws.Column(9).Style.DateFormat.Format = "yyyy-mm-dd hh:mm";
+
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                stream.Position = 0;
+
+                var fileNameXlsx = $"StockTransfers_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+                return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);
+            }
+        }
+
+        /// <summary>
+        /// قيم الأعمدة المميزة لاستخدامها في فلاتر الأعمدة بنمط Excel.
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = column?.Trim().ToLowerInvariant() ?? "";
+
+            IQueryable<StockTransfer> q = _context.StockTransfers.AsNoTracking();
+
+            List<(string Value, string Display)> items = col switch
+            {
+                "id" => (await q.Select(t => t.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "fromwarehouse" => (await q.Select(t => t.FromWarehouseId).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "towarehouse" => (await q.Select(t => t.ToWarehouseId).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "note" => (await q.Where(t => t.Note != null).Select(t => t.Note!).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                "date" => (await q.Select(t => t.TransferDate.Date).Distinct().OrderByDescending(d => d).Take(200).ToListAsync())
+                    .Select(d => (d.ToString("yyyy-MM-dd"), d.ToString("yyyy/MM/dd"))).ToList(),
+                "created" => (await q.Select(t => t.CreatedAt.Date).Distinct().OrderByDescending(d => d).Take(200).ToListAsync())
+                    .Select(d => (d.ToString("yyyy-MM-dd"), d.ToString("yyyy/MM/dd"))).ToList(),
+                "updated" => (await q.Where(t => t.UpdatedAt.HasValue).Select(t => t.UpdatedAt!.Value.Date).Distinct().OrderByDescending(d => d).Take(200).ToListAsync())
+                    .Select(d => (d.ToString("yyyy-MM-dd"), d.ToString("yyyy/MM/dd"))).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+            {
+                items = items
+                    .Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm))
+                    .ToList();
             }
 
-            // 6) تحويل النص إلى Bytes وتجهيزه كملف
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-
-            // حالياً بغضّ النظر عن قيمة format (excel / csv) هنطلع CSV
-            var fileName = "StockTransfers.csv";
-            const string contentType = "text/csv";
-
-            return File(bytes, contentType, fileName);
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         #endregion

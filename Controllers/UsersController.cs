@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -420,14 +420,20 @@ namespace ERP.Controllers
             if (dbUser == null)
                 return NotFound();                    // متغير: المستخدم لم يعد موجوداً
 
-            var oldValues = System.Text.Json.JsonSerializer.Serialize(new { dbUser.UserName, dbUser.DisplayName, dbUser.Email, dbUser.IsActive });
+            // نسجل في سجل النشاط فقط القيم المهمة للمستخدم (اسم الدخول + أدمن؟ + نشط؟)
+            var oldValues = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                dbUser.UserName,
+                dbUser.IsAdmin,
+                dbUser.IsActive
+            });
             // ======================================================
             // 4) تحديث خصائص المستخدم
             // ======================================================
 
             dbUser.UserName = model.UserName;      // متغير: اسم الدخول
-            dbUser.DisplayName = model.DisplayName;   // متغير: نحتفظ به مساويًا لاسم الدخول
-            dbUser.Email = model.Email;         // متغير: البريد الإلكتروني
+            dbUser.DisplayName = model.DisplayName;   // متغير: نحتفظ به مساويًا لاسم الدخول (للتقارير)
+            dbUser.Email = model.Email;               // متغير: البريد الإلكتروني (اختياري)
             dbUser.IsActive = model.IsActive;      // متغير: حالة التفعيل
 
             // لو عندك TextBox في الفورم لكتابة "كلمة مرور جديدة"
@@ -445,7 +451,12 @@ namespace ERP.Controllers
             // ======================================================
             await _context.SaveChangesAsync();
 
-            var newValues = System.Text.Json.JsonSerializer.Serialize(new { dbUser.UserName, dbUser.DisplayName, dbUser.Email, dbUser.IsActive });
+            var newValues = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                dbUser.UserName,
+                dbUser.IsAdmin,
+                dbUser.IsActive
+            });
             await _activityLogger.LogAsync(UserActionType.Edit, "User", model.UserId, $"تعديل مستخدم: {model.UserName}", oldValues, newValues);
 
             TempData["Success"] = "تم حفظ تعديلات المستخدم بنجاح.";

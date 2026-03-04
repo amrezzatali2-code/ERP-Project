@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -21,6 +21,8 @@ namespace ERP.Controllers
     public class StockFifoMapController : Controller
     {
         private readonly AppDbContext context;
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
         public StockFifoMapController(AppDbContext ctx) => context = ctx;
 
         /// <summary>
@@ -34,7 +36,12 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 50,
             int? fromCode = null,        // من MapId
-            int? toCode = null)        // إلى MapId
+            int? toCode = null,          // إلى MapId
+            string? filterCol_map = null,
+            string? filterCol_out = null,
+            string? filterCol_in = null,
+            string? filterCol_qty = null,
+            string? filterCol_unitcost = null)
         {
             // الاستعلام الأساسي بدون تتبّع
             var q = context.StockFifoMap.AsNoTracking();
@@ -80,7 +87,49 @@ namespace ERP.Controllers
             if (toCode.HasValue)
                 q = q.Where(x => x.MapId <= toCode.Value);
 
-            // 6) الترقيم (Paging)
+            // 6) فلاتر أعمدة بنمط Excel
+            if (!string.IsNullOrWhiteSpace(filterCol_map))
+            {
+                var ids = filterCol_map.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.MapId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_out))
+            {
+                var ids = filterCol_out.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.OutEntryId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_in))
+            {
+                var ids = filterCol_in.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.InEntryId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            {
+                var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.Qty));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_unitcost))
+            {
+                var vals = filterCol_unitcost.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => decimal.TryParse(s.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => vals.Contains(x.UnitCost));
+            }
+
+            // 7) الترقيم (Paging)
             if (pageSize <= 0) pageSize = 50;
 
             var totalRows = await q.CountAsync();
@@ -94,7 +143,7 @@ namespace ERP.Controllers
                 .Take(pageSize)
                 .ToListAsync();
 
-            // 7) قيم الواجهة (ViewBag) لربطها بالـ View
+            // 8) قيم الواجهة (ViewBag) لربطها بالـ View
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "OutEntryId";
@@ -111,7 +160,50 @@ namespace ERP.Controllers
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
 
+            // فلاتر الأعمدة
+            ViewBag.FilterCol_Map = filterCol_map;
+            ViewBag.FilterCol_Out = filterCol_out;
+            ViewBag.FilterCol_In = filterCol_in;
+            ViewBag.FilterCol_Qty = filterCol_qty;
+            ViewBag.FilterCol_UnitCost = filterCol_unitcost;
+
             return View(rows);
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود محدد لفلترة الأعمدة بنمط Excel.
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+
+            IQueryable<StockFifoMap> q = context.StockFifoMap.AsNoTracking();
+
+            List<(string Value, string Display)> items = col switch
+            {
+                "map" => (await q.Select(x => x.MapId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "out" => (await q.Select(x => x.OutEntryId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "in" => (await q.Select(x => x.InEntryId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "qty" => (await q.Select(x => x.Qty).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                "unitcost" => (await q.Select(x => x.UnitCost).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                    .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.0000"))).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+            {
+                items = items
+                    .Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm))
+                    .ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         /// <summary>
@@ -126,6 +218,11 @@ namespace ERP.Controllers
             string? dir = "asc",
             int? fromCode = null,
             int? toCode = null,
+            string? filterCol_map = null,
+            string? filterCol_out = null,
+            string? filterCol_in = null,
+            string? filterCol_qty = null,
+            string? filterCol_unitcost = null,
             string format = "excel")
         {
             var q = context.StockFifoMap.AsNoTracking();
@@ -165,6 +262,47 @@ namespace ERP.Controllers
 
             if (toCode.HasValue)
                 q = q.Where(x => x.MapId <= toCode.Value);
+
+            if (!string.IsNullOrWhiteSpace(filterCol_map))
+            {
+                var ids = filterCol_map.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.MapId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_out))
+            {
+                var ids = filterCol_out.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.OutEntryId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_in))
+            {
+                var ids = filterCol_in.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.InEntryId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            {
+                var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => int.TryParse(s.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.Qty));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_unitcost))
+            {
+                var vals = filterCol_unitcost.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(s => decimal.TryParse(s.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => vals.Contains(x.UnitCost));
+            }
 
             var data = await q.ToListAsync();
 

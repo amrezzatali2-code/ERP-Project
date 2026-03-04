@@ -127,167 +127,112 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @* ===== الكارت العلوي: بحث + فلتر رقم + أزرار التحكم ===== *@
-    <div class="card mb-3 d-print-none">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
+    @* ===== شريط الفلاتر الموحد (مثل قائمة فواتير المبيعات) ===== *@
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
-                @* العمود الأول: البحث *@
-                <div class="col-lg-4">
-                    <form method="get"
-                          action="@Url.Action(action, controller)"
-                          class="row g-2 align-items-end">
+            @* --- القسم الأول: البحث العام --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <form method="get"
+                      action="@Url.Action(action, controller)"
+                      class="erp-list-search-form d-flex flex-column align-items-center w-100">
 
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">بحث</label>
-                        </div>
+                    <label class="form-label w-100 text-center">بحث في أصناف المبيعات</label>
 
-                        <div class="col-sm-4">
-                            <input type="text"
-                                   name="search"
-                                   class="form-control form-control-sm"
-                                   placeholder="اكتب نص البحث..."
-                                   value="@search" />
-                        </div>
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <input type="text"
+                               name="search"
+                               class="form-control erp-filter-input"
+                               placeholder="اكتب نص البحث..."
+                               value="@search" />
 
-                        <div class="col-sm-4">
-                            <select name="searchBy"
-                                    class="form-select form-select-sm">
-                                @* الكل *@
-                                <option value="all"
-                                       @Html.Raw(searchBy == "all" ? " selected" : "")>
-                                    الكل
-                                </option>
+                        <select name="searchBy"
+                                class="form-select form-select-arrow erp-filter-input"
+                                style="max-width:180px;min-width:140px">
+                            <option value="all"         @Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
+                            <option value="id"          @Html.Raw(searchBy == "id" ? " selected" : "")>رقم الفاتورة</option>
+                            <option value="si"          @Html.Raw(searchBy == "si" ? " selected" : "")>رقم الفاتورة</option>
+                            <option value="line"        @Html.Raw(searchBy == "line" ? " selected" : "")>رقم السطر</option>
+                            <option value="prod"        @Html.Raw(searchBy == "prod" ? " selected" : "")>كود الصنف</option>
+                            <option value="prodname"    @Html.Raw(searchBy == "prodname" ? " selected" : "")>اسم الصنف</option>
+                            <option value="customername"@Html.Raw(searchBy == "customername" ? " selected" : "")>اسم العميل</option>
+                            <option value="qty"         @Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
+                            <option value="batch"       @Html.Raw(searchBy == "batch" ? " selected" : "")>التشغيلة</option>
+                            <option value="notes"       @Html.Raw(searchBy == "notes" ? " selected" : "")>الملاحظات</option>
+                        </select>
 
-                                @* البحث برقم الفاتورة *@
-                                <option value="id"
-                                       @Html.Raw(searchBy == "id" ? " selected" : "")>
-                                    رقم الفاتورة
-                                </option>
-                                <option value="si"
-                                       @Html.Raw(searchBy == "si" ? " selected" : "")>
-                                    رقم الفاتورة
-                                </option>
-
-                                @* البحث برقم السطر *@
-                                <option value="line"
-                                       @Html.Raw(searchBy == "line" ? " selected" : "")>
-                                    رقم السطر
-                                </option>
-
-                                @* البحث بكود الصنف *@
-                                <option value="prod"
-                                       @Html.Raw(searchBy == "prod" ? " selected" : "")>
-                                    كود الصنف
-                                </option>
-
-                                @* البحث باسم الصنف *@
-                                <option value="prodname"
-                                       @Html.Raw(searchBy == "prodname" ? " selected" : "")>
-                                    اسم الصنف
-                                </option>
-
-                                @* البحث باسم العميل *@
-                                <option value="customername"
-                                       @Html.Raw(searchBy == "customername" ? " selected" : "")>
-                                    اسم العميل
-                                </option>
-
-                                @* البحث بالكمية *@
-                                <option value="qty"
-                                       @Html.Raw(searchBy == "qty" ? " selected" : "")>
-                                    الكمية
-                                </option>
-
-                                @* البحث بالتشغيلة *@
-                                <option value="batch"
-                                       @Html.Raw(searchBy == "batch" ? " selected" : "")>
-                                    التشغيلة
-                                </option>
-
-                                @* البحث بالملاحظات *@
-                                <option value="notes"
-                                       @Html.Raw(searchBy == "notes" ? " selected" : "")>
-                                    الملاحظات
-                                </option>
-                            </select>
-                        </div>
-
-                        @* الحفاظ على باقي الفلاتر *@
-                        <input type="hidden" name="sort" value="@sort" />
-                        <input type="hidden" name="dir" value="@dir" />
-                        <input type="hidden" name="page" value="1" />
-                        <input type="hidden" name="pageSize" value="@ps" />
-                        <input type="hidden" name="dateField" value="@dateField" />
-                        <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
-                        <input type="hidden" name="siId" value="@siId" />
-                        @if (Model.FromDate.HasValue)
-                        {
-                            <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" />
-                        }
-                        @if (Model.ToDate.HasValue)
-                        {
-                            <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
-                        }
-                        @if (fromCode.HasValue)
-                        {
-                            <input type="hidden" name="fromCode" value="@fromCode" />
-                        }
-                        @if (toCode.HasValue)
-                        {
-                            <input type="hidden" name="toCode" value="@toCode" />
-                        }
-
-                        <div class="col-auto mt-1">
-                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">
-                                بحث
-                            </button>
-                        </div>
-                        <div class="col-auto mt-1">
-                            <a class="btn btn-erp btn-erp-ghost btn-erp-sm"
-                               href="@Url.Action(action, controller)">
-                                إلغاء
-                            </a>
-                        </div>
-                    </form>
-                </div>
-
-                @* العمود الثاني: فلتر رقم من/إلى (رقم فاتورة أو رقم سطر حسب ما تضبطه في الكنترولر) *@
-                <div class="col-lg-4">
-                    <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="fw-semibold">من رقم</span>
-                        <input id="codeFromInput"
-                               type="number"
-                               class="form-control form-control-sm"
-                               style="width:110px"
-                               value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
-
-                        <span class="fw-semibold">إلى رقم</span>
-                        <input id="codeToInput"
-                               type="number"
-                               class="form-control form-control-sm"
-                               style="width:110px"
-                               value="@(ViewBag.CodeTo?.ToString() ?? "")" />
-
-                        <button type="button"
-                                id="btnApplyCodeFilter"
-                                class="btn btn-erp btn-erp-primary btn-erp-sm">
-                            تطبيق فلتر الرقم
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">
+                            عرض
                         </button>
-
-                        <button type="button"
-                                id="btnClearCodeFilter"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm">
-                            مسح
-                        </button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0"
+                           href="@Url.Action(action, controller)">
+                            إلغاء
+                        </a>
                     </div>
+
+                    @* الحفاظ على باقي الفلاتر *@
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
+                    <input type="hidden" name="page" value="1" />
+                    <input type="hidden" name="pageSize" value="@ps" />
+                    <input type="hidden" name="dateField" value="@dateField" />
+                    <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
+                    <input type="hidden" name="siId" value="@siId" />
+                    @if (Model.FromDate.HasValue)
+                    {
+                        <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" />
+                    }
+                    @if (Model.ToDate.HasValue)
+                    {
+                        <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" />
+                    }
+                    @if (fromCode.HasValue)
+                    {
+                        <input type="hidden" name="fromCode" value="@fromCode" />
+                    }
+                    @if (toCode.HasValue)
+                    {
+                        <input type="hidden" name="toCode" value="@toCode" />
+                    }
+                </form>
+            </div>
+
+            @* --- القسم الثاني: فلتر رقم من/إلى --- *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label w-100 text-center">فلتر رقم الفاتورة / السطر</label>
+                <div class="erp-list-code-filter justify-content-center">
+                    <input id="codeFromInput"
+                           type="number"
+                           class="form-control erp-filter-input"
+                           placeholder="من"
+                           value="@(ViewBag.CodeFrom?.ToString() ?? "")" />
+
+                    <input id="codeToInput"
+                           type="number"
+                           class="form-control erp-filter-input"
+                           placeholder="إلى"
+                           value="@(ViewBag.CodeTo?.ToString() ?? "")" />
+
+                    <button type="button"
+                            id="btnApplyCodeFilter"
+                            class="btn btn-erp btn-erp-primary btn-erp-sm">
+                        تطبيق
+                    </button>
+
+                    <button type="button"
+                            id="btnClearCodeFilter"
+                            class="btn btn-erp btn-erp-secondary btn-erp-sm">
+                        مسح
+                    </button>
                 </div>
+            </div>
 
-                @* العمود الثالث: أزرار الفلاتر / الطباعة / التصدير (بدون زر إضافة) *@
-                <div class="col-lg-4">
-                    <div class="erp-toolbar justify-content-lg-end">
+            @* --- القسم الثالث: أزرار التحكم (تاريخ/أعمدة/طباعة/تصدير) *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
+                <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
 
-                        @* فلترة بالتاريخ/الوقت *@
                         <button type="button"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                 data-bs-toggle="modal"
@@ -295,7 +240,6 @@
                             فلترة بالتاريخ/الوقت
                         </button>
 
-                        @* اختيار الأعمدة *@
                         <button type="button"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                 data-bs-toggle="modal"
@@ -303,18 +247,16 @@
                             اختيار الأعمدة
                         </button>
 
-                        @* طباعة (الجدول فقط) *@
                         <button type="button"
                                 id="btnPrint"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm">
                             🖨️ طباعة
                         </button>
 
-                        @* تصدير *@
                         <form method="get"
                               asp-action="Export"
                               asp-controller="SalesInvoiceLines"
-                              class="d-flex flex-wrap gap-2 align-items-center">
+                              class="d-flex flex-wrap gap-2 align-items-center erp-export-form">
 
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -341,22 +283,22 @@
                             }
 
                             <select name="format"
-                                    class="form-select form-select-sm"
-                                    style="width:95px">
+                                    class="form-select form-select-arrow erp-filter-input"
+                                    style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
                             </select>
 
                             <button type="submit"
-                                    class="btn btn-erp btn-erp-primary btn-erp-sm">
+                                    class="btn btn-erp btn-erp-success btn-erp-sm">
                                 تصدير
                             </button>
                         </form>
 
                     </div>
                 </div>
-
             </div>
+
         </div>
     </div>
 
@@ -430,13 +372,23 @@
                                 @(x.Expiry.HasValue ? x.Expiry.Value.ToString("yyyy-MM") : "-")
                             </td>
                             <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
-                                   href="@(Url.Action("Show", "SalesInvoices", new { id = x.SIId }))?frame=1"
-                                   data-tab-id="si-show-tab"
-                                   data-tab-title="فاتورة مبيعات"
-                                   data-url="@(Url.Action("Show", "SalesInvoices", new { id = x.SIId }))?frame=1">
-                                    عرض
-                                </a>
+                                <div class="btn-group" role="group">
+                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                       href="@(Url.Action("Show", "SalesInvoices", new { id = x.SIId }))?frame=1"
+                                       data-tab-id="si-show-tab"
+                                       data-tab-title="فاتورة مبيعات"
+                                       data-url="@(Url.Action("Show", "SalesInvoices", new { id = x.SIId }))?frame=1">
+                                        عرض
+                                    </a>
+                                    <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"
+                                       asp-controller="Products"
+                                       asp-action="Show"
+                                       asp-route-id="@x.ProdId"
+                                       data-tab-id="product-movement-tab"
+                                       data-tab-title="حركة الصنف">
+                                        حركة الصنف
+                                    </a>
+                                </div>
                             </td>
                         </tr>
                     }
@@ -495,9 +447,9 @@
         </table>
     </div>
 
-    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة ===== *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
-        <small class="text-muted">
+    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة (محاذاة RTL) ===== *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted text-start">
             عرض @start - @end من @total
         </small>
 

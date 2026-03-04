@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.StockBatch>
 
@@ -40,6 +40,17 @@
     int? fromCode = ViewBag.FromCode as int?;
     int? toCode = ViewBag.ToCode as int?;
 
+    // فلاتر أعمدة (بنمط Excel)
+    string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string? filterCol_wh = ViewBag.FilterCol_Wh as string;
+    string? filterCol_prod = ViewBag.FilterCol_Prod as string;
+    string? filterCol_batchno = ViewBag.FilterCol_BatchNo as string;
+    string? filterCol_expiry = ViewBag.FilterCol_Expiry as string;
+    string? filterCol_qty = ViewBag.FilterCol_Qty as string;
+    string? filterCol_reserved = ViewBag.FilterCol_Reserved as string;
+    string? filterCol_updated = ViewBag.FilterCol_Updated as string;
+    string? filterCol_note = ViewBag.FilterCol_Note as string;
+
     // خرائط أسماء (اختيارية) جاية من الكنترولر لو موجودة
     // لو مش موجودة هنرجّع الأكواد بدل الأسماء
     var prodMap = ViewBag.ProdMap as Dictionary<int, string> ?? new Dictionary<int, string>();
@@ -57,7 +68,16 @@
         fromDate,
         toDate,
         fromCode,
-        toCode
+        toCode,
+        filterCol_id,
+        filterCol_wh,
+        filterCol_prod,
+        filterCol_batchno,
+        filterCol_expiry,
+        filterCol_qty,
+        filterCol_reserved,
+        filterCol_updated,
+        filterCol_note
     })!;
 
     Func<string, string, IHtmlContent> sortLink = (col, caption) =>
@@ -79,7 +99,16 @@
             fromDate,
             toDate,
             fromCode,
-            toCode
+            toCode,
+            filterCol_id,
+            filterCol_wh,
+            filterCol_prod,
+            filterCol_batchno,
+            filterCol_expiry,
+            filterCol_qty,
+            filterCol_reserved,
+            filterCol_updated,
+            filterCol_note
         }) ?? "#";
 
         string icon = "⇅";
@@ -87,6 +116,42 @@
             icon = dir == "asc" ? "▲" : "▼";
 
         return new HtmlString($@"<a href=""{url}"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>");
+    };
+
+    string? FilterForCol(string colKey) => colKey switch
+    {
+        "id" => filterCol_id,
+        "wh" => filterCol_wh,
+        "prod" => filterCol_prod,
+        "batchno" => filterCol_batchno,
+        "expiry" => filterCol_expiry,
+        "qty" => filterCol_qty,
+        "reserved" => filterCol_reserved,
+        "updated" => filterCol_updated,
+        "note" => filterCol_note,
+        _ => null
+    };
+
+    Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
+    {
+        var currentFilter = FilterForCol(colKey);
+        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
+        var sortDir = isCurrentSort ? dir : "asc";
+        var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
+        return new HtmlString($@"
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"">
+                <span class=""erp-col-title"">{caption}</span>
+                <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
+                        data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
+                        data-current-sort=""{sortKey}"" data-current-dir=""{sortDir}""
+                        title=""ترتيب وفلتر العمود"" style=""min-width:22px;"">
+                    <svg xmlns=""http://www.w3.org/2000/svg"" width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""currentColor"">
+                        <path d=""M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z""/>
+                        <path d=""M7 8l4-4 4 4H7zm0 8l4 4 4-4H7z"" opacity=""0.3""/>
+                    </svg>
+                </button>
+            </div>");
     };
 }
 
@@ -100,95 +165,66 @@
         </small>
     </div>
 
-    @* الكارت العلوي: بحث + فلتر كود + أزرار *@
-    <div class="card mb-3 d-print-none">
-        <div class="card-body">
-            <div class="row g-3 align-items-end">
+    @* ===== شريط الفلاتر الموحد (نمط القوائم) *@
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
-                @* البحث *@
-                <div class="col-lg-4">
-                    <form method="get"
-                          action="@Url.Action(action, controller)"
-                          class="row g-2 align-items-end">
-
-                        <div class="col-12">
-                            <label class="form-label fw-semibold">بحث</label>
-                        </div>
-
-                        <div class="col-sm-7">
-                            <input type="text"
-                                   name="search"
-                                   class="form-control form-control-sm"
-                                   placeholder="اكتب نص البحث..."
-                                   value="@search" />
-                        </div>
-
-                        <div class="col-sm-5">
-                            <select name="searchBy"
-                                    class="form-select form-select-sm">
-                                <option value="batchno"@Html.Raw(searchBy == "batchno" ? " selected" : "")>رقم التشغيلة</option>
-                                <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود السجل</option>
-                                <option value="prod"@Html.Raw(searchBy == "prod" ? " selected" : "")>كود الصنف</option>
-                                <option value="wh"@Html.Raw(searchBy == "wh" ? " selected" : "")>كود المخزن</option>
-                                <option value="expiry"@Html.Raw(searchBy == "expiry" ? " selected" : "")>الصلاحية</option>
-                                <option value="qty"@Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
-                                <option value="note"@Html.Raw(searchBy == "note" ? " selected" : "")>ملاحظة</option>
-                                <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
-                            </select>
-                        </div>
-
-                        <input type="hidden" name="sort" value="@sort" />
-                        <input type="hidden" name="dir" value="@dir" />
-                        <input type="hidden" name="page" value="1" />
-                        <input type="hidden" name="pageSize" value="@ps" />
-                        <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
-
-                        @if (fromDate.HasValue)
-                        {
-                            <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
-                        }
-                        @if (toDate.HasValue)
-                        {
-                            <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
-                        }
-                        @if (fromCode.HasValue)
-                        {
-                            <input type="hidden" name="fromCode" value="@fromCode" />
-                        }
-                        @if (toCode.HasValue)
-                        {
-                            <input type="hidden" name="toCode" value="@toCode" />
-                        }
-
-                        <div class="col-auto mt-1">
-                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">بحث</button>
-                        </div>
-                        <div class="col-auto mt-1">
-                            <a class="btn btn-erp btn-erp-ghost btn-erp-sm" href="@Url.Action(action, controller)">إلغاء</a>
-                        </div>
-                    </form>
-                </div>
-
-                @* فلتر كود من/إلى *@
-                <div class="col-lg-4">
-                    <div class="d-flex flex-wrap align-items-center gap-2">
-                        <span class="fw-semibold">من كود</span>
-                        <input id="codeFromInput" type="number" class="form-control form-control-sm" style="width:110px"
-                               value="@(fromCode?.ToString() ?? "")" />
-
-                        <span class="fw-semibold">إلى كود</span>
-                        <input id="codeToInput" type="number" class="form-control form-control-sm" style="width:110px"
-                               value="@(toCode?.ToString() ?? "")" />
-
-                        <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق فلتر الكود</button>
-                        <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
+            @* القسم الأول: البحث العام *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                    <label class="form-label w-100 text-center">بحث في مخزون التشغيلات</label>
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:140px" />
+                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:170px;min-width:120px">
+                            <option value="batchno"@Html.Raw(searchBy == "batchno" ? " selected" : "")>رقم التشغيلة</option>
+                            <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود السجل</option>
+                            <option value="prod"@Html.Raw(searchBy == "prod" ? " selected" : "")>كود الصنف</option>
+                            <option value="warehouse"@Html.Raw(searchBy == "warehouse" ? " selected" : "")>كود المخزن</option>
+                            <option value="expiry"@Html.Raw(searchBy == "expiry" ? " selected" : "")>الصلاحية</option>
+                            <option value="qty"@Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
+                            <option value="note"@Html.Raw(searchBy == "note" ? " selected" : "")>ملاحظة</option>
+                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
+                        </select>
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
+                    <input type="hidden" name="page" value="1" />
+                    <input type="hidden" name="pageSize" value="@ps" />
+                    <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
+                    @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+                    @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+                    @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                    @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_wh)) { <input type="hidden" name="filterCol_wh" value="@filterCol_wh" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_prod)) { <input type="hidden" name="filterCol_prod" value="@filterCol_prod" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_batchno)) { <input type="hidden" name="filterCol_batchno" value="@filterCol_batchno" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_expiry)) { <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_reserved)) { <input type="hidden" name="filterCol_reserved" value="@filterCol_reserved" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_note)) { <input type="hidden" name="filterCol_note" value="@filterCol_note" /> }
+                </form>
+            </div>
+
+            @* القسم الثاني: فلتر الكود من/إلى *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label w-100 text-center">فلتر الكود</label>
+                <div class="erp-list-code-filter justify-content-center">
+                    <input id="codeFromInput" type="number" class="form-control erp-filter-input" placeholder="من كود" value="@(fromCode?.ToString() ?? "")" />
+                    <input id="codeToInput" type="number" class="form-control erp-filter-input" placeholder="إلى كود" value="@(toCode?.ToString() ?? "")" />
+                    <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                    <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
                 </div>
+            </div>
 
-                @* أزرار *@
-                <div class="col-lg-4">
-                    <div class="erp-toolbar justify-content-lg-end">
-
+            @* القسم الثالث: أزرار التحكم *@
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
+                <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
                         <button type="button"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                 data-bs-toggle="modal"
@@ -196,20 +232,24 @@
                             اختيار الأعمدة
                         </button>
 
-                        <form id="bulkDeleteForm" asp-action="BulkDelete" method="post" class="d-inline">
-                            @Html.AntiForgeryToken()
-                            @* مهم: خلينا الاسم ids علشان يقبل int[] ids بسهولة *@
-                            <input type="hidden" name="ids" id="selectedIdsInput" />
-                            <button type="button" id="btnDeleteSelected" class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                حذف المحدد
+                        <div class="dropdown d-inline">
+                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                حذف
                             </button>
+                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
+                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteSelected">حذف المحدد</button></li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الكل</button></li>
+                            </ul>
+                        </div>
+
+                        <form id="bulkDeleteForm" asp-action="BulkDelete" method="post" class="d-none">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="ids" id="selectedIdsInput" />
                         </form>
 
-                        <form id="deleteAllForm" asp-action="DeleteAll" method="post" class="d-inline">
+                        <form id="deleteAllForm" asp-action="DeleteAll" method="post" class="d-none">
                             @Html.AntiForgeryToken()
-                            <button type="button" id="btnDeleteAll" class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                حذف الكل
-                            </button>
                         </form>
 
                         <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">
@@ -217,7 +257,7 @@
                         </button>
 
                         <form method="get" asp-action="Export" asp-controller="StockBatches"
-                              class="d-flex flex-wrap gap-2 align-items-center">
+                              class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
 
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -225,56 +265,77 @@
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
 
-                            @if (fromDate.HasValue)
-                            {
-                                <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" />
-                            }
-                            @if (toDate.HasValue)
-                            {
-                                <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" />
-                            }
-                            @if (fromCode.HasValue)
-                            {
-                                <input type="hidden" name="fromCode" value="@fromCode" />
-                            }
-                            @if (toCode.HasValue)
-                            {
-                                <input type="hidden" name="toCode" value="@toCode" />
-                            }
+                            @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+                            @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+                            @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                            @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_wh)) { <input type="hidden" name="filterCol_wh" value="@filterCol_wh" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prod)) { <input type="hidden" name="filterCol_prod" value="@filterCol_prod" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_batchno)) { <input type="hidden" name="filterCol_batchno" value="@filterCol_batchno" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_expiry)) { <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_reserved)) { <input type="hidden" name="filterCol_reserved" value="@filterCol_reserved" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_note)) { <input type="hidden" name="filterCol_note" value="@filterCol_note" /> }
 
-                            <select name="format" class="form-select form-select-sm" style="width:95px">
+                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
                             </select>
 
-                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">تصدير</button>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
-
                     </div>
                 </div>
-
             </div>
+
         </div>
     </div>
 
+    @* نموذج خفي لتطبيق فلتر الأعمدة *@
+    <form id="stockBatchesSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
+        <input type="hidden" name="search" value="@search" />
+        <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="sort" value="@sort" />
+        <input type="hidden" name="dir" value="@dir" />
+        <input type="hidden" name="page" value="1" />
+        <input type="hidden" name="pageSize" value="@ps" />
+        <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
+        @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
+        @if (toDate.HasValue) { <input type="hidden" name="toDate" value="@toDate.Value.ToString("o")" /> }
+        @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+        @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_wh)) { <input type="hidden" name="filterCol_wh" value="@filterCol_wh" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_prod)) { <input type="hidden" name="filterCol_prod" value="@filterCol_prod" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_batchno)) { <input type="hidden" name="filterCol_batchno" value="@filterCol_batchno" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_expiry)) { <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_reserved)) { <input type="hidden" name="filterCol_reserved" value="@filterCol_reserved" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_note)) { <input type="hidden" name="filterCol_note" value="@filterCol_note" /> }
+    </form>
+
     @* جدول StockBatch *@
-    <div class="erp-table-wrapper erp-print-area">
+    <div class="erp-table-scroll-container mt-3 ps-0 pe-0">
+        <div class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="stockBatchesTable" class="table table-striped table-hover erp-table erp-table-sortable">
-            <thead class="table-light">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
                     <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
                         <input type="checkbox" id="chkAllRows" />
                     </th>
 
-                    <th data-col="id">@sortLink("id", "الكود")</th>
-                    <th data-col="wh">@sortLink("wh", "المخزن")</th>
-                    <th data-col="prod">@sortLink("prod", "الصنف")</th>
-                    <th data-col="batchno">رقم التشغيلة</th>
-                    <th data-col="expiry">@sortLink("expiry", "الصلاحية")</th>
-                    <th data-col="qty">@sortLink("qty", "المتاح")</th>
-                    <th data-col="reserved">محجوز</th>
-                    <th data-col="updated">@sortLink("updated", "آخر تعديل")</th>
-                    <th data-col="note">ملاحظة</th>
+                    <th data-col="id">@filterableCol("id", "id", "الكود")</th>
+                    <th data-col="wh">@filterableCol("wh", "warehouse", "المخزن")</th>
+                    <th data-col="prod">@filterableCol("prod", "prod", "الصنف")</th>
+                    <th data-col="batchno">@filterableCol("batchno", "batchno", "رقم التشغيلة")</th>
+                    <th data-col="expiry">@filterableCol("expiry", "expiry", "الصلاحية")</th>
+                    <th data-col="qty">@filterableCol("qty", "onhand", "المتاح")</th>
+                    <th data-col="reserved">@filterableCol("reserved", "reserved", "محجوز")</th>
+                    <th data-col="updated">@filterableCol("updated", "updated", "آخر تعديل")</th>
+                    <th data-col="note">@filterableCol("note", "id", "ملاحظة")</th>
                 </tr>
             </thead>
 
@@ -317,10 +378,42 @@
                 }
             </tbody>
         </table>
+        </table>
+        </div>
+    </div>
+
+    @* لوحة فلتر الأعمدة (بنمط Excel) *@
+    <div id="erpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+        <div class="erp-column-filter-header">
+            <span id="erpColumnFilterTitle">ترتيب وفلتر</span>
+            <button type="button" class="btn-close btn-sm" id="erpColumnFilterClose" aria-label="إغلاق"></button>
+        </div>
+        <div class="erp-column-filter-body">
+            <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+                <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+                <div class="d-flex flex-column gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
+                </div>
+            </div>
+            <div class="erp-filter-section">
+                <div id="erpColumnFilterSearchRow">
+                    <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                    <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+                </div>
+                <div id="erpColumnFilterList" class="erp-column-filter-list">
+                    <div class="text-muted text-center py-3">جاري التحميل...</div>
+                </div>
+            </div>
+            <div class="erp-column-filter-actions">
+                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOk">تطبيق</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClear">مسح الفلتر</button>
+            </div>
+        </div>
     </div>
 
     @* الشريط السفلي *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
         <small class="text-muted">عرض @start - @end من @total</small>
 
         <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
@@ -347,6 +440,16 @@
             {
                 <input type="hidden" name="toCode" value="@toCode" />
             }
+
+            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_wh)) { <input type="hidden" name="filterCol_wh" value="@filterCol_wh" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_prod)) { <input type="hidden" name="filterCol_prod" value="@filterCol_prod" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_batchno)) { <input type="hidden" name="filterCol_batchno" value="@filterCol_batchno" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_expiry)) { <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_reserved)) { <input type="hidden" name="filterCol_reserved" value="@filterCol_reserved" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_note)) { <input type="hidden" name="filterCol_note" value="@filterCol_note" /> }
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -563,6 +666,185 @@
                 url.searchParams.set("page", "1");
 
                 window.location.href = url.toString();
+            });
+        })();
+
+        // فلتر الأعمدة بنمط Excel (ترتيب + فلترة)
+        (function () {
+            var panel = document.getElementById("erpColumnFilterPanel");
+            if (!panel) return;
+            var titleEl = document.getElementById("erpColumnFilterTitle");
+            var searchInp = document.getElementById("erpColumnFilterSearch");
+            var listEl = document.getElementById("erpColumnFilterList");
+            var btnOk = document.getElementById("erpColumnFilterOk");
+            var btnClear = document.getElementById("erpColumnFilterClear");
+            var btnClose = document.getElementById("erpColumnFilterClose");
+
+            var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
+
+            function getCurrentFilterValue(col) {
+                return new URL(window.location.href).searchParams.get("filterCol_" + col) || "";
+            }
+            function getCurrentSort() {
+                var url = new URL(window.location.href);
+                return { sort: url.searchParams.get("sort") || "id", dir: url.searchParams.get("dir") || "asc" };
+            }
+            function adjustPanelPosition() {
+                if (!panel || !anchorRect) return;
+                setTimeout(function () {
+                    var r = panel.getBoundingClientRect();
+                    var top = anchorRect.bottom + 4, left = anchorRect.left;
+                    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
+                    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
+                    panel.style.top = top + "px";
+                    panel.style.left = left + "px";
+                }, 50);
+            }
+
+            function showPanel(btn) {
+                currentCol = btn.dataset.col;
+                currentSortKey = btn.dataset.sortKey || currentCol;
+                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
+                searchInp.value = "";
+                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split(/[|,;]/).filter(Boolean));
+                anchorRect = btn.getBoundingClientRect();
+                panel.style.minWidth = Math.max(260, anchorRect.width) + "px";
+                panel.classList.remove("d-none");
+
+                var currentSort = getCurrentSort();
+                var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
+                var currentDir = isCurrent ? currentSort.dir : "asc";
+                panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
+                    if (isCurrent && b.dataset.sortDir === currentDir) {
+                        b.classList.add("active", "btn-primary");
+                        b.classList.remove("btn-outline-secondary");
+                    } else {
+                        b.classList.remove("active", "btn-primary");
+                        b.classList.add("btn-outline-secondary");
+                    }
+                });
+                adjustPanelPosition();
+                document.getElementById("erpColumnFilterSearchRow").classList.remove("d-none");
+                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
+                var url = "/StockBatches/GetColumnValues?column=" + encodeURIComponent(currentCol);
+                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
+                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
+                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
+                    allItems = items;
+                    renderList(searchInp ? searchInp.value : "");
+                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
+            }
+
+            function renderList(search) {
+                var term = (search || "").toLowerCase();
+                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
+                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
+                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
+                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAll" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAll">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
+                    var v = String(x.value);
+                    var checked = currentSelected.has(v);
+                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
+                }).join("") + "</div>";
+                var selectAllCb = listEl.querySelector("#erpFilterSelectAll");
+                if (selectAllCb) {
+                    selectAllCb.indeterminate = someChecked && !allChecked;
+                    selectAllCb.onchange = function () {
+                        filtered.forEach(function (x) {
+                            if (this.checked) currentSelected.add(String(x.value));
+                            else currentSelected.delete(String(x.value));
+                        }.bind(this));
+                        renderList(searchInp.value);
+                    };
+                }
+                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
+                    cb.onchange = function () {
+                        if (this.checked) currentSelected.add(this.value);
+                        else currentSelected.delete(this.value);
+                        renderList(searchInp.value);
+                    };
+                });
+                adjustPanelPosition();
+            }
+
+            function applyFilter(applySort, sortDir) {
+                if (!currentCol) return;
+                var url = new URL(window.location.href);
+                url.searchParams.forEach(function (_, key) {
+                    if (key.startsWith("filterCol_")) url.searchParams.delete(key);
+                });
+                if (applySort !== undefined && sortDir !== undefined) {
+                    url.searchParams.set("sort", applySort);
+                    url.searchParams.set("dir", sortDir);
+                } else if (currentSortKey) {
+                    var cur = getCurrentSort();
+                    url.searchParams.set("sort", cur.sort);
+                    url.searchParams.set("dir", cur.dir);
+                }
+                var val = Array.from(currentSelected).filter(Boolean).join("|");
+                if (val) url.searchParams.set("filterCol_" + currentCol, val);
+                url.searchParams.set("page", "1");
+                window.location.href = url.toString();
+            }
+            function clearFilter() {
+                if (!currentCol) return;
+                var url = new URL(window.location.href);
+                url.searchParams.delete("filterCol_" + currentCol);
+                url.searchParams.set("page", "1");
+                window.location.href = url.toString();
+            }
+
+            document.querySelectorAll(".erp-col-filter-btn").forEach(function (btn) {
+                btn.addEventListener("click", function (e) {
+                    e.stopPropagation();
+                    showPanel(this);
+                });
+            });
+
+            document.addEventListener("click", function (e) {
+                if (e.target.closest(".erp-sort-btn")) {
+                    var sortBtn = e.target.closest(".erp-sort-btn");
+                    if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir);
+                }
+            });
+
+            var fetchDebounce = null;
+            searchInp && searchInp.addEventListener("input", function () {
+                renderList(this.value);
+                if (fetchDebounce) clearTimeout(fetchDebounce);
+                fetchDebounce = setTimeout(function () {
+                    fetchDebounce = null;
+                    if (!currentCol) return;
+                    var url = "/StockBatches/GetColumnValues?column=" + encodeURIComponent(currentCol);
+                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
+                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
+                    fetch(url).then(function (r) { return r.json(); }).then(function (items) {
+                        allItems = items;
+                        renderList(searchInp ? searchInp.value : "");
+                    });
+                }, 400);
+            });
+
+            searchInp && searchInp.addEventListener("keydown", function (e) {
+                if (e.key === "Enter") {
+                    e.preventDefault();
+                    applyFilter();
+                }
+            });
+
+            btnOk && btnOk.addEventListener("click", function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                applyFilter();
+            });
+            btnClear && btnClear.addEventListener("click", clearFilter);
+            btnClose && btnClose.addEventListener("click", function () {
+                panel.classList.add("d-none");
+            });
+
+            document.addEventListener("click", function (e) {
+                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn")) {
+                    panel.classList.add("d-none");
+                }
             });
         })();
     </script>

@@ -11,11 +11,13 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.IO;                 // MemoryStream لتصدير Excel
 using System.Linq;
 using System.Linq.Expressions;
 using System.Security.Claims;
 using System.Text;               // لاستخدام StringBuilder في التصدير
 using System.Threading.Tasks;
+using ClosedXML.Excel;           // تصدير Excel
 
 namespace ERP.Controllers
 {
@@ -31,6 +33,9 @@ namespace ERP.Controllers
 
         // مصفوفة طرق الدفع الثابتة لعرضها في الفورم
         private static readonly string[] PaymentMethods = new[] { "نقدي", "شبكة", "آجل", "مختلط" };
+
+        // فاصل لقيم فلاتر الأعمدة بنمط Excel
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public SalesInvoicesController(AppDbContext context,
                                         DocumentTotalsService docTotals,
@@ -2144,7 +2149,7 @@ namespace ERP.Controllers
             string dateField
         )
         {
-            searchBy ??= "id";
+            searchBy ??= "all";
             dateField ??= "SIDate";
 
             // 1) فلتر نص البحث
@@ -2580,6 +2585,14 @@ namespace ERP.Controllers
             string? dateField = "SIDate",        // الحقل المستخدم في فلتر التاريخ (SIDate أو CreatedAt)
             int? fromCode = null,                // من رقم فاتورة
             int? toCode = null,                  // إلى رقم فاتورة
+            string? filterCol_id = null,         // فلتر عمود رقم الفاتورة
+            string? filterCol_date = null,       // فلتر عمود تاريخ الفاتورة
+            string? filterCol_time = null,       // فلتر عمود الوقت
+            string? filterCol_customer = null,   // فلتر اسم/كود العميل
+            string? filterCol_warehouse = null,  // فلتر اسم/كود المخزن
+            string? filterCol_net = null,        // فلتر الصافي
+            string? filterCol_status = null,     // فلتر الحالة
+            string? filterCol_posted = null,     // فلتر الترحيل
             int page = 1,                        // رقم الصفحة
             int pageSize = 25                    // حجم الصفحة
         )
@@ -2639,6 +2652,100 @@ namespace ERP.Controllers
                 dateField
             );
 
+            // 1.1) فلاتر الأعمدة بنمط Excel
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    query = query.Where(si => ids.Contains(si.SIId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var vals = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(si =>
+                        vals.Contains(
+                            (si.Customer != null ? si.Customer.CustomerName : si.CustomerId.ToString())!
+                        ));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var vals = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(si =>
+                        vals.Contains(
+                            (si.Warehouse != null ? si.Warehouse.WarehouseName : si.WarehouseId.ToString())!
+                        ));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    query = query.Where(si => si.Status != null && vals.Contains(si.Status));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_posted))
+            {
+                var vals = filterCol_posted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim().ToLowerInvariant())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                {
+                    bool includeTrue = vals.Any(v => v == "نعم" || v == "yes" || v == "1" || v == "true");
+                    bool includeFalse = vals.Any(v => v == "لا" || v == "no" || v == "0" || v == "false");
+                    if (includeTrue && !includeFalse)
+                        query = query.Where(si => si.IsPosted);
+                    else if (includeFalse && !includeTrue)
+                        query = query.Where(si => !si.IsPosted);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => DateTime.TryParse(v.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(d => d.HasValue).Select(d => d!.Value)
+                    .ToList();
+                if (dates.Count > 0)
+                    query = query.Where(si => dates.Contains(si.SIDate.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_time))
+            {
+                var times = filterCol_time.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => TimeSpan.TryParse(v.Trim(), out var t) ? t : (TimeSpan?)null)
+                    .Where(t => t.HasValue).Select(t => t!.Value)
+                    .ToList();
+                if (times.Count > 0)
+                    query = query.Where(si => times.Contains(si.SITime));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            {
+                var nets = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
+                    .Where(d => d.HasValue).Select(d => d!.Value)
+                    .ToList();
+                if (nets.Count > 0)
+                    query = query.Where(si => nets.Contains(si.NetTotal));
+            }
+
             // 2) تطبيق الترتيب
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             query = ApplySort(query, sort, sortDesc);
@@ -2689,6 +2796,16 @@ namespace ERP.Controllers
             ViewBag.ToCode = finalToCode;
             ViewBag.CodeFrom = finalFromCode;
             ViewBag.CodeTo = finalToCode;
+
+            // حفظ فلاتر الأعمدة لاستخدامها فى الواجهة
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Time = filterCol_time;
+            ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_Net = filterCol_net;
+            ViewBag.FilterCol_Status = filterCol_status;
+            ViewBag.FilterCol_Posted = filterCol_posted;
 
             // إجمالي الصافي
             ViewBag.TotalNet = totalNet;
@@ -2952,10 +3069,18 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? dateField = "SIDate",
-            string? format = "excel")        // excel | csv (حاليًا الاثنين CSV)
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_time = null,
+            string? filterCol_customer = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_net = null,
+            string? filterCol_status = null,
+            string? filterCol_posted = null,
+            string? format = "excel")        // excel | csv
         {
             // قيم افتراضية
-            searchBy ??= "id";
+            searchBy ??= "all";
             sort ??= "SIDate";
             dir ??= "desc";
             dateField ??= "SIDate";
@@ -2964,7 +3089,10 @@ namespace ERP.Controllers
             int? fromCode = codeFrom;
             int? toCode = codeTo;
 
-            IQueryable<SalesInvoice> q = _context.SalesInvoices.AsNoTracking();
+            IQueryable<SalesInvoice> q = _context.SalesInvoices
+                .AsNoTracking()
+                .Include(s => s.Customer)
+                .Include(s => s.Warehouse);
 
             // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
             int? finalCodeFrom = Request.Query.ContainsKey("codeFrom")
@@ -2975,44 +3103,285 @@ namespace ERP.Controllers
                 ? TryParseNullableInt(Request.Query["codeTo"])
                 : toCode;
 
-            // تطبيق الفلاتر والترتيب
+            // تطبيق الفلاتر العامة
             q = ApplyFilters(q, search, searchBy, finalCodeFrom, finalCodeTo, useDateRange, fromDate, toDate, dateField);
+
+            // فلاتر الأعمدة بنمط Excel (نفس Index)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(si => ids.Contains(si.SIId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var vals = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(si =>
+                        vals.Contains(
+                            (si.Customer != null ? si.Customer.CustomerName : si.CustomerId.ToString())!
+                        ));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var vals = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(si =>
+                        vals.Contains(
+                            (si.Warehouse != null ? si.Warehouse.WarehouseName : si.WarehouseId.ToString())!
+                        ));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(si => si.Status != null && vals.Contains(si.Status));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_posted))
+            {
+                var vals = filterCol_posted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim().ToLowerInvariant())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                {
+                    bool includeTrue = vals.Any(v => v == "نعم" || v == "yes" || v == "1" || v == "true");
+                    bool includeFalse = vals.Any(v => v == "لا" || v == "no" || v == "0" || v == "false");
+                    if (includeTrue && !includeFalse)
+                        q = q.Where(si => si.IsPosted);
+                    else if (includeFalse && !includeTrue)
+                        q = q.Where(si => !si.IsPosted);
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => DateTime.TryParse(v.Trim(), out var d) ? d.Date : (DateTime?)null)
+                    .Where(d => d.HasValue).Select(d => d!.Value)
+                    .ToList();
+                if (dates.Count > 0)
+                    q = q.Where(si => dates.Contains(si.SIDate.Date));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_time))
+            {
+                var times = filterCol_time.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => TimeSpan.TryParse(v.Trim(), out var t) ? t : (TimeSpan?)null)
+                    .Where(t => t.HasValue).Select(t => t!.Value)
+                    .ToList();
+                if (times.Count > 0)
+                    q = q.Where(si => times.Contains(si.SITime));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            {
+                var nets = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
+                    .Where(d => d.HasValue).Select(d => d!.Value)
+                    .ToList();
+                if (nets.Count > 0)
+                    q = q.Where(si => nets.Contains(si.NetTotal));
+            }
+
+            // الترتيب
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             q = ApplySort(q, sort, sortDesc);
 
             var list = await q.ToListAsync();
 
-            // تجهيز CSV بسيط — Excel يفتحه بدون مشكلة
-            var sb = new StringBuilder();
+            format = (format ?? "excel").Trim().ToLowerInvariant();
 
-            // العناوين
-            sb.AppendLine("InvoiceId,Date,Time,CustomerId,WarehouseId,NetTotal,Status,IsPosted");
-
-            foreach (var x in list)
+            if (format == "csv")
             {
-                // تحويل الوقت من TimeSpan إلى نص بصيغة hh:mm
-                string timeText = x.SITime.ToString(@"hh\:mm");   // مثال: 14:35
+                var sb = new StringBuilder();
+                sb.AppendLine("InvoiceId,Date,Time,Customer,Warehouse,NetTotal,Status,IsPosted");
 
-                // سطر واحد في CSV لكل فاتورة
-                var line = string.Join(",",
-                    x.SIId,                                      // رقم الفاتورة
-                    x.SIDate.ToString("yyyy-MM-dd"),             // التاريخ
-                    timeText,                                    // الوقت كنص
-                    x.CustomerId,                                // كود العميل
-                    x.WarehouseId,                               // كود المخزن
-                    x.NetTotal.ToString("0.00"),                 // الصافي (منسّق)
-                    (x.Status ?? "").Replace(",", " "),          // الحالة (نزيل الفاصلة عشان CSV)
-                    x.IsPosted ? "Yes" : "No"                    // مرحل أم لا
-                );
+                foreach (var x in list)
+                {
+                    string timeText = x.SITime.ToString(@"hh\:mm");
+                    var customerText = x.Customer != null ? x.Customer.CustomerName : x.CustomerId.ToString();
+                    var warehouseText = x.Warehouse != null ? x.Warehouse.WarehouseName : x.WarehouseId.ToString();
 
-                sb.AppendLine(line);
+                    var line = string.Join(",",
+                        x.SIId,
+                        x.SIDate.ToString("yyyy-MM-dd"),
+                        timeText,
+                        customerText.Replace(",", " "),
+                        warehouseText.Replace(",", " "),
+                        x.NetTotal.ToString("0.00"),
+                        (x.Status ?? "").Replace(",", " "),
+                        x.IsPosted ? "Yes" : "No"
+                    );
+
+                    sb.AppendLine(line);
+                }
+
+                var utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
+                var bytesCsv = utf8Bom.GetBytes(sb.ToString());
+                var fileNameCsv = $"SalesInvoices_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+
+                return File(bytesCsv, "text/csv; charset=utf-8", fileNameCsv);
+            }
+            else
+            {
+                using var workbook = new XLWorkbook();
+                var ws = workbook.Worksheets.Add("SalesInvoices");
+
+                int r = 1;
+                ws.Cell(r, 1).Value = "رقم الفاتورة";
+                ws.Cell(r, 2).Value = "تاريخ الفاتورة";
+                ws.Cell(r, 3).Value = "الوقت";
+                ws.Cell(r, 4).Value = "العميل";
+                ws.Cell(r, 5).Value = "المخزن";
+                ws.Cell(r, 6).Value = "الصافي";
+                ws.Cell(r, 7).Value = "الحالة";
+                ws.Cell(r, 8).Value = "مرحل؟";
+
+                var headerRange = ws.Range(r, 1, r, 8);
+                headerRange.Style.Font.Bold = true;
+                headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+                foreach (var x in list)
+                {
+                    r++;
+                    ws.Cell(r, 1).Value = x.SIId;
+                    ws.Cell(r, 2).Value = x.SIDate;
+                    ws.Cell(r, 3).Value = DateTime.Today.Add(x.SITime);
+                    ws.Cell(r, 4).Value = x.Customer != null ? x.Customer.CustomerName : x.CustomerId.ToString();
+                    ws.Cell(r, 5).Value = x.Warehouse != null ? x.Warehouse.WarehouseName : x.WarehouseId.ToString();
+                    ws.Cell(r, 6).Value = x.NetTotal;
+                    ws.Cell(r, 7).Value = x.Status ?? "";
+                    ws.Cell(r, 8).Value = x.IsPosted ? "نعم" : "لا";
+                }
+
+                ws.Columns().AdjustToContents();
+                ws.Column(2).Style.DateFormat.Format = "yyyy-mm-dd";
+                ws.Column(3).Style.DateFormat.Format = "hh:mm";
+
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                stream.Position = 0;
+
+                var fileNameXlsx = $"SalesInvoices_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+                return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);
+            }
+        }
+
+        // =========================
+        // GetColumnValues — جلب قيم مميزة لعمود معين (لنمط فلترة الأعمدة مثل Excel)
+        // =========================
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            if (string.IsNullOrWhiteSpace(column))
+                return Json(Array.Empty<string>());
+
+            column = column.ToLowerInvariant();
+            search = (search ?? string.Empty).Trim();
+
+            IQueryable<SalesInvoice> q = _context.SalesInvoices
+                .AsNoTracking()
+                .Include(s => s.Customer)
+                .Include(s => s.Warehouse);
+
+            if (column == "id")
+            {
+                var idsQuery = q.Select(si => si.SIId.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    idsQuery = idsQuery.Where(v => v.Contains(search));
+                var ids = await idsQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(ids);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv"; // الاثنين CSV حاليًا
-            var fileName = $"SalesInvoices_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+            if (column == "date")
+            {
+                var datesQuery = q.Select(si => si.SIDate.ToString("yyyy-MM-dd"));
+                if (!string.IsNullOrEmpty(search))
+                    datesQuery = datesQuery.Where(v => v.Contains(search));
+                var dates = await datesQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(dates);
+            }
 
-            return File(bytes, "text/csv", fileName);
+            if (column == "time")
+            {
+                var timesQuery = q.Select(si => si.SITime.ToString(@"hh\:mm"));
+                if (!string.IsNullOrEmpty(search))
+                    timesQuery = timesQuery.Where(v => v.Contains(search));
+                var times = await timesQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(times);
+            }
+
+            if (column == "customer")
+            {
+                var custQuery = q.Select(si =>
+                    si.Customer != null
+                        ? si.Customer.CustomerName
+                        : si.CustomerId.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    custQuery = custQuery.Where(v => v.Contains(search));
+                var customers = await custQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(customers);
+            }
+
+            if (column == "warehouse")
+            {
+                var whQuery = q.Select(si =>
+                    si.Warehouse != null
+                        ? si.Warehouse.WarehouseName
+                        : si.WarehouseId.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    whQuery = whQuery.Where(v => v.Contains(search));
+                var warehouses = await whQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(warehouses);
+            }
+
+            if (column == "net")
+            {
+                var netQuery = q.Select(si => si.NetTotal.ToString("0.00"));
+                if (!string.IsNullOrEmpty(search))
+                    netQuery = netQuery.Where(v => v.Contains(search));
+                var nets = await netQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(nets);
+            }
+
+            if (column == "status")
+            {
+                var statusQuery = q.Select(si => si.Status ?? "");
+                if (!string.IsNullOrEmpty(search))
+                    statusQuery = statusQuery.Where(v => v.Contains(search));
+                var statuses = await statusQuery.Where(v => v != "")
+                    .Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(statuses);
+            }
+
+            if (column == "posted")
+            {
+                var values = new List<string> { "نعم", "لا" };
+                if (!string.IsNullOrEmpty(search))
+                    values = values.Where(v => v.Contains(search)).ToList();
+                return Json(values);
+            }
+
+            return Json(Array.Empty<string>());
         }
 
 
