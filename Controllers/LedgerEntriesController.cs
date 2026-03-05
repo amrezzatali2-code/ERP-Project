@@ -101,6 +101,7 @@ namespace ERP.Controllers
                     ["Id"] = e => e.Id,                                       // رقم القيد
                     ["EntryDate"] = e => e.EntryDate,                                // تاريخ القيد
                     ["SourceType"] = e => e.SourceType,                               // نوع المستند
+                    ["PostVersion"] = e => e.PostVersion,                             // مرحلة
                     ["VoucherNo"] = e => e.VoucherNo ?? "",                          // رقم المستند
                     ["SourceId"] = e => e.SourceId ?? 0,                            // معرّف المصدر
                     ["AccountId"] = e => e.AccountId,                                // رقم الحساب
@@ -127,8 +128,174 @@ namespace ERP.Controllers
             return q;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static IQueryable<LedgerEntry> ApplyColumnFilters(
+            IQueryable<LedgerEntry> query,
+            string? filterCol_id,
+            string? filterCol_date,
+            string? filterCol_source,
+            string? filterCol_postVersion,
+            string? filterCol_sourceId,
+            string? filterCol_accId,
+            string? filterCol_accName,
+            string? filterCol_customer,
+            string? filterCol_debit,
+            string? filterCol_credit,
+            string? filterCol_desc)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(e => ids.Contains(e.Id));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(e => dates.Contains(e.EntryDate.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_source))
+            {
+                var vals = filterCol_source.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(e => vals.Contains(e.SourceType.ToString()));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_postVersion))
+            {
+                var vals = filterCol_postVersion.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(e => vals.Contains(e.PostVersion));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_sourceId))
+            {
+                var vals = filterCol_sourceId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(e => e.SourceId.HasValue && vals.Contains(e.SourceId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_accId))
+            {
+                var vals = filterCol_accId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(e => vals.Contains(e.AccountId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_accName))
+            {
+                var vals = filterCol_accName.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(e => e.Account != null && vals.Contains(e.Account.AccountName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var vals = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(e => e.Customer != null && vals.Contains(e.Customer.CustomerName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_debit))
+            {
+                var vals = filterCol_debit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(e => vals.Contains(e.Debit));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_credit))
+            {
+                var vals = filterCol_credit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(e => vals.Contains(e.Credit));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_desc))
+            {
+                var vals = filterCol_desc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(e => e.Description != null && vals.Any(v => e.Description.Contains(v)));
+            }
+            return query;
+        }
 
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.LedgerEntries.AsNoTracking().Include(e => e.Account).Include(e => e.Customer);
+
+            if (columnLower == "id")
+            {
+                var ids = await q.Select(e => e.Id).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "date")
+            {
+                var dates = await q.Select(e => e.EntryDate.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "source")
+            {
+                var list = await q.Select(e => e.SourceType.ToString()).Distinct().OrderBy(x => x).Take(100).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "postversion")
+            {
+                var list = await q.Select(e => e.PostVersion).Distinct().Where(x => x > 0).OrderBy(x => x).Take(100).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "sourceid")
+            {
+                var list = await q.Where(e => e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "accid" || columnLower == "accountid")
+            {
+                var list = await q.Select(e => e.AccountId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "accname" || columnLower == "accountname")
+            {
+                var list = await q.Where(e => e.Account != null).Select(e => e.Account!.AccountName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "customer" || columnLower == "customername")
+            {
+                var list = await q.Where(e => e.Customer != null).Select(e => e.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "desc" || columnLower == "description")
+            {
+                var list = await q.Where(e => e.Description != null && e.Description != "").Select(e => e.Description!).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v }));
+            }
+            if (columnLower == "debit")
+            {
+                var list = await q.Select(e => e.Debit).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(System.Globalization.CultureInfo.InvariantCulture), display = v.ToString("0.00") }));
+            }
+            if (columnLower == "credit")
+            {
+                var list = await q.Select(e => e.Credit).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(System.Globalization.CultureInfo.InvariantCulture), display = v.ToString("0.00") }));
+            }
+            return Json(Array.Empty<object>());
+        }
 
 
 
@@ -147,14 +314,22 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            int? fromCode = null,   // من كود (Id)
-            int? toCode = null,     // إلى كود
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_source = null,
+            string? filterCol_postVersion = null,
+            string? filterCol_sourceId = null,
+            string? filterCol_accId = null,
+            string? filterCol_accName = null,
+            string? filterCol_customer = null,
+            string? filterCol_debit = null,
+            string? filterCol_credit = null,
+            string? filterCol_desc = null,
             int page = 1,
             int pageSize = 50)
         {
-            // =========================================================
-            // 1) تجهيز الاستعلام مع كل الفلاتر (قبل الـ Paging)
-            // =========================================================
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -165,6 +340,8 @@ namespace ERP.Controllers
                 toDate,
                 fromCode,
                 toCode);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_sourceId, filterCol_accId, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_credit, filterCol_desc);
 
             // =========================================================
             // 2) حساب الإجماليات من نفس الاستعلام (بعد الفلاتر)
@@ -201,8 +378,19 @@ namespace ERP.Controllers
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Source = filterCol_source;
+            ViewBag.FilterCol_PostVersion = filterCol_postVersion;
+            ViewBag.FilterCol_SourceId = filterCol_sourceId;
+            ViewBag.FilterCol_AccId = filterCol_accId;
+            ViewBag.FilterCol_AccName = filterCol_accName;
+            ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_Debit = filterCol_debit;
+            ViewBag.FilterCol_Credit = filterCol_credit;
+            ViewBag.FilterCol_Desc = filterCol_desc;
 
-            ViewBag.DateField = "EntryDate";       // متغير: اسم حقل التاريخ المستخدم في الفلترة
+            ViewBag.DateField = "EntryDate";
             ViewBag.Page = page;                   // متغير: رقم الصفحة الحالية
             ViewBag.PageSize = pageSize;           // متغير: حجم الصفحة
 
@@ -261,9 +449,19 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
-            string format = "excel")   // excel | csv (الاثنين حالياً يخرجوا CSV
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_source = null,
+            string? filterCol_postVersion = null,
+            string? filterCol_sourceId = null,
+            string? filterCol_accId = null,
+            string? filterCol_accName = null,
+            string? filterCol_customer = null,
+            string? filterCol_debit = null,
+            string? filterCol_credit = null,
+            string? filterCol_desc = null,
+            string format = "excel")
         {
-            // نبني نفس الاستعلام المستخدم في Index لضمان نفس النتائج
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -274,6 +472,8 @@ namespace ERP.Controllers
                 toDate,
                 fromCode,
                 toCode);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_sourceId, filterCol_accId, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_credit, filterCol_desc);
 
             var list = await q.ToListAsync();
 

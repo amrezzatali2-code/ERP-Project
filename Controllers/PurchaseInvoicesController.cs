@@ -1944,6 +1944,7 @@ namespace ERP.Controllers
         .ThenInclude(c => c.District)
     .Include(p => p.Customer)
         .ThenInclude(c => c.Area)
+    .Include(p => p.RefPurchaseRequest)
     .Include(p => p.Lines)
         .ThenInclude(l => l.Product)
     .AsNoTracking()

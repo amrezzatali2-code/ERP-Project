@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;                    // القوائم List
+using System.Globalization;                          // NumberStyles لفلتر الأعمدة
 using System.Linq;                                   // استعلامات LINQ
 using System.Text;                                   // بناء ملف CSV
 using System.Threading.Tasks;                        // async / await
@@ -19,10 +20,177 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
         public AccountsController(AppDbContext context, IUserActivityLogger activityLogger)
         {
             _context = context;
             _activityLogger = activityLogger;
+        }
+
+        /// <summary>تطبيق فلاتر الأعمدة (بنمط Excel) على استعلام الحسابات.</summary>
+        private static IQueryable<Account> ApplyColumnFilters(
+            IQueryable<Account> query,
+            string? filterCol_id,
+            string? filterCol_code,
+            string? filterCol_name,
+            string? filterCol_type,
+            string? filterCol_level,
+            string? filterCol_leaf,
+            string? filterCol_active,
+            string? filterCol_created,
+            string? filterCol_updated,
+            string? filterCol_notes)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(a => ids.Contains(a.AccountId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            {
+                var vals = filterCol_code.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(a => vals.Contains(a.AccountCode));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(a => vals.Contains(a.AccountName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_type))
+            {
+                var vals = filterCol_type.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(a => vals.Contains(a.AccountType.ToString()));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_level))
+            {
+                var ids = filterCol_level.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(a => ids.Contains(a.Level));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_leaf))
+            {
+                var parts = filterCol_leaf.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant())
+                    .Where(x => x == "true" || x == "false" || x == "1" || x == "0" || x == "نعم" || x == "لا" || x == "تفصيلي" || x == "تجميعي").ToList();
+                var includeTrue = parts.Any(x => x == "true" || x == "1" || x == "نعم" || x == "تفصيلي");
+                var includeFalse = parts.Any(x => x == "false" || x == "0" || x == "لا" || x == "تجميعي");
+                if (includeTrue && !includeFalse) query = query.Where(a => a.IsLeaf);
+                else if (includeFalse && !includeTrue) query = query.Where(a => !a.IsLeaf);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_active))
+            {
+                var parts = filterCol_active.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant())
+                    .Where(x => x == "true" || x == "false" || x == "1" || x == "0" || x == "نعم" || x == "لا" || x == "نشط" || x == "موقوف").ToList();
+                var includeTrue = parts.Any(x => x == "true" || x == "1" || x == "نعم" || x == "نشط");
+                var includeFalse = parts.Any(x => x == "false" || x == "0" || x == "لا" || x == "موقوف");
+                if (includeTrue && !includeFalse) query = query.Where(a => a.IsActive);
+                else if (includeFalse && !includeTrue) query = query.Where(a => !a.IsActive);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(a => dates.Contains(a.CreatedAt.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(a => a.UpdatedAt.HasValue && dates.Contains(a.UpdatedAt.Value.Date));
+                }
+            }
+            return query;
+        }
+
+        /// <summary>API: جلب القيم المميزة لعمود (للفلترة بنمط Excel).</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+
+            if (columnLower == "id")
+            {
+                var ids = await _context.Accounts.AsNoTracking()
+                    .Select(a => a.AccountId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "code")
+            {
+                var q = _context.Accounts.AsNoTracking().Select(a => a.AccountCode);
+                if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "name")
+            {
+                var q = _context.Accounts.AsNoTracking().Select(a => a.AccountName);
+                if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "type")
+            {
+                // جلب القيم كـ enum ثم تحويلها لنص في الذاكرة (تفادي فشل ترجمة ToString في EF)
+                var list = await _context.Accounts.AsNoTracking()
+                    .Select(a => a.AccountType).Distinct().OrderBy(x => x).Take(100).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "level")
+            {
+                var ids = await _context.Accounts.AsNoTracking()
+                    .Select(a => a.Level).Distinct().OrderBy(x => x).Take(50).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "leaf")
+            {
+                var items = new[] { new { value = "true", display = "تفصيلي" }, new { value = "false", display = "تجميعي" } };
+                return Json(items);
+            }
+            if (columnLower == "active")
+            {
+                var items = new[] { new { value = "true", display = "نشط" }, new { value = "false", display = "موقوف" } };
+                return Json(items);
+            }
+            if (columnLower == "created")
+            {
+                var dates = await _context.Accounts.AsNoTracking()
+                    .Select(a => a.CreatedAt.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "updated")
+            {
+                var dates = await _context.Accounts.AsNoTracking()
+                    .Where(a => a.UpdatedAt.HasValue).Select(a => a.UpdatedAt!.Value.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "notes")
+            {
+                var q = _context.Accounts.AsNoTracking().Where(a => a.Notes != null && a.Notes != "").Select(a => a.Notes!);
+                if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v.Length > 60 ? v.Substring(0, 60) + "…" : v }));
+            }
+            return Json(Array.Empty<object>());
         }
 
         // =========================================================
@@ -77,20 +245,28 @@ namespace ERP.Controllers
         [RequirePermission("Accounts.Index")]
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "all",          // all|name|code|id|type|notes|level
-            string? sort = "name",             // name|code|id|type|level|created|updated
-            string? dir = "asc",               // asc | desc
-            bool useDateRange = false,         // فلترة بالتاريخ؟
-            DateTime? fromDate = null,         // من تاريخ
-            DateTime? toDate = null,           // إلى تاريخ
-            string? dateField = "CreatedAt",   // CreatedAt أو UpdatedAt
-            int? fromCode = null,              // من رقم حساب (AccountId)
-            int? toCode = null,                // إلى رقم حساب
-            int page = 1,                      // رقم الصفحة
-            int pageSize = 50                  // حجم الصفحة
-        )
+            string? searchBy = "all",
+            string? sort = "name",
+            string? dir = "asc",
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? dateField = "CreatedAt",
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_code = null,
+            string? filterCol_name = null,
+            string? filterCol_type = null,
+            string? filterCol_level = null,
+            string? filterCol_leaf = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string? filterCol_notes = null,
+            int page = 1,
+            int pageSize = 50)
         {
-            // استعلام أساسي بدون تتبع لتحسين الأداء
             IQueryable<Account> q = _context.Accounts.AsNoTracking();
 
             // تنظيف قيم البحث والترتيب
@@ -201,6 +377,8 @@ namespace ERP.Controllers
                 }
             }
 
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_code, filterCol_name, filterCol_type, filterCol_level, filterCol_leaf, filterCol_active, filterCol_created, filterCol_updated, filterCol_notes);
+
             // ============= 4) الترتيب حسب العمود ===============================
             q = so switch
             {
@@ -227,6 +405,10 @@ namespace ERP.Controllers
                 "updated" => (descending
                     ? q.OrderByDescending(a => a.UpdatedAt)
                     : q.OrderBy(a => a.UpdatedAt)),
+
+                "leaf" => (descending ? q.OrderByDescending(a => a.IsLeaf) : q.OrderBy(a => a.IsLeaf)),
+                "active" => (descending ? q.OrderByDescending(a => a.IsActive) : q.OrderBy(a => a.IsActive)),
+                "notes" => (descending ? q.OrderByDescending(a => a.Notes ?? "") : q.OrderBy(a => a.Notes ?? "")),
 
                 "name" or _ => (descending
                     ? q.OrderByDescending(a => a.AccountName)
@@ -258,7 +440,6 @@ namespace ERP.Controllers
                                        // مفيش FromCode/ToCode هنا، هنمررهم في ViewBag فقط
             };
 
-            // تمرير القيم للـ ViewBag علشان البارشال _IndexFilters
             ViewBag.Search = s;
             ViewBag.SearchBy = sb;
             ViewBag.Sort = so;
@@ -266,7 +447,20 @@ namespace ERP.Controllers
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
             ViewBag.Total = totalCount;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.FromCode = fromCode;
+            ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Code = filterCol_code;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Type = filterCol_type;
+            ViewBag.FilterCol_Level = filterCol_level;
+            ViewBag.FilterCol_Leaf = filterCol_leaf;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.FilterCol_Notes = filterCol_notes;
 
             // ========= خيارات البحث في الدروب داون (نفس أسماء أعمدة الجدول) =======
             ViewBag.SearchOptions = new[]
@@ -549,11 +743,18 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             string? dateField = "CreatedAt",
             int? fromCode = null,
-            int? toCode = null)
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_code = null,
+            string? filterCol_name = null,
+            string? filterCol_type = null,
+            string? filterCol_level = null,
+            string? filterCol_leaf = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string? filterCol_notes = null)
         {
-            // نعيد استخدام نفس منطق Index بدون الترقيم
-            // (نسخ مبسط: لو حابب نعمل دالة مشتركة للفلاتر نقدر لاحقاً)
-
             IQueryable<Account> q = _context.Accounts.AsNoTracking();
 
             var s = (search ?? string.Empty).Trim();
@@ -631,6 +832,8 @@ namespace ERP.Controllers
                 }
             }
 
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_code, filterCol_name, filterCol_type, filterCol_level, filterCol_leaf, filterCol_active, filterCol_created, filterCol_updated, filterCol_notes);
+
             // الترتيب
             q = so switch
             {
@@ -640,6 +843,9 @@ namespace ERP.Controllers
                 "level" => (descending ? q.OrderByDescending(a => a.Level) : q.OrderBy(a => a.Level)),
                 "created" => (descending ? q.OrderByDescending(a => a.CreatedAt) : q.OrderBy(a => a.CreatedAt)),
                 "updated" => (descending ? q.OrderByDescending(a => a.UpdatedAt) : q.OrderBy(a => a.UpdatedAt)),
+                "leaf" => (descending ? q.OrderByDescending(a => a.IsLeaf) : q.OrderBy(a => a.IsLeaf)),
+                "active" => (descending ? q.OrderByDescending(a => a.IsActive) : q.OrderBy(a => a.IsActive)),
+                "notes" => (descending ? q.OrderByDescending(a => a.Notes ?? "") : q.OrderBy(a => a.Notes ?? "")),
                 "name" or _ => (descending ? q.OrderByDescending(a => a.AccountName) : q.OrderBy(a => a.AccountName)),
             };
 

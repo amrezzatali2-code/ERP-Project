@@ -1,4 +1,4 @@
-﻿using DocumentFormat.OpenXml.InkML;
+using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                                 // AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                       // كلاس PagedResult لتقسيم الصفحات
@@ -43,6 +43,7 @@ namespace ERP.Controllers
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IPermissionService _permissionService;
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public PurchaseRequestsController(AppDbContext context,
                                           DocumentTotalsService docTotals,
@@ -256,24 +257,32 @@ private int? GetCurrentUserId()
         [RequirePermission("PurchaseRequests.Index")]
         public async Task<IActionResult> Index(
                 string? search,                      // متغير: نص البحث
-                string? searchBy,                    // متغير: نوع البحث: id / vendor / warehouse / date / status ...
-                string? sort,                        // متغير: عمود الترتيب: id / date / vendor / warehouse / net / status ...
+                string? searchBy,                    // متغير: نوع البحث: all / id / customer / warehouse / date / status ...
+                string? sort,                        // متغير: عمود الترتيب: id / date / customer / warehouse / total / status ...
                 string? dir,                         // متغير: اتجاه الترتيب: asc / desc
                 bool useDateRange = false,           // متغير: هل فلتر التاريخ مفعّل؟
                 DateTime? fromDate = null,           // متغير: من تاريخ/وقت
                 DateTime? toDate = null,             // متغير: إلى تاريخ/وقت
-                string? dateField = "PRDate",        // ✅ طلب الشراء: الحقل الافتراضي للتاريخ (غيّره لو اسم الحقل مختلف)
+                string? dateField = "PRDate",        // ✅ طلب الشراء: الحقل الافتراضي للتاريخ
                 int? fromCode = null,                // متغير: من رقم طلب
                 int? toCode = null,                  // متغير: إلى رقم طلب
                 int page = 1,                        // متغير: رقم الصفحة
-                int pageSize = 25                    // متغير: حجم الصفحة
+                int pageSize = 25,                   // متغير: حجم الصفحة
+                string? filterCol_id = null,
+                string? filterCol_date = null,
+                string? filterCol_needby = null,
+                string? filterCol_customer = null,
+                string? filterCol_warehouse = null,
+                string? filterCol_status = null,
+                string? filterCol_total = null,
+                string? filterCol_created = null
             )
         {
             // =========================================================
-            // (0) قيم افتراضية
+            // (0) قيم افتراضية — البحث الافتراضي على كل الأعمدة
             // =========================================================
-            searchBy ??= "id";
-            sort ??= "PRDate";      // ✅ طلب الشراء: ترتيب افتراضي بالتاريخ
+            searchBy ??= "all";
+            sort ??= "date";
             dir ??= "desc";
             dateField ??= "PRDate";
 
@@ -281,22 +290,23 @@ private int? GetCurrentUserId()
             if (pageSize <= 0) pageSize = 25;
 
             // =========================================================
-            // (1) الاستعلام الأساسي (IQueryable) بدون تنفيذ
+            // (1) الاستعلام الأساسي — Include عند البحث في «الكل» لاستخدام اسم العميل/المخزن
             // =========================================================
             IQueryable<PurchaseRequest> query = _context.PurchaseRequests.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(search) && string.Equals(searchBy, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                query = query.Include(pr => pr.Customer).Include(pr => pr.Warehouse);
+            }
 
             // =========================================================
-            // (2) قراءة codeFrom/codeTo من الكويري للتوافق مع Export وغيره
+            // (2) قراءة fromCode/toCode من الكويري للتوافق مع Export
             // =========================================================
             int? codeFrom = Request.Query.ContainsKey("codeFrom")
                 ? TryParseNullableInt(Request.Query["codeFrom"])
                 : null;
-
             int? codeTo = Request.Query.ContainsKey("codeTo")
                 ? TryParseNullableInt(Request.Query["codeTo"])
                 : null;
-
-            // متغير: القيمة النهائية لفلتر الأرقام
             int? finalFromCode = fromCode ?? codeFrom;
             int? finalToCode = toCode ?? codeTo;
 
@@ -314,6 +324,94 @@ private int? GetCurrentUserId()
                 toDate,
                 dateField
             );
+
+            // =========================================================
+            // (3b) فلاتر الأعمدة (بنمط Excel)
+            // =========================================================
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    query = query.Where(p => ids.Contains(p.PRId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var ids = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    query = query.Where(p => ids.Contains(p.CustomerId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    query = query.Where(p => ids.Contains(p.WarehouseId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => p.Status != null && vals.Contains(p.Status));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_total))
+            {
+                var vals = filterCol_total.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(p => vals.Contains(p.ExpectedItemsTotal));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 7).ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length >= 7 && p.IndexOf('-') >= 0 &&
+                        int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                        dateFilters.Add((y, m));
+                }
+                if (dateFilters.Count > 0)
+                    query = query.Where(p => dateFilters.Any(df => p.PRDate.Year == df.Year && p.PRDate.Month == df.Month));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_needby))
+            {
+                var parts = filterCol_needby.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 7).ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length >= 7 && p.IndexOf('-') >= 0 &&
+                        int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                        dateFilters.Add((y, m));
+                }
+                if (dateFilters.Count > 0)
+                    query = query.Where(p => p.NeedByDate.HasValue && dateFilters.Any(df => p.NeedByDate!.Value.Year == df.Year && p.NeedByDate.Value.Month == df.Month));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 7).ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length >= 7 && p.IndexOf('-') >= 0 &&
+                        int.TryParse(p.Substring(0, 4), out var y) &&
+                        int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                        dateFilters.Add((y, m));
+                }
+                if (dateFilters.Count > 0)
+                    query = query.Where(p => dateFilters.Any(df => p.CreatedAt.Year == df.Year && p.CreatedAt.Month == df.Month));
+            }
 
             // =========================================================
             // (4) تطبيق الترتيب
@@ -377,10 +475,86 @@ private int? GetCurrentUserId()
             ViewBag.ToCode = finalToCode;
             ViewBag.CodeFrom = finalFromCode;
             ViewBag.CodeTo = finalToCode;
-
             ViewBag.TotalNet = totalNet;
 
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Needby = filterCol_needby;
+            ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_Status = filterCol_status;
+            ViewBag.FilterCol_Total = filterCol_total;
+            ViewBag.FilterCol_Created = filterCol_created;
+
             return View(model);
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود (للفلترة بنمط Excel).
+        /// </summary>
+        [RequirePermission("PurchaseRequests.Index")]
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            IQueryable<PurchaseRequest> q = _context.PurchaseRequests.AsNoTracking();
+
+            List<(string Value, string Display)> items;
+            switch (col)
+            {
+                case "id":
+                    items = (await q.Select(x => x.PRId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                        .Select(v => (v.ToString(), v.ToString())).ToList();
+                    break;
+                case "date":
+                    items = (await q.Select(x => new { x.PRDate.Year, x.PRDate.Month }).Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                        .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList();
+                    break;
+                case "needby":
+                    items = (await q.Where(x => x.NeedByDate.HasValue).Select(x => new { x.NeedByDate!.Value.Year, x.NeedByDate.Value.Month }).Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                        .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList();
+                    break;
+                case "customer":
+                    var custList = await q.Select(x => x.CustomerId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                    var custNames = await _context.Customers.AsNoTracking()
+                        .Where(c => custList.Contains(c.CustomerId))
+                        .Select(c => new { c.CustomerId, c.CustomerName })
+                        .ToListAsync();
+                    items = custNames.Select(c => (c.CustomerId.ToString(), c.CustomerName ?? "")).ToList();
+                    break;
+                case "warehouse":
+                    var whList = await q.Select(x => x.WarehouseId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                    var whNames = await _context.Warehouses.AsNoTracking()
+                        .Where(w => whList.Contains(w.WarehouseId))
+                        .Select(w => new { w.WarehouseId, w.WarehouseName })
+                        .ToListAsync();
+                    items = whNames.Select(w => (w.WarehouseId.ToString(), w.WarehouseName ?? "")).ToList();
+                    break;
+                case "status":
+                    items = (await q.Where(x => x.Status != null).Select(x => x.Status!).Distinct().OrderBy(c => c).Take(200).ToListAsync())
+                        .Select(c => (c ?? "", c ?? "")).ToList();
+                    break;
+                case "total":
+                    items = (await q.Select(x => x.ExpectedItemsTotal).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                        .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.00"))).ToList();
+                    break;
+                case "created":
+                    items = (await q.Select(x => new { x.CreatedAt.Year, x.CreatedAt.Month }).Distinct()
+                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
+                        .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList();
+                    break;
+                default:
+                    items = new List<(string Value, string Display)>();
+                    break;
+            }
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+                items = items.Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm)).ToList();
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         #endregion
@@ -2725,45 +2899,100 @@ private async Task PopulateDropDownsAsync(
             DateTime? toDate = null,
             string? dateField = "PRDate",
             int? codeFrom = null,
-            int? codeTo = null
+            int? codeTo = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_needby = null,
+            string? filterCol_customer = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_status = null,
+            string? filterCol_total = null,
+            string? filterCol_created = null
         )
         {
-            // =========================
-            // 0) القيم الافتراضية بما يناسب "طلبات الشراء"
-            // =========================
             format = string.IsNullOrWhiteSpace(format) ? "excel" : format.ToLowerInvariant();
-
-            // متغير: افتراضات البحث/الترتيب
-            searchBy ??= "id";
-            sort ??= "PRDate";
+            searchBy ??= "all";
+            sort ??= "date";
             dir ??= "desc";
             dateField ??= "PRDate";
 
+            int? finalFrom = fromCode ?? codeFrom;
+            int? finalTo = toCode ?? codeTo;
+
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-            // =========================
-            // 1) استعلام أساسي (طلبات الشراء)
-            // =========================
             IQueryable<PurchaseRequest> query = _context.PurchaseRequests.AsNoTracking();
+            if (!string.IsNullOrWhiteSpace(search) && string.Equals(searchBy, "all", StringComparison.OrdinalIgnoreCase))
+                query = query.Include(pr => pr.Customer).Include(pr => pr.Warehouse);
 
-            // =========================
-            // 2) تطبيق نفس الفلاتر بتاعة Index (كما هي عندك)
-            // =========================
-            query = ApplyFilters(
-                query,
-                search,
-                searchBy,
-                codeFrom,
-                codeTo,
-                useDateRange,
-                fromDate,
-                toDate,
-                dateField
-            );
+            query = ApplyFilters(query, search, searchBy, finalFrom, finalTo, useDateRange, fromDate, toDate, dateField);
 
-            // =========================
-            // 3) تطبيق نفس الترتيب (كما هو عندك)
-            // =========================
+            // فلاتر الأعمدة (نفس Index)
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(p => ids.Contains(p.PRId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var ids = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(p => ids.Contains(p.CustomerId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(p => ids.Contains(p.WarehouseId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(p => p.Status != null && vals.Contains(p.Status));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_total))
+            {
+                var vals = filterCol_total.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(p => vals.Contains(p.ExpectedItemsTotal));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length >= 7).ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length >= 7 && int.TryParse(p.Substring(0, 4), out var y) && int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                        dateFilters.Add((y, m));
+                }
+                if (dateFilters.Count > 0) query = query.Where(p => dateFilters.Any(df => p.PRDate.Year == df.Year && p.PRDate.Month == df.Month));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_needby))
+            {
+                var parts = filterCol_needby.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length >= 7).ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length >= 7 && int.TryParse(p.Substring(0, 4), out var y) && int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                        dateFilters.Add((y, m));
+                }
+                if (dateFilters.Count > 0) query = query.Where(p => p.NeedByDate.HasValue && dateFilters.Any(df => p.NeedByDate!.Value.Year == df.Year && p.NeedByDate.Value.Month == df.Month));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length >= 7).ToList();
+                var dateFilters = new List<(int Year, int Month)>();
+                foreach (var p in parts)
+                {
+                    if (p.Length >= 7 && int.TryParse(p.Substring(0, 4), out var y) && int.TryParse(p.Substring(5, 2), out var m) && m >= 1 && m <= 12)
+                        dateFilters.Add((y, m));
+                }
+                if (dateFilters.Count > 0) query = query.Where(p => dateFilters.Any(df => p.CreatedAt.Year == df.Year && p.CreatedAt.Month == df.Month));
+            }
+
             query = ApplySort(query, sort, sortDesc);
 
             var list = await query.ToListAsync();
@@ -2857,7 +3086,7 @@ private async Task PopulateDropDownsAsync(
             // =========================
             // 0) قيم افتراضية تناسب طلب الشراء
             // =========================
-            searchBy ??= "id";
+            searchBy ??= "all";
             dateField = string.IsNullOrWhiteSpace(dateField) ? "PRDate" : dateField;
 
             // =========================
@@ -2869,6 +3098,21 @@ private async Task PopulateDropDownsAsync(
 
                 switch (searchBy.ToLower())
                 {
+                    case "all":
+                        // بحث في كل أعمدة الجدول (يتطلب Include Customer و Warehouse من الـ Index)
+                        query = query.Where(p =>
+                            p.PRId.ToString().Contains(search) ||
+                            (p.Customer != null && p.Customer.CustomerName != null && p.Customer.CustomerName.Contains(search)) ||
+                            (p.Warehouse != null && p.Warehouse.WarehouseName != null && p.Warehouse.WarehouseName.Contains(search)) ||
+                            (p.Status != null && p.Status.Contains(search)) ||
+                            p.ExpectedItemsTotal.ToString(System.Globalization.CultureInfo.InvariantCulture).Contains(search) ||
+                            p.PRDate.ToString("yyyy-MM-dd").Contains(search) ||
+                            (p.NeedByDate.HasValue && p.NeedByDate.Value.ToString("yyyy-MM-dd").Contains(search)) ||
+                            p.CreatedAt.ToString("yyyy-MM-dd").Contains(search) ||
+                            p.CustomerId.ToString().Contains(search) ||
+                            p.WarehouseId.ToString().Contains(search));
+                        break;
+
                     case "id":
                         // بحث برقم الطلب (PRId)
                         if (int.TryParse(search, out var idVal))
@@ -3046,10 +3290,17 @@ private async Task PopulateDropDownsAsync(
                         : query.OrderBy(p => p.IsConverted).ThenBy(p => p.PRId);
                     break;
 
+                case "created":
                 case "createdat":
                     query = desc
                         ? query.OrderByDescending(p => p.CreatedAt).ThenByDescending(p => p.PRId)
                         : query.OrderBy(p => p.CreatedAt).ThenBy(p => p.PRId);
+                    break;
+
+                case "needby":
+                    query = desc
+                        ? query.OrderByDescending(p => p.NeedByDate ?? DateTime.MinValue).ThenByDescending(p => p.PRId)
+                        : query.OrderBy(p => p.NeedByDate ?? DateTime.MaxValue).ThenBy(p => p.PRId);
                     break;
 
                 case "updatedat":

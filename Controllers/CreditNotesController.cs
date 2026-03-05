@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy

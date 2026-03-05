@@ -166,8 +166,8 @@ body {
 /* ================== تصميم احترافي موحد لشريط فلاتر القوائم ================== */
 .erp-list-filter-bar {
     background: #fff;
-    border: 2px solid #c7d2fe; /* نفس سمك ولون حدود الجدول */
-    border-radius: 8px;
+    border: 2px solid #c7d2fe; /* حدود زرقاء/بنفسجية فاتحة */
+    border-radius: 12px;
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
     box-shadow: 0 1px 3px rgba(59,130,246,.12);
@@ -206,18 +206,39 @@ body {
     outline: none;
 }
 
-/* أزرار الشريط: نفس الارتفاع للحقول */
-.erp-list-filter-bar .btn-erp-sm {
+/* أزرار الشريط: نفس الارتفاع والحواف الموحّدة (كما في قائمة أذون الدفع) */
+.erp-list-filter-bar .btn-erp-sm,
+.erp-list-filter-bar .erp-toolbar .btn-erp-sm,
+.erp-list-filter-bar .erp-toolbar a.btn-erp-sm {
     height: 34px;
     min-height: 34px;
     padding: 0.35rem 0.9rem;
     font-size: 0.8125rem;
-    border-radius: 6px;
+    border-radius: 6px; /* زوايا موحّدة — لا شكل pill */
+    box-sizing: border-box;
 }
 
 .erp-list-filter-bar .erp-toolbar .btn-erp-sm {
     height: 34px;
     min-height: 34px;
+}
+
+/* أزرار ثانوية في الشريط: حد رمادي داكن واضح (مطابق لصورة أذون الدفع) */
+.erp-list-filter-bar .erp-toolbar .btn-erp-secondary {
+    border: 1px solid #4b5563;
+    color: #374151;
+}
+
+.erp-list-filter-bar .erp-toolbar .btn-erp-secondary:hover {
+    border-color: #4b5563;
+    background-color: #f9fafb;
+    color: #111827;
+}
+
+/* قائمة Excel في الشريط: نفس مظهر الأزرار الثانوية */
+.erp-list-filter-bar .erp-export-form .form-select.erp-filter-input {
+    border: 1px solid #4b5563;
+    color: #374151;
 }
 
 /* صف البحث */
@@ -274,6 +295,29 @@ body {
 }
 .erp-list-filter-bar .erp-filter-section .erp-list-search-row.justify-content-center {
     justify-content: center;
+}
+
+/* تنسيق أزرار شريط التحكم كما في الصورة: حواف أوضح + زر طباعة بأيقونة بنفسجية + Excel كزر منقسم */
+.erp-list-filter-bar .erp-toolbar-btn-rounded {
+    border-radius: 8px;
+}
+.erp-list-filter-bar .erp-btn-print .erp-icon-print {
+    color: #7c3aed;
+    flex-shrink: 0;
+}
+.erp-list-filter-bar .erp-export-format-split .dropdown-toggle-split {
+    border-inline-start: 1px solid rgba(0,0,0,.15);
+}
+.erp-list-filter-bar .erp-export-format-split .btn-group > span.btn {
+    pointer-events: none;
+}
+.erp-list-filter-bar .erp-export-format-split.btn-group > *:first-child {
+    border-start-start-radius: 8px;
+    border-end-start-radius: 8px;
+}
+.erp-list-filter-bar .erp-export-format-split.btn-group > .dropdown-toggle {
+    border-start-end-radius: 8px;
+    border-end-end-radius: 8px;
 }
 
 .erp-list-code-filter .erp-filter-input {
@@ -727,6 +771,8 @@ main.erp-list-page-layout {
     align-items: center;
     gap: 0.25rem;
     justify-content: space-between;
+    position: relative;
+    z-index: 2;
 }
 .erp-col-header-filterable .erp-col-title {
     flex: 1;

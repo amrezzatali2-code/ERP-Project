@@ -601,10 +601,14 @@
                                     </div>
 
                                     <div class="col-lg-1 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm">رقم الطلب</label>
-                                        <input class="form-control form-control-sm text-center"
-                                               value="@(Model.RefPRId?.ToString() ?? "")"
-                                               readonly />
+                                        <label class="form-label form-label-sm" for="RefPRId">رقم الطلب المحول</label>
+                                        <input id="RefPRId"
+                                               name="RefPRId"
+                                               type="text"
+                                               inputmode="numeric"
+                                               class="form-control form-control-sm text-center"
+                                               value="@(Model.RefPRId?.ToString() ?? Model.RefPurchaseRequest?.PRId.ToString() ?? "")"
+                                               @(Model.IsPosted ? "readonly" : "") />
                                     </div>
 
                                     <div class="col-lg-1 col-md-6 col-sm-12">

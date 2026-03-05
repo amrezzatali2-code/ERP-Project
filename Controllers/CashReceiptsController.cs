@@ -1,4 +1,4 @@
-﻿using System;                                     // للتعامل مع التواريخ DateTime
+using System;                                     // للتعامل مع التواريخ DateTime
 using System.Collections.Generic;                 // القوائم Dictionary / List
 using System.Globalization;                       // تنسيق التواريخ فى التصدير
 using System.Linq;                                // أوامر LINQ مثل Where / OrderBy
@@ -260,6 +260,167 @@ namespace ERP.Controllers
             return q;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
+        private static IQueryable<CashReceipt> ApplyColumnFilters(
+            IQueryable<CashReceipt> query,
+            string? filterCol_id,
+            string? filterCol_receiptNumber,
+            string? filterCol_date,
+            string? filterCol_customer,
+            string? filterCol_cashAccount,
+            string? filterCol_counterAccount,
+            string? filterCol_amount,
+            string? filterCol_posted,
+            string? filterCol_desc)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(r => ids.Contains(r.CashReceiptId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_receiptNumber))
+            {
+                var vals = filterCol_receiptNumber.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(r => r.ReceiptNumber != null && vals.Contains(r.ReceiptNumber));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(r => dates.Contains(r.ReceiptDate.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var vals = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(r => r.Customer != null && vals.Contains(r.Customer.CustomerName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_cashAccount))
+            {
+                var vals = filterCol_cashAccount.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(r => r.CashAccount != null && vals.Contains(r.CashAccount.AccountName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_counterAccount))
+            {
+                var vals = filterCol_counterAccount.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(r => r.CounterAccount != null && vals.Contains(r.CounterAccount.AccountName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_amount))
+            {
+                var vals = filterCol_amount.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(r => vals.Contains(r.Amount));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_posted))
+            {
+                var vals = filterCol_posted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant()).Where(x => x == "true" || x == "1" || x == "مرحّل" || x == "false" || x == "0" || x == "مسودة").ToList();
+                if (vals.Count > 0)
+                {
+                    var postTrue = vals.Any(v => v == "true" || v == "1" || v == "مرحّل");
+                    var postFalse = vals.Any(v => v == "false" || v == "0" || v == "مسودة");
+                    if (postTrue && !postFalse) query = query.Where(r => r.IsPosted);
+                    else if (postFalse && !postTrue) query = query.Where(r => !r.IsPosted);
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_desc))
+            {
+                var vals = filterCol_desc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(r => r.Description != null && vals.Any(v => r.Description.Contains(v)));
+            }
+            return query;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.CashReceipts.AsNoTracking()
+                .Include(r => r.Customer)
+                .Include(r => r.CashAccount)
+                .Include(r => r.CounterAccount);
+
+            if (columnLower == "id")
+            {
+                var ids = await q.Select(r => r.CashReceiptId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "receiptnumber")
+            {
+                var list = await q.Where(r => r.ReceiptNumber != null).Select(r => r.ReceiptNumber!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "date")
+            {
+                var dates = await q.Select(r => r.ReceiptDate.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "customer" || columnLower == "customername")
+            {
+                var list = await q.Where(r => r.Customer != null).Select(r => r.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "cashaccount")
+            {
+                var list = await q.Where(r => r.CashAccount != null).Select(r => r.CashAccount!.AccountName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "counteraccount")
+            {
+                var list = await q.Where(r => r.CounterAccount != null).Select(r => r.CounterAccount!.AccountName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "amount")
+            {
+                var list = await q.Select(r => r.Amount).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(CultureInfo.InvariantCulture), display = v.ToString("0.00") }));
+            }
+            if (columnLower == "posted" || columnLower == "isposted")
+            {
+                return Json(new[] { new { value = "true", display = "مرحّل" }, new { value = "false", display = "مسودة" } });
+            }
+            if (columnLower == "created" || columnLower == "createdat")
+            {
+                var list = await q.Where(r => r.CreatedAt != default).Select(r => r.CreatedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "updated" || columnLower == "updatedat")
+            {
+                var list = await q.Where(r => r.UpdatedAt.HasValue).Select(r => r.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "desc" || columnLower == "description")
+            {
+                var list = await q.Where(r => r.Description != null && r.Description != "").Select(r => r.Description!).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v }));
+            }
+            return Json(Array.Empty<object>());
+        }
+
         // =========================================================
         // Index — عرض قائمة إذون الاستلام (نظام القوائم الموحد)
         // =========================================================
@@ -271,12 +432,20 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            int? fromCode = null,   // من كود (CashReceiptId)
-            int? toCode = null,     // إلى كود
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_receiptNumber = null,
+            string? filterCol_date = null,
+            string? filterCol_customer = null,
+            string? filterCol_cashAccount = null,
+            string? filterCol_counterAccount = null,
+            string? filterCol_amount = null,
+            string? filterCol_posted = null,
+            string? filterCol_desc = null,
             int page = 1,
             int pageSize = 50)
         {
-            // تجهيز الاستعلام مع كل الفلاتر
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -288,36 +457,37 @@ namespace ERP.Controllers
                 fromCode,
                 toCode);
 
-            // إجمالي المبلغ فى كل النتائج (للسطر الإجمالي أسفل الجدول)
-            var totalAmount = await q
-                .Select(r => (decimal?)r.Amount)
-                .SumAsync() ?? 0m;
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_receiptNumber, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc);
 
-            // إنشاء موديل التقسيم PagedResult
+            var totalAmount = await q.Select(r => (decimal?)r.Amount).SumAsync() ?? 0m;
             var model = await PagedResult<CashReceipt>.CreateAsync(q, page, pageSize);
 
-            // حفظ قيم الفلترة الزمنية داخل الموديل (لنظام القوائم الموحد)
             model.UseDateRange = useDateRange;
             model.FromDate = fromDate;
             model.ToDate = toDate;
 
-            // تمرير القيم للـ ViewBag لاستخدامها في الواجهة
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "ReceiptDate";
             ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
-
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
-
-            ViewBag.DateField = "ReceiptDate";       // نستخدم تاريخ الإذن للفلترة
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_ReceiptNumber = filterCol_receiptNumber;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_CashAccount = filterCol_cashAccount;
+            ViewBag.FilterCol_CounterAccount = filterCol_counterAccount;
+            ViewBag.FilterCol_Amount = filterCol_amount;
+            ViewBag.FilterCol_Posted = filterCol_posted;
+            ViewBag.FilterCol_Desc = filterCol_desc;
+            ViewBag.DateField = "ReceiptDate";
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
+            ViewBag.TotalCount = model.TotalCount;
+            ViewBag.TotalAmount = totalAmount;
 
-            ViewBag.TotalCount = model.TotalCount;   // إجمالي عدد الإذون
-            ViewBag.TotalAmount = totalAmount;       // إجمالي المبلغ فى النتائج
-
-            return View(model); // يعرض Views/CashReceipts/Index.cshtml
+            return View(model);
         }
 
         // =========================================================
@@ -857,7 +1027,16 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
-            string format = "excel")   // excel | csv (الاتنين حالياً CSV
+            string? filterCol_id = null,
+            string? filterCol_receiptNumber = null,
+            string? filterCol_date = null,
+            string? filterCol_customer = null,
+            string? filterCol_cashAccount = null,
+            string? filterCol_counterAccount = null,
+            string? filterCol_amount = null,
+            string? filterCol_posted = null,
+            string? filterCol_desc = null,
+            string format = "excel")
         {
             var q = BuildQuery(
                 search,
@@ -869,6 +1048,8 @@ namespace ERP.Controllers
                 toDate,
                 fromCode,
                 toCode);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_receiptNumber, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc);
 
             var list = await q.ToListAsync();
 

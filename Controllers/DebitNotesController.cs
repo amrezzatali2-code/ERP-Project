@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // Dictionary, List
 using System.Globalization;                       // تنسيق التواريخ عند التصدير
 using System.Linq;                                // LINQ: Where / OrderBy
@@ -107,22 +107,25 @@ namespace ERP.Controllers
             var intFields =
                 new Dictionary<string, Expression<Func<DebitNote, int>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["id"] = d => d.DebitNoteId      // البحث برقم الإشعار
+                    ["id"] = d => d.DebitNoteId,
+                    ["number"] = d => d.DebitNoteId   // رقم المستند = رقم الإشعار
                 };
 
             // الحقول المسموح الترتيب عليها
             var orderFields =
                 new Dictionary<string, Expression<Func<DebitNote, object>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["DebitNoteId"] = d => d.DebitNoteId,                                         // رقم الإشعار / رقم المستند
-                    ["NoteDate"] = d => d.NoteDate,                                            // تاريخ الإشعار
-                    ["Amount"] = d => d.Amount,                                              // المبلغ
-                    ["CustomerName"] = d => d.Customer != null ? d.Customer.CustomerName : "",     // اسم العميل/الطرف
-                    ["AccountName"] = d => d.Account != null ? d.Account.AccountName : "",        // اسم حساب الطرف
-                    ["OffsetAccountName"] = d => d.OffsetAccount != null ? d.OffsetAccount.AccountName : "", // اسم الحساب المقابل
-                    ["IsPosted"] = d => d.IsPosted,                                            // حالة الترحيل
-                    ["CreatedAt"] = d => d.CreatedAt,                                           // تاريخ الإنشاء
-                    ["UpdatedAt"] = d => d.UpdatedAt ?? DateTime.MinValue                       // آخر تعديل
+                    ["DebitNoteId"] = d => d.DebitNoteId,
+                    ["NoteDate"] = d => d.NoteDate,
+                    ["Amount"] = d => d.Amount,
+                    ["CustomerName"] = d => d.Customer != null ? d.Customer.CustomerName : "",
+                    ["AccountName"] = d => d.Account != null ? d.Account.AccountName : "",
+                    ["OffsetAccountName"] = d => d.OffsetAccount != null ? d.OffsetAccount.AccountName : "",
+                    ["IsPosted"] = d => d.IsPosted,
+                    ["CreatedAt"] = d => d.CreatedAt,
+                    ["UpdatedAt"] = d => d.UpdatedAt ?? DateTime.MinValue,
+                    ["Reason"] = d => d.Reason ?? "",
+                    ["Description"] = d => d.Description ?? ""
                 };
 
             // (5) تطبيق منظومة البحث/الترتيب الموحدة
@@ -141,6 +144,176 @@ namespace ERP.Controllers
             return q;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
+        private static IQueryable<DebitNote> ApplyColumnFilters(
+            IQueryable<DebitNote> query,
+            string? filterCol_id,
+            string? filterCol_number,
+            string? filterCol_date,
+            string? filterCol_customer,
+            string? filterCol_account,
+            string? filterCol_offset,
+            string? filterCol_amount,
+            string? filterCol_posted,
+            string? filterCol_reason,
+            string? filterCol_desc)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(d => ids.Contains(d.DebitNoteId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_number))
+            {
+                var ids = filterCol_number.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(d => ids.Contains(d.DebitNoteId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var dt)) dates.Add(dt.Date);
+                    if (dates.Count > 0) query = query.Where(d => dates.Contains(d.NoteDate.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var vals = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(d => d.Customer != null && vals.Contains(d.Customer.CustomerName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_account))
+            {
+                var vals = filterCol_account.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(d => d.Account != null && vals.Contains(d.Account.AccountName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_offset))
+            {
+                var vals = filterCol_offset.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(d => d.OffsetAccount != null && vals.Contains(d.OffsetAccount.AccountName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_amount))
+            {
+                var vals = filterCol_amount.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(d => vals.Contains(d.Amount));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_posted))
+            {
+                var vals = filterCol_posted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant()).Where(x => x == "true" || x == "1" || x == "مرحّل" || x == "false" || x == "0" || x == "مسودة").ToList();
+                if (vals.Count > 0)
+                {
+                    var postTrue = vals.Any(v => v == "true" || v == "1" || v == "مرحّل");
+                    var postFalse = vals.Any(v => v == "false" || v == "0" || v == "مسودة");
+                    if (postTrue && !postFalse) query = query.Where(d => d.IsPosted);
+                    else if (postFalse && !postTrue) query = query.Where(d => !d.IsPosted);
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_reason))
+            {
+                var vals = filterCol_reason.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(d => d.Reason != null && vals.Any(v => d.Reason.Contains(v)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_desc))
+            {
+                var vals = filterCol_desc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    query = query.Where(d => d.Description != null && vals.Any(v => d.Description.Contains(v)));
+            }
+            return query;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.DebitNotes.AsNoTracking()
+                .Include(d => d.Customer)
+                .Include(d => d.Account)
+                .Include(d => d.OffsetAccount);
+
+            if (columnLower == "id" || columnLower == "number")
+            {
+                var ids = await q.Select(d => d.DebitNoteId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "date")
+            {
+                var dates = await q.Select(d => d.NoteDate.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "customer" || columnLower == "customername")
+            {
+                var list = await q.Where(d => d.Customer != null).Select(d => d.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "account" || columnLower == "accountname")
+            {
+                var list = await q.Where(d => d.Account != null).Select(d => d.Account!.AccountName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "offset" || columnLower == "offsetaccountname")
+            {
+                var list = await q.Where(d => d.OffsetAccount != null).Select(d => d.OffsetAccount!.AccountName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "amount")
+            {
+                var list = await q.Select(d => d.Amount).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                return Json(list.Select(v => new { value = v.ToString(CultureInfo.InvariantCulture), display = v.ToString("0.00") }));
+            }
+            if (columnLower == "posted" || columnLower == "isposted")
+            {
+                return Json(new[] { new { value = "true", display = "مرحّل" }, new { value = "false", display = "مسودة" } });
+            }
+            if (columnLower == "created" || columnLower == "createdat")
+            {
+                var list = await q.Select(d => d.CreatedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "updated" || columnLower == "updatedat")
+            {
+                var list = await q.Where(d => d.UpdatedAt.HasValue).Select(d => d.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "reason")
+            {
+                var list = await q.Where(d => d.Reason != null && d.Reason != "").Select(d => d.Reason!).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v }));
+            }
+            if (columnLower == "desc" || columnLower == "description")
+            {
+                var list = await q.Where(d => d.Description != null && d.Description != "").Select(d => d.Description!).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v }));
+            }
+            return Json(Array.Empty<object>());
+        }
+
         // =========================================================
         // Index — عرض قائمة إشعارات الخصم (نظام القوائم الموحد)
         // =========================================================
@@ -152,12 +325,21 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            int? fromCode = null,   // من كود (DebitNoteId)
-            int? toCode = null,     // إلى كود
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_number = null,
+            string? filterCol_date = null,
+            string? filterCol_customer = null,
+            string? filterCol_account = null,
+            string? filterCol_offset = null,
+            string? filterCol_amount = null,
+            string? filterCol_posted = null,
+            string? filterCol_reason = null,
+            string? filterCol_desc = null,
             int page = 1,
             int pageSize = 50)
         {
-            // تجهيز الاستعلام مع كل الفلاتر
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -169,30 +351,38 @@ namespace ERP.Controllers
                 fromCode,
                 toCode);
 
-            // إنشاء موديل التقسيم PagedResult
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_account, filterCol_offset, filterCol_amount, filterCol_posted, filterCol_reason, filterCol_desc);
+
+            var totalAmount = await q.Select(d => (decimal?)d.Amount).SumAsync() ?? 0m;
             var model = await PagedResult<DebitNote>.CreateAsync(q, page, pageSize);
 
-            // حفظ قيم الفلترة الزمنية داخل الموديل (لنظام القوائم الموحد)
             model.UseDateRange = useDateRange;
             model.FromDate = fromDate;
             model.ToDate = toDate;
 
-            // تمرير القيم للـ ViewBag لاستخدامها في الواجهة
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "NoteDate";
             ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
-
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
-
-            ViewBag.DateField = "NoteDate";       // نستخدم تاريخ الإشعار للفلترة
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Number = filterCol_number;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_Account = filterCol_account;
+            ViewBag.FilterCol_Offset = filterCol_offset;
+            ViewBag.FilterCol_Amount = filterCol_amount;
+            ViewBag.FilterCol_Posted = filterCol_posted;
+            ViewBag.FilterCol_Reason = filterCol_reason;
+            ViewBag.FilterCol_Desc = filterCol_desc;
+            ViewBag.DateField = "NoteDate";
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
+            ViewBag.TotalCount = model.TotalCount;
+            ViewBag.TotalAmount = totalAmount;
 
-            ViewBag.TotalCount = model.TotalCount; // إجمالي عدد الإشعارات
-
-            return View(model); // يعرض Views/DebitNotes/Index.cshtml
+            return View(model);
         }
 
         // =========================================================
@@ -232,9 +422,18 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
-            string format = "excel")   // excel | csv (الاثنين حالياً يخرجوا CSV
+            string? filterCol_id = null,
+            string? filterCol_number = null,
+            string? filterCol_date = null,
+            string? filterCol_customer = null,
+            string? filterCol_account = null,
+            string? filterCol_offset = null,
+            string? filterCol_amount = null,
+            string? filterCol_posted = null,
+            string? filterCol_reason = null,
+            string? filterCol_desc = null,
+            string format = "excel")
         {
-            // نبني نفس الاستعلام المستخدم في Index لضمان نفس النتائج
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -245,6 +444,7 @@ namespace ERP.Controllers
                 toDate,
                 fromCode,
                 toCode);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_account, filterCol_offset, filterCol_amount, filterCol_posted, filterCol_reason, filterCol_desc);
 
             var list = await q.ToListAsync();
 
@@ -304,7 +504,7 @@ namespace ERP.Controllers
             // لو المستخدم لم يحدد أى إشعار
             if (ids == null || ids.Length == 0)
             {
-                TempData["Error"] = "لم يتم اختيار أى إشعار للحذف.";
+                TempData["DebitNoteError"] = "لم يتم اختيار أى إشعار للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -315,7 +515,7 @@ namespace ERP.Controllers
 
             if (notes.Count == 0)
             {
-                TempData["Error"] = "لم يتم العثور على الإشعارات المحددة.";
+                TempData["DebitNoteError"] = "لم يتم العثور على الإشعارات المحددة.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -329,11 +529,11 @@ namespace ERP.Controllers
                 _context.DebitNotes.RemoveRange(notes);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = $"تم حذف {notes.Count} من إشعارات الخصم المحددة.";
+                TempData["DebitNoteSuccess"] = $"تم حذف {notes.Count} من إشعارات الخصم المحددة.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"لا يمكن حذف بعض الإشعارات: {ex.Message}";
+                TempData["DebitNoteError"] = $"لا يمكن حذف بعض الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -351,7 +551,7 @@ namespace ERP.Controllers
 
             if (all.Count == 0)
             {
-                TempData["Error"] = "لا توجد إشعارات خصم لحذفها.";
+                TempData["DebitNoteError"] = "لا توجد إشعارات خصم لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -365,11 +565,11 @@ namespace ERP.Controllers
                 _context.DebitNotes.RemoveRange(all);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = "تم حذف جميع إشعارات الخصم.";
+                TempData["DebitNoteSuccess"] = "تم حذف جميع إشعارات الخصم.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"لا يمكن حذف جميع الإشعارات: {ex.Message}";
+                TempData["DebitNoteError"] = $"لا يمكن حذف جميع الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -482,11 +682,11 @@ namespace ERP.Controllers
                 try
                 {
                     await _ledgerPostingService.PostDebitNoteAsync(debitNote.DebitNoteId, User?.Identity?.Name ?? "System");
-                    TempData["Success"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
+                    TempData["DebitNoteSuccess"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
                 }
                 catch (Exception ex)
                 {
-                    TempData["Error"] = TempData["ErrorMessage"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
+                    TempData["DebitNoteError"] = TempData["ErrorMessage"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
                 }
                 return RedirectToAction(nameof(Edit), new { id = debitNote.DebitNoteId });
             }
@@ -589,11 +789,11 @@ namespace ERP.Controllers
                 try
                 {
                     await _ledgerPostingService.PostDebitNoteAsync(id, postedBy);
-                    TempData["Success"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
+                    TempData["DebitNoteSuccess"] = "تم حفظ وترحيل إشعار الخصم بنجاح.";
                 }
                 catch (Exception ex)
                 {
-                    TempData["Error"] = $"تم الحفظ وعكس الترحيل القديم، لكن فشل الترحيل الجديد: {ex.Message}";
+                    TempData["DebitNoteError"] = $"تم الحفظ وعكس الترحيل القديم، لكن فشل الترحيل الجديد: {ex.Message}";
                 }
                 return RedirectToAction(nameof(Edit), new { id });
             }
@@ -642,11 +842,11 @@ namespace ERP.Controllers
 
                 await _activityLogger.LogAsync(UserActionType.Delete, "DebitNote", id, $"حذف إشعار خصم رقم {id}", oldValues: oldValues);
 
-                TempData["Success"] = "تم حذف إشعار الخصم.";
+                TempData["DebitNoteSuccess"] = "تم حذف إشعار الخصم.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = TempData["ErrorMessage"] = $"لا يمكن حذف الإشعار: {ex.Message}";
+                TempData["DebitNoteError"] = TempData["ErrorMessage"] = $"لا يمكن حذف الإشعار: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));

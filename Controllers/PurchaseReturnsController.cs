@@ -1,5 +1,6 @@
-﻿using System;                                     // استخدام DateTime
+using System;                                     // استخدام DateTime
 using System.Collections.Generic;                 // List, Dictionary
+using System.Globalization;                       // NumberStyles لفلتر الأعمدة
 using System.Linq;                                // أوامر LINQ
 using System.Linq.Expressions;                   // Expression<Func<...>>
 using System.Text;                                // StringBuilder لإنشاء CSV
@@ -28,6 +29,7 @@ namespace ERP.Controllers
         private readonly DocumentTotalsService _docTotals;
         private readonly IUserActivityLogger _activityLogger;
         private readonly IPermissionService _permissionService;
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger, IPermissionService permissionService)
         {
@@ -228,6 +230,233 @@ namespace ERP.Controllers
             return Json(new { success = true, pretId = existing.PRetId, returnNumber = existing.PRetId.ToString(), returnDate = existing.PRetDate.ToString("yyyy/MM/dd"), returnTime = existing.CreatedAt.ToLocalTime().ToString("HH:mm"), status = existing.Status, isPosted = existing.IsPosted, createdBy = existing.CreatedBy });
         }
 
+        /// <summary>
+        /// تطبيق فلاتر الأعمدة (بنمط Excel) على استعلام مرتجعات الشراء.
+        /// </summary>
+        private static IQueryable<PurchaseReturn> ApplyColumnFilters(
+            IQueryable<PurchaseReturn> query,
+            string? filterCol_id,
+            string? filterCol_date,
+            string? filterCol_customerId,
+            string? filterCol_customer,
+            string? filterCol_warehouse,
+            string? filterCol_refpi,
+            string? filterCol_net,
+            string? filterCol_status,
+            string? filterCol_posted,
+            string? filterCol_postedAt,
+            string? filterCol_createdBy,
+            string? filterCol_createdAt,
+            string? filterCol_updatedAt)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(pr => ids.Contains(pr.PRetId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_date))
+            {
+                var parts = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(pr => dates.Contains(pr.PRetDate.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customerId))
+            {
+                var ids = filterCol_customerId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(pr => ids.Contains(pr.CustomerId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var vals = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(pr => pr.Customer != null && pr.Customer.CustomerName != null && vals.Contains(pr.Customer.CustomerName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(pr => ids.Contains(pr.WarehouseId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_refpi))
+            {
+                var ids = filterCol_refpi.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(pr => pr.RefPIId.HasValue && ids.Contains(pr.RefPIId!.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            {
+                var vals = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0) query = query.Where(pr => vals.Contains(pr.NetTotal));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_status))
+            {
+                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(pr => pr.Status != null && vals.Contains(pr.Status));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_posted))
+            {
+                var parts = filterCol_posted.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant())
+                    .Where(x => x == "true" || x == "false" || x == "1" || x == "0" || x == "نعم" || x == "لا").ToList();
+                var includeTrue = parts.Any(x => x == "true" || x == "1" || x == "نعم");
+                var includeFalse = parts.Any(x => x == "false" || x == "0" || x == "لا");
+                if (includeTrue && !includeFalse) query = query.Where(pr => pr.IsPosted);
+                else if (includeFalse && !includeTrue) query = query.Where(pr => !pr.IsPosted);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_postedAt))
+            {
+                var parts = filterCol_postedAt.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(pr => pr.PostedAt.HasValue && dates.Contains(pr.PostedAt.Value.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_createdBy))
+            {
+                var vals = filterCol_createdBy.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(pr => pr.CreatedBy != null && vals.Contains(pr.CreatedBy));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_createdAt))
+            {
+                var parts = filterCol_createdAt.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(pr => dates.Contains(pr.CreatedAt.Date));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updatedAt))
+            {
+                var parts = filterCol_updatedAt.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d.Date);
+                    if (dates.Count > 0) query = query.Where(pr => pr.UpdatedAt.HasValue && dates.Contains(pr.UpdatedAt.Value.Date));
+                }
+            }
+            return query;
+        }
+
+        /// <summary>
+        /// API: جلب القيم المميزة لعمود (للفلترة بنمط Excel).
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+
+            if (columnLower == "id")
+            {
+                var ids = await _context.PurchaseReturns.AsNoTracking()
+                    .Select(p => p.PRetId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "date")
+            {
+                var dates = await _context.PurchaseReturns.AsNoTracking()
+                    .Select(p => p.PRetDate.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "customerid")
+            {
+                var ids = await _context.PurchaseReturns.AsNoTracking()
+                    .Select(p => p.CustomerId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "customer")
+            {
+                var q = _context.Customers.AsNoTracking()
+                    .Where(c => _context.PurchaseReturns.Any(pr => pr.CustomerId == c.CustomerId))
+                    .Select(c => c.CustomerName ?? "");
+                if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "warehouse")
+            {
+                var ids = await _context.PurchaseReturns.AsNoTracking()
+                    .Select(p => p.WarehouseId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "refpi")
+            {
+                var ids = await _context.PurchaseReturns.AsNoTracking()
+                    .Where(p => p.RefPIId.HasValue).Select(p => p.RefPIId!.Value).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "net")
+            {
+                var vals = await _context.PurchaseReturns.AsNoTracking()
+                    .Select(p => p.NetTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
+            }
+            if (columnLower == "status")
+            {
+                var q = _context.PurchaseReturns.AsNoTracking().Where(p => p.Status != null).Select(p => p.Status!);
+                if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "posted")
+            {
+                var items = new[] { new { value = "true", display = "نعم" }, new { value = "false", display = "لا" } };
+                return Json(items);
+            }
+            if (columnLower == "postedat")
+            {
+                var dates = await _context.PurchaseReturns.AsNoTracking()
+                    .Where(p => p.PostedAt.HasValue).Select(p => p.PostedAt!.Value.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "createdby")
+            {
+                var q = _context.PurchaseReturns.AsNoTracking().Where(p => p.CreatedBy != null).Select(p => p.CreatedBy!);
+                if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
+                var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (columnLower == "createdat")
+            {
+                var dates = await _context.PurchaseReturns.AsNoTracking()
+                    .Select(p => p.CreatedAt.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            if (columnLower == "updatedat")
+            {
+                var dates = await _context.PurchaseReturns.AsNoTracking()
+                    .Where(p => p.UpdatedAt.HasValue).Select(p => p.UpdatedAt!.Value.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
+                return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
+            }
+            return Json(Array.Empty<object>());
+        }
+
         // ---------------------------------------------------------
         // دالة خاصة: تجهيز الاستعلام مع كل الفلاتر + البحث + الترتيب
         // نستخدمها في Index و Export حتى لا نكرر الكود.
@@ -327,6 +556,19 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_customerId = null,
+            string? filterCol_customer = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_refpi = null,
+            string? filterCol_net = null,
+            string? filterCol_status = null,
+            string? filterCol_posted = null,
+            string? filterCol_postedAt = null,
+            string? filterCol_createdBy = null,
+            string? filterCol_createdAt = null,
+            string? filterCol_updatedAt = null,
             int page = 1,
             int pageSize = 50)
         {
@@ -335,6 +577,8 @@ namespace ERP.Controllers
                 search, searchBy, sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_customerId, filterCol_customer, filterCol_warehouse, filterCol_refpi, filterCol_net, filterCol_status, filterCol_posted, filterCol_postedAt, filterCol_createdBy, filterCol_createdAt, filterCol_updatedAt);
 
             // إنشاء نتيجة مقسّمة صفحات
             var model = await PagedResult<PurchaseReturn>.CreateAsync(q, page, pageSize);
@@ -353,6 +597,20 @@ namespace ERP.Controllers
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = "PRetDate";
+
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_CustomerId = filterCol_customerId;
+            ViewBag.FilterCol_Customer = filterCol_customer;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_Refpi = filterCol_refpi;
+            ViewBag.FilterCol_Net = filterCol_net;
+            ViewBag.FilterCol_Status = filterCol_status;
+            ViewBag.FilterCol_Posted = filterCol_posted;
+            ViewBag.FilterCol_PostedAt = filterCol_postedAt;
+            ViewBag.FilterCol_CreatedBy = filterCol_createdBy;
+            ViewBag.FilterCol_CreatedAt = filterCol_createdAt;
+            ViewBag.FilterCol_UpdatedAt = filterCol_updatedAt;
 
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
@@ -472,12 +730,27 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_date = null,
+            string? filterCol_customerId = null,
+            string? filterCol_customer = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_refpi = null,
+            string? filterCol_net = null,
+            string? filterCol_status = null,
+            string? filterCol_posted = null,
+            string? filterCol_postedAt = null,
+            string? filterCol_createdBy = null,
+            string? filterCol_createdAt = null,
+            string? filterCol_updatedAt = null,
             string format = "excel")  // excel | csv (حالياً الاتنين CSV)
         {
             var q = BuildQuery(
                 search, searchBy, sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_customerId, filterCol_customer, filterCol_warehouse, filterCol_refpi, filterCol_net, filterCol_status, filterCol_posted, filterCol_postedAt, filterCol_createdBy, filterCol_createdAt, filterCol_updatedAt);
 
             var list = await q.ToListAsync();
 
