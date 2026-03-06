@@ -243,6 +243,9 @@
                         <th style="min-width: 120px;" data-col="bonusGroup">
                             <div class="d-flex align-items-center gap-1"><span>مجموعة البونص</span><button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="bonusGroup" data-col-title="مجموعة البونص" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div>
                         </th>
+                        <th style="min-width: 100px;" data-col="company">الشركة</th>
+                        <th style="min-width: 90px;" data-col="imported">محلي/مستورد</th>
+                        <th style="min-width: 120px;" data-col="description">الوصف</th>
                         <th class="text-end" style="min-width: 100px;" data-col="qty">
                             <div class="d-flex align-items-center justify-content-end gap-1">
                                 <span>الكمية الحالية</span>
@@ -308,6 +311,9 @@
                                 <td data-col="category"><small class="text-muted">@item.CategoryName</small></td>
                                 <td data-col="productGroup"><small class="text-muted">@item.ProductGroupName</small></td>
                                 <td data-col="bonusGroup"><small class="text-muted">@item.ProductBonusGroupName</small></td>
+                                <td data-col="company"><small class="text-muted">@(item.Company ?? "—")</small></td>
+                                <td data-col="imported"><small class="text-muted">@(item.Imported ?? "—")</small></td>
+                                <td data-col="description"><small class="text-muted text-truncate d-inline-block" style="max-width:180px;" title="@item.Description">@(item.Description ?? "—")</small></td>
                                 <td data-col="qty" class="text-end">@item.CurrentQty.ToString("N0")</td>
                                 <td data-col="discount" class="text-end">@item.WeightedDiscount.ToString("N2")</td>
                                 <td data-col="manualDiscount" class="text-end d-print-none">
@@ -338,6 +344,9 @@
                                         <td class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
                                         <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
                                         <td data-col="date"><small class="text-muted">@(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("yyyy/MM/dd") : "—")</small></td>
+                                        <td></td>
+                                        <td></td>
+                                        <td></td>
                                         <td></td>
                                         <td></td>
                                         <td></td>

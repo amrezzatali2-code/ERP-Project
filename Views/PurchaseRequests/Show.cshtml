@@ -91,12 +91,20 @@
         }
 
         /* إخفاء حدود وظل الكروت — الخط الملون أو لا فواصل (كما اتفقنا) */
-        .invoice-product-card,
         .invoice-Add-card,
         .invoice-header-card,
         .invoice-lines-card {
             border: none !important;
             box-shadow: none !important;
+        }
+        /* كارت بيانات الصنف: نمط القوائم (حدود بدون خط فاصل) */
+        .invoice-product-card.invoice-product-card-list-style {
+            border: 2px solid #c7d2fe !important;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(59,130,246,.12);
+        }
+        .invoice-product-card.invoice-product-card-list-style .card-body {
+            padding-bottom: 0.5rem;
         }
 
         .erp-table-wrapper {
@@ -200,15 +208,9 @@
                     </div>
 
 
-                    <!-- =========================================================
-                    ثابت: رقم طلب  الشراء + علم التحويل (Flag)
-                    - InvoiceId: رقم طلب  الشراء الحالي (0 لو جديد)
-                    - InvoiceIsPostedFlag: 1 لو محوّل / 0 لو مفتوح
-                    ========================================================= -->
-                    <input type="hidden" id="InvoiceId" value="@Model.PRId" />
-                    <input type="hidden" id="InvoiceIsPostedFlag" value="@(Model.IsConverted ? "1" : "0")" />
-
-
+                    <!-- مثل فاتورة المبيعات: رقم الطلب وعلم التحويل في الشريط الجانبي، ويُحدّثان من الـ body بعد كل تحميل -->
+                    <input type="hidden" id="InvoiceId" value="@(Model?.PRId ?? 0)" />
+                    <input type="hidden" id="InvoiceIsPostedFlag" value="@(Model?.IsConverted == true ? "1" : "0")" />
 
                     <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
 
@@ -377,8 +379,8 @@
                ========================= *@
             <div class="col-12 col-lg-10 order-2 order-lg-1">
 
-                @* ✅ ده الجزء الوحيد اللي هيتبدّل عند التنقل *@
-                <div id="PI_BodyHost">
+                @* ✅ ده الجزء الوحيد اللي هيتبدّل عند التنقل — data-pr-show-base لبناء رابط التحميل من السيرفر *@
+                <div id="PI_BodyHost" data-pr-show-base="@(Url.Action("Show", "PurchaseRequests", new { frame = 1 }))">
 
                     @* =========================
                        قيم التنقل (لازم تكون داخل الـ BodyHost عشان تتحدّث مع frag=body)
@@ -460,6 +462,7 @@
                                     <div class="col-auto col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">رقم الطلب</label>
                                         <input type="hidden" id="InvoiceId" value="@(Model?.PRId ?? 0)" />
+                                        <input type="hidden" id="InvoiceIsPostedFlag" value="@(Model?.IsConverted == true ? "1" : "0")" />
                                         <input id="InvoiceNumberDisplay"
                                                class="form-control form-control-sm text-center"
                                                style="max-width: 80px;"
@@ -476,7 +479,7 @@
                                                readonly />
                                     </div>
 
-                                    <div class="col-auto col-lg-2 col-md-2">
+                                    <div class="col-auto col-lg-2 col-md-3">
                                         <label class="form-label form-label-sm">وقت الإنشاء</label>
                                         <input id="InvoiceTimeDisplay"
                                                class="form-control form-control-sm text-center"
@@ -580,11 +583,10 @@
                     </div>
                         </div>
                         <div class="col-12">
-                        <div class="card shadow-sm mb-2 invoice-product-card">
-                            <div class="invoice-card-line"></div>
-                            <div class="card-body pt-0">
+                        <div class="card shadow-sm mb-2 invoice-product-card invoice-product-card-list-style">
+                            <div class="card-body pt-2 pb-2">
 
-                                    <div class="row g-2 mb-3 align-items-center flex-wrap">
+                                    <div class="row g-2 mb-2 align-items-center flex-wrap">
                                         <div class="col-auto d-flex align-items-center gap-1">
                                             <label class="form-label form-label-sm mb-0">الكمية في هذا المخزن</label>
                                             <input type="text" id="ProdQtyCurrentWarehouse"
@@ -603,10 +605,10 @@
                                         <div class="col-auto d-flex align-items-center gap-1">
                                             <label class="form-label form-label-sm mb-0">الخصم المرجّح للصنف %</label>
                                             <input type="text" id="ProdWeightedDiscount"
-                                                   class="form-control form-control-sm text-center" value="0" readonly style="max-width: 55px;" />
+                                                   class="form-control form-control-sm text-center" value="0" readonly style="max-width: 100px;" />
                                         </div>
                                         <div class="col-auto d-flex align-items-center gap-1">
-                                            <label class="form-label form-label-sm mb-0">بدائل الصنف (حسب الاسم العلمي)</label>
+                                            <label class="form-label form-label-sm mb-0 text-nowrap">بدائل الصنف (حسب الاسم العلمي)</label>
                                             <select id="AlternativeProducts" class="form-select form-select-sm" style="min-width: 180px;"></select>
                                         </div>
                                     </div>
@@ -614,7 +616,7 @@
                                     @* =====================================================
                                        جدول المطلوب + جدول المبيعات والوسيط — قصاد بعض بالضبط (نفس الارتفاع والمحاذاة)
                                        ===================================================== *@
-                                    <div class="row g-2 mb-3 align-items-start">
+                                    <div class="row g-2 mb-2 align-items-start">
                                         <div class="col-md-6 d-flex flex-column">
                                             <div class="form-label form-label-sm mb-1" style="min-height: 1.75rem;">المطلوب (طلبات غير محولة)</div>
                                             <div class="table-responsive flex-grow-1" style="height: 130px; overflow-y: auto;">
@@ -710,6 +712,7 @@
                                                 }
                                             }
                                         </datalist>
+                                        <datalist id="productsListEmpty"></datalist>
 
                                         <input type="hidden" id="ProdId" />
                                     </div>
@@ -1058,6 +1061,14 @@
 
             </div> @* نهاية row *@
         </div> @* نهاية container *@
+    @* نافذة رسالة قابلة للإغلاق (بديل عن alert حتى يعمل زر OK) *@
+    <div id="erpPrMessageOverlay" class="d-none" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem;">
+        <div style="background:#fff;border-radius:12px;max-width:420px;width:100%;box-shadow:0 10px 40px rgba(0,0,0,.2);padding:1.25rem;text-align:center;">
+            <p id="erpPrMessageText" class="mb-3" style="font-size:1rem;color:#333;"></p>
+            <button type="button" id="erpPrMessageOk" class="btn btn-primary">موافق</button>
+        </div>
+    </div>
+
     </div> @* نهاية invoice-page *@
 
     <!-- =========================================================
@@ -1111,6 +1122,28 @@
 
 
     <script>
+                         // ✅ رابط عرض طلب الشراء (من السيرفر) — لاستخدامه عند تحميل body بالأسهم/بحث
+                         window.__PR_ShowBaseUrl__ = '@(Url.Action("Show", "PurchaseRequests", new { frame = 1 }))';
+
+                         // رسالة قابلة للإغلاق (زر موافق يزيل النافذة — بديل عن alert)
+                         (function () {
+                             var overlay = document.getElementById('erpPrMessageOverlay');
+                             var textEl = document.getElementById('erpPrMessageText');
+                             var btnOk = document.getElementById('erpPrMessageOk');
+                             if (btnOk) {
+                                 btnOk.addEventListener('click', function () {
+                                     if (overlay) { overlay.style.display = 'none'; overlay.classList.add('d-none'); }
+                                 });
+                             }
+                             window.showDismissibleMessage = function (msg) {
+                                 if (!overlay || !textEl) return;
+                                 textEl.textContent = msg || '';
+                                 overlay.classList.remove('d-none');
+                                 overlay.style.display = 'flex';
+                                 if (btnOk) btnOk.focus();
+                             };
+                         })();
+
                          // =========================================================
                          // (A) أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
                          // =========================================================
@@ -1444,50 +1477,34 @@
 
                              // =========================================================
                              // تعبئة بيانات الصنف من <option>
+                             // skipCard: true = تعبئة سطر الإضافة فقط (بدون كارت الصنف والبدائل والجداول) لتفادي إعادة تحميل مرئية
                              // =========================================================
-                             function fillProductFromOption(opt) {
-                                 console.log('🔄 fillProductFromOption called with:', opt ? opt.value : 'null');
+                             function fillProductFromOption(opt, options) {
+                                 const skipCard = options && options.skipCard === true;
+                                 console.log('🔄 fillProductFromOption called with:', opt ? opt.value : 'null', skipCard ? '(سطر الإضافة فقط)' : '');
 
-                                 // لو مفيش صنف مطابق → نفرّغ
                                  if (!opt) {
-                                     console.warn('⚠️ fillProductFromOption: لم يتم العثور على صنف مطابق');
                                      if (prodHiddenId)    prodHiddenId.value    = '';
                                      if (prodCodeInput)   prodCodeInput.value   = '';
-                                     // لا نمسح اسم الصنف المكتوب (نتركه للمستخدم)
-                                     // if (prodNameInput)   prodNameInput.value   = '';
-                                     if (prodPriceInput)  {
-                                         prodPriceInput.value = '';
-                                         console.log('🧹 تم مسح السعر');
+                                     if (prodPriceInput)  prodPriceInput.value = '';
+                                     if (!skipCard) {
+                                         if (prodQuotaText)    prodQuotaText.value    = 'بدون كوتة';
+                                         if (prodWeightedDisc) prodWeightedDisc.value = '0';
+                                         if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
+                                         if (prodQtyAll)       prodQtyAll.value       = '0';
+                                         if (prodAltSelect)    prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
+                                         clearProductDemandTables();
                                      }
-
-                                     if (prodQuotaText)    prodQuotaText.value    = 'بدون كوتة';
-                                     if (prodWeightedDisc) prodWeightedDisc.value = '0';
-
-                                     if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
-                                     if (prodQtyAll)       prodQtyAll.value       = '0';
-
-                                     if (prodAltSelect) {
-                                         prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
-                                     }
-
-                                     // مسح جداول المطلوب والكمية المباعة والوسيط
-                                     clearProductDemandTables();
                                      return;
                                  }
 
-                                 console.log('✅ fillProductFromOption: تم العثور على صنف', opt.value);
-
-                                 // قراءة البيانات من data-*
-                                 const id       = opt.getAttribute('data-id')      || ''; // متغير: ProdId
-                                 const code     = opt.getAttribute('data-code')    || id; // متغير: كود ظاهر (قد يساوي id)
-                                 const name     = opt.value                        || ''; // متغير: اسم الصنف
-                                 const generic  = opt.getAttribute('data-generic') || ''; // متغير: الاسم العلمي
-                                 const hasQuota = (opt.getAttribute('data-hasquota') === 'true'); // متغير: هل له كوتة؟
-                                 let priceRaw   = opt.getAttribute('data-price')   || '0'; // متغير: السعر كنص
-
-                                 // معالجة السعر
-                                 priceRaw = priceRaw.toString().replace(',', '.');
-                                 let price = parseFloat(priceRaw);
+                                 const id       = opt.getAttribute('data-id')      || '';
+                                 const code     = opt.getAttribute('data-code')    || id;
+                                 const name     = opt.value                        || '';
+                                 const generic  = opt.getAttribute('data-generic') || '';
+                                 const hasQuota = (opt.getAttribute('data-hasquota') === 'true');
+                                 let priceRaw   = (opt.getAttribute('data-price')   || '0').toString().replace(',', '.');
+                                 let price      = parseFloat(priceRaw);
                                  if (isNaN(price)) price = 0;
 
                                  if (prodHiddenId)  prodHiddenId.value  = id;
@@ -1495,32 +1512,25 @@
                                  if (prodNameInput) prodNameInput.value = name;
                                  if (prodPriceInput) {
                                      prodPriceInput.value = price.toFixed(2);
-                                     // ✅ إطلاق event للتأكد من تحديث القيمة حتى لو كان الحقل readOnly
                                      prodPriceInput.dispatchEvent(new Event('input', { bubbles: true }));
                                      prodPriceInput.dispatchEvent(new Event('change', { bubbles: true }));
                                  }
 
-                                 if (prodQuotaText) {
-                                     prodQuotaText.value = hasQuota ? 'له كوتة' : 'بدون كوتة';
-                                 }
+                                 if (skipCard) return;
 
-                                 // حالياً: الخصم المرجّح = 0 (هنربطه بالسياسات لاحقاً)
-                                 if (prodWeightedDisc) {
-                                     prodWeightedDisc.value = '0';
-                                 }
-
-                                 // بدائل الصنف حسب الاسم العلمي
+                                 if (prodQuotaText)   prodQuotaText.value   = hasQuota ? 'له كوتة' : 'بدون كوتة';
+                                 if (prodWeightedDisc) prodWeightedDisc.value = '0';
+                                 if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
+                                 if (prodQtyAll)       prodQtyAll.value       = '0';
                                  if (prodAltSelect && generic) {
                                      loadAlternativeProducts(id);
                                  } else if (prodAltSelect) {
                                      prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
                                  }
-
-                                 // تحميل بيانات المطلوب
                                  if (id) {
+                                     loadProductCardInfo(id);
                                      const currentPRId = parseInt(document.getElementById('InvoiceId')?.value || '0', 10) || 0;
                                      loadProductDemandInfo(id, currentPRId);
-                                     // تعيين تاريخ افتراضي للمبيعات (آخر شهر) وتحميل جدول المبيعات
                                      const toEl = document.getElementById('SalesToDate');
                                      const fromEl = document.getElementById('SalesFromDate');
                                      if (toEl && fromEl) {
@@ -1534,6 +1544,33 @@
                                  } else {
                                      clearProductDemandTables();
                                  }
+                             }
+
+                             // =========================================================
+                             // تحميل بيانات كارت الصنف (الكمية في المخزن، إجمالي الكمية، الخصم المرجح %)
+                             // =========================================================
+                             function loadProductCardInfo(prodId) {
+                                 if (!prodId || (!prodQtyWarehouse && !prodQtyAll && !prodWeightedDisc)) return;
+                                 var whId = (document.getElementById('WarehouseId') && document.getElementById('WarehouseId').value) ? document.getElementById('WarehouseId').value : '';
+                                 var url = '@Url.Action("GetProductCardInfo", "PurchaseRequests")' + '?prodId=' + encodeURIComponent(prodId) + (whId ? '&warehouseId=' + encodeURIComponent(whId) : '');
+                                 fetch(url)
+                                     .then(function(r) { return r.ok ? r.json() : null; })
+                                     .then(function(data) {
+                                         if (data && data.ok) {
+                                             if (prodQtyWarehouse) prodQtyWarehouse.value = (data.qtyInWarehouse != null) ? data.qtyInWarehouse : '0';
+                                             if (prodQtyAll)       prodQtyAll.value       = (data.qtyAllWarehouses != null) ? data.qtyAllWarehouses : '0';
+                                             if (prodWeightedDisc) prodWeightedDisc.value = (data.weightedDiscount != null) ? Number(data.weightedDiscount).toFixed(2) : '0';
+                                         } else {
+                                             if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
+                                             if (prodQtyAll)       prodQtyAll.value       = '0';
+                                             if (prodWeightedDisc) prodWeightedDisc.value = '0';
+                                         }
+                                     })
+                                     .catch(function() {
+                                         if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
+                                         if (prodQtyAll)       prodQtyAll.value       = '0';
+                                         if (prodWeightedDisc) prodWeightedDisc.value = '0';
+                                     });
                              }
 
                              // =========================================================
@@ -1686,6 +1723,7 @@
                                      applyDatalistFilter(this.value);
                                  });
                                  prodNameInput.addEventListener('focus', function () {
+                                     if (!this.getAttribute('list') || this.getAttribute('list') === 'productsListEmpty') this.setAttribute('list', 'productsList');
                                      applyDatalistFilter(this.value);
                                  });
 
@@ -1699,13 +1737,14 @@
                                  });
 
                                  prodNameInput.addEventListener('blur', function (e) {
+                                     if (this.dataset.skipBlurEnter === '1') return;
                                      try {
                                          const found = findProductByName(this.value);
                                          if (found) fillProductFromOption(found);
                                      } catch (err) {
                                          console.error('❌ خطأ في blur event:', err);
                                      }
-                                     setTimeout(restoreDatalistFull, 150);
+                                     if (this.getAttribute('list')) setTimeout(restoreDatalistFull, 150);
                                  });
                              } else {
                                  console.error('❌ prodNameInput غير موجود!');
@@ -1817,55 +1856,42 @@
                                      console.log('⌨️ Enter pressed on:', input.id || input.className);
 
                                      try {
-                                         // لو المستخدم داخل اسم الصنف → نحاول نثبّت الصنف
-                                         if (input === prodNameInput) {
-                                             console.log('🔍 البحث عن صنف قبل الانتقال:', prodNameInput.value);
-                                             const found = findProductByName(prodNameInput.value);
-                                             fillProductFromOption(found);
-                                             // إخفاء قائمة الـ datalist بعد الاختيار بالضغط Enter
-                                             input.blur();
+                                         // تخطي الحقول المقفلة (مثل السعر) — تحديد الحقل التالي أولاً (مثل سلوك اسم المورد)
+                                         let nextIndex = index + 1;
+                                         let next = null;
+                                         while (nextIndex < lineInputs.length) {
+                                             const cand = lineInputs[nextIndex];
+                                             if (cand && !cand.readOnly) { next = cand; break; }
+                                             nextIndex++;
                                          }
 
-                                         // لو المستخدم داخل كود الصنف → نحاول نثبّت الصنف
+                                         function moveToNext() {
+                                             if (next) {
+                                                 next.focus();
+                                                 if (typeof next.select === 'function') next.select();
+                                             } else if (btnAddLine) {
+                                                 btnAddLine.focus();
+                                             }
+                                         }
+
+                                         // اسم الصنف: إخفاء القائمة (datalist فارغ) ثم نقل التركيز في التيك التالي لضمان إغلاق واجهة المتصفح
+                                         if (input === prodNameInput) {
+                                             prodNameInput.dataset.skipBlurEnter = '1';
+                                             setTimeout(function () { delete prodNameInput.dataset.skipBlurEnter; }, 400);
+                                             const found = findProductByName(prodNameInput.value);
+                                             fillProductFromOption(found, { skipCard: true });
+                                             prodNameInput.setAttribute('list', 'productsListEmpty');
+                                             if (prodDataList) prodDataList.innerHTML = '';
+                                             moveToNext();
+                                             return;
+                                         }
+
                                          if (input === prodCodeInput) {
-                                             console.log('🔍 البحث عن صنف بالكود قبل الانتقال:', prodCodeInput.value);
                                              const found = findProductByCode(prodCodeInput.value);
                                              fillProductFromOption(found);
                                          }
 
-                                         // البحث عن الحقل التالي القابل للتحرير (ليس readOnly)
-                                         let nextIndex = index + 1;
-                                         let next = null;
-
-                                         while (nextIndex < lineInputs.length) {
-                                             next = lineInputs[nextIndex];
-                                             // ✅ التحقق من أن الحقل قابل للتحرير (ليس readOnly)
-                                             if (next && !next.readOnly) {
-                                                 break;
-                                             }
-                                             nextIndex++;
-                                         }
-
-                                         // نقل التركيز للحقل التالي (مع تأخير بسيط لاسم الصنف حتى تختفي قائمة الـ datalist)
-                                         function moveToNext() {
-                                             if (next && !next.readOnly) {
-                                                 console.log('➡️ الانتقال إلى:', next.id || next.className);
-                                                 next.focus();
-                                                 if (typeof next.select === 'function') {
-                                                     next.select();
-                                                 }
-                                             } else if (btnAddLine) {
-                                                 console.log('➡️ الانتقال إلى زر الإضافة');
-                                                 btnAddLine.focus();
-                                             } else {
-                                                 console.warn('⚠️ لا يوجد حقل تالي للانتقال إليه');
-                                             }
-                                         }
-                                         if (input === prodNameInput) {
-                                             setTimeout(moveToNext, 50);
-                                         } else {
-                                             moveToNext();
-                                         }
+                                         moveToNext();
                                      } catch (err) {
                                          console.error('❌ خطأ في معالجة Enter:', err);
                                      }
@@ -2187,110 +2213,89 @@
                                  field.parentNode.replaceChild(newField, field);
                              });
                              
-                             // إعادة تحديد الحقول بعد الاستبدال
-                             const allFields = document.querySelectorAll('.editable-line-field');
-                             if (allFields.length === 0) {
-                                 // لا توجد حقول بعد، ربما الصفحة لم تحمل بعد
-                                 return;
-                             }
+                             const tbody = document.getElementById('PILinesTbody');
+                             if (!tbody) return;
+                             const allFields = tbody.querySelectorAll('.editable-line-field');
+                             if (allFields.length === 0) return;
                              
-                             // ترتيب الحقول: التشغيلة → الصلاحية → الكمية → الخصم
                              const fieldOrder = ['batchNo', 'expiry', 'qty', 'discount'];
+                             const allRows = Array.from(tbody.querySelectorAll('tr[data-line-no]'));
                              
-                             // ربط listeners جديدة مع Tabindex للترتيب
-                             const allRows = document.querySelectorAll('tr[data-line-no]');
                              allRows.forEach((row, rowIndex) => {
-                                 const lineNo = parseInt(row.getAttribute('data-line-no') || '0');
-                                 
                                  fieldOrder.forEach((fieldType, fieldIndex) => {
-                                     const field = row.querySelector(`input[data-field="${fieldType}"]`);
+                                     const field = row.querySelector('input[data-field="' + fieldType + '"]');
                                      if (!field) return;
+                                     field.setAttribute('tabindex', (rowIndex * fieldOrder.length) + fieldIndex + 1);
                                      
-                                     // تعيين Tabindex للترتيب
-                                     const globalIndex = (rowIndex * fieldOrder.length) + fieldIndex + 1;
-                                     field.setAttribute('tabindex', globalIndex);
-                                     
-                                     // Event listener للـ Enter
-                                     field.addEventListener('keydown', async function(e) {
-                                         if (e.key === 'Enter') {
-                                             e.preventDefault();
-                                             e.stopPropagation();
-                                             
-                                             // منع استدعاء blur عند الانتقال
-                                             this.dataset.skipBlur = '1';
-                                             
-                                             // حفظ التعديلات أولاً
-                                             await saveLineFieldChange(this);
-                                             
-                                             // الانتقال بعد الحفظ
-                                             setTimeout(() => {
-                                                 // تحديد إذا كان هذا آخر حقل في السطر (الخصم)
-                                                 const isLastField = fieldType === 'discount';
-                                                 
-                                                 if (isLastField) {
-                                                     // إذا كان آخر حقل، ننتقل للسطر التالي
-                                                     // إعادة تحديد الصفوف لأنها قد تتغير بعد الحفظ
-                                                     const currentRow = this.closest('tr[data-line-no]');
-                                                     const allRowsNow = document.querySelectorAll('tr[data-line-no]');
-                                                     let currentRowIndex = -1;
-                                                     allRowsNow.forEach((r, idx) => {
-                                                         if (r === currentRow) currentRowIndex = idx;
-                                                     });
-                                                     
-                                                     if (currentRowIndex >= 0 && currentRowIndex < allRowsNow.length - 1) {
-                                                         // الانتقال للتشغيلة في السطر التالي
-                                                         const nextRow = allRowsNow[currentRowIndex + 1];
-                                                         const nextBatchField = nextRow.querySelector('input[data-field="batchNo"]');
-                                                         if (nextBatchField) {
-                                                             nextBatchField.focus();
-                                                             nextBatchField.select();
-                                                         }
-                                                 } else {
-                                                     // آخر سطر: الانتقال لحقل اسم الصنف لإضافة صنف جديد
-                                                     // لا نحتاج لتحديث الإجماليات هنا لأن saveLineFieldChange سيقوم بذلك
-                                                     this.blur();
-                                                     
-                                                     // الانتقال لحقل اسم الصنف
-                                                     setTimeout(() => {
-                                                         const prodNameInput = document.getElementById('ProdNameInput');
-                                                         if (prodNameInput) {
-                                                             prodNameInput.focus();
-                                                             prodNameInput.select();
-                                                         }
-                                                     }, 300);
-                                                 }
-                                                 } else {
-                                                     // الانتقال للحقل التالي في نفس السطر
-                                                     const nextFieldType = fieldOrder[fieldIndex + 1];
-                                                     const nextField = row.querySelector(`input[data-field="${nextFieldType}"]`);
-                                                     if (nextField) {
-                                                         nextField.focus();
-                                                         nextField.select();
+                                     field.addEventListener('keydown', function(e) {
+                                         if (e.key !== 'Enter') return;
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         this.dataset.skipBlur = '1';
+                                         saveLineFieldChange(this).catch(function() {});
+                                         var self = this;
+                                         var fType = fieldType;
+                                         var fIdx = fieldIndex;
+                                         setTimeout(function() {
+                                             var currentRow = self.closest('tr[data-line-no]');
+                                             if (!currentRow) { delete self.dataset.skipBlur; return; }
+                                             var rowsList = Array.from(tbody.querySelectorAll('tr[data-line-no]'));
+                                             var idx = rowsList.indexOf(currentRow);
+                                             var isLastField = (fType === 'discount');
+                                             if (isLastField && idx >= 0 && idx < rowsList.length - 1) {
+                                                 var nextRow = rowsList[idx + 1];
+                                                 for (var f = 0; f < fieldOrder.length; f++) {
+                                                     var inp = nextRow.querySelector('input[data-field="' + fieldOrder[f] + '"]');
+                                                     if (inp && !inp.readOnly) {
+                                                         inp.focus();
+                                                         if (typeof inp.select === 'function') inp.select();
+                                                         break;
                                                      }
                                                  }
-                                                 
-                                                 // إزالة العلم بعد الانتقال
-                                                 delete this.dataset.skipBlur;
-                                             }, 200);
-                                         }
+                                             } else if (isLastField) {
+                                                 self.blur();
+                                                 setTimeout(function() {
+                                                     var p = document.getElementById('ProdNameInput');
+                                                     if (p) { p.focus(); if (typeof p.select === 'function') p.select(); }
+                                                 }, 150);
+                                             } else {
+                                                 var nextType = fieldOrder[fIdx + 1];
+                                                 var nextField = currentRow.querySelector('input[data-field="' + nextType + '"]');
+                                                 if (nextField && !nextField.readOnly) {
+                                                     nextField.focus();
+                                                     if (typeof nextField.select === 'function') nextField.select();
+                                                 }
+                                             }
+                                             delete self.dataset.skipBlur;
+                                         }, 120);
                                      });
                                      
                                      // Event listener للـ Blur (حفظ عند الخروج من الحقل - فقط إذا لم يكن Enter)
                                      field.addEventListener('blur', async function() {
                                          if (this.dataset.skipBlur === '1') {
-                                             return; // تخطي الحفظ إذا كان Enter
+                                             return;
                                          }
                                          await saveLineFieldChange(this);
                                      });
+                                     // منع بلبلة الدبل-كليك: تركيز وتحديد النص فقط دون انتقال أو سلوك جانبي
+                                     field.addEventListener('dblclick', function(e) {
+                                         e.preventDefault();
+                                         e.stopPropagation();
+                                         this.focus();
+                                         if (typeof this.select === 'function') this.select();
+                                     });
                                  });
                              });
+                             if (typeof applyPostedUiLock === 'function') applyPostedUiLock();
                          }
                          
                          // ===============================
                          // دالة: حفظ تغيير حقل في سطر
                          // ===============================
                          async function saveLineFieldChange(field) {
-                             // منع الاستدعاءات المتعددة في نفس الوقت
+                             if (typeof isInvoicePosted === 'function' && isInvoicePosted()) {
+                                 return;
+                             }
                              if (field.dataset.saving === '1') {
                                  return;
                              }
@@ -2461,7 +2466,9 @@
                                      } catch {
                                          errorData = { message: 'حدث خطأ أثناء الحفظ' };
                                      }
-                                     alert(errorData.message || 'حدث خطأ أثناء الحفظ');
+                                     if (typeof showDismissibleMessage === 'function') {
+                                         showDismissibleMessage(errorData.message || 'حدث خطأ أثناء الحفظ');
+                                     } else { alert(errorData.message || 'حدث خطأ أثناء الحفظ'); }
                                      delete field.dataset.saving;
                                      return;
                                  }
@@ -2563,31 +2570,31 @@
                                          const netTotal = totalAfterDiscountAndTax;
                                          
                                          // تحديث الإجماليات
-                                         if (typeof updateSummaryBadges === 'function') {
-                                             updateSummaryBadges({
-                                                 totalLines: allRows.length,
-                                                 totalItems: allRows.length,
-                                                 totalQty: totalQty,
-                                                 totalRetail: totalRetail,
-                                                 totalDiscount: totalDiscount,
-                                                 totalAfterDiscount: totalAfterDiscount,
-                                                 taxAmount: taxAmount,
-                                                 totalAfterDiscountAndTax: totalAfterDiscountAndTax,
-                                                 netTotal: netTotal
-                                             });
-                                         }
-                                         
-                                         // إعادة ربط الحقول بعد التحديث (في حالة تغيير السطور)
-                                         if (typeof bindEditableLineFields === 'function') {
-                                             bindEditableLineFields();
-                                         }
-                                     }, 150);
+                                        if (typeof updateSummaryBadges === 'function') {
+                                            updateSummaryBadges({
+                                                totalLines: allRows.length,
+                                                totalItems: allRows.length,
+                                                totalQty: totalQty,
+                                                totalRetail: totalRetail,
+                                                totalDiscount: totalDiscount,
+                                                totalAfterDiscount: totalAfterDiscount,
+                                                taxAmount: taxAmount,
+                                                totalAfterDiscountAndTax: totalAfterDiscountAndTax,
+                                                netTotal: netTotal
+                                            });
+                                        }
+                                        // لا نستدعي bindEditableLineFields هنا لأنها تستبدل الحقول بنسخ فتفقد الفوكس
+                                    }, 150);
                                  } else {
-                                     alert(data.message || 'حدث خطأ أثناء الحفظ');
+                                     if (typeof showDismissibleMessage === 'function') {
+                                         showDismissibleMessage(data.message || 'حدث خطأ أثناء الحفظ');
+                                     } else { alert(data.message || 'حدث خطأ أثناء الحفظ'); }
                                  }
                              } catch (error) {
                                  console.error('Error saving line field:', error);
-                                 alert('حدث خطأ أثناء الحفظ: ' + error.message);
+                                 if (typeof showDismissibleMessage === 'function') {
+                                     showDismissibleMessage('حدث خطأ أثناء الحفظ: ' + (error.message || ''));
+                                 } else { alert('حدث خطأ أثناء الحفظ: ' + error.message); }
                              } finally {
                                  delete field.dataset.saving;
                              }
@@ -3270,6 +3277,10 @@
                                      e.target.closest('a')) {
                                      return;
                                  }
+                                 // حماية: النقر على خانة تعديل (التشغيلة/الصلاحية/الكمية/الخصم) = فقط فوكس للتعديل، لا تعبئة النموذج ولا نقل الفوكس
+                                 if (e.target.closest('input.editable-line-field') || e.target.closest('input[data-field]')) {
+                                     return;
+                                 }
 
                                  // 1) تمييز الصف المختار
                                  const tbody = document.getElementById('PILinesTbody');
@@ -3354,8 +3365,23 @@
                              setVal(ProdPriceEl, priceText);
                              setVal(ProdDiscEl, discText);
 
+                             // 6.1) تحميل بيانات كارت الصنف وجداول المطلوب والمبيعات
+                             if (typeof loadProductCardInfo === 'function') loadProductCardInfo(prodId);
+                             var currentPRId = parseInt(document.getElementById('InvoiceId')?.value || '0', 10) || 0;
+                             if (typeof loadProductDemandInfo === 'function') loadProductDemandInfo(prodId, currentPRId);
+                             var toEl = document.getElementById('SalesToDate');
+                             var fromEl = document.getElementById('SalesFromDate');
+                             if (toEl && fromEl) {
+                                 var today = new Date();
+                                 toEl.value = today.toISOString().slice(0, 10);
+                                 var fromDate = new Date(today);
+                                 fromDate.setMonth(fromDate.getMonth() - 1);
+                                 fromEl.value = fromDate.toISOString().slice(0, 10);
+                                 if (typeof loadProductSalesInPeriod === 'function') loadProductSalesInPeriod(prodId, fromEl.value, toEl.value);
+                             }
+
                              // 7) فوكس سريع على الكمية لسهولة التعديل
-                                         if (prodName) prodName.focus();
+                             if (prodName) prodName.focus();
 
                              });
 
@@ -4014,6 +4040,17 @@
                                          return;
                                      }
                                  });
+
+                                 // قفل حقول السطور (التشغيلة، الصلاحية، الكمية، الخصم) عند الترحيل — تُنشأ ديناميكياً فلا تحتوي data-lock-posted
+                                 document.querySelectorAll('.editable-line-field').forEach(el => {
+                                     if (posted) {
+                                         el.readOnly = true;
+                                         el.classList.add("bg-light", "text-muted");
+                                     } else {
+                                         el.readOnly = false;
+                                         el.classList.remove("bg-light", "text-muted");
+                                     }
+                                 });
                              }
 
                              // تشغيل القفل مرة عند تحميل الصفحة
@@ -4232,16 +4269,36 @@
                                  setBtnState(btnPrev, canPrev);
                                  setBtnState(btnNext, canNext);
                              }
+                             window.__refreshSideNavButtons = refreshSideNavButtons;
+
+                             // ✅ بناء رابط Show: من PI_BodyHost (من السيرفر) أو __PR_ShowBaseUrl__ أو المسار الثابت
+                             function buildShowUrl(id) {
+                                 var host = document.getElementById('PI_BodyHost');
+                                 var base = (host && host.getAttribute('data-pr-show-base')) || window.__PR_ShowBaseUrl__ || (document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')) || '';
+                                 if (!base) base = '/PurchaseRequests/Show?frame=1';
+                                 base = setOrReplaceParam(base, 'id', id);
+                                 base = setOrReplaceParam(base, 'frag', 'body');
+                                 try { return new URL(base, window.location.origin).toString(); } catch (e) { return (window.location.origin || '') + (base.startsWith('/') ? base : '/' + base); }
+                             }
 
                              // =========================
                              // تحميل Body فقط وتبديل المحتوى
                              // =========================
-                             async function loadInvoiceBody(url) {
+                             async function loadInvoiceBody(urlOrId) {
 
                                  const host = document.getElementById('PI_BodyHost');
                                  if (!host) return;
 
-                                 url = setOrReplaceParam(url, 'frag', 'body');
+                                 var url;
+                                 var id = typeof urlOrId === 'number' ? urlOrId : (parseInt(String(urlOrId).replace(/.*[?&]id=(\d+).*/, '$1'), 10) || 0);
+                                 if (id > 0) {
+                                     url = buildShowUrl(id);
+                                 } else {
+                                     url = setOrReplaceParam(urlOrId, 'frag', 'body');
+                                     try { url = new URL(url, window.location.href).toString(); } catch (e) { }
+                                 }
+                                 if (!url) return;
+                                 url = url + (url.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
 
                                  if (host.dataset.loading === "1") return;
                                  host.dataset.loading = "1";
@@ -4252,8 +4309,15 @@
                                      const res = await fetch(url, {
                                          method: 'GET',
                                          credentials: 'same-origin',
-                                         headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                                         cache: 'no-store',
+                                         headers: { 'X-Requested-With': 'XMLHttpRequest', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
                                      });
+
+                                     if (!res.ok) {
+                                         const msg = await res.text();
+                                         alert('فشل تحميل الطلب: ' + (res.status === 404 ? 'الطلب غير موجود.' : (res.status + ' ' + (msg || ''))));
+                                         return;
+                                     }
 
                                      const html = await res.text();
 
@@ -4261,11 +4325,22 @@
                                      const doc = parser.parseFromString(html, 'text/html');
                                      const newHost = doc.getElementById('PI_BodyHost');
 
-                                     if (newHost) {
+                                     if (newHost && newHost.innerHTML) {
                                          host.innerHTML = newHost.innerHTML;
                                      } else {
-                                         host.innerHTML = html;
+                                         console.warn('🔄 استجابة بدون PI_BodyHost، قد تكون صفحة خطأ.');
+                                         alert('لم يُعاد محتوى الطلب. تأكد من الرابط وحاول مرة أخرى.');
+                                         return;
                                      }
+
+                                     // ✅ مثل فاتورة المبيعات: مزامنة الشريط الجانبي من الـ body (رقم الطلب + علم التحويل)
+                                     const bodyInvoiceId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10) || 0;
+                                     const bodyIsPosted = (host.querySelector('#InvoiceIsPostedFlag')?.value === '1');
+                                     const invIdEl = document.getElementById('InvoiceId');
+                                     if (invIdEl) invIdEl.value = bodyInvoiceId;
+                                     const invFlagEl = document.getElementById('InvoiceIsPostedFlag');
+                                     if (invFlagEl) invFlagEl.value = bodyIsPosted ? '1' : '0';
+                                     if (typeof applyPostedUiLock === 'function') applyPostedUiLock();
 
                                      // ✅ بعد تبديل الـ body: حدّث أزرار السايد بار
                                      refreshSideNavButtons();
@@ -4304,9 +4379,18 @@
                                  }
                              }
 
-
-
-
+                             // ✅ مثل فاتورة المبيعات: تحديث الطلب الحالي فقط (بدون فتح طلب آخر)
+                             window.__ERP_REFRESH__ = function () {
+                                 const currentId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10) || 0;
+                                 const baseUrl = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url') || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
+                                 if (currentId > 0 && typeof loadInvoiceBody === 'function') {
+                                     try {
+                                         const u = new URL(baseUrl, window.location.origin);
+                                         u.searchParams.set('id', currentId);
+                                         loadInvoiceBody(u.toString());
+                                     } catch (e) { console.warn('__ERP_REFRESH__:', e); }
+                                 }
+                             };
 
                             // =========================
                             // اعتراض الضغط على الأسهم/بحث الطلب على مستوى document (Capture)
@@ -4319,10 +4403,8 @@
                                 // حماية: لو target مش Element (نادرًا) نخرج
                                 if (!(t instanceof Element)) return;
 
-                                // ✅ ثابت البرنامج: الأسهم + البحث يتم التعامل معهم من site.js (open-same-tab + btnNavInvoiceSearch)
-                                // ✅ ممنوع اعتراضهم هنا لأن تبديل الـ Body الجزئي يبوّظ السعر والفوكس
-                                const navBtn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
-                                if (navBtn) return;
+                                // ✅ الأسهم + البحث: نتعامل معهم هنا (عند فتح الصفحة داخل iframe لا يصل النقر إلى site.js)
+                                // لا نرجع هنا؛ نترك الكود يصل إلى معالج (1) الأسهم + البحث لتنفيذ loadInvoiceBody
 
 
 
@@ -4478,33 +4560,16 @@
                                     const input = document.getElementById('NavInvoiceSearchInput');
                                     const val = input ? parseInt(input.value || '0', 10) : 0;
                                     if (!val || val <= 0) return;
-
-                                    const baseUrl = btn.getAttribute('data-base-url');
-                                    if (!baseUrl) return;
-
-                                    const url = setOrReplaceParam(baseUrl, 'id', val);
-                                    loadInvoiceBody(url);
+                                    loadInvoiceBody(val);
                                     return;
                                 }
 
-                                // ✅ للأزرار: نستخدم data-url (يحتوي على URL كامل مع id)
-                                // ✅ مهم: نحدث data-url فوراً قبل الاستخدام (لضمان القيم الصحيحة)
+                                // ✅ للأزرار: نقرأ data-id (رقم الطلب المستهدف) ونحمّل body من المسار الحالي
                                 refreshSideNavButtons();
-                                
-                                let url = btn.getAttribute('data-url');
-                                
-                                // ✅ لو data-url غير موجود أو فارغ، نبني URL من data-base-url و data-id
-                                if (!url || !url.trim()) {
-                                    const baseUrl = btn.getAttribute('data-base-url');
-                                    const btnId = btn.getAttribute('data-id');
-                                    if (baseUrl && btnId) {
-                                        url = setOrReplaceParam(baseUrl, 'id', parseInt(btnId || '0', 10));
-                                    }
-                                }
-                                
-                                if (!url || !url.trim()) return;
-
-                                loadInvoiceBody(url);
+                                const btnId = btn.getAttribute('data-id');
+                                const targetId = btnId ? parseInt(btnId, 10) : 0;
+                                if (!targetId || targetId <= 0) return;
+                                loadInvoiceBody(targetId);
                              }
 
 

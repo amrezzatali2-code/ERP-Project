@@ -43,19 +43,22 @@ namespace ERP.Controllers
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IPermissionService _permissionService;
+        private readonly StockAnalysisService _stockAnalysis;
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public PurchaseRequestsController(AppDbContext context,
                                           DocumentTotalsService docTotals,
                                           IUserActivityLogger activityLogger,
                                           ILedgerPostingService ledgerPosting,
-                                          IPermissionService permissionService)
+                                          IPermissionService permissionService,
+                                          StockAnalysisService stockAnalysis)
         {
             _context = context;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
             _ledgerPostingService = ledgerPosting;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
+            _stockAnalysis = stockAnalysis ?? throw new ArgumentNullException(nameof(stockAnalysis));
         }
 
 
@@ -727,6 +730,31 @@ private async Task PopulateDropDownsAsync(
                 .ToListAsync();
 
             return Json(alts);
+        }
+
+        // =========================================================
+        // API: بيانات كارت الصنف (الكمية في المخزن، إجمالي الكمية، الخصم المرجح %) للعرض عند اختيار الصنف
+        // =========================================================
+        [RequirePermission("PurchaseRequests.Edit")]
+        [HttpGet]
+        public async Task<IActionResult> GetProductCardInfo(int prodId, int? warehouseId = null)
+        {
+            if (prodId <= 0)
+                return Json(new { ok = false, qtyInWarehouse = 0, qtyAllWarehouses = 0, weightedDiscount = 0m });
+
+            int qtyAll = await _stockAnalysis.GetCurrentQtyAsync(prodId, null);
+            int qtyInWh = warehouseId.HasValue && warehouseId.Value > 0
+                ? await _stockAnalysis.GetCurrentQtyAsync(prodId, warehouseId)
+                : qtyAll;
+            decimal weightedDisc = await _stockAnalysis.GetWeightedPurchaseDiscountCurrentAsync(prodId);
+
+            return Json(new
+            {
+                ok = true,
+                qtyInWarehouse = qtyInWh,
+                qtyAllWarehouses = qtyAll,
+                weightedDiscount = weightedDisc
+            });
         }
 
         // =========================================================
@@ -1988,6 +2016,7 @@ private async Task PopulateDropDownsAsync(
 
         [RequirePermission("PurchaseRequests.Show")]
         [HttpGet]
+        [ResponseCache(NoStore = true, Duration = 0)]
         public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
         {
             // =========================================
@@ -2080,14 +2109,10 @@ private async Task PopulateDropDownsAsync(
 
             // =========================================
             // 3) تجهيز القوائم + الأوتوكومبليت
-            // ✅ مهم للأداء: لو frag=body (تنقل بالأسهم) ما نعملش تحميل تقيل
-            // لأن الـ Body بيتبدّل كتير
+            // ✅ نحمّل الموردين والأصناف دائماً (بما فيها عند frag=body) حتى تظهر أسماء الموردين وقائمة الأصناف بعد البحث/الأسهم
             // =========================================
-            if (!isBodyOnly)
-            {
-                await PopulateDropDownsAsync(request.CustomerId, request.WarehouseId);
-                await LoadProductsForAutoCompleteAsync();
-            }
+            await PopulateDropDownsAsync(request.CustomerId, request.WarehouseId);
+            await LoadProductsForAutoCompleteAsync();
 
             // =========================================
             // 3.1) متغير: هل الطلب مقفول

@@ -10,6 +10,9 @@ namespace ERP.ViewModels
         public string ProdName { get; set; } = "";
         public string CategoryName { get; set; } = "";
         public string ProductGroupName { get; set; } = "";
+        public string? Company { get; set; }
+        public string? Imported { get; set; }
+        public string? Description { get; set; }
         public string ProductBonusGroupName { get; set; } = "";
         public int CurrentQty { get; set; }
         /// <summary>الخصم المرجّح المحسوب من StockLedger (للعرض والمقارنة فقط).</summary>

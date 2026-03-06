@@ -1,16 +1,16 @@
-@model ERP.ViewModels.SalesPerformanceReportViewModel
+@model ERP.ViewModels.PurchasePerformanceReportViewModel
 @{
-    ViewData["Title"] = "تقرير أداء المبيعات";
+    ViewData["Title"] = "تقرير أداء المشتريات";
     var fromStr = Model.FromDate?.ToString("yyyy-MM-dd") ?? "";
     var toStr = Model.ToDate?.ToString("yyyy-MM-dd") ?? "";
 }
 <div dir="rtl" class="container-fluid py-3">
-    <h4 class="mb-2">تقرير أداء المبيعات</h4>
+    <h4 class="mb-2">تقرير أداء المشتريات</h4>
 
     @* ===== شريط الفلاتر (نمط القوائم) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2 mb-4">
         <div class="row g-3 align-items-end flex-wrap">
-            <form method="get" asp-action="SalesPerformanceReport" asp-controller="Reports" id="reportForm" class="row g-3 align-items-end flex-wrap w-100">
+            <form method="get" asp-action="PurchasePerformanceReport" asp-controller="Reports" id="reportForm" class="row g-3 align-items-end flex-wrap w-100">
                 <input type="hidden" name="fromDate" value="@fromStr" />
                 <input type="hidden" name="toDate" value="@toStr" />
                 <div class="col-12 col-lg-auto erp-filter-section">
@@ -184,10 +184,7 @@
                 </div>
                 <div class="col-12 col-lg-auto erp-filter-section">
                     <label class="form-label d-none d-md-block" style="visibility:hidden">تنفيذ</label>
-                    <div class="d-flex gap-2 flex-wrap">
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">تجميع التقرير</button>
-                        <button type="submit" name="apply" value="1" class="btn btn-erp btn-erp-secondary btn-erp-sm">تعيين</button>
-                    </div>
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm w-100">تجميع التقرير</button>
                 </div>
             </form>
         </div>
@@ -198,7 +195,7 @@
         <div class="col-md-2">
             <div class="card border-0 shadow-sm h-100 bg-primary text-white">
                 <div class="card-body py-3">
-                    <small class="d-block opacity-90">الخصم المقدم للعميل %</small>
+                    <small class="d-block opacity-90">الخصم %</small>
                     <h4 class="mb-0">@Model.DiscountPctAvg.ToString("N1")%</h4>
                 </div>
             </div>
@@ -206,9 +203,9 @@
         <div class="col-md-2">
             <div class="card border-0 shadow-sm h-100 bg-info text-white">
                 <div class="card-body py-3">
-                    <small class="d-block opacity-90">صافي المبيعات</small>
-                    <h4 class="mb-0">@Model.NetSales.ToString("N0")</h4>
-                    @if (Model.HasActiveFilters && Model.GrandTotalNetSales > 0) { <small class="d-block opacity-90">@Model.NetSalesPctOfTotal.ToString("N1")% من إجمالي البيع</small> }
+                    <small class="d-block opacity-90">صافي المشتريات</small>
+                    <h4 class="mb-0">@Model.NetPurchases.ToString("N0")</h4>
+                    @if (Model.TotalGrossPurchases > 0) { <small class="d-block opacity-90">@Model.NetPurchasesPct.ToString("N1")% من الإجمالي</small> }
                 </div>
             </div>
         </div>
@@ -217,17 +214,7 @@
                 <div class="card-body py-3">
                     <small class="d-block opacity-90">المرتجعات</small>
                     <h4 class="mb-0">@Model.TotalReturns.ToString("N0")</h4>
-                    @if (Model.HasActiveFilters && Model.GrandTotalNetSales > 0) { <small class="d-block opacity-90">@Model.ReturnsPctOfTotal.ToString("N1")% من إجمالي البيع</small> }
-                </div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="card border-0 shadow-sm h-100 bg-success text-white">
-                <div class="card-body py-3">
-                    <small class="d-block opacity-90">صافي الربح</small>
-                    <h4 class="mb-0">@Model.NetProfit.ToString("N0")</h4>
-                    @if (Model.HasActiveFilters && Model.GrandTotalNetSales > 0) { <small class="d-block opacity-90">@Model.NetProfitPctOfTotalSales.ToString("N1")% من إجمالي البيع</small> }
-                    @if (Model.HasActiveFilters && Model.GrandTotalNetProfit != 0) { <small class="d-block opacity-90">@Model.NetProfitPctOfTotalProfit.ToString("N1")% من إجمالي الربح</small> }
+                    @if (Model.TotalGrossPurchases > 0) { <small class="d-block opacity-90">@Model.ReturnsPct.ToString("N1")% من الإجمالي</small> }
                 </div>
             </div>
         </div>
@@ -236,14 +223,6 @@
                 <div class="card-body py-3">
                     <small class="d-block opacity-90">عدد الفواتير</small>
                     <h4 class="mb-0">@Model.InvoiceCount.ToString("N0")</h4>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="card border-0 shadow-sm h-100 bg-dark text-white">
-                <div class="card-body py-3">
-                    <small class="d-block opacity-90">متوسط سعر القطعة</small>
-                    <h4 class="mb-0">@Model.AvgItemPrice.ToString("N0")</h4>
                 </div>
             </div>
         </div>
@@ -259,10 +238,10 @@
 
     @* ===== رسم بياني: خطي لعنصر واحد، أعمدة لأكثر من عنصر ===== *@
     <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white"><strong>تقرير أداء المبيعات</strong></div>
+        <div class="card-header bg-white"><strong>تقرير أداء المشتريات</strong></div>
         <div class="card-body">
             <div style="height: 320px;">
-                <canvas id="salesChart"></canvas>
+                <canvas id="purchaseChart"></canvas>
             </div>
         </div>
     </div>
@@ -277,7 +256,7 @@
             var timeLabels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartTimeSeriesLabels));
             var timeValues = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartTimeSeriesValues));
 
-            var ctx = document.getElementById('salesChart');
+            var ctx = document.getElementById('purchaseChart');
             if (!ctx) return;
 
             if (isLineChart && timeLabels && timeLabels.length > 0) {
@@ -286,7 +265,7 @@
                     data: {
                         labels: timeLabels,
                         datasets: [{
-                            label: 'صافي المبيعات',
+                            label: 'صافي المشتريات',
                             data: timeValues,
                             borderColor: 'rgba(54, 162, 235, 1)',
                             backgroundColor: 'rgba(54, 162, 235, 0.1)',
@@ -313,8 +292,8 @@
                     data: {
                         labels: chartData.map(function (x) { return x.writerName; }),
                         datasets: [{
-                            label: 'صافي المبيعات',
-                            data: chartData.map(function (x) { return x.netSales; }),
+                            label: 'صافي المشتريات',
+                            data: chartData.map(function (x) { return x.netPurchases; }),
                             backgroundColor: 'rgba(54, 162, 235, 0.7)',
                             borderColor: 'rgba(54, 162, 235, 1)',
                             borderWidth: 1

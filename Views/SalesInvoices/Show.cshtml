@@ -965,6 +965,9 @@
                                         </div>
                                         <div class="col-12 col-md-8 col-lg-9">
                                             <label class="form-label form-label-sm mb-1">تشغيلات الصنف (حسب FEFO)</label>
+                                            <select id="ProdBatchSelect" class="form-select form-select-sm mb-2" style="max-width:320px;" title="اختر تشغيلة معيّنة لتجاوز ترتيب FIFO التلقائي">
+                                                <option value="">لا توجد تشغيلات</option>
+                                            </select>
                                             <div class="table-responsive invoice-batch-table-wrap">
                                                 <table class="table table-sm table-bordered align-middle text-center mb-0 invoice-batch-table">
                                                     <thead class="table-light">
@@ -1734,6 +1737,8 @@
 
                         // 4) جدول تشغيلات FEFO داخل كارت بيانات الصنف
                         const batchQueueBody = document.getElementById('BatchQueueBody'); // متغير: جسم جدول التشغيلات (tbody)
+                        const prodBatchSelect = document.getElementById('ProdBatchSelect'); // متغير: دروب داون اختيار التشغيلة (تجاوز FIFO)
+                        let currentProductBatches = []; // متغير: قائمة التشغيلات الحالية (من GetSalesProductInfo) لاستخدامها عند تغيير الاختيار
 
                         // 5) مخزن الفاتورة (لازم يكون موجود في الهيدر)
                          const warehouseInput = document.getElementById('WarehouseId');    // متغير: رقم المخزن الحالي
@@ -1953,14 +1958,16 @@
                     }
 
 
-                    // 4) جدول تشغيلات FEFO (كارت 2)
+                    // 4) جدول تشغيلات FEFO (كارت 2) + دروب داون اختيار التشغيلة (تجاوز FIFO)
+                    const batches = data.batches || [];
+                    currentProductBatches = batches;
+
                     if (batchQueueBody) {
-                        const batches = data.batches || [];
                         if (!batches.length) {
                             batchQueueBody.innerHTML = `<tr><td colspan="5" class="text-muted">لا توجد تشغيلات متاحة لهذا الصنف في هذا المخزن.</td></tr>`;
                         } else {
                             batchQueueBody.innerHTML = batches.map((b, idx) => `
-                                <tr class="${idx === 0 ? 'table-success' : ''}">
+                                <tr class="${idx === 0 ? 'table-success' : ''}" data-batch-index="${idx}">
                                     <td>${idx + 1}</td>
                                     <td>${b.batchNo || ''}</td>
                                     <td>${b.expiryText || ''}</td>
@@ -1968,6 +1975,18 @@
                                     <td>${fmt2(b.priceRetailBatch ?? 0)}</td>
                                 </tr>
                             `).join('');
+                        }
+                    }
+
+                    if (prodBatchSelect) {
+                        prodBatchSelect.innerHTML = '';
+                        if (!batches.length) {
+                            prodBatchSelect.appendChild(new Option('لا توجد تشغيلات', '', true, true));
+                        } else {
+                            batches.forEach((b, idx) => {
+                                const label = `تشغيلة ${idx + 1}: ${b.batchNo || ''} | صلاحية ${b.expiryText || ''} | سعر ${fmt2(b.priceRetailBatch ?? 0)}`;
+                                prodBatchSelect.appendChild(new Option(label, String(idx), idx === 0, idx === 0));
+                            });
                         }
                     }
 
@@ -1988,6 +2007,26 @@
                 }
             }
 
+            // =========================================================
+            // اختيار التشغيلة يدوياً (تجاوز FIFO) — عند تغيير الدروب داون نحدّث الباتش والصلاحية والسعر
+            // =========================================================
+            if (prodBatchSelect) {
+                prodBatchSelect.addEventListener('change', function () {
+                    const idx = parseInt(this.value, 10);
+                    if (isNaN(idx) || idx < 0 || idx >= currentProductBatches.length) return;
+                    const b = currentProductBatches[idx];
+                    if (!b) return;
+                    if (prodBatchInput)  prodBatchInput.value  = b.batchNo || '';
+                    if (prodExpiryInput) prodExpiryInput.value = b.expiryText || '';
+                    if (prodPriceInput)  prodPriceInput.value  = fmt2(b.priceRetailBatch ?? 0);
+                    if (batchQueueBody) {
+                        batchQueueBody.querySelectorAll('tr[data-batch-index]').forEach(tr => {
+                            const i = parseInt(tr.getAttribute('data-batch-index'), 10);
+                            tr.classList.toggle('table-success', i === idx);
+                        });
+                    }
+                });
+            }
 
 
 
@@ -3183,7 +3222,24 @@
                 console.warn('refreshProductInfoAfterAddLine failed:', e);
             }
 
+                            // 6.6) ✅ تحديث قائمة الأصناف في الداتاليست — عند "أصناف لها رصيد فقط" الصنف اللي رصيده خلص يختفي
+                            try {
+                                if (typeof refreshProductsDatalist === 'function') await refreshProductsDatalist();
+                            } catch (e) {
+                                console.warn('refreshProductsDatalist failed:', e);
+                            }
 
+                            // 6.7) ✅ استدعاء أول صنف موجود في القائمة بعد التحديث (الصنف اللي خلص رصيده اختفى)
+                            try {
+                                const list = prodDataList || document.getElementById('productsList');
+                                if (list && list.options && list.options.length > 0 && typeof fillProductFromOption === 'function') {
+                                    fillProductFromOption(list.options[0]);
+                                } else if (typeof fillProductFromOption === 'function') {
+                                    fillProductFromOption(null);
+                                }
+                            } catch (e) {
+                                console.warn('استدعاء أول صنف بعد الإضافة:', e);
+                            }
 
                             // =========================================================
                             // 7) تنظيف الخانات + فوكس على اسم الصنف
@@ -4212,37 +4268,48 @@
 
 
 
+                        // دالة: تحديث قائمة الأصناف في الداتاليست (أصناف لها رصيد فقط أو الكل حسب تشيك بوكس "عرض الصفر")
+                        // — نستدعيها بعد إضافة سطر حتى يختفي الصنف إذا استُنفد رصيده
+                        function refreshProductsDatalist() {
+                            const list = document.getElementById('productsList');
+                            if (list) list.innerHTML = ''; // تفريغ فوراً حتى لا يظهر أصناف قديمة قبل وصول الاستجابة
+                            const chk = document.getElementById('chkIncludeZeroQty');
+                            const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
+                            const includeZero = chk ? !!chk.checked : false;
+                            const url = `/SalesInvoices/GetProductsForDatalist?includeZeroQty=${includeZero}&warehouseId=${warehouseId || ''}`;
+                            return fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } })
+                                .then(r => r.ok ? r.json() : [])
+                                .then(products => {
+                                    const listEl = document.getElementById('productsList');
+                                    if (!listEl) return;
+                                    listEl.innerHTML = '';
+                                    (products || []).forEach(p => {
+                                        const opt = document.createElement('option');
+                                        opt.value = p.name || '';
+                                        opt.setAttribute('data-id', (p.id || '').toString());
+                                        opt.setAttribute('data-code', (p.id || '').toString());
+                                        opt.setAttribute('data-generic', p.genericName || '');
+                                        opt.setAttribute('data-company', p.company || '');
+                                        opt.setAttribute('data-price', '0');
+                                        opt.setAttribute('data-hasquota', p.hasQuota ? 'true' : 'false');
+                                        opt.setAttribute('data-hasbonus', p.hasBonus ? 'true' : 'false');
+                                        opt.setAttribute('data-bonusgroup', p.bonusGroupName || '');
+                                        listEl.appendChild(opt);
+                                    });
+                                })
+                                .catch(e => console.warn('refreshProductsDatalist:', e));
+                        }
+
                         // تشيك بوكس "عرض الصفر": تحديث الداتاليست فقط (بدون إعادة تحميل أو فتح فاتورة جديدة)
                         document.addEventListener("DOMContentLoaded", function () {
+                            // عند فتح الصفحة: جلب قائمة الأصناف الحالية من الـ API (الموجود فقط حسب تشيك بوكس "عرض الصفر") لضمان عدم عرض أصناف قديمة أو مخزنة في الكاش
+                            if (typeof refreshProductsDatalist === 'function') refreshProductsDatalist();
                             document.body.addEventListener('change', function (ev) {
                                 const chk = ev.target;
                                 if (!chk || chk.id !== 'chkIncludeZeroQty') return;
                                 ev.preventDefault();
                                 ev.stopPropagation();
-                                const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
-                                const includeZero = !!chk.checked;
-                                const url = `/SalesInvoices/GetProductsForDatalist?includeZeroQty=${includeZero}&warehouseId=${warehouseId || ''}`;
-                                fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } })
-                                    .then(r => r.ok ? r.json() : [])
-                                    .then(products => {
-                                        const list = document.getElementById('productsList');
-                                        if (!list) return;
-                                        list.innerHTML = '';
-                                        (products || []).forEach(p => {
-                                            const opt = document.createElement('option');
-                                            opt.value = p.name || '';
-                                            opt.setAttribute('data-id', (p.id || '').toString());
-                                            opt.setAttribute('data-code', (p.id || '').toString());
-                                            opt.setAttribute('data-generic', p.genericName || '');
-                                            opt.setAttribute('data-company', p.company || '');
-                                            opt.setAttribute('data-price', '0');
-                                            opt.setAttribute('data-hasquota', p.hasQuota ? 'true' : 'false');
-                                            opt.setAttribute('data-hasbonus', p.hasBonus ? 'true' : 'false');
-                                            opt.setAttribute('data-bonusgroup', p.bonusGroupName || '');
-                                            list.appendChild(opt);
-                                        });
-                                    })
-                                    .catch(e => console.warn('chkIncludeZeroQty:', e));
+                                refreshProductsDatalist();
                             });
                         });
 

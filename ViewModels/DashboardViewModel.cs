@@ -8,6 +8,10 @@ namespace ERP.ViewModels
         public string Level { get; set; } = "owner";  // sales | manager | owner
         public string LevelName { get; set; } = "لوحة الإدارة الكاملة";
         public string? UserDisplayName { get; set; }
+        /// <summary>فلتر التاريخ: من (للوحة مبيعاتي الشخصية).</summary>
+        public DateTime? FromDate { get; set; }
+        /// <summary>فلتر التاريخ: إلى (للوحة مبيعاتي الشخصية).</summary>
+        public DateTime? ToDate { get; set; }
 
         // إحصائيات أساسية
         public int CustomersCount { get; set; }

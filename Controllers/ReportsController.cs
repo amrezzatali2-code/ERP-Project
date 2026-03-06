@@ -548,7 +548,10 @@ namespace ERP.Controllers
                     CategoryName = p.Category != null ? p.Category.CategoryName : "",
                     ProductGroupName = p.ProductGroup != null ? p.ProductGroup.Name : "",
                     ProductBonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : "",
-                    p.PriceRetail
+                    p.PriceRetail,
+                    p.Company,
+                    p.Imported,
+                    p.Description
                 })
                 .ToDictionaryAsync(p => p.ProdId);
 
@@ -741,6 +744,9 @@ namespace ERP.Controllers
                     CategoryName = product.CategoryName ?? "",
                     ProductGroupName = product.ProductGroupName ?? "",
                     ProductBonusGroupName = product.ProductBonusGroupName ?? "",
+                    Company = product.Company,
+                    Imported = product.Imported,
+                    Description = product.Description,
                     CurrentQty = currentQty,
                     WeightedDiscount = weightedDiscount,
                     ManualDiscountPct = manualPct,
@@ -2208,7 +2214,10 @@ namespace ERP.Controllers
                     CategoryName = p.Category != null ? p.Category.CategoryName : "",
                     ProductGroupName = p.ProductGroup != null ? p.ProductGroup.Name : "",
                     ProductBonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : "",
-                    p.PriceRetail
+                    p.PriceRetail,
+                    p.Company,
+                    p.Imported,
+                    p.Description
                 })
                 .ToDictionaryAsync(p => p.ProdId);
 
@@ -2347,6 +2356,9 @@ namespace ERP.Controllers
                     CategoryName = product.CategoryName ?? "",
                     ProductGroupName = product.ProductGroupName ?? "",
                     ProductBonusGroupName = product.ProductBonusGroupName ?? "",
+                    Company = product.Company,
+                    Imported = product.Imported,
+                    Description = product.Description,
                     CurrentQty = currentQty,
                     WeightedDiscount = weightedDiscount,
                     ManualDiscountPct = manualPctExp,
@@ -2527,7 +2539,8 @@ namespace ERP.Controllers
             string? filterCol_salesqtyExpr = null,
             bool loadReport = false,
             int page = 1,
-            int pageSize = 20)
+            int pageSize = 20,
+            string? format = null)  // "excel" | "csv" للتصدير
         {
             // =========================================================
             // 1) تجهيز القوائم المنسدلة
@@ -2581,9 +2594,10 @@ namespace ERP.Controllers
             ViewBag.FilterCol_SalesqtyExpr = filterCol_salesqtyExpr;
 
             // =========================================================
-            // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
+            // 3) تحميل البيانات عند "تجميع التقرير" أو طلب التصدير
             // =========================================================
-            if (!loadReport)
+            bool wantExport = !string.IsNullOrWhiteSpace(format) && (format.Equals("excel", StringComparison.OrdinalIgnoreCase) || format.Equals("csv", StringComparison.OrdinalIgnoreCase));
+            if (!loadReport && !wantExport)
             {
                 ViewBag.ReportData = new List<ProductProfitReportDto>();
                 ViewBag.TotalSalesRevenue = 0m;
@@ -2592,6 +2606,7 @@ namespace ERP.Controllers
                 ViewBag.BalanceSheetData = null;
                 return View();
             }
+            if (wantExport) loadReport = true;
 
             // =========================================================
             // 4) بناء الاستعلام الأساسي للأصناف
@@ -3168,6 +3183,73 @@ namespace ERP.Controllers
             int totalCount = reportData.Count;
 
             // =========================================================
+            // 9.5) تصدير Excel (.xlsx) أو CSV (بدون باجيناشن)
+            // =========================================================
+            if (!string.IsNullOrWhiteSpace(format) && (format.Equals("excel", StringComparison.OrdinalIgnoreCase) || format.Equals("csv", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (format.Equals("excel", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var workbook = new XLWorkbook();
+                    var worksheet = workbook.Worksheets.Add("أرباح الأصناف");
+                    int row = 1;
+                    worksheet.Cell(row, 1).Value = "الكود";
+                    worksheet.Cell(row, 2).Value = "اسم الصنف";
+                    worksheet.Cell(row, 3).Value = "الفئة";
+                    worksheet.Cell(row, 4).Value = "البيع";
+                    worksheet.Cell(row, 5).Value = "التكلفة";
+                    worksheet.Cell(row, 6).Value = "الربح (بيع)";
+                    worksheet.Cell(row, 7).Value = "نسبة الربح %";
+                    worksheet.Cell(row, 8).Value = "ربح المرتجعات";
+                    worksheet.Cell(row, 9).Value = "الربح (تسويات)";
+                    worksheet.Cell(row, 10).Value = "الربح (تحويلات)";
+                    worksheet.Cell(row, 11).Value = "الكمية";
+                    worksheet.Cell(row, 12).Value = "صافي الربح";
+                    row++;
+                    foreach (var r in reportData)
+                    {
+                        worksheet.Cell(row, 1).Value = r.ProdCode ?? "";
+                        worksheet.Cell(row, 2).Value = r.ProdName ?? "";
+                        worksheet.Cell(row, 3).Value = r.CategoryName ?? "";
+                        worksheet.Cell(row, 4).Value = r.SalesRevenue;
+                        worksheet.Cell(row, 5).Value = r.SalesCost;
+                        worksheet.Cell(row, 6).Value = r.SalesProfit;
+                        worksheet.Cell(row, 7).Value = r.SalesProfitPercent;
+                        worksheet.Cell(row, 8).Value = r.ReturnProfit;
+                        worksheet.Cell(row, 9).Value = r.AdjustmentProfit;
+                        worksheet.Cell(row, 10).Value = r.TransferProfit;
+                        worksheet.Cell(row, 11).Value = r.SalesQty;
+                        worksheet.Cell(row, 12).Value = r.NetProfit;
+                        row++;
+                    }
+                    worksheet.Columns().AdjustToContents();
+                    using var stream = new System.IO.MemoryStream();
+                    workbook.SaveAs(stream);
+                    var fileName = $"ProductProfits_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                    return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+                }
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("ProdCode,ProdName,CategoryName,SalesRevenue,SalesCost,SalesProfit,SalesProfitPercent,ReturnProfit,AdjustmentProfit,TransferProfit,SalesQty,NetProfit");
+                foreach (var r in reportData)
+                {
+                    sb.AppendLine(string.Join(",",
+                        (r.ProdCode ?? "").Replace(",", " "),
+                        (r.ProdName ?? "").Replace(",", " "),
+                        (r.CategoryName ?? "").Replace(",", " "),
+                        r.SalesRevenue.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.SalesCost.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.SalesProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.SalesProfitPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.ReturnProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.AdjustmentProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.TransferProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.SalesQty.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.NetProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
+                }
+                var csvBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+                return File(csvBytes, "text/csv", "ProductProfits.csv");
+            }
+
+            // =========================================================
             // 10) Pagination
             // =========================================================
             if (pageSize > 0 && pageSize < totalCount)
@@ -3237,7 +3319,8 @@ namespace ERP.Controllers
             string? sortDir = "asc",
             bool loadReport = false,
             int page = 1,
-            int pageSize = 200)
+            int pageSize = 200,
+            string? format = null)  // "excel" | "csv" للتصدير
         {
             // =========================================================
             // 1) تجهيز القوائم المنسدلة
@@ -3268,9 +3351,10 @@ namespace ERP.Controllers
             ViewBag.SortDir = sortDir;
 
             // =========================================================
-            // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
+            // 3) تحميل البيانات عند "تجميع التقرير" أو طلب التصدير
             // =========================================================
-            if (!loadReport)
+            bool wantExport = !string.IsNullOrWhiteSpace(format) && (format.Equals("excel", StringComparison.OrdinalIgnoreCase) || format.Equals("csv", StringComparison.OrdinalIgnoreCase));
+            if (!loadReport && !wantExport)
             {
                 ViewBag.ReportData = new List<CustomerProfitReportDto>();
                 ViewBag.TotalSalesRevenue = 0m;
@@ -3281,6 +3365,7 @@ namespace ERP.Controllers
                 ViewBag.TotalLedgerProfit = 0m;
                 return View();
             }
+            if (wantExport) loadReport = true;
 
             // =========================================================
             // 4) بناء الاستعلام الأساسي للعملاء
@@ -3882,6 +3967,37 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.SalesRevenue).ToList()
                         : reportData.OrderBy(r => r.SalesRevenue).ToList();
                     break;
+                case "salescost":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.SalesCost).ToList()
+                        : reportData.OrderBy(r => r.SalesCost).ToList();
+                    break;
+                case "salesprofitpct":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.SalesProfitPercent).ToList()
+                        : reportData.OrderBy(r => r.SalesProfitPercent).ToList();
+                    break;
+                case "returnprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.ReturnProfit).ToList()
+                        : reportData.OrderBy(r => r.ReturnProfit).ToList();
+                    break;
+                case "netprofit":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.NetProfit).ToList()
+                        : reportData.OrderBy(r => r.NetProfit).ToList();
+                    break;
+                case "category":
+                case "partycategory":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.PartyCategory ?? "").ToList()
+                        : reportData.OrderBy(r => r.PartyCategory ?? "").ToList();
+                    break;
+                case "phone":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.Phone1 ?? "").ToList()
+                        : reportData.OrderBy(r => r.Phone1 ?? "").ToList();
+                    break;
                 default: // "name"
                     reportData = isDesc
                         ? reportData.OrderByDescending(r => r.CustomerName).ToList()
@@ -3913,6 +4029,67 @@ namespace ERP.Controllers
             decimal totalAdjustedProfit = totalNetProfit + totalNetNotesAdjustment;
 
             int totalCount = reportData.Count;
+
+            // =========================================================
+            // 9.5) تصدير Excel (.xlsx) أو CSV (بدون باجيناشن، بدون عدد الفواتير/متوسط الفاتورة)
+            // =========================================================
+            if (wantExport)
+            {
+                if (format!.Equals("excel", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var workbook = new XLWorkbook();
+                    var worksheet = workbook.Worksheets.Add("أرباح العملاء");
+                    int row = 1;
+                    worksheet.Cell(row, 1).Value = "الكود";
+                    worksheet.Cell(row, 2).Value = "اسم العميل";
+                    worksheet.Cell(row, 3).Value = "فئة العميل";
+                    worksheet.Cell(row, 4).Value = "الهاتف";
+                    worksheet.Cell(row, 5).Value = "الإيرادات";
+                    worksheet.Cell(row, 6).Value = "التكلفة";
+                    worksheet.Cell(row, 7).Value = "الربح";
+                    worksheet.Cell(row, 8).Value = "نسبة الربح %";
+                    worksheet.Cell(row, 9).Value = "ربح المرتجعات";
+                    worksheet.Cell(row, 10).Value = "صافي الربح";
+                    row++;
+                    foreach (var r in reportData)
+                    {
+                        worksheet.Cell(row, 1).Value = r.CustomerCode ?? "";
+                        worksheet.Cell(row, 2).Value = r.CustomerName ?? "";
+                        worksheet.Cell(row, 3).Value = r.PartyCategory ?? "";
+                        worksheet.Cell(row, 4).Value = r.Phone1 ?? "";
+                        worksheet.Cell(row, 5).Value = r.SalesRevenue;
+                        worksheet.Cell(row, 6).Value = r.SalesCost;
+                        worksheet.Cell(row, 7).Value = r.SalesProfit;
+                        worksheet.Cell(row, 8).Value = r.SalesProfitPercent;
+                        worksheet.Cell(row, 9).Value = r.ReturnProfit;
+                        worksheet.Cell(row, 10).Value = r.NetProfit;
+                        row++;
+                    }
+                    worksheet.Columns().AdjustToContents();
+                    using var stream = new System.IO.MemoryStream();
+                    workbook.SaveAs(stream);
+                    var fileName = $"CustomerProfits_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                    return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
+                }
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("CustomerCode,CustomerName,PartyCategory,Phone1,SalesRevenue,SalesCost,SalesProfit,SalesProfitPercent,ReturnProfit,NetProfit");
+                foreach (var r in reportData)
+                {
+                    sb.AppendLine(string.Join(",",
+                        (r.CustomerCode ?? "").Replace(",", " "),
+                        (r.CustomerName ?? "").Replace(",", " "),
+                        (r.PartyCategory ?? "").Replace(",", " "),
+                        (r.Phone1 ?? "").Replace(",", " "),
+                        r.SalesRevenue.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.SalesCost.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.SalesProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.SalesProfitPercent.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.ReturnProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
+                        r.NetProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
+                }
+                var csvBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+                return File(csvBytes, "text/csv", "CustomerProfits.csv");
+            }
 
             // =========================================================
             // 10) Pagination
@@ -3963,73 +4140,84 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// تقرير أداء المبيعات (بالكاتب): KPIs + رسم بياني + جدول تفصيلي مع فلاتر التاريخ والمستخدمين والمنطقة والمحافظة والعملاء.
+        /// تقرير أداء المبيعات: KPIs + رسم بياني (خطي لعنصر واحد، أعمدة لأكثر من عنصر) مع فلاتر متعددة الاختيار.
         /// </summary>
         [HttpGet]
         [RequirePermission("Reports.SalesPerformanceReport")]
         public async Task<IActionResult> SalesPerformanceReport(
             DateTime? fromDate,
             DateTime? toDate,
-            string? userIds,
-            int? governorateId,
-            int? districtId,
-            int? areaId,
-            string? customerIds)
+            int[]? governorateIds,
+            int[]? districtIds,
+            int[]? areaIds,
+            string[]? partyCategories,
+            int[]? customerIds,
+            int[]? userIds,
+            int[]? productIds)
         {
             var vm = new SalesPerformanceReportViewModel();
             var today = DateTime.Today;
             vm.FromDate = fromDate ?? new DateTime(today.Year, today.Month, 1);
             vm.ToDate = toDate ?? today;
-            vm.GovernorateId = governorateId;
-            vm.DistrictId = districtId;
-            vm.AreaId = areaId;
+            var selGov = governorateIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selDist = districtIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selArea = areaIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selParty = partyCategories?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList() ?? new List<string>();
+            var selCust = customerIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selUsers = userIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selProds = productIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            vm.SelectedGovernorateIds = selGov;
+            vm.SelectedDistrictIds = selDist;
+            vm.SelectedAreaIds = selArea;
+            vm.SelectedPartyCategories = selParty;
+            vm.SelectedCustomerIds = selCust;
+            vm.SelectedUserIds = selUsers;
+            vm.SelectedProductIds = selProds;
 
             var from = vm.FromDate.Value.Date;
             var to = vm.ToDate.Value.Date.AddDays(1);
 
-            // قائمة العملاء حسب الفلتر الجغرافي والعميل
             var customerIdsList = new List<int>();
             var custQ = _context.Customers.AsNoTracking().Where(c => c.IsActive);
-            if (governorateId.HasValue && governorateId.Value > 0)
-                custQ = custQ.Where(c => c.GovernorateId == governorateId.Value);
-            if (districtId.HasValue && districtId.Value > 0)
-                custQ = custQ.Where(c => c.DistrictId == districtId.Value);
-            if (areaId.HasValue && areaId.Value > 0)
-                custQ = custQ.Where(c => c.AreaId == areaId.Value);
-            if (!string.IsNullOrWhiteSpace(customerIds))
-            {
-                var ids = customerIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => int.TryParse(s.Trim(), out var n) ? n : (int?)null).Where(n => n.HasValue).Select(n => n!.Value).ToList();
-                if (ids.Any())
-                {
-                    custQ = custQ.Where(c => ids.Contains(c.CustomerId));
-                    vm.CustomerIds = ids;
-                }
-            }
+            if (selGov.Any())
+                custQ = custQ.Where(c => selGov.Contains(c.GovernorateId ?? 0));
+            if (selDist.Any())
+                custQ = custQ.Where(c => c.DistrictId.HasValue && selDist.Contains(c.DistrictId.Value));
+            if (selArea.Any())
+                custQ = custQ.Where(c => c.AreaId.HasValue && selArea.Contains(c.AreaId.Value));
+            if (selParty.Any())
+                custQ = custQ.Where(c => c.PartyCategory != null && selParty.Contains(c.PartyCategory));
+            if (selCust.Any())
+                custQ = custQ.Where(c => selCust.Contains(c.CustomerId));
             customerIdsList = await custQ.Select(c => c.CustomerId).ToListAsync();
             if (!customerIdsList.Any())
                 customerIdsList = await _context.Customers.Where(c => c.IsActive).Select(c => c.CustomerId).ToListAsync();
 
-            // أسماء المستخدمين من فلتر المستخدمين (CreatedBy يُخزن اسم المستخدم)
             var creatorNames = new List<string>();
-            if (!string.IsNullOrWhiteSpace(userIds))
+            if (selUsers.Any())
             {
-                var uids = userIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                    .Select(s => int.TryParse(s.Trim(), out var n) ? n : (int?)null).Where(n => n.HasValue).Select(n => n!.Value).Distinct().ToList();
-                if (uids.Any())
-                {
-                    vm.UserIds = uids;
-                    var users = await _context.Users.AsNoTracking().Where(u => uids.Contains(u.UserId)).Select(u => new { u.UserId, u.UserName, u.DisplayName }).ToListAsync();
-                    creatorNames = users.Select(u => !string.IsNullOrWhiteSpace(u.DisplayName) ? u.DisplayName : u.UserName).Distinct().ToList();
-                    vm.UserNames = creatorNames;
-                }
+                var names = await _context.Users.AsNoTracking()
+                    .Where(uu => selUsers.Contains(uu.UserId))
+                    .Select(uu => uu.DisplayName ?? uu.UserName ?? "")
+                    .Where(n => !string.IsNullOrEmpty(n))
+                    .ToListAsync();
+                creatorNames = names;
             }
 
-            // فواتير البيع في الفترة (مرحّلة، ضمن العملاء المفلترين، واختياراً بالكاتب)
             var salesQ = _context.SalesInvoices.AsNoTracking()
                 .Where(si => si.IsPosted && si.SIDate >= from && si.SIDate < to && customerIdsList.Contains(si.CustomerId));
             if (creatorNames.Any())
                 salesQ = salesQ.Where(si => creatorNames.Contains(si.CreatedBy));
+
+            if (selProds.Any())
+            {
+                var siIdsWithProduct = await _context.SalesInvoiceLines.AsNoTracking()
+                    .Where(l => selProds.Contains(l.ProdId)).Select(l => l.SIId).Distinct().ToListAsync();
+                if (siIdsWithProduct.Any())
+                    salesQ = salesQ.Where(si => siIdsWithProduct.Contains(si.SIId));
+                else
+                    salesQ = salesQ.Where(si => false);
+            }
 
             var salesByWriter = await salesQ
                 .GroupBy(si => si.CreatedBy)
@@ -4069,16 +4257,25 @@ namespace ERP.Controllers
                 if (qtyBySi.TryGetValue(si.Key, out var q)) qtyByWriter[si.Value] = qtyByWriter.GetValueOrDefault(si.Value) + q;
             }
 
-            // مرتجعات البيع في الفترة (نفس العملاء واختياراً نفس الكتّاب)
             var returnsQ = _context.SalesReturns.AsNoTracking()
                 .Where(sr => sr.IsPosted && sr.SRDate >= from && sr.SRDate < to && customerIdsList.Contains(sr.CustomerId));
             if (creatorNames.Any())
                 returnsQ = returnsQ.Where(sr => creatorNames.Contains(sr.CreatedBy));
+            if (selProds.Any())
+            {
+                var srIdsWithProduct = await _context.SalesReturnLines.AsNoTracking()
+                    .Where(l => selProds.Contains(l.ProdId)).Select(l => l.SRId).Distinct().ToListAsync();
+                if (srIdsWithProduct.Any())
+                    returnsQ = returnsQ.Where(sr => srIdsWithProduct.Contains(sr.SRId));
+                else
+                    returnsQ = returnsQ.Where(sr => false);
+            }
 
             var returnsByWriter = await returnsQ
                 .GroupBy(sr => sr.CreatedBy)
                 .Select(g => new { WriterName = g.Key, TotalReturns = g.Sum(sr => sr.NetTotal) })
                 .ToDictionaryAsync(x => x.WriterName, x => x.TotalReturns);
+            var srIdsInRange = await returnsQ.Select(sr => sr.SRId).ToListAsync();
 
             decimal totalNetSales = 0m, totalReturns = 0m, totalCost = 0m, totalDiscountWeighted = 0m, totalQtyForDiscount = 0m;
             int totalInvoices = 0;
@@ -4097,6 +4294,9 @@ namespace ERP.Controllers
                 }
             }
 
+            vm.TotalReturns = totalReturns;
+            decimal totalGrossSales = totalNetSales;
+            vm.TotalGrossSales = totalGrossSales;
             vm.NetSales = totalNetSales - totalReturns;
             vm.NetProfit = (totalNetSales - totalCost) - totalReturns;
             vm.InvoiceCount = totalInvoices;
@@ -4104,6 +4304,12 @@ namespace ERP.Controllers
             decimal totalQtySold = qtyByWriter.Values.Sum();
             vm.AvgItemPrice = totalQtySold > 0 ? (totalNetSales - totalReturns) / totalQtySold : 0m;
             vm.DiscountPctAvg = totalQtyForDiscount > 0 ? totalDiscountWeighted / totalQtyForDiscount : 0m;
+            if (totalGrossSales > 0)
+            {
+                vm.NetSalesPct = (vm.NetSales / totalGrossSales) * 100m;
+                vm.ReturnsPct = (vm.TotalReturns / totalGrossSales) * 100m;
+                vm.NetProfitPct = (vm.NetProfit / totalGrossSales) * 100m;
+            }
 
             foreach (var s in salesByWriter.OrderByDescending(x => x.TotalSales))
             {
@@ -4135,16 +4341,273 @@ namespace ERP.Controllers
                 vm.ChartData.Add(new SalesPerformanceChartPoint { WriterName = s.WriterName ?? "—", NetSales = netSalesRow });
             }
 
+            // عند وجود فلتر: حساب إجمالي البيع والربح بدون فلتر (نفس الفترة) وعرض النسب من الإجمالي فقط عندها
+            vm.HasActiveFilters = selGov.Any() || selDist.Any() || selArea.Any() || selParty.Any() || selCust.Any() || selUsers.Any() || selProds.Any();
+            if (vm.HasActiveFilters)
+            {
+                var salesGrandQ = _context.SalesInvoices.AsNoTracking().Where(si => si.IsPosted && si.SIDate >= from && si.SIDate < to);
+                decimal totalSalesGrand = await salesGrandQ.SumAsync(si => si.NetTotal);
+                var siIdsGrand = await salesGrandQ.Select(si => si.SIId).ToListAsync();
+                decimal costGrand = 0m;
+                if (siIdsGrand.Any())
+                    costGrand = await _context.SalesInvoiceLines.AsNoTracking().Where(l => siIdsGrand.Contains(l.SIId)).SumAsync(l => l.CostTotal);
+                decimal totalReturnsGrand = await _context.SalesReturns.AsNoTracking().Where(sr => sr.IsPosted && sr.SRDate >= from && sr.SRDate < to).SumAsync(sr => sr.NetTotal);
+                vm.GrandTotalNetSales = totalSalesGrand - totalReturnsGrand;
+                vm.GrandTotalNetProfit = (totalSalesGrand - costGrand) - totalReturnsGrand;
+                if (vm.GrandTotalNetSales > 0)
+                {
+                    vm.NetSalesPctOfTotal = (vm.NetSales / vm.GrandTotalNetSales) * 100m;
+                    vm.ReturnsPctOfTotal = (vm.TotalReturns / vm.GrandTotalNetSales) * 100m;
+                    vm.NetProfitPctOfTotalSales = (vm.NetProfit / vm.GrandTotalNetSales) * 100m;
+                }
+                if (vm.GrandTotalNetProfit != 0)
+                    vm.NetProfitPctOfTotalProfit = (vm.NetProfit / vm.GrandTotalNetProfit) * 100m;
+            }
+
+            if (salesByWriter.Count == 1 && salesByWriter[0].WriterName != null && siIdsInRange.Any())
+            {
+                var salesByDate = await _context.SalesInvoices.AsNoTracking()
+                    .Where(si => siIdsInRange.Contains(si.SIId))
+                    .GroupBy(si => si.SIDate)
+                    .Select(g => new { Date = g.Key, Total = g.Sum(si => si.NetTotal) })
+                    .ToDictionaryAsync(x => x.Date, x => x.Total);
+                var returnsByDate = srIdsInRange.Any()
+                    ? await _context.SalesReturns.AsNoTracking()
+                        .Where(sr => srIdsInRange.Contains(sr.SRId))
+                        .GroupBy(sr => sr.SRDate)
+                        .Select(g => new { Date = g.Key, Total = g.Sum(sr => sr.NetTotal) })
+                        .ToDictionaryAsync(x => x.Date, x => x.Total)
+                    : new Dictionary<DateTime, decimal>();
+                for (var d = from; d < to; d = d.AddDays(1))
+                {
+                    vm.ChartTimeSeriesLabels.Add(d.ToString("yyyy-MM-dd"));
+                    var sales = salesByDate.TryGetValue(d, out var s) ? s : 0m;
+                    var ret = returnsByDate.TryGetValue(d, out var r) ? r : 0m;
+                    vm.ChartTimeSeriesValues.Add(sales - ret);
+                }
+            }
+
+            var allGov = await _context.Governorates.AsNoTracking().OrderBy(g => g.GovernorateName).Select(g => new { g.GovernorateId, g.GovernorateName }).ToListAsync();
+            vm.Governorates = allGov.Select(g => new SelectListItem(g.GovernorateName, g.GovernorateId.ToString(), selGov.Contains(g.GovernorateId))).ToList();
+            var distFilter = !selGov.Any();
+            var allDist = await _context.Districts.AsNoTracking().Where(d => distFilter || selGov.Contains(d.GovernorateId)).OrderBy(d => d.DistrictName).Select(d => new { d.DistrictId, d.DistrictName }).ToListAsync();
+            vm.Districts = allDist.Select(d => new SelectListItem(d.DistrictName, d.DistrictId.ToString(), selDist.Contains(d.DistrictId))).ToList();
+            var areaFilterGov = !selGov.Any();
+            var areaFilterDist = !selDist.Any();
+            var allAreas = await _context.Areas.AsNoTracking().Where(a => (areaFilterGov || selGov.Contains(a.GovernorateId)) && (areaFilterDist || selDist.Contains(a.DistrictId))).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync();
+            vm.Areas = allAreas.Select(a => new SelectListItem(a.AreaName, a.AreaId.ToString(), selArea.Contains(a.AreaId))).ToList();
+            vm.PartyTypes = new List<SelectListItem>
+            {
+                new SelectListItem("عميل", "Customer", selParty.Contains("Customer")),
+                new SelectListItem("مورد", "Supplier", selParty.Contains("Supplier"))
+            };
+            var allUsers = await _context.Users.AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.DisplayName ?? u.UserName).Select(u => new { u.UserId, u.DisplayName, u.UserName }).ToListAsync();
+            vm.Users = allUsers.Select(u => new SelectListItem((u.DisplayName ?? u.UserName) ?? u.UserId.ToString(), u.UserId.ToString(), selUsers.Contains(u.UserId))).ToList();
+            var allCust = await _context.Customers.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.CustomerName).Take(500).Select(c => new { c.CustomerId, c.CustomerName }).ToListAsync();
+            vm.Customers = allCust.Select(c => new SelectListItem(c.CustomerName ?? c.CustomerId.ToString(), c.CustomerId.ToString(), selCust.Contains(c.CustomerId))).ToList();
+            // أصناف لها بيع فقط (في الفترة): مبيعات من فواتير معتمدة في المدى [from, to]
+            var siIdsInRangeForProducts = await _context.SalesInvoices.AsNoTracking()
+                .Where(si => si.IsPosted && si.SIDate >= from && si.SIDate < to).Select(si => si.SIId).ToListAsync();
+            var productIdsWithSales = siIdsInRangeForProducts.Count > 0
+                ? await _context.SalesInvoiceLines.AsNoTracking()
+                    .Where(l => siIdsInRangeForProducts.Contains(l.SIId)).Select(l => l.ProdId).Distinct().ToListAsync()
+                : new List<int>();
+            var allProds = await _context.Products.AsNoTracking()
+                .Where(p => p.IsActive && productIdsWithSales.Contains(p.ProdId))
+                .OrderBy(p => p.ProdName).Select(p => new { p.ProdId, p.ProdName }).ToListAsync();
+            vm.Products = allProds.Select(p => new SelectListItem(p.ProdName ?? p.ProdId.ToString(), p.ProdId.ToString(), selProds.Contains(p.ProdId))).ToList();
+
+            return View(vm);
+        }
+
+        /// <summary>
+        /// تقرير أداء المشتريات: KPIs + رسم بياني (خطي لعنصر واحد، أعمدة لأكثر من عنصر) مع فلاتر متعددة الاختيار.
+        /// </summary>
+        [HttpGet]
+        [RequirePermission("Reports.PurchasePerformanceReport")]
+        public async Task<IActionResult> PurchasePerformanceReport(
+            DateTime? fromDate,
+            DateTime? toDate,
+            int[]? governorateIds,
+            int[]? districtIds,
+            int[]? areaIds,
+            string[]? partyCategories,
+            int[]? customerIds,
+            int[]? userIds,
+            int[]? productIds)
+        {
+            var vm = new PurchasePerformanceReportViewModel();
+            var today = DateTime.Today;
+            vm.FromDate = fromDate ?? new DateTime(today.Year, today.Month, 1);
+            vm.ToDate = toDate ?? today;
+            var selGov = governorateIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selDist = districtIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selArea = areaIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selParty = partyCategories?.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList() ?? new List<string>();
+            var selCust = customerIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selUsers = userIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            var selProds = productIds?.Where(id => id > 0).Distinct().ToList() ?? new List<int>();
+            vm.SelectedGovernorateIds = selGov;
+            vm.SelectedDistrictIds = selDist;
+            vm.SelectedAreaIds = selArea;
+            vm.SelectedPartyCategories = selParty;
+            vm.SelectedCustomerIds = selCust;
+            vm.SelectedUserIds = selUsers;
+            vm.SelectedProductIds = selProds;
+
+            var from = vm.FromDate.Value.Date;
+            var to = vm.ToDate.Value.Date.AddDays(1);
+
+            var custQ = _context.Customers.AsNoTracking().Where(c => c.IsActive);
+            if (selGov.Any()) custQ = custQ.Where(c => selGov.Contains(c.GovernorateId ?? 0));
+            if (selDist.Any()) custQ = custQ.Where(c => c.DistrictId.HasValue && selDist.Contains(c.DistrictId.Value));
+            if (selArea.Any()) custQ = custQ.Where(c => c.AreaId.HasValue && selArea.Contains(c.AreaId.Value));
+            if (selParty.Any()) custQ = custQ.Where(c => c.PartyCategory != null && selParty.Contains(c.PartyCategory));
+            if (selCust.Any()) custQ = custQ.Where(c => selCust.Contains(c.CustomerId));
+            var customerIdsList = await custQ.Select(c => c.CustomerId).ToListAsync();
+            if (!customerIdsList.Any())
+                customerIdsList = await _context.Customers.Where(c => c.IsActive).Select(c => c.CustomerId).ToListAsync();
+
+            var creatorNames = new List<string>();
+            if (selUsers.Any())
+            {
+                creatorNames = await _context.Users.AsNoTracking()
+                    .Where(uu => selUsers.Contains(uu.UserId))
+                    .Select(uu => uu.DisplayName ?? uu.UserName ?? "")
+                    .Where(n => !string.IsNullOrEmpty(n)).ToListAsync();
+            }
+
+            var purchasesQ = _context.PurchaseInvoices.AsNoTracking()
+                .Where(pi => pi.IsPosted && pi.PIDate >= from && pi.PIDate < to && customerIdsList.Contains(pi.CustomerId));
+            if (creatorNames.Any())
+                purchasesQ = purchasesQ.Where(pi => creatorNames.Contains(pi.CreatedBy));
+            if (selProds.Any())
+            {
+                var piIdsWithProduct = await _context.PILines.AsNoTracking()
+                    .Where(l => selProds.Contains(l.ProdId)).Select(l => l.PIId).Distinct().ToListAsync();
+                if (piIdsWithProduct.Any())
+                    purchasesQ = purchasesQ.Where(pi => piIdsWithProduct.Contains(pi.PIId));
+                else
+                    purchasesQ = purchasesQ.Where(pi => false);
+            }
+
+            var purchasesByWriter = await purchasesQ
+                .GroupBy(pi => pi.CreatedBy)
+                .Select(g => new
+                {
+                    WriterName = g.Key,
+                    TotalPurchases = g.Sum(pi => pi.NetTotal),
+                    InvoiceCount = g.Count()
+                })
+                .ToListAsync();
+
+            var returnsQ = _context.PurchaseReturns.AsNoTracking()
+                .Where(pr => pr.IsPosted && pr.PRetDate >= from && pr.PRetDate < to && customerIdsList.Contains(pr.CustomerId));
+            if (creatorNames.Any())
+                returnsQ = returnsQ.Where(pr => creatorNames.Contains(pr.CreatedBy));
+            if (selProds.Any())
+            {
+                var pretIdsWithProduct = await _context.PurchaseReturnLines.AsNoTracking()
+                    .Where(l => selProds.Contains(l.ProdId)).Select(l => l.PRetId).Distinct().ToListAsync();
+                if (pretIdsWithProduct.Any())
+                    returnsQ = returnsQ.Where(pr => pretIdsWithProduct.Contains(pr.PRetId));
+                else
+                    returnsQ = returnsQ.Where(pr => false);
+            }
+
+            var returnsByWriter = await returnsQ
+                .GroupBy(pr => pr.CreatedBy)
+                .Select(g => new { WriterName = g.Key, TotalReturns = g.Sum(pr => pr.NetTotal) })
+                .ToDictionaryAsync(x => x.WriterName, x => x.TotalReturns);
+
+            decimal totalPurchases = 0m, totalReturns = 0m;
+            foreach (var p in purchasesByWriter)
+            {
+                totalPurchases += p.TotalPurchases;
+                totalReturns += returnsByWriter.GetValueOrDefault(p.WriterName);
+            }
+
+            vm.TotalReturns = totalReturns;
+            vm.TotalGrossPurchases = totalPurchases;
+            vm.NetPurchases = totalPurchases - totalReturns;
+            vm.InvoiceCount = purchasesByWriter.Sum(p => p.InvoiceCount);
+            vm.AvgInvoiceValue = vm.InvoiceCount > 0 ? vm.NetPurchases / vm.InvoiceCount : 0m;
+            vm.AvgItemPrice = 0m;
+            vm.DiscountPctAvg = 0m;
+            vm.NetProfit = 0m;
+            if (vm.TotalGrossPurchases > 0)
+            {
+                vm.NetPurchasesPct = (vm.NetPurchases / vm.TotalGrossPurchases) * 100m;
+                vm.ReturnsPct = (vm.TotalReturns / vm.TotalGrossPurchases) * 100m;
+                vm.NetProfitPct = 0m;
+            }
+
+            foreach (var p in purchasesByWriter.OrderByDescending(x => x.TotalPurchases))
+            {
+                decimal ret = returnsByWriter.GetValueOrDefault(p.WriterName);
+                decimal netRow = p.TotalPurchases - ret;
+                decimal purchPct = vm.NetPurchases != 0 ? (netRow / vm.NetPurchases) * 100m : 0m;
+                decimal retPct = p.TotalPurchases != 0 ? (ret / p.TotalPurchases) * 100m : 0m;
+                vm.Rows.Add(new PurchasePerformanceRow
+                {
+                    WriterName = p.WriterName ?? "—",
+                    TotalPurchases = p.TotalPurchases,
+                    PurchasesPct = purchPct,
+                    TotalReturns = ret,
+                    ReturnsPct = retPct,
+                    NetProfit = 0m,
+                    NetProfitPct = 0m,
+                    InvoiceCount = p.InvoiceCount,
+                    AvgInvoiceValue = p.InvoiceCount > 0 ? netRow / p.InvoiceCount : 0m,
+                    QtyBought = 0m,
+                    DiscountPct = 0m
+                });
+                vm.ChartData.Add(new PurchasePerformanceChartPoint { WriterName = p.WriterName ?? "—", NetPurchases = netRow });
+            }
+
+            var piIdsInRange = await purchasesQ.Select(pi => pi.PIId).ToListAsync();
+            if (purchasesByWriter.Count == 1 && purchasesByWriter[0].WriterName != null && piIdsInRange.Any())
+            {
+                var singleWriterName = purchasesByWriter[0].WriterName;
+                var purchasesByDate = await _context.PurchaseInvoices.AsNoTracking()
+                    .Where(pi => pi.IsPosted && pi.CreatedBy == singleWriterName && pi.PIDate >= from && pi.PIDate < to && customerIdsList.Contains(pi.CustomerId))
+                    .GroupBy(pi => pi.PIDate)
+                    .Select(g => new { Date = g.Key, Total = g.Sum(pi => pi.NetTotal) })
+                    .ToDictionaryAsync(x => x.Date, x => x.Total);
+                var pretIdsInRange = await returnsQ.Select(pr => pr.PRetId).ToListAsync();
+                var returnsByDate = pretIdsInRange.Any()
+                    ? await _context.PurchaseReturns.AsNoTracking()
+                        .Where(pr => pretIdsInRange.Contains(pr.PRetId))
+                        .GroupBy(pr => pr.PRetDate)
+                        .Select(g => new { Date = g.Key, Total = g.Sum(pr => pr.NetTotal) })
+                        .ToDictionaryAsync(x => x.Date, x => x.Total)
+                    : new Dictionary<DateTime, decimal>();
+                for (var d = from; d < to; d = d.AddDays(1))
+                {
+                    vm.ChartTimeSeriesLabels.Add(d.ToString("yyyy-MM-dd"));
+                    var purch = purchasesByDate.TryGetValue(d, out var pp) ? pp : 0m;
+                    var ret = returnsByDate.TryGetValue(d, out var rr) ? rr : 0m;
+                    vm.ChartTimeSeriesValues.Add(purch - ret);
+                }
+            }
+
             vm.Governorates = (await _context.Governorates.AsNoTracking().OrderBy(g => g.GovernorateName).Select(g => new { g.GovernorateId, g.GovernorateName }).ToListAsync())
-                .Select(g => new SelectListItem(g.GovernorateName, g.GovernorateId.ToString(), governorateId == g.GovernorateId)).ToList();
-            vm.Districts = (await _context.Districts.AsNoTracking().Where(d => !governorateId.HasValue || d.GovernorateId == governorateId).OrderBy(d => d.DistrictName).Select(d => new { d.DistrictId, d.DistrictName }).ToListAsync())
-                .Select(d => new SelectListItem(d.DistrictName, d.DistrictId.ToString(), districtId == d.DistrictId)).ToList();
-            vm.Areas = (await _context.Areas.AsNoTracking().Where(a => (!governorateId.HasValue || a.GovernorateId == governorateId) && (!districtId.HasValue || a.DistrictId == districtId)).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync())
-                .Select(a => new SelectListItem(a.AreaName, a.AreaId.ToString(), areaId == a.AreaId)).ToList();
+                .Select(g => new SelectListItem(g.GovernorateName, g.GovernorateId.ToString(), selGov.Contains(g.GovernorateId))).ToList();
+            vm.Districts = (await _context.Districts.AsNoTracking().Where(d => !selGov.Any() || selGov.Contains(d.GovernorateId)).OrderBy(d => d.DistrictName).Select(d => new { d.DistrictId, d.DistrictName }).ToListAsync())
+                .Select(d => new SelectListItem(d.DistrictName, d.DistrictId.ToString(), selDist.Contains(d.DistrictId))).ToList();
+            vm.Areas = (await _context.Areas.AsNoTracking().Where(a => (!selGov.Any() || selGov.Contains(a.GovernorateId)) && (!selDist.Any() || selDist.Contains(a.DistrictId))).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync())
+                .Select(a => new SelectListItem(a.AreaName, a.AreaId.ToString(), selArea.Contains(a.AreaId))).ToList();
+            vm.PartyTypes = new List<SelectListItem>
+            {
+                new SelectListItem("عميل", "Customer", selParty.Contains("Customer")),
+                new SelectListItem("مورد", "Supplier", selParty.Contains("Supplier"))
+            };
             vm.Users = (await _context.Users.AsNoTracking().Where(u => u.IsActive).OrderBy(u => u.DisplayName ?? u.UserName).Select(u => new { u.UserId, u.DisplayName, u.UserName }).ToListAsync())
-                .Select(u => new SelectListItem((u.DisplayName ?? u.UserName) ?? u.UserId.ToString(), u.UserId.ToString(), vm.UserIds != null && vm.UserIds.Contains(u.UserId))).ToList();
-            vm.Customers = (await custQ.OrderBy(c => c.CustomerName).Take(500).Select(c => new { c.CustomerId, c.CustomerName }).ToListAsync())
-                .Select(c => new SelectListItem(c.CustomerName ?? c.CustomerId.ToString(), c.CustomerId.ToString(), vm.CustomerIds != null && vm.CustomerIds.Contains(c.CustomerId))).ToList();
+                .Select(u => new SelectListItem((u.DisplayName ?? u.UserName) ?? u.UserId.ToString(), u.UserId.ToString(), selUsers.Contains(u.UserId))).ToList();
+            vm.Customers = (await _context.Customers.AsNoTracking().Where(c => c.IsActive).OrderBy(c => c.CustomerName).Take(500).Select(c => new { c.CustomerId, c.CustomerName }).ToListAsync())
+                .Select(c => new SelectListItem(c.CustomerName ?? c.CustomerId.ToString(), c.CustomerId.ToString(), selCust.Contains(c.CustomerId))).ToList();
+            vm.Products = (await _context.Products.AsNoTracking().Where(p => p.IsActive).OrderBy(p => p.ProdName).Select(p => new { p.ProdId, p.ProdName }).ToListAsync())
+                .Select(p => new SelectListItem(p.ProdName ?? p.ProdId.ToString(), p.ProdId.ToString(), selProds.Contains(p.ProdId))).ToList();
 
             return View(vm);
         }

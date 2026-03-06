@@ -196,10 +196,7 @@
                     }
                     @if (Model.CashPaymentId > 0 && Model.Status == "مغلق")
                     {
-                        <form asp-action="Open" method="post" style="display: inline;" asp-route-id="@Model.CashPaymentId">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="btn btn-warning btn-sm">فتح للتعديل</button>
-                        </form>
+                        <button type="button" class="btn btn-warning btn-sm" id="btnOpenForEdit" data-id="@Model.CashPaymentId" data-url="@Url.Action("Open", "CashPayments", new { id = Model.CashPaymentId })">فتح للتعديل</button>
                     }
                     @if (Model.Status != "مغلق")
                     {
@@ -217,6 +214,15 @@
     }
     <script>
         $(document).ready(function() {
+            // زر "فتح للتعديل": إرسال POST إلى Open بدون نموذج متداخل
+            $('#btnOpenForEdit').on('click', function() {
+                var url = $(this).data('url');
+                var token = $('input[name="__RequestVerificationToken"]').val();
+                var $f = $('<form>').attr({ method: 'post', action: url }).hide();
+                if (token) $f.append($('<input>').attr({ type: 'hidden', name: '__RequestVerificationToken', value: token }));
+                $('body').append($f);
+                $f.submit();
+            });
             // ✅ إزالة الصفر من خانة المبلغ عند التحميل
             var $amount = $('#Amount');
             if ($amount.length && ($amount.val() === '0' || $amount.val() === '0.00')) {

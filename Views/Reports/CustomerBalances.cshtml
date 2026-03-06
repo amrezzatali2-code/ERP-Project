@@ -249,7 +249,7 @@
                         <tr>
                             <td data-col="code"><strong>@item.CustomerCode</strong></td>
                             <td data-col="name">@item.CustomerName</td>
-                            <td data-col="category"><small class="text-muted">@item.PartyCategory</small></td>
+                            <td data-col="category"><small class="text-muted">@(item.PartyCategory == "Customer" ? "عميل" : item.PartyCategory == "Supplier" ? "مورد" : item.PartyCategory ?? "—")</small></td>
                             <td data-col="phone"><small>@item.Phone1</small></td>
                             <td data-col="debit" class="text-end">@(item.CurrentBalance > 0 ? item.CurrentBalance.ToString("N2") : "—")</td>
                             <td data-col="credit" class="text-end">@(item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance).ToString("N2") : "—")</td>
@@ -264,7 +264,7 @@
                                    asp-action="Show"
                                    asp-route-id="@item.CustomerId"
                                    data-tab-id="customer-engagement"
-                                   data-tab-title="حجم تعامل — @item.CustomerName">
+                                   data-tab-title="حجم تعامل عميل">
                                     حجم تعامل
                                 </a>
                             </td>

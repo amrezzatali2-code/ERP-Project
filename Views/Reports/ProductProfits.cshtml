@@ -172,21 +172,43 @@
                 <div class="col-12 col-lg-auto erp-filter-section ms-lg-auto d-flex flex-wrap gap-2 align-items-end">
                     <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
                     <a href="@Url.Action("ProductProfits", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none"><span>🔄</span> إعادة تعيين</a>
-                    @if (reportData.Any())
-                    {
-                        <label class="form-label mb-0 small">حجم الصفحة</label>
-                        <select name="pageSize" class="form-select form-select-sm erp-filter-input" style="width:auto" onchange="this.form.submit()">
-                            <option value="20"@Html.Raw(pageSize == 20 ? " selected" : "")>20</option>
-                            <option value="50"@Html.Raw(pageSize == 50 ? " selected" : "")>50</option>
-                            <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
-                            <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
-                            <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
-                            <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
-                        </select>
-                    }
                 </div>
             </div>
         </form>
+        @* عمود التصدير خارج نموذج الفلاتر (نفس الصف بصرياً عبر الـ grid) *@
+        <div class="row g-3 align-items-end mt-0">
+            <div class="col-12 col-lg-auto erp-filter-section d-flex flex-wrap gap-2 align-items-end">
+                <form method="get" asp-action="ProductProfits" asp-controller="Reports" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
+                        <input type="hidden" name="loadReport" value="true" />
+                        <input type="hidden" name="search" value="@search" />
+                        <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
+                        <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
+                        <input type="hidden" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                        <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                        <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
+                        <input type="hidden" name="profitMethod" value="@profitMethod" />
+                        <input type="hidden" name="sortBy" value="@sortBy" />
+                        <input type="hidden" name="sortDir" value="@sortDir" />
+                        <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
+                        <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
+                        <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
+                        @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_adjustmentprofitExpr)) { <input type="hidden" name="filterCol_adjustmentprofitExpr" value="@filterCol_adjustmentprofitExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_transferprofitExpr)) { <input type="hidden" name="filterCol_transferprofitExpr" value="@filterCol_transferprofitExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
+                        @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
+                        <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
+                            <option value="excel" selected>Excel</option>
+                            <option value="csv">CSV</option>
+                        </select>
+                        <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
+                </form>
+            </div>
+        </div>
     </div>
 
     <div class="d-flex justify-content-between align-items-center mt-2 mb-1">
@@ -197,25 +219,12 @@
         }
     </div>
 
-    @* ===== Pagination Info ===== *@
-    @if (reportData.Any() && totalPages > 1)
-    {
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <small class="text-muted">
-                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
-            </small>
-            <small class="text-muted">
-                @($"صفحة {page} من {totalPages}")
-            </small>
-        </div>
-    }
-
     @* ===== جدول البيانات (نفس تنسيق قائمة الأصناف + فلتر أعمدة إكسل) ===== *@
     @if (reportData.Any())
     {
-        <div class="erp-table-scroll-container mt-2">
-            <div class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
-                <table id="productProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sortBy" data-current-dir="@sortDir">
+        <div class="erp-table-scroll-container mt-2" dir="rtl">
+            <div id="productProfitsTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+                <table id="productProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sortBy" data-current-dir="@sortDir" style="min-width: 1200px;">
                     <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                         <tr>
                             <th style="min-width: 80px;" data-col="code">
@@ -345,51 +354,41 @@
                                 </tr>
                             }
                         </tbody>
-                        <tfoot class="table-secondary fw-bold">
+                        <tfoot class="table-light fw-bold text-start">
                             <tr>
-                                <td class="text-end"><strong>المجموع الإجمالي:</strong></td>
-                                <td></td>
-                                <td></td>
-
-                                @* ربح البيع *@
-                                <td class="text-end"><strong>@totalSalesRevenue.ToString("N2")</strong></td>
-                                <td class="text-end"><strong>@totalSalesCost.ToString("N2")</strong></td>
-                                <td class="text-end">
-                                    <strong class="text-primary" style="font-size: 1.1rem;">
+                                <td data-col="code" class="text-start"><strong>المجموع الإجمالي:</strong></td>
+                                <td data-col="name"></td>
+                                <td data-col="category"></td>
+                                <td data-col="salesrevenue" class="text-end"><strong>@totalSalesRevenue.ToString("N2")</strong></td>
+                                <td data-col="salescost" class="text-end"><strong>@totalSalesCost.ToString("N2")</strong></td>
+                                <td data-col="salesprofit" class="text-end">
+                                    <strong class="@(totalSalesProfit >= 0 ? "text-success" : "text-danger")">
                                         @totalSalesProfit.ToString("N2")
                                     </strong>
                                 </td>
-                                <td class="text-end">
+                                <td data-col="salesprofitpct" class="text-end">
                                     <strong>
                                         @((totalSalesRevenue > 0 ? (totalSalesProfit / totalSalesRevenue * 100) : 0).ToString("N2"))%
                                     </strong>
                                 </td>
-
-                                @* ربح المرتجعات *@
-                                <td class="text-end">
+                                <td data-col="returnprofit" class="text-end">
                                     <strong class="@(totalReturnProfit >= 0 ? "text-success" : "text-danger")">
                                         @totalReturnProfit.ToString("N2")
                                     </strong>
                                 </td>
-
-                                @* ربح التسويات *@
-                                <td class="text-end">
+                                <td data-col="adjustmentprofit" class="text-end">
                                     <strong class="@(totalAdjustmentProfit >= 0 ? "text-success" : "text-danger")">
                                         @totalAdjustmentProfit.ToString("N2")
                                     </strong>
                                 </td>
-
-                                @* ربح التحويلات *@
-                                <td class="text-end">
+                                <td data-col="transferprofit" class="text-end">
                                     <strong class="@(totalTransferProfit >= 0 ? "text-success" : "text-danger")">
                                         @totalTransferProfit.ToString("N2")
                                     </strong>
                                 </td>
-
-                                @* إحصائيات *@
-                                <td class="text-end">@totalSalesQtyAll.ToString("N2")</td>
-                                <td class="text-end">
-                                    <strong class="@(totalNetProfit >= 0 ? "text-success" : "text-danger")">
+                                <td data-col="salesqty" class="text-end">@totalSalesQtyAll.ToString("N2")</td>
+                                <td data-col="netprofit" class="text-end">
+                                    <strong class="text-primary">
                                         @totalNetProfit.ToString("N2")
                                     </strong>
                                 </td>
@@ -399,28 +398,61 @@
             </div>
         </div>
 
-        @* ===== Pagination Controls ===== *@
-        @if (totalPages > 1)
+        @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة + الترقيم (محاذاة لليمين) ===== *@
+        @if (reportData.Any())
         {
-            <nav aria-label="pagination" class="mt-3 d-print-none">
-                <ul class="pagination justify-content-center">
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(1)">الأول</a>
-                    </li>
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page - 1)">السابق</a>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">@($"صفحة {page} من {totalPages}")</span>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page + 1)">التالي</a>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
-                    </li>
-                </ul>
-            </nav>
+            var startRow = totalCount == 0 ? 0 : ((page - 1) * pageSize) + 1;
+            var endRow = Math.Min(totalCount, page * pageSize);
+            <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
+                <small class="text-muted">عرض @startRow - @endRow من @totalCount</small>
+                <form method="get" asp-action="ProductProfits" asp-controller="Reports" class="d-flex align-items-center gap-2">
+                    <input type="hidden" name="loadReport" value="true" />
+                    <input type="hidden" name="search" value="@search" />
+                    <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
+                    <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
+                    <input type="hidden" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
+                    <input type="hidden" name="profitMethod" value="@profitMethod" />
+                    <input type="hidden" name="sortBy" value="@sortBy" />
+                    <input type="hidden" name="sortDir" value="@sortDir" />
+                    <input type="hidden" name="page" value="1" />
+                    <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
+                    <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
+                    <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_adjustmentprofitExpr)) { <input type="hidden" name="filterCol_adjustmentprofitExpr" value="@filterCol_adjustmentprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_transferprofitExpr)) { <input type="hidden" name="filterCol_transferprofitExpr" value="@filterCol_transferprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
+                    <label class="form-label m-0 nowrap">حجم الصفحة</label>
+                    <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                        <option value="20"@Html.Raw(pageSize == 20 ? " selected" : "")>20</option>
+                        <option value="50"@Html.Raw(pageSize == 50 ? " selected" : "")>50</option>
+                        <option value="100"@Html.Raw(pageSize == 100 ? " selected" : "")>100</option>
+                        <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
+                        <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
+                        <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
+                        <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
+                    </select>
+                </form>
+                @if (totalPages > 1)
+                {
+                    <nav aria-label="pagination">
+                        <ul class="pagination pagination-sm mb-0">
+                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(1)">الأول</a></li>
+                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(Math.Max(1, page - 1))">السابق</a></li>
+                            <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(totalPages)</span></li>
+                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(page + 1)">التالي</a></li>
+                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(totalPages)">الأخير</a></li>
+                        </ul>
+                    </nav>
+                }
+            </div>
         }
 
         @* ===== ربح الميزانية ===== *@
@@ -851,6 +883,45 @@
                         form.appendChild(hidden);
                     }
                 });
+            }
+
+            // تمرير أفقي لأقصى اليمين + مقابض توسيع الأعمدة (تقرير أرباح الأصناف)
+            var wrapper = document.getElementById('productProfitsTableScrollWrapper');
+            if (wrapper) {
+                if (wrapper.scrollWidth > wrapper.clientWidth)
+                    wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
+                var table = document.getElementById('productProfitsTable');
+                if (table && table.tHead) {
+                    var ths = table.tHead.rows[0].cells;
+                    for (var i = 0; i < ths.length; i++) {
+                        var th = ths[i];
+                        th.style.position = 'relative';
+                        var handle = document.createElement('div');
+                        handle.className = 'erp-col-resize-handle';
+                        th.appendChild(handle);
+                        (function (headerCell) {
+                            var startX, startWidth;
+                            handle.addEventListener('mousedown', function (e) {
+                                e.preventDefault();
+                                startX = e.pageX;
+                                startWidth = headerCell.offsetWidth;
+                                function onMouseMove(eMove) {
+                                    var diffX = eMove.pageX - startX;
+                                    var newWidth = startWidth + diffX;
+                                    if (newWidth < 50) newWidth = 50;
+                                    headerCell.style.minWidth = newWidth + 'px';
+                                    headerCell.style.width = newWidth + 'px';
+                                }
+                                function onMouseUp() {
+                                    document.removeEventListener('mousemove', onMouseMove);
+                                    document.removeEventListener('mouseup', onMouseUp);
+                                }
+                                document.addEventListener('mousemove', onMouseMove);
+                                document.addEventListener('mouseup', onMouseUp);
+                            });
+                        })(th);
+                    }
+                }
             }
         });
     </script>
