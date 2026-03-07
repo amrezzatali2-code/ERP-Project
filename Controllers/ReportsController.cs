@@ -223,6 +223,47 @@ namespace ERP.Controllers
         }
 
         /// <summary>
+        /// تصفير RemainingQty لمرتجعات البيع المرتبطة ببيع وهمي (البيع الأصلي لم يكن له FIFO).
+        /// بعد التشغيل لن يظهر الصنف كمتاح في فاتورة المبيعات.
+        /// </summary>
+        [HttpPost]
+        [RequirePermission("Reports.ZeroPhantomSalesReturnRemaining")]
+        public async Task<IActionResult> ZeroPhantomSalesReturnRemaining()
+        {
+            var srLedgers = await _context.StockLedger
+                .Where(sl => sl.SourceType == "SalesReturn" && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                .ToListAsync();
+            int fixedCount = 0;
+            foreach (var sl in srLedgers)
+            {
+                var retLine = await _context.SalesReturnLines
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(l => l.SRId == sl.SourceId && l.LineNo == sl.SourceLine);
+                if (retLine?.SalesInvoiceId == null || retLine.SalesInvoiceLineNo == null)
+                    continue;
+                int siId = retLine.SalesInvoiceId.Value;
+                int lineNo = retLine.SalesInvoiceLineNo.Value;
+                var saleOutEntryIds = await _context.StockLedger
+                    .Where(x => x.SourceType == "Sales" && x.SourceId == siId && x.SourceLine == lineNo && x.QtyOut > 0)
+                    .Select(x => x.EntryId)
+                    .ToListAsync();
+                if (saleOutEntryIds.Count == 0)
+                    continue;
+                bool saleHadFifo = await _context.Set<StockFifoMap>().AnyAsync(f => saleOutEntryIds.Contains(f.OutEntryId));
+                if (!saleHadFifo)
+                {
+                    sl.RemainingQty = 0;
+                    fixedCount++;
+                }
+            }
+            await _context.SaveChangesAsync();
+            TempData["SuccessMessage"] = fixedCount > 0
+                ? $"تم تصفير RemainingQty لـ {fixedCount} قيد مرتجع بيع (كانت مرتبطة ببيع وهمي). الصنف لن يظهر كمتاح في الفاتورة."
+                : "لا توجد قيود مرتجع بيع وهمية تحتاج تصفير.";
+            return RedirectToAction(nameof(ProductBalances), new { loadReport = true });
+        }
+
+        /// <summary>
         /// حذف قيود StockLedger اليتيمة (مصدرها محذوف: مشتريات، مرتجعات، تسويات، تحويلات).
         /// يُصلح ظهور كمية بدون تكلفة عند حذف المستند الأصلي دون تنظيف StockLedger.
         /// </summary>

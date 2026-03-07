@@ -315,7 +315,7 @@
                     <th data-col="source">@filterableCol("source", "SourceType", "نوع المصدر")</th>
                     <th data-col="sourceid">@filterableCol("sourceid", "EntryId", "رقم الفاتورة")</th>
                     <th data-col="sourceline">@filterableCol("sourceline", "EntryId", "سطر")</th>
-                    <th class="text-center no-print" data-col="actions">إجراءات</th>
+                    <th class="text-center no-print" data-col="actions" data-col-fixed="true">إجراءات</th>
                 </tr>
             </thead>
             <tbody>
@@ -449,15 +449,10 @@
         </div>
     </div>
 
-    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة (اتجاه RTL: العدد يمين، النموذج يسار) ===== *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted order-1">
-            عرض @start - @end من @total
-        </small>
-
-        <form method="get" class="order-2"
-              action="@Url.Action(action, controller)"
-              class="d-flex align-items-center gap-2">
+    @* ===== الشريط السفلي (محاذاة لليمين في RTL — نمط القوائم) ===== *@
+    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted">عرض @start - @end من @total</small>
+        <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
             <input type="hidden" name="sort" value="@sort" />
@@ -485,38 +480,23 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_priceretail)) { <input type="hidden" name="filterCol_priceretail" value="@filterCol_priceretail" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_purchasediscount)) { <input type="hidden" name="filterCol_purchasediscount" value="@filterCol_purchasediscount" /> }
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
-            <select name="pageSize"
-                    class="form-select form-select-sm"
-                    onchange="this.form.submit()">
+            <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
             </select>
         </form>
+        <nav aria-label="pagination">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
+                <li class="page-item @(page > first ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
+                <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
+                <li class="page-item @(page < last ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
+                <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
+            </ul>
+        </nav>
     </div>
-
-    <nav aria-label="pagination" class="mt-3 no-print">
-        <ul class="pagination justify-content-center">
-            <li class="page-item @(page == first ? "disabled" : "")">
-                <a class="page-link" href="@Link(first)">الأول</a>
-            </li>
-            <li class="page-item @(page > first ? "" : "disabled")">
-                <a class="page-link" href="@Link(prev)">السابق</a>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">
-                    صفحة @(page) من @(pages)
-                </span>
-            </li>
-            <li class="page-item @(page < last ? "" : "disabled")">
-                <a class="page-link" href="@Link(next)">التالي</a>
-            </li>
-            <li class="page-item @(page == last ? "disabled" : "")">
-                <a class="page-link" href="@Link(last)">الأخير</a>
-            </li>
-        </ul>
-    </nav>
 </div>
 
 @* ===== Modal فلترة بالتاريخ/الوقت (تاريخ الحركة) ===== *@
@@ -939,5 +919,45 @@
                     panel.classList.add("d-none");
             });
         })();
+
+        // =========================
+        // أعمدة قابلة للتوسعة (سحب مقبض — ما عدا عمود الإجراءات)
+        // =========================
+        document.addEventListener("DOMContentLoaded", function () {
+            var wrapper = document.getElementById("ledgerTableScrollWrapper");
+            if (!wrapper) return;
+            var table = document.getElementById("ledgerTable");
+            if (table) {
+                var ths = table.querySelectorAll("thead th");
+                ths.forEach(function (th) {
+                    if (th.getAttribute("data-col-fixed") === "true") return;
+                    th.style.position = "relative";
+                    var handle = document.createElement("div");
+                    handle.className = "erp-col-resize-handle";
+                    th.appendChild(handle);
+                    var startX, startWidth;
+                    handle.addEventListener("mousedown", function (e) {
+                        e.preventDefault();
+                        startX = e.pageX;
+                        startWidth = th.offsetWidth;
+                        function onMouseMove(eMove) {
+                            var diffX = eMove.pageX - startX;
+                            var newWidth = startWidth + diffX;
+                            if (newWidth < 50) newWidth = 50;
+                            th.style.minWidth = newWidth + "px";
+                            th.style.width = newWidth + "px";
+                        }
+                        function onMouseUp() {
+                            document.removeEventListener("mousemove", onMouseMove);
+                            document.removeEventListener("mouseup", onMouseUp);
+                        }
+                        document.addEventListener("mousemove", onMouseMove);
+                        document.addEventListener("mouseup", onMouseUp);
+                    });
+                });
+            }
+            if (wrapper.scrollWidth > wrapper.clientWidth)
+                wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
+        });
     </script>
 }

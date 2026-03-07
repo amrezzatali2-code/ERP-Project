@@ -4283,7 +4283,9 @@
                                     const listEl = document.getElementById('productsList');
                                     if (!listEl) return;
                                     listEl.innerHTML = '';
+                                    const productIds = [];
                                     (products || []).forEach(p => {
+                                        productIds.push((p.id || '').toString());
                                         const opt = document.createElement('option');
                                         opt.value = p.name || '';
                                         opt.setAttribute('data-id', (p.id || '').toString());
@@ -4296,20 +4298,55 @@
                                         opt.setAttribute('data-bonusgroup', p.bonusGroupName || '');
                                         listEl.appendChild(opt);
                                     });
+                                    // إذا «عرض الصفر» غير مفعّل والصنف الحالي غير موجود في القائمة الجديدة — مسح انبوت الصنف وتفاصيله
+                                    if (!includeZero) {
+                                        const currentId = (document.getElementById('ProdId')?.value || '').toString();
+                                        if (currentId && !productIds.includes(currentId)) {
+                                            document.getElementById('ProdId').value = '';
+                                            const nameInp = document.getElementById('ProdNameInput');
+                                            if (nameInp) nameInp.value = '';
+                                            const prodQtyWarehouse = document.getElementById('ProdQtyCurrentWarehouse');
+                                            const prodQtyAll = document.getElementById('ProdQtyAllWarehouses');
+                                            const prodWeightedDisc = document.getElementById('ProdWeightedDiscount');
+                                            const batchQueueBody = document.getElementById('BatchQueueBody');
+                                            const prodBatchSelect = document.getElementById('ProdBatchSelect');
+                                            if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
+                                            if (prodQtyAll) prodQtyAll.value = '0';
+                                            if (prodWeightedDisc) prodWeightedDisc.value = '0';
+                                            if (batchQueueBody) batchQueueBody.innerHTML = '<tr><td colspan="5" class="text-muted">لا توجد تشغيلات بعد.</td></tr>';
+                                            if (prodBatchSelect) { prodBatchSelect.innerHTML = ''; prodBatchSelect.appendChild(new Option('لا توجد تشغيلات', '', true, true)); }
+                                            const prodQtyInput = document.getElementById('ProdQtyInput');
+                                            const prodDisc1Input = document.getElementById('ProdDisc1Input');
+                                            const prodBatchInput = document.getElementById('ProdBatchInput');
+                                            const prodExpiryInput = document.getElementById('ProdExpiryInput');
+                                            const prodPriceInput = document.getElementById('ProdPriceInput');
+                                            if (prodQtyInput) prodQtyInput.value = '0';
+                                            if (prodDisc1Input) prodDisc1Input.value = '0';
+                                            if (prodBatchInput) prodBatchInput.value = '';
+                                            if (prodExpiryInput) prodExpiryInput.value = '';
+                                            if (prodPriceInput) prodPriceInput.value = '';
+                                        }
+                                    }
                                 })
                                 .catch(e => console.warn('refreshProductsDatalist:', e));
                         }
 
-                        // تشيك بوكس "عرض الصفر": تحديث الداتاليست فقط (بدون إعادة تحميل أو فتح فاتورة جديدة)
+                        // تشيك بوكس "عرض الصفر" + تغيير المخزن: تحديث الداتاليست (ومسح الصنف إن لم يعد في القائمة)
                         document.addEventListener("DOMContentLoaded", function () {
-                            // عند فتح الصفحة: جلب قائمة الأصناف الحالية من الـ API (الموجود فقط حسب تشيك بوكس "عرض الصفر") لضمان عدم عرض أصناف قديمة أو مخزنة في الكاش
+                            // عند فتح الصفحة: جلب قائمة الأصناف الحالية من الـ API لضمان عدم عرض أصناف قديمة أو بدون رصيد في المخزن الحالي
                             if (typeof refreshProductsDatalist === 'function') refreshProductsDatalist();
                             document.body.addEventListener('change', function (ev) {
                                 const chk = ev.target;
-                                if (!chk || chk.id !== 'chkIncludeZeroQty') return;
-                                ev.preventDefault();
-                                ev.stopPropagation();
-                                refreshProductsDatalist();
+                                if (chk && chk.id === 'chkIncludeZeroQty') {
+                                    ev.preventDefault();
+                                    ev.stopPropagation();
+                                    refreshProductsDatalist();
+                                    return;
+                                }
+                                // عند تغيير المخزن: تحديث القائمة حسب المخزن الجديد — إن الصنف الحالي لا رصيد له فيه يُمسح
+                                if (chk && chk.id === 'WarehouseId') {
+                                    if (typeof refreshProductsDatalist === 'function') refreshProductsDatalist();
+                                }
                             });
                         });
 

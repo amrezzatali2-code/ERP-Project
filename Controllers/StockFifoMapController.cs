@@ -143,6 +143,34 @@ namespace ERP.Controllers
                 .Take(pageSize)
                 .ToListAsync();
 
+            // 7.1) جلب بيانات العرض (اسم الصنف، نوع المصدر) من StockLedger و Products
+            var outIds = rows.Select(x => x.OutEntryId).Distinct().ToList();
+            var inIds = rows.Select(x => x.InEntryId).Distinct().ToList();
+            var outLedgers = await context.StockLedger
+                .AsNoTracking()
+                .Where(sl => outIds.Contains(sl.EntryId))
+                .Select(sl => new { sl.EntryId, sl.ProdId, sl.SourceType, sl.SourceId })
+                .ToListAsync();
+            var inLedgers = await context.StockLedger
+                .AsNoTracking()
+                .Where(sl => inIds.Contains(sl.EntryId))
+                .Select(sl => new { sl.EntryId, sl.SourceType, sl.SourceId })
+                .ToListAsync();
+            var prodIds = outLedgers.Select(x => x.ProdId).Distinct().ToList();
+            var prodNames = prodIds.Count > 0
+                ? await context.Products
+                    .AsNoTracking()
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .ToDictionaryAsync(p => p.ProdId, p => p.ProdName ?? "")
+                : new Dictionary<int, string>();
+            var outDict = new Dictionary<int, object>();
+            foreach (var o in outLedgers) outDict[o.EntryId] = o;
+            var inDict = new Dictionary<int, object>();
+            foreach (var i in inLedgers) inDict[i.EntryId] = i;
+            ViewBag.OutLedgerDict = outDict;
+            ViewBag.InLedgerDict = inDict;
+            ViewBag.ProdNames = prodNames;
+
             // 8) قيم الواجهة (ViewBag) لربطها بالـ View
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
@@ -306,13 +334,38 @@ namespace ERP.Controllers
 
             var data = await q.ToListAsync();
 
-            // بناء CSV بسيط: العناوين + الصفوف
+            var outIds = data.Select(x => x.OutEntryId).Distinct().ToList();
+            var inIds = data.Select(x => x.InEntryId).Distinct().ToList();
+            var outLedgersExp = await context.StockLedger
+                .AsNoTracking()
+                .Where(sl => outIds.Contains(sl.EntryId))
+                .Select(sl => new { sl.EntryId, sl.ProdId, sl.SourceType, sl.SourceId })
+                .ToListAsync();
+            var inLedgersExp = await context.StockLedger
+                .AsNoTracking()
+                .Where(sl => inIds.Contains(sl.EntryId))
+                .Select(sl => new { sl.EntryId, sl.SourceType, sl.SourceId })
+                .ToListAsync();
+            var prodIdsExp = outLedgersExp.Select(o => o.ProdId).Distinct().ToList();
+            var prodNamesExp = prodIdsExp.Count > 0
+                ? await context.Products.AsNoTracking().Where(p => prodIdsExp.Contains(p.ProdId)).ToDictionaryAsync(p => p.ProdId, p => p.ProdName ?? "")
+                : new Dictionary<int, string>();
+            var outDictExp = outLedgersExp.ToDictionary(x => x.EntryId);
+            var inDictExp = inLedgersExp.ToDictionary(x => x.EntryId);
+
             var sb = new StringBuilder();
-            sb.AppendLine("MapId,OutEntryId,InEntryId,Qty,UnitCost");
+            sb.AppendLine("MapId,ProdId,ProdName,OutEntryId,OutSource,InEntryId,InSource,Qty,UnitCost");
 
             foreach (var x in data)
             {
-                sb.AppendLine($"{x.MapId},{x.OutEntryId},{x.InEntryId},{x.Qty},{x.UnitCost}");
+                var o = outDictExp.GetValueOrDefault(x.OutEntryId);
+                var i = inDictExp.GetValueOrDefault(x.InEntryId);
+                int? pid = o?.ProdId;
+                string pname = (pid.HasValue && prodNamesExp.TryGetValue(pid.Value, out var n)) ? n : "";
+                if (!string.IsNullOrEmpty(pname) && pname.Contains(',')) pname = "\"" + pname.Replace("\"", "\"\"") + "\"";
+                string outSrc = o != null ? $"{o.SourceType} {o.SourceId}" : "";
+                string inSrc = i != null ? $"{i.SourceType} {i.SourceId}" : "";
+                sb.AppendLine($"{x.MapId},{pid ?? 0},{pname},{x.OutEntryId},{outSrc},{x.InEntryId},{inSrc},{x.Qty},{x.UnitCost.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
             }
 
             var bytes = Encoding.UTF8.GetBytes(sb.ToString());

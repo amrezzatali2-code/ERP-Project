@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using ERP.Data;                                   // AppDbContext (الاتصال بقاعدة البيانات)
 using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
@@ -141,27 +141,140 @@ namespace ERP.Controllers
         // =========================
         // Index — عرض قائمة السياسات بالنظام الثابت
         // =========================
+        private static readonly char[] _filterSep = { '|', ',', ';' };
+
+        private IQueryable<Policy> ApplyColumnFilters(
+            IQueryable<Policy> q,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_description,
+            string? filterCol_active,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.PolicyId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var terms = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.Name != null && terms.Contains(x.Name));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_description))
+            {
+                var terms = filterCol_description.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.Description != null && terms.Any(t => x.Description.Contains(t)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_active))
+            {
+                var parts = filterCol_active.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim().ToLowerInvariant()).ToHashSet();
+                if (parts.Contains("true") && !parts.Contains("false"))
+                    q = q.Where(x => x.IsActive);
+                else if (parts.Contains("false") && !parts.Contains("true"))
+                    q = q.Where(x => !x.IsActive);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var terms = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => terms.Any(t => x.CreatedAt.ToString("yyyy-MM-dd HH:mm").Contains(t)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var terms = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.UpdatedAt != null && terms.Any(t => x.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm").Contains(t)));
+            }
+            return q;
+        }
+
+        /// <summary>قيم مميزة للعمود (للوحة فلتر الأعمدة بنمط Excel).</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.Policies.AsNoTracking();
+
+            if (col == "id")
+            {
+                var ids = await q.Select(x => x.PolicyId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (col == "name")
+            {
+                var list = await q.Where(x => x.Name != null).Select(x => x.Name!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "description")
+            {
+                var list = await q.Where(x => x.Description != null).Select(x => x.Description!).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v.Length > 100 ? v.Substring(0, 100) : v, display = v.Length > 60 ? v.Substring(0, 60) + "..." : v }));
+            }
+            if (col == "active")
+            {
+                return Json(new[] { new { value = "true", display = "نعم" }, new { value = "false", display = "لا" } });
+            }
+            if (col == "created")
+            {
+                var list = await q.Select(x => x.CreatedAt.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "updated")
+            {
+                var list = await q.Where(x => x.UpdatedAt != null).Select(x => x.UpdatedAt!.Value.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            return Json(new List<object>());
+        }
+
         public async Task<IActionResult> Index(
-            string? search,                 // نص البحث
-            string? searchBy = "name",      // name | id | description
-            string? sort = "id",            // id | name | created | updated | active
-            string? dir = "asc",            // asc | desc
+            string? search,
+            string? searchBy = "name",
+            string? sort = "id",
+            string? dir = "asc",
             int page = 1,
             int pageSize = 25,
-            int? fromCode = null,           // فلتر كود من
-            int? toCode = null,             // فلتر كود إلى
-            bool useDateRange = false,      // تفعيل فلتر التاريخ
+            int? fromCode = null,
+            int? toCode = null,
+            bool useDateRange = false,
             DateTime? fromDate = null,
-            DateTime? toDate = null)
+            DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_description = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
-            // 1) بناء الاستعلام الموحّد
             var q = BuildPoliciesQuery(
                 search, searchBy,
                 sort, dir,
                 fromCode, toCode,
                 useDateRange, fromDate, toDate);
 
-            // 2) التقسيم إلى صفحات
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_description, filterCol_active, filterCol_created, filterCol_updated);
+
             var model = await PagedResult<Policy>.CreateAsync(q, page, pageSize);
 
             // تعبئة خصائص إضافية في PagedResult (نفس ما نستخدمه في الجداول الأخرى)
@@ -183,8 +296,13 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.CodeFrom = fromCode;
             ViewBag.CodeTo = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Description = filterCol_description;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
-            // فلترة التاريخ على CreatedAt
             ViewBag.DateField = "CreatedAt";
 
             ViewBag.Page = page;
@@ -214,10 +332,14 @@ namespace ERP.Controllers
         DateTime? toDate = null,
         int? fromCode = null,
         int? toCode = null,
+        string? filterCol_id = null,
+        string? filterCol_name = null,
+        string? filterCol_description = null,
+        string? filterCol_active = null,
+        string? filterCol_created = null,
+        string? filterCol_updated = null,
         string format = "excel")
         {
-            // 1) بناء الاستعلام بنفس فلاتر الواجهة (نظام القوائم الموحد)
-            //    الدالة BuildPoliciesQuery موجودة بالفعل أسفل الكنترولر.
             var query = BuildPoliciesQuery(
                 search,
                 searchBy,
@@ -229,7 +351,8 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            // 2) جلب كل النتائج للتصدير (بدون تقسيم صفحات)
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_description, filterCol_active, filterCol_created, filterCol_updated);
+
             var list = await query.ToListAsync();   // متغير: قائمة السياسات الجاهزة للتصدير
 
             // 3) لو المطلوب Excel (افتراضي)

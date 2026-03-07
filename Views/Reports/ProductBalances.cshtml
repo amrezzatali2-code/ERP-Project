@@ -170,6 +170,12 @@
                         <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none">
                             <span>🔄</span> إعادة تعيين
                         </a>
+                        <form method="post" asp-action="ZeroPhantomSalesReturnRemaining" asp-controller="Reports" class="d-inline" id="formZeroPhantomProductBalances">
+                            @Html.AntiForgeryToken()
+                            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="btnZeroPhantomProductBalances" title="تصفير الكميات التي تظهر في فاتورة المبيعات فقط (مرتجعات وهمية)">
+                                <span>🧹</span> تصفير كميات وهمية
+                            </button>
+                        </form>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" data-bs-toggle="modal" data-bs-target="#columnsModalProductBalances" title="إظهار/إخفاء أعمدة التقرير">
                             اختيار الأعمدة
                         </button>
@@ -576,6 +582,19 @@
 
 @section Scripts {
     <script>
+        // زر تصفير كميات وهمية: عرض رسالة تأكيد ثم إرسال النموذج
+        (function () {
+            var btn = document.getElementById('btnZeroPhantomProductBalances');
+            var form = document.getElementById('formZeroPhantomProductBalances');
+            if (btn && form) {
+                btn.addEventListener('click', function () {
+                    if (confirm('سيتم تصفير كميات المرتجعات الوهمية (التي تظهر في فاتورة المبيعات فقط). هل تريد المتابعة؟')) {
+                        form.submit();
+                    }
+                });
+            }
+        })();
+
         // فتح حركة الصنف / تعديل الصنف في تاب (نفس نظام قائمة الأصناف)
         (function () {
             document.addEventListener('click', function (e) {

@@ -1,4 +1,4 @@
-﻿using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
+using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                          // ProductGroup, UserActionType
@@ -139,6 +139,98 @@ namespace ERP.Controllers
             return q;
         }
 
+        private static readonly char[] _filterSep = { '|', ',', ';' };
+
+        private IQueryable<ProductGroup> ApplyColumnFilters(
+            IQueryable<ProductGroup> q,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_active,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.ProductGroupId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var terms = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.Name != null && terms.Contains(x.Name));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_active))
+            {
+                var parts = filterCol_active.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim().ToLowerInvariant()).ToHashSet();
+                if (parts.Contains("true") && !parts.Contains("false"))
+                    q = q.Where(x => x.IsActive);
+                else if (parts.Contains("false") && !parts.Contains("true"))
+                    q = q.Where(x => !x.IsActive);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var terms = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => terms.Any(t => x.CreatedAt.ToString("yyyy-MM-dd HH:mm").Contains(t)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var terms = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.UpdatedAt != null && terms.Any(t => x.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm").Contains(t)));
+            }
+            return q;
+        }
+
+        /// <summary>قيم مميزة للعمود (للوحة فلتر الأعمدة بنمط Excel).</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.ProductGroups.AsNoTracking();
+
+            if (col == "id")
+            {
+                var ids = await q.Select(x => x.ProductGroupId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (col == "name")
+            {
+                var list = await q.Where(x => x.Name != null).Select(x => x.Name!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "active")
+            {
+                return Json(new[] { new { value = "true", display = "نعم" }, new { value = "false", display = "لا" } });
+            }
+            if (col == "created")
+            {
+                var list = await q.Select(x => x.CreatedAt.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "updated")
+            {
+                var list = await q.Where(x => x.UpdatedAt != null).Select(x => x.UpdatedAt!.Value.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            return Json(new List<object>());
+        }
+
         // =========================
         // Index — قائمة مجموعات الأصناف
         // =========================
@@ -153,7 +245,12 @@ namespace ERP.Controllers
             int? toCode = null,
             bool useDateRange = false,
             DateTime? fromDate = null,
-            DateTime? toDate = null)
+            DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
             var q = BuildGroupsQuery(
                 search,
@@ -165,6 +262,8 @@ namespace ERP.Controllers
                 useDateRange,
                 fromDate,
                 toDate);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_active, filterCol_created, filterCol_updated);
 
             var model = await PagedResult<ProductGroup>.CreateAsync(q, page, pageSize);
 
@@ -180,6 +279,11 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.CodeFrom = fromCode;
             ViewBag.CodeTo = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             ViewBag.DateField = "CreatedAt";
 
@@ -202,7 +306,12 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            string? format = "excel")
+            string? format = "excel",
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
             if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
             if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
@@ -217,6 +326,8 @@ namespace ERP.Controllers
                 useDateRange,
                 fromDate,
                 toDate);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_active, filterCol_created, filterCol_updated);
 
             var list = await q.ToListAsync();
 

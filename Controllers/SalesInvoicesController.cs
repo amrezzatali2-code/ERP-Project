@@ -343,13 +343,17 @@ namespace ERP.Controllers
 
             if (!includeZeroQty)
             {
-                // أصناف لها رصيد (QtyOnHand > 0) في StockBatches
-                var prodIdsWithStock = _context.StockBatches
+                // أصناف لها رصيد قابل للبيع (RemainingQty > 0) في StockLedger — نفس مصدر أرصدة الأصناف
+                var prodIdsWithStock = _context.StockLedger
                     .AsNoTracking()
-                    .Where(sb => sb.QtyOnHand > 0);
+                    .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                    .Select(sl => sl.ProdId);
                 if (warehouseId.HasValue && warehouseId.Value > 0)
-                    prodIdsWithStock = prodIdsWithStock.Where(sb => sb.WarehouseId == warehouseId.Value);
-                var ids = await prodIdsWithStock.Select(sb => sb.ProdId).Distinct().ToListAsync();
+                    prodIdsWithStock = _context.StockLedger
+                        .AsNoTracking()
+                        .Where(sl => sl.WarehouseId == warehouseId.Value && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                        .Select(sl => sl.ProdId);
+                var ids = await prodIdsWithStock.Distinct().ToListAsync();
                 productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
             }
 
@@ -381,12 +385,16 @@ namespace ERP.Controllers
 
             if (!includeZeroQty)
             {
-                var prodIdsWithStock = _context.StockBatches
+                var prodIdsWithStock = _context.StockLedger
                     .AsNoTracking()
-                    .Where(sb => sb.QtyOnHand > 0);
+                    .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                    .Select(sl => sl.ProdId);
                 if (warehouseId.HasValue && warehouseId.Value > 0)
-                    prodIdsWithStock = prodIdsWithStock.Where(sb => sb.WarehouseId == warehouseId.Value);
-                var ids = await prodIdsWithStock.Select(sb => sb.ProdId).Distinct().ToListAsync();
+                    prodIdsWithStock = _context.StockLedger
+                        .AsNoTracking()
+                        .Where(sl => sl.WarehouseId == warehouseId.Value && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                        .Select(sl => sl.ProdId);
+                var ids = await prodIdsWithStock.Distinct().ToListAsync();
                 productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
             }
 
@@ -522,17 +530,17 @@ namespace ERP.Controllers
             }
 
             // =========================
-            // (3) كميات لحظية من StockBatches
+            // (3) كميات لحظية من StockLedger (نفس مصدر تقرير أرصدة الأصناف — RemainingQty القابل للبيع)
             // =========================
-            var qtyCurrentWarehouse = await _context.StockBatches
+            var qtyCurrentWarehouse = await _context.StockLedger
                 .AsNoTracking()
-                .Where(sb => sb.ProdId == prodId && sb.WarehouseId == warehouseId)
-                .SumAsync(sb => (decimal?)sb.QtyOnHand) ?? 0m; // متغير: كمية هذا المخزن
+                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0)
+                .SumAsync(sl => (decimal?)(sl.RemainingQty ?? 0)) ?? 0m;
 
-            var qtyAllWarehouses = await _context.StockBatches
+            var qtyAllWarehouses = await _context.StockLedger
                 .AsNoTracking()
-                .Where(sb => sb.ProdId == prodId)
-                .SumAsync(sb => (decimal?)sb.QtyOnHand) ?? 0m; // متغير: إجمالي كل المخازن
+                .Where(sl => sl.ProdId == prodId && sl.QtyIn > 0)
+                .SumAsync(sl => (decimal?)(sl.RemainingQty ?? 0)) ?? 0m;
 
             // =========================
             // (4) الخصم الفعّال للصنف (يدوي من ProductDiscountOverrides إن وُجد، وإلا المرجّح من StockLedger)
@@ -560,24 +568,22 @@ namespace ERP.Controllers
 
 
             // =========================
-            // (5) تشغيلات FEFO للمخزن المختار
-            // - الكمية: StockBatches
-            // - السعر: Batches.PriceRetailBatch
-            // - الربط على (ProdId, BatchNo, Expiry) لتجنب تكرار الصفوف (Batch له مفتاح مركب)
+            // (5) تشغيلات FEFO من StockLedger (نفس مصدر تقرير أرصدة الأصناف — RemainingQty فقط)
             // =========================
-            var stockBatchList = await _context.StockBatches
+            var ledgerBatchList = await _context.StockLedger
                 .AsNoTracking()
-                .Where(sb => sb.ProdId == prodId && sb.WarehouseId == warehouseId && sb.QtyOnHand > 0)
-                .Select(sb => new { sb.BatchNo, sb.Expiry, sb.QtyOnHand })
+                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                .Select(sl => new { sl.BatchNo, sl.Expiry, RemainingQty = sl.RemainingQty ?? 0 })
                 .ToListAsync();
 
-            // جلب أسعار التشغيلات من Batches (مطابقة حسب ProdId + BatchNo + Expiry)
-            var batchKeys = stockBatchList
-                .Where(x => x.Expiry.HasValue)
-                .Select(x => new { ProdId = prodId, x.BatchNo, Expiry = x.Expiry!.Value.Date })
-                .Distinct()
+            var rawLedgerBatches = ledgerBatchList
+                .GroupBy(x => new { BatchNo = x.BatchNo ?? "", Expiry = x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null })
+                .Where(g => g.Key.Expiry.HasValue)
+                .Select(g => new { g.Key.BatchNo, g.Key.Expiry, Qty = g.Sum(x => x.RemainingQty) })
+                .Where(x => x.Qty > 0)
                 .ToList();
 
+            var batchKeys = rawLedgerBatches.Select(x => new { ProdId = prodId, x.BatchNo, Expiry = x.Expiry!.Value.Date }).ToList();
             var batchPrices = new Dictionary<(string BatchNo, DateTime ExpiryDate), decimal>();
             if (batchKeys.Any())
             {
@@ -593,27 +599,14 @@ namespace ERP.Controllers
                     batchPrices[(p.BatchNo, p.Expiry.Date)] = p.PriceRetailBatch ?? 0m;
             }
 
-            // StockBatches هو المرجع — عرض كل التشغيلات، والسعر من Batches إن وُجد
-            var rawBatches = stockBatchList.Select(sb => new
+            var batches = rawLedgerBatches.Select(sb => new
             {
                 batchNo = sb.BatchNo,
                 expiry = sb.Expiry,
                 expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("MM/yyyy") : "",
-                qty = sb.QtyOnHand,
+                qty = sb.Qty,
                 priceRetailBatch = sb.Expiry.HasValue && batchPrices.TryGetValue((sb.BatchNo, sb.Expiry!.Value.Date), out var pr) ? pr : 0m
-            }).ToList();
-
-            // تجميع حسب (BatchNo, Expiry) — صف واحد لكل تشغيلة
-            var batches = rawBatches
-                .GroupBy(x => new { x.batchNo, expiryDate = x.expiry.HasValue ? x.expiry.Value.Date : (DateTime?)null })
-                .Select(g => new
-                {
-                    batchNo = g.Key.batchNo,
-                    expiry = g.First().expiry,
-                    expiryText = g.Key.expiryDate.HasValue ? g.Key.expiryDate.Value.ToString("MM/yyyy") : "",
-                    qty = g.Sum(x => x.qty),
-                    priceRetailBatch = g.First().priceRetailBatch
-                })
+            })
                 .OrderBy(x => x.expiry).ThenBy(x => x.batchNo)
                 .ToList();
 
@@ -981,6 +974,27 @@ namespace ERP.Controllers
                     {
                         ok = false,
                         message = $"المخزون غير كافي لهذا الصنف. المتاح أقل من المطلوب. (المتبقي غير متاح: {remainingToSell})"
+                    });
+                }
+
+                // =========================
+                // 4.1) منع البيع بدون رصيد فعلي في دفتر الحركة (StockLedger)
+                // — صافي الكمية في حركة الصنف = Sum(QtyIn) - Sum(QtyOut)، ولا يُعرض سالب. المصدر الوحيد للرصيد: StockLedger.
+                // — StockBatches = رصيد سريع للتشغيلات ويجب أن يظل مطابقاً لـ StockLedger (كل تحديث لمخزون يمس الاثنين).
+                // — إذا وُجدت كمية في StockBatches دون حركات دخول في StockLedger يُرفض البيع.
+                // =========================
+                int availableFromLedger = await _context.StockLedger
+                    .Where(x => x.WarehouseId == invoice.WarehouseId && x.ProdId == dto.prodId && x.QtyIn > 0)
+                    .SumAsync(x => x.RemainingQty ?? 0);
+                if (dto.qty > availableFromLedger)
+                {
+                    await tx.RollbackAsync();
+                    return BadRequest(new
+                    {
+                        ok = false,
+                        message = availableFromLedger == 0
+                            ? "لا يمكن بيع هذا الصنف: لا يوجد رصيد مسجّل في دفتر الحركة (لم يُدخل بمشتريات أو تسوية جرد)."
+                            : $"الكمية المطلوبة ({dto.qty}) تتجاوز الرصيد الفعلي في دفتر الحركة ({availableFromLedger}). لا يمكن البيع بدون رصيد من مشتريات أو تسويات."
                     });
                 }
 
@@ -1433,6 +1447,14 @@ namespace ERP.Controllers
                     return NotFound(new { ok = false, message = "السطر غير موجود." });
 
                 // =========================
+                // 2) منع حذف سطر له مرتجع بيع مرتبط به
+                // =========================
+                var hasReturnForLine = await _context.SalesReturnLines
+                    .AnyAsync(srl => srl.SalesInvoiceId == dto.SIId && srl.SalesInvoiceLineNo == dto.LineNo);
+                if (hasReturnForLine)
+                    return BadRequest(new { ok = false, message = "لا يمكن حذف السطر: يوجد مرتجع بيع مرتبط بهذا السطر." });
+
+                // =========================
                 // 3) تحميل حركات StockLedger المرتبطة بالسطر
                 // =========================
                 var ledgers = await _context.StockLedger
@@ -1448,32 +1470,44 @@ namespace ERP.Controllers
                 await using var tx = await _context.Database.BeginTransactionAsync();
 
                 // =========================
-                // 6) تحديث StockBatches (إرجاع الكمية للمخزن)
+                // 5) هل البيع كان من رصيد فعلي (FIFO)؟ لو لا فلا نُرجع كمية لـ StockBatches
                 // =========================
-                var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim(); // متغير: رقم التشغيلة
-                var expDate = line.Expiry?.Date;                                                   // متغير: تاريخ الصلاحية
-
-                // شرطنا الثابت: لازم BatchNo + Expiry
-                if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
+                bool hadFifoConsumption = false;
+                foreach (var lg in ledgers.Where(x => x.QtyOut > 0))
                 {
-                    var exp = expDate.Value.Date;
+                    var anyMap = await _context.Set<StockFifoMap>().AnyAsync(f => f.OutEntryId == lg.EntryId);
+                    if (anyMap) { hadFifoConsumption = true; break; }
+                }
 
-                    var sbRow = await _context.StockBatches
-                        .FirstOrDefaultAsync(x =>
-                            x.WarehouseId == invoice.WarehouseId &&         // متغير: المخزن
-                            x.ProdId == line.ProdId &&                      // متغير: الصنف
-                            x.BatchNo == batchNo &&                          // متغير: التشغيلة
-                            x.Expiry.HasValue &&
-                            x.Expiry.Value.Date == exp);
+                // =========================
+                // 6) تحديث StockBatches (إرجاع الكمية للمخزن فقط لو البيع كان من رصيد فعلي)
+                // =========================
+                if (hadFifoConsumption)
+                {
+                    var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
+                    var expDate = line.Expiry?.Date;
 
-                    if (sbRow != null)
+                    if (!string.IsNullOrWhiteSpace(batchNo) && expDate.HasValue)
                     {
-                        sbRow.QtyOnHand += line.Qty; // ✅ إرجاع الكمية للمخزن (زيادة رصيد البيع)
+                        var exp = expDate.Value.Date;
 
-                        sbRow.UpdatedAt = DateTime.UtcNow;
-                        sbRow.Note = $"SI:{dto.SIId} Line:{dto.LineNo} (+{line.Qty})";
+                        var sbRow = await _context.StockBatches
+                            .FirstOrDefaultAsync(x =>
+                                x.WarehouseId == invoice.WarehouseId &&
+                                x.ProdId == line.ProdId &&
+                                x.BatchNo == batchNo &&
+                                x.Expiry.HasValue &&
+                                x.Expiry.Value.Date == exp);
+
+                        if (sbRow != null)
+                        {
+                            sbRow.QtyOnHand += line.Qty;
+                            sbRow.UpdatedAt = DateTime.UtcNow;
+                            sbRow.Note = $"SI:{dto.SIId} Line:{dto.LineNo} (+{line.Qty})";
+                        }
                     }
                 }
+                // لو لم يكن هناك FIFO (بيع من رصيد وهمي) لا نزيد StockBatches حتى يظل مطابقاً لـ StockLedger
 
                 // =========================
                 // 7) حذف StockFifoMap المرتبط بحركات الخروج أولاً
@@ -2060,15 +2094,8 @@ namespace ERP.Controllers
                 }
 
                 // ================================
-                // 2.5) لا يمكن فتح فاتورة لها مرتجع بالكامل — تبقى مرحلة
+                // 2.5) الفتح مسموح حتى لو وُجد مرتجع (كامل أو جزئي). منع الحذف يكون على مستوى السطر في RemoveLineJson إن وُجد مرتجع مرتبط به.
                 // ================================
-                var hasFullReturn = await _context.SalesReturns.AnyAsync(sr => sr.SalesInvoiceId == id);
-                if (hasFullReturn)
-                {
-                    if (isAjax) return BadRequest(new { ok = false, message = "لا يمكن فتح الفاتورة: تم إنشاء مرتجع بيع من هذه الفاتورة. الفاتورة مغلقة." });
-                    TempData["Error"] = "لا يمكن فتح الفاتورة: تم إنشاء مرتجع بيع من هذه الفاتورة. الفاتورة مغلقة.";
-                    return RedirectToAction("Show", new { id = invoice.SIId });
-                }
 
                 // ================================
                 // 3) (لاحقًا) صلاحية فتح التعديل
@@ -3688,10 +3715,19 @@ namespace ERP.Controllers
             try
             {
                 // =========================
-                // 5) تحديث StockBatches (إرجاع الكمية للمخزن — زيادة QtyOnHand)
+                // 5) تحديث StockBatches (إرجاع الكمية فقط للسطور التي كان بيعها من رصيد فعلي FIFO)
                 // =========================
                 foreach (var line in lines)
                 {
+                    var lineLedgers = allLedgers.Where(x => x.SourceLine == line.LineNo && x.QtyOut > 0).ToList();
+                    bool hadFifo = false;
+                    foreach (var lg in lineLedgers)
+                    {
+                        if (await _context.Set<StockFifoMap>().AnyAsync(f => f.OutEntryId == lg.EntryId))
+                        { hadFifo = true; break; }
+                    }
+                    if (!hadFifo) continue; // بيع من رصيد وهمي — لا نُرجع لـ StockBatches
+
                     var batchNo = string.IsNullOrWhiteSpace(line.BatchNo) ? null : line.BatchNo.Trim();
                     var expDate = line.Expiry?.Date;
 
@@ -3709,7 +3745,7 @@ namespace ERP.Controllers
 
                         if (sbRow != null)
                         {
-                            sbRow.QtyOnHand += line.Qty; // ✅ إرجاع الكمية للمخزن (زيادة رصيد البيع)
+                            sbRow.QtyOnHand += line.Qty;
                             sbRow.UpdatedAt = DateTime.UtcNow;
                             sbRow.Note = $"SI:{id} DeleteFromHeader (Line:{line.LineNo}) (+{line.Qty})";
                         }

@@ -275,8 +275,12 @@
             <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
                     <th data-col="map">@filterableCol("map", "MapId", "MapId")</th>
-                    <th data-col="out">@filterableCol("out", "OutEntryId", "OutEntry (الخروج)")</th>
-                    <th data-col="in">@filterableCol("in", "InEntryId", "InEntry (الدخول)")</th>
+                    <th data-col="prod">كود الصنف</th>
+                    <th data-col="prodname">اسم الصنف</th>
+                    <th data-col="out">@filterableCol("out", "OutEntryId", "الخروج (قيد)")</th>
+                    <th data-col="outsource">مصدر الخروج</th>
+                    <th data-col="in">@filterableCol("in", "InEntryId", "الدخول (قيد)")</th>
+                    <th data-col="insource">مصدر الدخول</th>
                     <th class="text-end" data-col="qty">@filterableCol("qty", "Qty", "الكمية")</th>
                     <th class="text-end" data-col="unitcost">@filterableCol("unitcost", "UnitCost", "تكلفة/وحدة")</th>
                 </tr>
@@ -285,19 +289,49 @@
                 @if (Model == null || !Model.Any())
                 {
                     <tr>
-                        <td colspan="5" class="text-center text-muted py-4">
+                        <td colspan="9" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
                 }
                 else
                 {
+                    var outDict = ViewBag.OutLedgerDict as System.Collections.Generic.IDictionary<int, object>;
+                    var inDict = ViewBag.InLedgerDict as System.Collections.Generic.IDictionary<int, object>;
+                    var pNames = ViewBag.ProdNames as System.Collections.Generic.IDictionary<int, string>;
                     foreach (var x in Model)
                     {
+                        var outInfo = outDict != null && outDict.ContainsKey(x.OutEntryId) ? outDict[x.OutEntryId] : null;
+                        var inInfo = inDict != null && inDict.ContainsKey(x.InEntryId) ? inDict[x.InEntryId] : null;
+                        int? prodId = null;
+                        if (outInfo != null)
+                        {
+                            var prop = outInfo.GetType().GetProperty("ProdId");
+                            if (prop != null) prodId = (int?)prop.GetValue(outInfo);
+                        }
+                        string? prodName = (prodId.HasValue && pNames != null && pNames.ContainsKey(prodId.Value)) ? pNames[prodId.Value] : "";
+                        string outSource = "";
+                        if (outInfo != null)
+                        {
+                            var st = outInfo.GetType().GetProperty("SourceType")?.GetValue(outInfo)?.ToString();
+                            var si = outInfo.GetType().GetProperty("SourceId")?.GetValue(outInfo);
+                            outSource = st != null ? $"{st} {si}" : "";
+                        }
+                        string inSource = "";
+                        if (inInfo != null)
+                        {
+                            var st = inInfo.GetType().GetProperty("SourceType")?.GetValue(inInfo)?.ToString();
+                            var si = inInfo.GetType().GetProperty("SourceId")?.GetValue(inInfo);
+                            inSource = st != null ? $"{st} {si}" : "";
+                        }
                         <tr>
                             <td data-col="map">@x.MapId</td>
+                            <td data-col="prod">@(prodId?.ToString() ?? "—")</td>
+                            <td data-col="prodname">@(prodName ?? "—")</td>
                             <td data-col="out">@x.OutEntryId</td>
+                            <td data-col="outsource">@outSource</td>
                             <td data-col="in">@x.InEntryId</td>
+                            <td data-col="insource">@inSource</td>
                             <td class="text-end" data-col="qty">@x.Qty</td>
                             <td class="text-end" data-col="unitcost">@x.UnitCost.ToString("0.0000")</td>
                         </tr>

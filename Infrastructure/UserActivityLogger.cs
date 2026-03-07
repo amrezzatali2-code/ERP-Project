@@ -10,11 +10,9 @@ namespace ERP.Infrastructure
     /// <summary>
     /// خدمة لتسجيل نشاط المستخدمين في جدول UserActivityLogs.
     /// 
-    /// سياسة التسجيل: نسجل أي تعديل على البيانات
-    /// - Create: إنشاء سجل جديد
+    /// سياسة التسجيل: نسجل التعديل والمسح فقط (لا إنشاء ولا ترحيل).
     /// - Edit: تعديل سجل
     /// - Delete: حذف سجل
-    /// - Post/Unpost: ترحيل وإلغاء ترحيل المستندات
     /// </summary>
     public interface IUserActivityLogger
     {
@@ -48,12 +46,10 @@ namespace ERP.Infrastructure
             string? newValues = null)
         {
             // =========================================================
-            // (1) فلترة: نسجل العمليات المهمة (إنشاء، تعديل، حذف، ترحيل، إلغاء ترحيل)
-            // نتجاهل View/Export/Import لتقليل الحمل
+            // (1) فلترة: نسجل التعديل والمسح فقط (Edit + Delete)
+            // لا نسجل: Create، Post، Unpost، View، Export، Import، Login، Logout
             // =========================================================
-            if (actionType != UserActionType.Create && actionType != UserActionType.Edit &&
-                actionType != UserActionType.Delete && actionType != UserActionType.Post &&
-                actionType != UserActionType.Unpost)
+            if (actionType != UserActionType.Edit && actionType != UserActionType.Delete)
                 return;
 
             // =========================================================

@@ -1,0 +1,48 @@
+---
+description: نمط حدود الكروت في شاشات الفواتير — توحيد التصميم (طلب شراء، فاتورة مشتريات، فاتورة مبيعات، إلخ)
+alwaysApply: true
+---
+
+# نمط حدود الكروت في الفواتير
+
+عند تعديل شاشات الفواتير (طلب شراء، فاتورة مشتريات، فاتورة مبيعات، مرتجعات، تحويلات، إلخ)، استخدم **نفس حدود الكروت** كما في نمط القوائم (`erp-list-filter-bar`).
+
+## حدود الكروت (اللون اللبني)
+
+**كل كارت** في الصفحة يجب أن يكون له حدود واضحة بنفس نمط القوائم:
+
+```css
+/* حدود كل الكروت: نفس نمط القوائم (erp-list-filter-bar) — اللون اللبني #c7d2fe */
+div.card.invoice-side-card,
+div.card.invoice-header-card,
+div.card.invoice-product-card.invoice-product-card-list-style,
+div.card.invoice-Add-card,
+div.card.invoice-lines-card,
+div.card.invoice-totals-card {
+    border: 1px solid #c7d2fe !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 3px rgba(59,130,246,.12) !important;
+    overflow: hidden;
+}
+```
+
+**القيم:**
+- اللون: `#c7d2fe` (لبني/بنفسجي فاتح — نفس `erp-list-filter-bar`)
+- السمك: `1px`
+- الزوايا: `12px`
+- الظل: `0 1px 3px rgba(59,130,246,.12)`
+
+**ملاحظة:** استخدم محدد `div.card.` لزيادة الأولوية وتجاوز تنسيقات Bootstrap. أضف كل أصناف الكروت المستخدمة في الصفحة (مثل `invoice-side-card`, `invoice-header-card`, إلخ).
+
+## أصناف الكروت الشائعة
+
+- `invoice-side-card` — الشريط الجانبي (إجراءات)
+- `invoice-header-card` — كارت بيانات العميل/المورد
+- `invoice-product-card` أو `invoice-product-card.invoice-product-card-list-style` — كارت بيانات الصنف
+- `invoice-Add-card` — كارت إدخال الصنف
+- `invoice-lines-card` — كارت جدول السطور
+- `invoice-totals-card` — كارت الإجماليات
+
+## المرجع التطبيقي
+
+- **`Views/PurchaseRequests/Show.cshtml`** — التصميم المطبق في طلب الشراء (الأقسام: حدود الكروت، انبوت اسم الصنف، تنسيق البوكسات).

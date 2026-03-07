@@ -41,6 +41,10 @@
     }
 
     <form asp-action="Create" method="post" id="receiptForm">
+        @if (Model.CashReceiptId > 0)
+        {
+            <input type="hidden" asp-for="CashReceiptId" />
+        }
         <div class="card">
             <div class="card-body">
                 <div class="row g-3">
@@ -194,11 +198,7 @@
                     }
                     @if (isPosted)
                     {
-                        <form asp-action="Open" method="post" style="display: inline;" asp-route-id="@Model.CashReceiptId">
-                            @Html.AntiForgeryToken()
-                            <button type="submit" class="btn btn-warning btn-sm">فتح للتعديل</button>
-                        </form>
-                        <a asp-action="Edit" asp-route-id="@Model.CashReceiptId" class="btn btn-primary btn-sm">تعديل</a>
+                        <button type="button" class="btn btn-warning btn-sm" id="btnOpenForEdit" data-id="@Model.CashReceiptId" data-url="@Url.Action("Open", "CashReceipts", new { id = Model.CashReceiptId })">فتح للتعديل</button>
                     }
                     @if (!isPosted)
                     {
@@ -216,6 +216,15 @@
     }
     <script>
         $(document).ready(function() {
+            // زر "فتح للتعديل": إرسال POST إلى Open بدون نموذج متداخل (مثل إذن الدفع)
+            $('#btnOpenForEdit').on('click', function() {
+                var url = $(this).data('url');
+                var token = $('input[name="__RequestVerificationToken"]').val();
+                var $f = $('<form>').attr({ method: 'post', action: url }).hide();
+                if (token) $f.append($('<input>').attr({ type: 'hidden', name: '__RequestVerificationToken', value: token }));
+                $('body').append($f);
+                $f.submit();
+            });
             // ✅ إزالة الصفر من خانة المبلغ عند التحميل
             var $amount = $('#Amount');
             if ($amount.length && ($amount.val() === '0' || $amount.val() === '0.00')) {

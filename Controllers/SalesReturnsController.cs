@@ -1294,6 +1294,17 @@ namespace ERP.Controllers
                 context.SalesReturnLines.Add(line);
                 await context.SaveChangesAsync();
 
+                // هل البيع الأصلي كان من رصيد فعلي (FIFO)؟ لو لا فلا نُنشئ رصيد قابل للبيع (RemainingQty=0) ولا نزيد StockBatches
+                bool originalSaleHadFifo = true;
+                if (dto.SalesInvoiceId.HasValue && dto.SalesInvoiceId.Value > 0 && dto.SalesInvoiceLineNo.HasValue)
+                {
+                    var saleLedgers = await context.StockLedger
+                        .Where(x => x.SourceType == "Sales" && x.SourceId == dto.SalesInvoiceId.Value && x.SourceLine == dto.SalesInvoiceLineNo.Value && x.QtyOut > 0)
+                        .Select(x => x.EntryId)
+                        .ToListAsync();
+                    originalSaleHadFifo = saleLedgers.Count > 0 && await context.Set<StockFifoMap>().AnyAsync(f => saleLedgers.Contains(f.OutEntryId));
+                }
+
                 var avgCost = await GetAverageCostAsync(dto.ProdId, ret.WarehouseId);
                 var now = DateTime.UtcNow;
                 context.StockLedger.Add(new StockLedger
@@ -1306,7 +1317,7 @@ namespace ERP.Controllers
                     QtyIn = dto.Qty,
                     QtyOut = 0,
                     UnitCost = avgCost,
-                    RemainingQty = dto.Qty,
+                    RemainingQty = originalSaleHadFifo ? dto.Qty : 0, // مرتجع من بيع وهمي لا يُنشئ رصيد قابل للاستهلاك
                     SourceType = "SalesReturn",
                     SourceId = dto.SRId,
                     SourceLine = nextLineNo,
@@ -1314,7 +1325,7 @@ namespace ERP.Controllers
                 });
                 await context.SaveChangesAsync();
 
-                if (!string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
+                if (originalSaleHadFifo && !string.IsNullOrWhiteSpace(batchNo) && exp.HasValue)
                 {
                     var sb = await context.StockBatches.FirstOrDefaultAsync(b =>
                         b.WarehouseId == ret.WarehouseId && b.ProdId == dto.ProdId && b.BatchNo == batchNo && b.Expiry.HasValue && b.Expiry.Value.Date == exp.Value.Date);

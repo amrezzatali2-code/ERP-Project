@@ -534,49 +534,60 @@ namespace ERP.Controllers
         // POST: يحفظ + يرحّل محاسبيًا
         // =========================================================
 
-        // GET: CashReceipts/Create
-        public async Task<IActionResult> Create(int? customerId = null)
+        // GET: CashReceipts/Create — يدعم إنشاء جديد أو عرض إذن موجود (مثل إذن الدفع)
+        public async Task<IActionResult> Create(int? id = null, int? customerId = null)
         {
-            // ✅ جلب حساب الخزينة الافتراضي (كود 1101) أو أول حساب خزينة/صندوق
-            var defaultCashAccount = await _context.Accounts
-                .AsNoTracking()
-                .Where(a => a.IsActive && 
-                           (a.AccountCode == "1101" || 
-                            a.AccountName.Contains("خزينة") || 
-                            a.AccountName.Contains("صندوق")))
-                .OrderBy(a => a.AccountCode == "1101" ? 0 : 1) // أولوية لكود 1101
-                .ThenBy(a => a.AccountName)
-                .Select(a => new { a.AccountId })
-                .FirstOrDefaultAsync();
+            CashReceipt model;
 
-            var model = new CashReceipt
+            if (id.HasValue && id.Value > 0)
             {
-                ReceiptDate = DateTime.Now.Date,
-                Status = "غير مرحلة",
-                IsPosted = false,
-                CashAccountId = defaultCashAccount?.AccountId ?? 0 // ✅ تعيين حساب الصندوق الافتراضي
-            };
+                model = await _context.CashReceipts
+                    .Include(r => r.Customer)
+                    .ThenInclude(c => c.Account)
+                    .FirstOrDefaultAsync(r => r.CashReceiptId == id.Value);
 
-            // ✅ إذا جاء من صفحة "حجم تعامل عميل" (customerId موجود)
-            if (customerId.HasValue && customerId.Value > 0)
-            {
-                var customer = await _context.Customers
-                    .AsNoTracking()
-                    .Include(c => c.Account)
-                    .FirstOrDefaultAsync(c => c.CustomerId == customerId.Value);
+                if (model == null)
+                    return NotFound();
 
-                if (customer != null)
-                {
-                    model.CustomerId = customer.CustomerId;
-                    // ✅ حساب الطرف = حساب العميل تلقائيًا
-                    if (customer.AccountId.HasValue)
-                    {
-                        model.CounterAccountId = customer.AccountId.Value;
-                    }
-                    // ✅ البيان الافتراضي
-                    model.Description = $"تحصيل من العميل {customer.CustomerName}";
-                    // ✅ قفل العميل وحساب الطرف في الواجهة
+                if (model.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
+            }
+            else
+            {
+                var defaultCashAccount = await _context.Accounts
+                    .AsNoTracking()
+                    .Where(a => a.IsActive &&
+                               (a.AccountCode == "1101" ||
+                                a.AccountName.Contains("خزينة") ||
+                                a.AccountName.Contains("صندوق")))
+                    .OrderBy(a => a.AccountCode == "1101" ? 0 : 1)
+                    .ThenBy(a => a.AccountName)
+                    .Select(a => new { a.AccountId })
+                    .FirstOrDefaultAsync();
+
+                model = new CashReceipt
+                {
+                    ReceiptDate = DateTime.Now.Date,
+                    Status = "غير مرحلة",
+                    IsPosted = false,
+                    CashAccountId = defaultCashAccount?.AccountId ?? 0
+                };
+
+                if (customerId.HasValue && customerId.Value > 0)
+                {
+                    var customer = await _context.Customers
+                        .AsNoTracking()
+                        .Include(c => c.Account)
+                        .FirstOrDefaultAsync(c => c.CustomerId == customerId.Value);
+
+                    if (customer != null)
+                    {
+                        model.CustomerId = customer.CustomerId;
+                        if (customer.AccountId.HasValue)
+                            model.CounterAccountId = customer.AccountId.Value;
+                        model.Description = $"تحصيل من العميل {customer.CustomerName}";
+                        ViewBag.LockCustomer = true;
+                    }
                 }
             }
 
@@ -587,7 +598,7 @@ namespace ERP.Controllers
         // POST: CashReceipts/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Create([Bind("ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
+        public async Task<IActionResult> Create([Bind("CashReceiptId,ReceiptDate,CustomerId,CashAccountId,CounterAccountId,Amount,Description")]
                                                 CashReceipt cashReceipt)
         {
             // ✅ تجاهل خطأ التحقق لـ ReceiptNumber لأنه سيتم توليده تلقائياً
@@ -628,21 +639,19 @@ namespace ERP.Controllers
             
             if (ModelState.IsValid)
             {
+                // تعديل إذن موجود (مثل إذن الدفع)
+                if (cashReceipt.CashReceiptId > 0)
+                {
+                    return await Edit(cashReceipt.CashReceiptId, cashReceipt);
+                }
+
                 try
                 {
-                    // =========================================================
-                    // 1) تعبئة بيانات التتبع الأساسية
-                    // =========================================================
                     cashReceipt.CreatedAt = DateTime.Now;
                     cashReceipt.CreatedBy = User?.Identity?.Name ?? "SYSTEM";
                     cashReceipt.Status = "غير مرحلة";
                     cashReceipt.IsPosted = false;
-                    // ✅ ReceiptNumber سيتم توليده من CashReceiptId بعد الحفظ
 
-                    // =========================================================
-                    // 2) حفظ الهيدر (سيتم توليد CashReceiptId تلقائياً كـ Identity)
-                    // ✅ هنا يتم توليد CashReceiptId تلقائياً من قاعدة البيانات
-                    // =========================================================
                     _context.Add(cashReceipt);
                     await _context.SaveChangesAsync();
                     
@@ -732,7 +741,7 @@ namespace ERP.Controllers
         // Edit — تعديل إذن موجود
         // =========================================================
 
-        // GET: CashReceipts/Edit/5
+        // GET: CashReceipts/Edit/5 — يعيد نفس واجهة Create (مثل إذن الدفع)
         public async Task<IActionResult> Edit(int? id)
         {
             if (id == null)
@@ -746,12 +755,11 @@ namespace ERP.Controllers
             if (cashReceipt == null)
                 return NotFound();
 
-            // ✅ إذا كان العميل محددًا، نحفظ هذه المعلومة للواجهة
             if (cashReceipt.CustomerId.HasValue)
                 ViewBag.LockCustomer = true;
 
             await PopulateDropdownsAsync(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
-            return View(cashReceipt);
+            return View("Create", cashReceipt);
         }
 
         // POST: CashReceipts/Edit/5
@@ -769,7 +777,7 @@ namespace ERP.Controllers
                 PopulateDropdowns(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
                 if (cashReceipt.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
-                return View(cashReceipt);
+                return View("Create", cashReceipt);
             }
 
             try
@@ -847,11 +855,10 @@ namespace ERP.Controllers
                 );
 
                 TempData["CashReceiptSuccess"] = "تم تعديل وترحيل إذن الاستلام بنجاح.";
-                // البقاء داخل الإذن مع عرض الرسالة فقط (مثل إذن الدفع)
                 PopulateDropdowns(existing.CustomerId, existing.CashAccountId, existing.CounterAccountId);
                 if (existing.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
-                return View(existing);
+                return View("Create", existing);
             }
             catch (Exception ex)
             {
@@ -859,7 +866,7 @@ namespace ERP.Controllers
                 PopulateDropdowns(cashReceipt.CustomerId, cashReceipt.CashAccountId, cashReceipt.CounterAccountId);
                 if (cashReceipt.CustomerId.HasValue)
                     ViewBag.LockCustomer = true;
-                return View(cashReceipt);
+                return View("Create", cashReceipt);
             }
         }
 
@@ -887,7 +894,7 @@ namespace ERP.Controllers
                 if (!receipt.IsPosted)
                 {
                     TempData["CashReceiptError"] = "هذا الإذن غير مُرحّل، لا يوجد ما يمكن فتحه.";
-                    return RedirectToAction(nameof(Details), new { id });
+                    return RedirectToAction(nameof(Create), new { id });
                 }
 
                 // ================================
@@ -912,7 +919,7 @@ namespace ERP.Controllers
                 );
 
                 TempData["CashReceiptSuccess"] = "تم فتح الإذن للتعديل بنجاح.";
-                return RedirectToAction(nameof(Edit), new { id });
+                return RedirectToAction(nameof(Create), new { id });
             }
             catch (Exception ex)
             {

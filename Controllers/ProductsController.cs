@@ -1,4 +1,4 @@
-﻿// Controllers/ProductsController.cs
+// Controllers/ProductsController.cs
 using ClosedXML.Excel;                  // مكتبة Excel
 using OfficeOpenXml;
 using DocumentFormat.OpenXml.InkML;
@@ -2174,11 +2174,11 @@ namespace ERP.Controllers
                 stockLedgerQuery = stockLedgerQuery.Where(sl => sl.TranDate <= to.Value);
             }
 
-            // حساب صافي الكمية = Sum(QtyIn) - Sum(QtyOut)
+            // حساب صافي الكمية = Sum(QtyIn) - Sum(QtyOut) — ولا يُعرض سالب أبداً (الحد الأدنى 0)
             int totalQtyIn = await stockLedgerQuery.SumAsync(sl => sl.QtyIn);
             int totalQtyOut = await stockLedgerQuery.SumAsync(sl => sl.QtyOut);
             int calculatedNetQty = totalQtyIn - totalQtyOut;
-            ViewBag.NetQty = calculatedNetQty;
+            ViewBag.NetQty = calculatedNetQty < 0 ? 0 : calculatedNetQty;
 
             // حساب صافي المبلغ من StockLedger (إجمالي التكلفة)
             decimal calculatedNetAmount = await stockLedgerQuery

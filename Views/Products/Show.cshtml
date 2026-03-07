@@ -42,7 +42,7 @@
     var totalAmountReturned = ViewBag.TotalAmountReturned ?? 0m;  // مبلغ مردودات المبيعات
 
     var totalQtyAll = ViewBag.TotalQtyAll ?? 0;                   // إجمالى الكمية
-    var netQty = ViewBag.NetQty ?? 0;                             // صافى الكمية
+    var netQty = Math.Max(0, (int)(ViewBag.NetQty ?? 0));       // صافي الكمية — لا يُعرض سالب
     var netAmount = ViewBag.NetAmount ?? 0m;                      // صافى المبلغ
 
     // تفاصيل الحركة والملخصات
