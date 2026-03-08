@@ -1,4 +1,4 @@
-﻿using System;                                        // متغيرات التاريخ DateTime
+using System;                                        // متغيرات التاريخ DateTime
 using System.Collections.Generic;                    // Dictionary, List
 using System.Linq;                                   // أوامر LINQ
 using System.Linq.Expressions;                       // Expressions
@@ -144,6 +144,116 @@ namespace ERP.Controllers
             return q;
         }
 
+        private static readonly char[] _filterSep = { '|', ',', ';' };
+
+        private IQueryable<ProductBonusGroup> ApplyColumnFilters(
+            IQueryable<ProductBonusGroup> q,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_bonus,
+            string? filterCol_active,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.ProductBonusGroupId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var terms = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.Name != null && terms.Contains(x.Name));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_bonus))
+            {
+                var vals = filterCol_bonus.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => decimal.TryParse(t.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => vals.Contains(x.BonusAmount));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_active))
+            {
+                var parts = filterCol_active.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim().ToLowerInvariant()).ToHashSet();
+                if (parts.Contains("true") && !parts.Contains("false"))
+                    q = q.Where(x => x.IsActive);
+                else if (parts.Contains("false") && !parts.Contains("true"))
+                    q = q.Where(x => !x.IsActive);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var terms = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => terms.Any(t => x.CreatedAt.ToString("yyyy-MM-dd HH:mm").Contains(t)));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var terms = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.UpdatedAt != null && terms.Any(t => x.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm").Contains(t)));
+            }
+            return q;
+        }
+
+        /// <summary>قيم مميزة للعمود (للوحة فلتر الأعمدة بنمط Excel).</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.ProductBonusGroups.AsNoTracking();
+
+            if (col == "id")
+            {
+                var ids = await q.Select(x => x.ProductBonusGroupId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (col == "name")
+            {
+                var list = await q.Where(x => x.Name != null).Select(x => x.Name!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "bonus")
+            {
+                var list = await q.Select(x => x.BonusAmount).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm) && decimal.TryParse(searchTerm, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var bSearch))
+                    list = list.Where(b => b == bSearch).ToList();
+                return Json(list.Select(v => new { value = v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture), display = v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture) }));
+            }
+            if (col == "active")
+            {
+                return Json(new[] { new { value = "true", display = "نعم" }, new { value = "false", display = "لا" } });
+            }
+            if (col == "created")
+            {
+                var dates = await q.Select(x => x.CreatedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var list = dates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct().ToList();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "updated")
+            {
+                var dates = await q.Where(x => x.UpdatedAt != null).Select(x => x.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var list = dates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct().ToList();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            return Json(new List<object>());
+        }
+
         // =========================
         // Index — قائمة مجموعات الحوافز
         // =========================
@@ -155,10 +265,16 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 25,
             int? fromCode = null,            // فلتر كود من
-            int? toCode = null,              // فلتر كود إلى
+            int? toCode = null,               // فلتر كود إلى
             bool useDateRange = false,       // تفعيل فلتر التاريخ
             DateTime? fromDate = null,
-            DateTime? toDate = null)
+            DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_bonus = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
             // بناء الاستعلام طبقاً للفلاتر
             var q = BuildBonusGroupsQuery(
@@ -171,6 +287,8 @@ namespace ERP.Controllers
                 useDateRange,
                 fromDate,
                 toDate);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_bonus, filterCol_active, filterCol_created, filterCol_updated);
 
             // تقسيم الصفحات
             var model = await PagedResult<ProductBonusGroup>.CreateAsync(q, page, pageSize);
@@ -189,6 +307,12 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.CodeFrom = fromCode;
             ViewBag.CodeTo = toCode;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Bonus = filterCol_bonus;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             // حقل التاريخ المستخدم في الفلترة (للنموذج الموحد)
             ViewBag.DateField = "CreatedAt";
@@ -212,7 +336,13 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
-            string? format = "excel")
+            string? format = "excel",
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_bonus = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
             if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
             if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
@@ -227,6 +357,8 @@ namespace ERP.Controllers
                 useDateRange,
                 fromDate,
                 toDate);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_bonus, filterCol_active, filterCol_created, filterCol_updated);
 
             var list = await q.ToListAsync();
 

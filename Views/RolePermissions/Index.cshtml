@@ -107,7 +107,7 @@
         var sortDir = isCurrentSort ? dir : "asc";
         var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
         return new HtmlString($@"
-            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"">
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"" style=""position:relative;z-index:2;"">
                 <span class=""erp-col-title"">{caption}</span>
                 <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
                         data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
@@ -254,10 +254,11 @@
         @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
     </form>
 
-    @* ===== جدول RolePermissions ===== *@
-    <div class="erp-table-wrapper mt-3 erp-print-area" id="rpTableWrapper">
+    @* ===== جدول RolePermissions (حاوية تمرير + رأس ثابت + توسعة أعمدة) ===== *@
+    <div class="erp-table-scroll-container mt-3 ps-0 pe-0" dir="rtl">
+        <div id="rpTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="rpTable" class="table table-striped table-hover erp-table erp-table-sortable">
-            <thead class="table-light">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
                     <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
                         <input type="checkbox" id="selectAll" class="form-check-input" />
@@ -355,6 +356,7 @@
             </tbody>
 
         </table>
+        </div>
     </div>
 
     @* شريط أسفل الجدول: عرض X–Y من Z + حجم الصفحة *@
@@ -920,9 +922,6 @@
             function applyFilter(applySort, sortDir) {
                 if (!currentCol) return;
                 const url = new URL(window.location.href);
-                url.searchParams.forEach(function(_, key) {
-                    if (key.indexOf("filterCol_") === 0) url.searchParams.delete(key);
-                });
                 if (applySort != null && sortDir != null) {
                     url.searchParams.set("sort", applySort);
                     url.searchParams.set("dir", sortDir);
@@ -935,10 +934,13 @@
                     const exprInput = document.getElementById("erpRpNumericExpr");
                     const expr = exprInput ? String(exprInput.value || "").trim() : "";
                     if (expr) url.searchParams.set("filterCol_" + currentCol + "Expr", expr);
+                    else url.searchParams.delete("filterCol_" + currentCol + "Expr");
+                    url.searchParams.delete("filterCol_" + currentCol);
                 } else {
-                    // فلتر العمود من العناصر المحددة فقط — لا ننسخ نص بوكس البحث داخل الكارت إلى البحث العام
                     const val = Array.from(currentSelected).filter(Boolean).join("|");
                     if (val) url.searchParams.set("filterCol_" + currentCol, val);
+                    else url.searchParams.delete("filterCol_" + currentCol);
+                    url.searchParams.delete("filterCol_" + currentCol + "Expr");
                 }
                 url.searchParams.set("page", "1");
                 window.location.href = url.toString();
@@ -979,6 +981,43 @@
             document.addEventListener("click", function(e) {
                 if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
                     panel.classList.add("d-none");
+            });
+
+            document.addEventListener("DOMContentLoaded", function() {
+                var wrapper = document.getElementById("rpTableScrollWrapper");
+                if (!wrapper) return;
+                var table = wrapper.querySelector("table#rpTable");
+                if (table) {
+                    var ths = table.querySelectorAll("thead th");
+                    ths.forEach(function(th) {
+                        if (th.hasAttribute("data-col-fixed")) return;
+                        th.style.position = "relative";
+                        var handle = document.createElement("div");
+                        handle.className = "erp-col-resize-handle";
+                        th.appendChild(handle);
+                        var startX, startWidth;
+                        handle.addEventListener("mousedown", function(e) {
+                            e.preventDefault();
+                            startX = e.pageX;
+                            startWidth = th.offsetWidth;
+                            function onMouseMove(eMove) {
+                                var diffX = eMove.pageX - startX;
+                                var newWidth = startWidth + diffX;
+                                if (newWidth < 50) newWidth = 50;
+                                th.style.minWidth = newWidth + "px";
+                                th.style.width = newWidth + "px";
+                            }
+                            function onMouseUp() {
+                                document.removeEventListener("mousemove", onMouseMove);
+                                document.removeEventListener("mouseup", onMouseUp);
+                            }
+                            document.addEventListener("mousemove", onMouseMove);
+                            document.addEventListener("mouseup", onMouseUp);
+                        });
+                    });
+                }
+                if (wrapper.scrollWidth > wrapper.clientWidth)
+                    wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
             });
         })();
     </script>

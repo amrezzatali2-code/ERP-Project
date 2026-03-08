@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;                              // تصدير Excel
+using ClosedXML.Excel;                              // تصدير Excel
 using ERP.Data;                                    // كائن AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                          // PagedResult + UserActivityLogger
@@ -30,6 +30,123 @@ namespace ERP.Controllers
             _activityLogger = activityLogger;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
+        private static IQueryable<Area> ApplyColumnFilters(
+            IQueryable<Area> query,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_dist,
+            string? filterCol_gov,
+            string? filterCol_isactive,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(a => ids.Contains(a.AreaId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(a => vals.Contains(a.AreaName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_dist))
+            {
+                var vals = filterCol_dist.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(a => a.District != null && vals.Contains(a.District.DistrictName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_gov))
+            {
+                var vals = filterCol_gov.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(a => a.Governorate != null && vals.Contains(a.Governorate.GovernorateName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_isactive))
+            {
+                var vals = filterCol_isactive.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant()).ToList();
+                var wantTrue = vals.Any(v => v == "true" || v == "1" || v == "\u0646\u0639\u0645");
+                var wantFalse = vals.Any(v => v == "false" || v == "0" || v == "\u0644\u0627");
+                if (wantTrue && !wantFalse) query = query.Where(a => a.IsActive);
+                else if (wantFalse && !wantTrue) query = query.Where(a => !a.IsActive);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime?>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(a => a.CreatedAt.HasValue && dates.Contains(a.CreatedAt));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime?>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(a => a.UpdatedAt.HasValue && dates.Contains(a.UpdatedAt));
+                }
+            }
+            return query;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _db.Areas.AsNoTracking().Include(a => a.Governorate).Include(a => a.District);
+            if (columnLower == "id" || columnLower == "areaid")
+            {
+                var ids = await q.Select(a => a.AreaId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "name" || columnLower == "areaname")
+            {
+                var list = await q.Select(a => a.AreaName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "dist" || columnLower == "district")
+            {
+                var list = await q.Where(a => a.District != null).Select(a => a.District!.DistrictName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "gov" || columnLower == "governorate")
+            {
+                var list = await q.Where(a => a.Governorate != null).Select(a => a.Governorate!.GovernorateName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "isactive")
+                return Json(new[] { new { value = "true", display = "\u0646\u0639\u0645" }, new { value = "false", display = "\u0644\u0627" } });
+            if (columnLower == "created" || columnLower == "createdat")
+            {
+                var list = await q.Where(a => a.CreatedAt.HasValue).Select(a => a.CreatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "updated" || columnLower == "updatedat")
+            {
+                var list = await q.Where(a => a.UpdatedAt.HasValue).Select(a => a.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            return Json(Array.Empty<object>());
+        }
+
         // ===============================
         // GET: /Areas
         // قائمة المناطق + بحث/ترتيب/ترقيم + فلترة بتاريخ الإنشاء
@@ -45,6 +162,13 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? governorateId = null,
             int? districtId = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_dist = null,
+            string? filterCol_gov = null,
+            string? filterCol_isactive = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
             int page = 1,
             int pageSize = 25)
         {
@@ -209,11 +333,17 @@ namespace ERP.Controllers
             ViewBag.SearchBy = searchBy;
             ViewBag.Sort = sort;
             ViewBag.Dir = dir;
-
             ViewBag.GovFilter = governorateId;
             ViewBag.DistrictFilter = districtId;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Dist = filterCol_dist;
+            ViewBag.FilterCol_Gov = filterCol_gov;
+            ViewBag.FilterCol_IsActive = filterCol_isactive;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
-            return View(result);    // إرسال النتيجة لواجهة Index
+            return View(result);
         }
 
         // =============================== تفاصيل/إضافة/تعديل/حذف ===============================
@@ -468,7 +598,14 @@ namespace ERP.Controllers
             int? districtId = null,
             int? fromCode = null,
             int? toCode = null,
-            string format = "excel"   // excel أو csv حسب اختيار المستخدم
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_dist = null,
+            string? filterCol_gov = null,
+            string? filterCol_isactive = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string format = "excel"
         )
         {
             // بداية الاستعلام: جدول المناطق + ربط المحافظة والحي/المركز
@@ -532,15 +669,15 @@ namespace ERP.Controllers
                 query = query.Where(a => a.AreaId <= toCode.Value);
             }
 
-            // فلتر التاريخ (تاريخ الإنشاء) لو مفعّل
             if (useDateRange)
             {
                 if (fromDate.HasValue)
                     query = query.Where(a => a.CreatedAt >= fromDate.Value);
-
                 if (toDate.HasValue)
                     query = query.Where(a => a.CreatedAt <= toDate.Value);
             }
+
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_dist, filterCol_gov, filterCol_isactive, filterCol_created, filterCol_updated);
 
             // ---------- الترتيب (نفس الإندكس) ----------
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);

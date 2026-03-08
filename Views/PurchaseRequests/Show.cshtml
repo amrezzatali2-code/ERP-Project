@@ -15,15 +15,11 @@
             -moz-appearance: textfield;
         }
 
+        /* ارتفاع الصفحة بحسب المحتوى فقط — إلغاء min-height: 100vh لتفادي المساحة الفارغة السفلية */
         .invoice-page {
             background-color: #f3f6fb;
-            min-height: 100vh;
-            padding-bottom: 2rem;
-            opacity: 0;
-            transition: opacity 0.2s ease-in;
-        }
-        body.pr-content-ready .invoice-page {
-            opacity: 1;
+            min-height: 0;
+            padding-bottom: 1rem;
         }
 
         .invoice-header-card,
@@ -78,8 +74,11 @@
         .invoice-side-card .btn-erp {
             font-size: 0.85rem;
             padding: 0.35rem 0.6rem;
+            border: 1px solid #94a3b8 !important;
         }
         .invoice-side-card .btn-erp + .btn-erp { margin-top: 0.25rem; }
+        /* إخفاء الخطوط الفاصلة داخل كارت الأزرار */
+        .invoice-side-card .invoice-actions-bar hr { display: none !important; }
 
         .invoice-lines-header {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
@@ -112,19 +111,90 @@
             box-shadow: 0 1px 3px rgba(59,130,246,.12) !important;
             overflow: hidden;
         }
+
+        /* لون النص أعمق داخل كروت الطلب لظهور أوضح */
+        .invoice-header-card .card-body .form-label,
+        .invoice-header-card .card-body .form-label-sm,
+        .invoice-header-card .card-body label {
+            color: #1e293b !important;
+            font-weight: 500;
+        }
+        .invoice-header-card .card-body .form-control,
+        .invoice-header-card .card-body .form-control-sm,
+        .invoice-header-card .card-body .form-select,
+        .invoice-header-card .card-body .form-select-sm {
+            color: #0f172a !important;
+        }
+        .invoice-product-card .card-body .form-label,
+        .invoice-product-card .card-body .form-label-sm,
+        .invoice-product-card .card-body label,
+        .invoice-product-card .pr-card-field label {
+            color: #1e293b !important;
+            font-weight: 500;
+        }
+        .invoice-product-card .card-body .form-control,
+        .invoice-product-card .card-body .form-control-sm,
+        .invoice-product-card .card-body .form-select,
+        .invoice-product-card .pr-card-field .form-control-sm,
+        .invoice-product-card .pr-card-field .form-select-sm {
+            color: #0f172a !important;
+        }
+        .invoice-Add-card .card-body .form-label,
+        .invoice-Add-card .card-body .form-label-sm,
+        .invoice-Add-card .card-body label {
+            color: #1e293b !important;
+            font-weight: 500;
+        }
+        .invoice-Add-card .card-body .form-control,
+        .invoice-Add-card .card-body .form-control-sm,
+        .invoice-Add-card .card-body .form-select,
+        .invoice-Add-card .card-body .form-select-sm {
+            color: #0f172a !important;
+        }
+        .invoice-product-card .pr-card-table-wrap .table tbody td,
+        .invoice-product-card .pr-card-table-wrap .table tbody th {
+            color: #1e293b !important;
+        }
+        .invoice-lines-card .erp-table-wrapper .erp-table tbody td,
+        .invoice-lines-card .erp-table-wrapper .erp-table tbody th {
+            color: #1e293b !important;
+        }
+        .invoice-totals-card .card-body,
+        .invoice-totals-card .card-body .form-label,
+        .invoice-totals-card .invoice-summary-item label,
+        .invoice-totals-card .invoice-summary-item .small {
+            color: #1e293b !important;
+        }
+        .invoice-totals-card .invoice-summary-badge {
+            color: #0f172a !important;
+        }
+        /* حدود الانبوتات أغمق لظهور أوضح في الكروت */
+        #PI_BodyHost .invoice-header-card .form-control,
+        #PI_BodyHost .invoice-header-card .form-select,
+        #PI_BodyHost .invoice-product-card .form-control,
+        #PI_BodyHost .invoice-product-card .form-select,
+        #PI_BodyHost .invoice-lines-card .form-control,
+        #PI_BodyHost .invoice-lines-card .form-select,
+        #PI_BodyHost .invoice-totals-card .form-control,
+        #PI_BodyHost .invoice-totals-card .form-select {
+            border-color: #94a3b8 !important;
+        }
+        #PI_BodyHost .invoice-lines-card .editable-line-field {
+            border-color: #94a3b8 !important;
+        }
         .invoice-product-card.invoice-product-card-list-style .card-body {
             padding: 0.75rem 1rem 1rem;
         }
-        /* انبوت اسم الصنف: لون مميز مائل للبنفسجي/الأزرق الفاتح */
+        /* انبوت اسم الصنف: حدود مميزة بدون لون داخلي */
         #ProdNameInput.pi-product-name-input,
         .invoice-Add-card .pi-product-name-input {
-            border: 2px solid #a5b4fc !important;
+            border: 2px solid #4f46e5 !important;
             border-radius: 0.375rem;
-            background-color: #eef2ff !important;
+            background-color: #fff !important;
         }
         .invoice-Add-card .pi-product-name-input:focus {
-            border-color: #6366f1 !important;
-            box-shadow: 0 0 0 0.2rem rgba(99,102,241,.25);
+            border-color: #4338ca !important;
+            box-shadow: 0 0 0 0.2rem rgba(79,70,229,.25);
         }
         /* الكارت الثالث (إدخال الصنف): حدود مثل الثاني + إعادة تنسيق البوكسات */
         .invoice-Add-card .card-body {
@@ -143,15 +213,15 @@
         .invoice-Add-card .card-body .form-control-sm,
         .invoice-Add-card .card-body .form-select-sm {
             border-radius: 0.4rem;
-            border: 1px solid #d1d5db;
+            border: 1px solid #94a3b8;
             padding: 0.4rem 0.55rem;
             font-size: 0.875rem;
             background-color: #fff;
         }
         .invoice-Add-card .card-body .form-control-sm:focus,
         .invoice-Add-card .card-body .form-select-sm:focus {
-            border-color: #a5b4fc;
-            box-shadow: 0 0 0 0.2rem rgba(165,180,252,.35);
+            border-color: #64748b;
+            box-shadow: 0 0 0 0.2rem rgba(100,116,139,.2);
         }
         .invoice-Add-card .card-body .btn-primary {
             border-radius: 0.4rem;
@@ -180,6 +250,7 @@
             font-size: 0.875rem;
             padding: 0.35rem 0.5rem;
             border-radius: 0.375rem;
+            border: 1px solid #94a3b8;
         }
         /* جداول الكارت الثاني: في سطر واحد وحجم متساوٍ */
         .invoice-product-card.invoice-product-card-list-style .pr-card-tables-row {
@@ -195,7 +266,7 @@
         .invoice-product-card.invoice-product-card-list-style .pr-card-table-wrap {
             border-radius: 8px;
             overflow: hidden;
-            border: 1px solid #dee2e6;
+            border: 1px solid #94a3b8;
             background: #fff;
         }
         .invoice-product-card.invoice-product-card-list-style .pr-card-table-title {
@@ -249,6 +320,11 @@
             max-width: 130px;
         }
 
+        /* جدول سطور الطلب: بدون ارتفاع ثابت لتفادي شريط تمرير ثانٍ — التمرير يكون للصفحة فقط */
+        .invoice-lines-card .erp-table-wrapper {
+            max-height: none;
+            overflow: visible;
+        }
         .erp-table-wrapper {
             max-height: 360px;
             overflow: auto;
@@ -339,6 +415,7 @@
             padding: 0.3rem 0.5rem;
             font-size: 0.875rem;
             min-height: 2rem;
+            border: 1px solid #94a3b8;
         }
         .invoice-header-card .pr-request-card-body .row.g-3 {
             --bs-gutter-x: 0.75rem;
@@ -351,10 +428,40 @@
                 overflow: visible !important;
             }
         }
+        /* حاوية الرسائل العابرة (تظهر وتختفي) */
+        #prToastContainer {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        #prToastContainer .pr-toast {
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+            animation: prToastIn 0.25s ease;
+            pointer-events: auto;
+        }
+        #prToastContainer .pr-toast.text-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+        #prToastContainer .pr-toast.text-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+        #prToastContainer .pr-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        #prToastContainer .pr-toast.text-muted { background: #f1f5f9; color: #475569; border: 1px solid #94a3b8; }
+        @@keyframes prToastIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
     </style>
 }
 
 <div class="invoice-page" dir="rtl">
+    <div id="prToastContainer" aria-live="polite"></div>
     <div class="container-fluid pt-3">
 
         @* فورم مخفي لتوليد Anti-Forgery Token لاستخدامه في نداءات AJAX *@
@@ -407,11 +514,12 @@
                         }
 
                         <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
+                            @* أزرار التنقل: معالجة النقر في docCaptureHandler (بدون open-same-tab لتفادي تعارض مع site.js) *@
                             <button type="button"
                                     id="btnFirstInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب  الشراء"
+                                    data-tab-title="طلب الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (navFirst ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(navFirst ?? 0)"
@@ -422,9 +530,9 @@
 
                             <button type="button"
                                     id="btnPrevInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب  الشراء"
+                                    data-tab-title="طلب الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (prevEffective ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(prevEffective ?? 0)"
@@ -435,9 +543,9 @@
 
                             <button type="button"
                                     id="btnNextInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب  الشراء"
+                                    data-tab-title="طلب الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (nextEffective ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(nextEffective ?? 0)"
@@ -448,9 +556,9 @@
 
                             <button type="button"
                                     id="btnLastInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب  الشراء"
+                                    data-tab-title="طلب الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (navLast ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(navLast ?? 0)"
@@ -470,14 +578,10 @@
                             <button type="button"
                                     id="btnNavInvoiceSearch"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
-                                    data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })">
                                 بحث
                             </button>
                         </div>
-
-                        <hr class="my-1" />
 
                         <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
                            data-tab-id="pr-show-tab"
@@ -497,7 +601,12 @@
                             🔄 تحويل إلى فاتورة مشتريات
                         </button>
 
-                        <div id="postInvoiceMsg" class="small mt-2"></div>
+                        <a href="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "#")" id="btnSupplierVolume" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none @(Model?.CustomerId > 0 ? "" : "d-none")"
+                           data-tab-id="customer-engagement"
+                           data-tab-title="حجم تعامل عميل"
+                           data-base-url="@Url.Action("Show", "Customers", new { frame = 1 })">
+                            📊 حجم تعامل
+                        </a>
 
                         <!-- ✅ في طلب  الشراء: لا يوجد فتح للطلب المحوّل (يتم التحويل فقط) -->
                         <!-- <button type="button"
@@ -521,8 +630,6 @@
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
                             🖨️ طباعة الطلب
                         </button>
-
-                        <hr class="my-1" />
 
                         <button type="button" id="btnOpenProductMovement"
                                 class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
@@ -1155,11 +1262,10 @@
                             l.QtyRequested * l.PriceRetail * (1m - (l.PurchaseDiscountPct / 100m))
                             );
 
-                            // PurchaseRequest لا يحتوي على TaxTotal، نستخدم ExpectedItemsTotal
                             decimal expectedTotal = Model.ExpectedItemsTotal;
-                            decimal taxAmount = 0m; // PurchaseRequest لا يحتوي على ضريبة
+                            decimal taxAmount = Model.TaxAmount;
                             decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
-                            decimal netTotal = expectedTotal; // أو totalAfterDiscountAndTax حسب المتطلبات
+                            decimal netTotal = totalAfterDiscountAndTax;
                         }
 
                         <div class="card shadow-sm invoice-totals-card">
@@ -1272,17 +1378,6 @@
 
 
     <script>
-                         // ✅ إظهار المحتوى ككتلة واحدة بعد اكتمال الـ DOM (بدون ظهور تدريجي)
-                         (function () {
-                             function showContent() {
-                                 document.body.classList.add('pr-content-ready');
-                             }
-                             if (document.readyState === 'complete' || document.readyState === 'interactive') {
-                                 showContent();
-                             } else {
-                                 document.addEventListener('DOMContentLoaded', showContent);
-                             }
-                         })();
                          // ✅ رابط عرض طلب الشراء (من السيرفر) — لاستخدامه عند تحميل body بالأسهم/بحث
                          window.__PR_ShowBaseUrl__ = '@(Url.Action("Show", "PurchaseRequests", new { frame = 1 }))';
 
@@ -1304,6 +1399,25 @@
                                  if (btnOk) btnOk.focus();
                              };
                          })();
+
+                         // رسالة عابرة تظهر وتختفي (بدون كارت الأزرار)
+                         function showToast(text, type) {
+                             if (!text) return;
+                             var container = document.getElementById('prToastContainer');
+                             if (!container) return;
+                             type = type || 'muted';
+                             var el = document.createElement('div');
+                             el.className = 'pr-toast text-' + type;
+                             el.textContent = text;
+                             container.appendChild(el);
+                             setTimeout(function () {
+                                 el.style.opacity = '0';
+                                 el.style.transition = 'opacity 0.25s ease';
+                                 setTimeout(function () {
+                                     if (el.parentNode) el.parentNode.removeChild(el);
+                                 }, 250);
+                             }, 4000);
+                         }
 
                          // =========================================================
                          // (A) أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
@@ -1377,6 +1491,8 @@
                                      if (custAreaInput)     custAreaInput.value     = '';
                                      if (custAddressInput)  custAddressInput.value  = '';
                                      if (custCreditInput)   custCreditInput.value   = '';
+                                     var btnVol = document.getElementById('btnSupplierVolume');
+                                     if (btnVol) { btnVol.href = '#'; btnVol.classList.add('d-none'); btnVol.setAttribute('data-url', ''); }
                                      return;
                                  }
 
@@ -1400,6 +1516,17 @@
                                  if (custAreaInput)     custAreaInput.value     = area;
                                  if (custAddressInput)  custAddressInput.value  = address;
                                  if (custCreditInput)   custCreditInput.value   = credit;
+
+                                 // تحديث زر حجم تعامل عند تغيير المورد
+                                 var btnVol = document.getElementById('btnSupplierVolume');
+                                 if (btnVol) {
+                                     var cid = parseInt((custHiddenId && custHiddenId.value) || '0', 10) || 0;
+                                     var volBase = btnVol.getAttribute('data-base-url') || '';
+                                     var volUrl = cid > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + cid) : '#';
+                                     btnVol.href = volUrl;
+                                     btnVol.classList.toggle('d-none', cid <= 0);
+                                     btnVol.setAttribute('data-url', volUrl);
+                                 }
                              }
 
                              // اسم المورد: change + Enter
@@ -3597,7 +3724,6 @@
                              document.addEventListener("DOMContentLoaded", function () {
 
                                              const btnClearAll = document.getElementById("btnClearInvoiceLines"); // متغير: زر مسح كل الأصناف (غيّر الـ id لو مختلف عندك)
-                                 const msg = document.getElementById("postInvoiceMsg");           // متغير: صندوق الرسائل
 
                                  if (!btnClearAll) return;
 
@@ -3633,19 +3759,13 @@
                                      const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
                                      if (invoiceId <= 0) {
-                                         if (msg) {
-                                             msg.textContent = "⚠️ لا يمكن مسح الأصناف قبل حفظ الطلب.";
-                                             msg.className = "small mt-2 text-warning";
-                                         }
+                                         showToast("⚠️ لا يمكن مسح الأصناف قبل حفظ الطلب.", "warning");
                                          return;
                                      }
 
                                      // ✅ منع المسح لو الطلب مُرحّلة (نفس سياسة البرنامج)
                                      if (typeof isInvoicePosted === "function" && isInvoicePosted()) {
-                                         if (msg) {
-                                             msg.textContent = "الطلب مُرحّلة ومقفولة. استخدم زر (فتح الطلب) أولاً.";
-                                             msg.className = "small mt-2 text-danger";
-                                         }
+                                         showToast("الطلب مُرحّلة ومقفولة. استخدم زر (فتح الطلب) أولاً.", "danger");
                                          return;
                                      }
 
@@ -3657,10 +3777,7 @@
                                      btnClearAll.disabled = true;
                                      btnClearAll.innerHTML = "⏳ جاري المسح...";
 
-                                     if (msg) {
-                                         msg.textContent = "جاري مسح جميع الأصناف...";
-                                         msg.className = "small mt-2 text-muted";
-                                     }
+                                     showToast("جاري مسح جميع الأصناف...", "muted");
 
                                      try {
 
@@ -3708,20 +3825,14 @@
                                          const url = setOrReplaceParam(baseUrl, 'id', invoiceId);
                                          await loadInvoiceBody(url);
 
-                                         if (msg) {
-                                             msg.textContent = data.message || "تم مسح جميع الأصناف.";
-                                             msg.className = "small mt-2 text-success";
-                                         }
+                                         showToast(data.message || "تم مسح جميع الأصناف.", "success");
 
                                      } catch (err) {
 
                                          btnClearAll.disabled = false;
                                          btnClearAll.innerHTML = oldHtml;
 
-                                         if (msg) {
-                                             msg.textContent = "فشل مسح الأصناف: " + (err.message || "خطأ غير معروف");
-                                             msg.className = "small mt-2 text-danger";
-                                         }
+                                         showToast("فشل مسح الأصناف: " + (err.message || "خطأ غير معروف"), "danger");
 
                                      } finally {
                                          busy = false;
@@ -3795,7 +3906,6 @@
                                  console.log('🔄 تهيئة زر التحويل...');
 
                                  const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر التحويل
-                                 const msg = document.getElementById("postInvoiceMsg");                  // متغير: مكان الرسائل
                                  const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة "محوّل؟" (عرض فقط)
 
                                  if (!btnPost) {
@@ -3819,14 +3929,10 @@
                                      btnPost.innerHTML = "✅ تم تحويل الطلب";
 
                                      // ✅ تحديث علم الترحيل + تطبيق القفل
-                                     if (typeof setInvoicePosted === "function") setInvoicePosted(true);
-                                     if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                                if (typeof setInvoicePosted === "function") setInvoicePosted(true);
+                                    if (typeof applyPostedUiLock === "function") applyPostedUiLock();
 
-                                     if (msg) {
-                                         msg.textContent = "هذه الطلب مترحّلة بالفعل.";
-                                         msg.className = "small mt-2 text-muted";
-                                     }
-                                     return;
+                                    return;
                                  }
 
                                  btnPost.addEventListener("click", async function (e) {
@@ -3841,10 +3947,7 @@
                                      console.log('📤 تم الضغط على زر الترحيل - InvoiceId:', invoiceId);
 
                                      if (invoiceId <= 0) {
-                                         if (msg) {
-                                             msg.textContent = "⚠️ لازم تحفظ الطلب أولاً قبل التحويل.";
-                                             msg.className = "small mt-2 text-warning";
-                                         }
+                                         showToast("⚠️ لازم تحفظ الطلب أولاً قبل التحويل.", "warning");
                                          const saveBtn = document.getElementById("btnSaveInvoiceHeader");
                                          if (saveBtn) saveBtn.focus();
                                          return;
@@ -3860,10 +3963,7 @@
                                      const oldHtml = btnPost.innerHTML;
                                      btnPost.innerHTML = "⏳ جاري التحويل...";
 
-                                     if (msg) {
-                                         msg.textContent = "يتم حفظ التعديلات ثم التحويل...";
-                                         msg.className = "small mt-2 text-muted";
-                                     }
+                                     showToast("يتم حفظ التعديلات ثم التحويل...", "muted");
 
                                      try {
 
@@ -3872,17 +3972,14 @@
                                          // =========================
                                          if (typeof window.__saveHeaderAndUpdateDom === 'function') {
                                              const saveResult = await window.__saveHeaderAndUpdateDom();
-                                             if (!saveResult || !saveResult.ok) {
-                                                 if (msg) { msg.textContent = (saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل التحويل.'; msg.className = 'small mt-2 text-danger'; }
+                                                 if (!saveResult || !saveResult.ok) {
+                                                 showToast((saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل التحويل.', 'danger');
                                                  btnPost.disabled = false;
                                                  btnPost.innerHTML = oldHtml;
                                                  return;
                                              }
                                          }
-                                         if (msg) {
-                                             msg.textContent = "يتم الآن تحويل الطلب...";
-                                             msg.className = "small mt-2 text-muted";
-                                         }
+                                         showToast("يتم الآن تحويل الطلب...", "muted");
 
                                          // =========================
                                          // 1) طلب  التحويل
@@ -3946,20 +4043,14 @@
                                          btnPost.innerHTML = "✅ تم تحويل الطلب";
                                          btnPost.disabled = true;
 
-                                         if (msg) {
-                                             msg.textContent = okMsg;
-                                             msg.className = "small mt-2 text-success";
-                                         }
+                                         showToast(okMsg, "success");
 
                                      } catch (err) {
 
                                          btnPost.disabled = false;
                                          btnPost.innerHTML = oldHtml;
 
-                                         if (msg) {
-                                             msg.textContent = "فشل التحويل: " + (err.message || "خطأ غير معروف");
-                                             msg.className = "small mt-2 text-danger";
-                                         }
+                                         showToast("فشل التحويل: " + (err.message || "خطأ غير معروف"), "danger");
                                          console.error('❌ خطأ في التحويل:', err);
                                      }
                                  });
@@ -4007,7 +4098,6 @@
 
                                  const btnOpen = document.getElementById("btnOpenInvoice");              // متغير: زر الفتح
                                  const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر الترحيل (لو موجود)
-                                 const msg = document.getElementById("postInvoiceMsg");                  // متغير: نفس بوكس الرسائل
                                  const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة مُرحَّلة؟ (لو موجودة)
 
                                  if (!btnOpen) return;
@@ -4036,10 +4126,7 @@
                                      const oldHtml = btnOpen.innerHTML;
                                      btnOpen.innerHTML = "⏳ جاري الفتح...";
 
-                                     if (msg) {
-                                         msg.textContent = "جاري فتح الطلب للتعديل...";
-                                         msg.className = "small mt-2 text-muted";
-                                     }
+                                     showToast("جاري فتح الطلب للتعديل...", "muted");
 
                                      try {
 
@@ -4048,10 +4135,7 @@
                                   const invoiceId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
 
                              if (invoiceId <= 0) {
-                                 if (msg) {
-                                     msg.textContent = "⚠️ لا يمكن فتح طلب  شراء قبل حفظه.";
-                                     msg.className = "small mt-2 text-warning";
-                                 }
+                                 showToast("⚠️ لا يمكن فتح طلب شراء قبل حفظه.", "warning");
                                  btnOpen.disabled = true;
                                  btnOpen.innerHTML = oldHtml;
                                  busy = false;
@@ -4106,10 +4190,7 @@
                              // if (isPostedBox) isPostedBox.value = "مفتوحة للتعديل";
 
                              // ✅ رسالة نجاح
-                             if (msg) {
-                                 msg.textContent = okMsg;
-                                 msg.className = "small mt-2 text-success";
-                             }
+                            showToast(okMsg, "success");
 
                                      }
                                      catch (err) {
@@ -4118,10 +4199,7 @@
                                          btnOpen.disabled = false;
                                          btnOpen.innerHTML = oldHtml;
 
-                                         if (msg) {
-                                             msg.textContent = "فشل فتح الطلب: " + (err.message || "خطأ غير معروف");
-                                             msg.className = "small mt-2 text-danger";
-                                         }
+                                        showToast("فشل فتح الطلب: " + (err.message || "خطأ غير معروف"), "danger");
                                      }
                                      finally {
                                          busy = false;
@@ -4538,6 +4616,38 @@
                                      // ✅ بعد تبديل الـ body: حدّث أزرار السايد بار
                                      refreshSideNavButtons();
 
+                                     // ✅ جلب سطور الطلب عبر GetLinesJson وعرضها (حل مشكلة ظهور السطور فارغة بعد التنقل بالأسهم/بحث)
+                                     if (bodyInvoiceId > 0) {
+                                         try {
+                                             const linesRes = await fetch('@Url.Action("GetLinesJson", "PurchaseRequests")?id=' + bodyInvoiceId, {
+                                                 method: 'GET',
+                                                 credentials: 'same-origin',
+                                                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
+                                             });
+                                             if (linesRes.ok) {
+                                                 const linesData = await linesRes.json();
+                                                 if (linesData && linesData.ok && Array.isArray(linesData.lines)) {
+                                                     if (typeof renderGroupedLines === 'function') renderGroupedLines(linesData.lines);
+                                                     if (linesData.totals && typeof updateSummaryBadges === 'function') updateSummaryBadges(linesData.totals);
+                                                     var taxInp = document.getElementById('TaxAmountInput');
+                                                     if (taxInp && linesData.totals && linesData.totals.taxAmount != null) taxInp.value = Number(linesData.totals.taxAmount).toFixed(2);
+                                                     if (typeof bindEditableLineFields === 'function') setTimeout(function () { bindEditableLineFields(); }, 50);
+                                                 }
+                                             }
+                                         } catch (linesErr) { console.warn('GetLinesJson بعد التنقل:', linesErr); }
+                                     }
+
+                                     // ✅ تحديث زر حجم تعامل المورد (حسب CustomerId في الهيدر)
+                                     var custId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                                     var btnVol = document.getElementById('btnSupplierVolume');
+                                     if (btnVol) {
+                                         var volBase = btnVol.getAttribute('data-base-url') || '';
+                                         var volUrl = custId > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + custId) : '#';
+                                         btnVol.href = volUrl;
+                                         btnVol.classList.toggle('d-none', custId <= 0);
+                                         btnVol.setAttribute('data-url', volUrl);
+                                     }
+
                                      // ✅ بعد التبديل: أعد تهيئة tooltips للأسهم مرة واحدة وبشكل سليم
                                      setupTooltips();
 
@@ -4684,11 +4794,7 @@
                                      }
                                      if (typeof bindEditableLineFields === 'function') setTimeout(() => bindEditableLineFields(), 50);
 
-                                     const msgBox = document.getElementById('postInvoiceMsg');
-                                     if (msgBox) {
-                                         msgBox.textContent = data.message || 'تم حذف السطر.';
-                                         msgBox.className = 'small mt-2 text-success';
-                                     }
+                                    showToast(data.message || 'تم حذف السطر.', 'success');
 
                                  } catch (e) {
                                      console.error(e);
@@ -4763,7 +4869,6 @@
                  document.addEventListener("DOMContentLoaded", function () {
 
                      const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الطلب
-                     const msg = document.getElementById("postInvoiceMsg");       // متغير: صندوق الرسائل
 
                      if (!btnPrint) return;
 
@@ -4896,19 +5001,13 @@
                          const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
                          if (invoiceId <= 0) {
-                             if (msg) {
-                                 msg.textContent = "⚠️ لا يمكن طباعة طلبقبل حفظها.";
-                                 msg.className = "small mt-2 text-warning";
-                             }
+                            showToast("⚠️ لا يمكن طباعة الطلب قبل حفظه.", "warning");
                              return;
                          }
 
                          // ✅ شرط البرنامج: لا طباعة إلا بعد الترحيل
                          if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
-                             if (msg) {
-                                 msg.textContent = "❌ لا يمكن طباعة الطلب إلا بعد التحويل.";
-                                 msg.className = "small mt-2 text-danger";
-                             }
+                            showToast("❌ لا يمكن طباعة الطلب إلا بعد التحويل.", "danger");
                              document.getElementById("btnPostInvoice")?.focus();
                              return;
                          }
@@ -4921,10 +5020,7 @@
                          const ok = preparePurchaseInvoicePrint();
                          if (!ok) {
                              printing = false;
-                             if (msg) {
-                                 msg.textContent = "تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.";
-                                 msg.className = "small mt-2 text-danger";
-                             }
+                            showToast("تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.", "danger");
                              return;
                          }
 

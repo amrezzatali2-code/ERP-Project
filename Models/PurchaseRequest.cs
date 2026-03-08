@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;          // لاستخدام Display و Key
 using System.ComponentModel.DataAnnotations.Schema;  // لاستخدام DatabaseGenerated
@@ -52,6 +52,10 @@ namespace ERP.Models
         [Display(Name = "إجمالي التكلفة المتوقعة")]
         [Precision(18, 4)]
         public decimal ExpectedItemsTotal { get; set; }    // مجموع (الكمية × التكلفة المتوقعة للوحدة)
+
+        [Display(Name = "قيمة الضريبة")]
+        [Precision(18, 2)]
+        public decimal TaxAmount { get; set; }             // ضريبة تقديرية على الطلب (مثل فاتورة المبيعات)
 
         // ========= بيانات إنشاء الطلب =========
 

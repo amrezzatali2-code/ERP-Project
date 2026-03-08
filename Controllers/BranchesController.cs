@@ -1,4 +1,4 @@
-﻿using Azure.Core;
+using Azure.Core;
 using ClosedXML.Excel;                            // مكتبة Excel
 using DocumentFormat.OpenXml.InkML;
 using ERP.Data;                                   // AppDbContext
@@ -35,7 +35,84 @@ namespace ERP.Controllers
             _activityLogger = activityLogger;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static IQueryable<Branch> ApplyColumnFilters(
+            IQueryable<Branch> query,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(b => ids.Contains(b.BranchId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(b => b.BranchName != null && vals.Contains(b.BranchName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime?>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(b => b.CreatedAt.HasValue && dates.Contains(b.CreatedAt));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime?>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(b => b.UpdatedAt.HasValue && dates.Contains(b.UpdatedAt));
+                }
+            }
+            return query;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _db.Branches.AsNoTracking();
+            if (columnLower == "id" || columnLower == "branchid")
+            {
+                var ids = await q.Select(b => b.BranchId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "name" || columnLower == "branchname")
+            {
+                var list = await q.Select(b => b.BranchName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "created" || columnLower == "createdat")
+            {
+                var list = await q.Where(b => b.CreatedAt.HasValue).Select(b => b.CreatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "updated" || columnLower == "updatedat")
+            {
+                var list = await q.Where(b => b.UpdatedAt.HasValue).Select(b => b.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            return Json(Array.Empty<object>());
+        }
 
         // دالة خاصة لتجهيز كويري الفروع مع تطبيق الفلاتر
         private IQueryable<Branch> FilterBranches(
@@ -107,6 +184,10 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
             int page = 1,
             int pageSize = 25)
         {
@@ -153,23 +234,15 @@ namespace ERP.Controllers
                 }
             }
 
-            // ===== فلترة بالتاريخ (تاريخ الإنشاء) =====
             if (useDateRange)
             {
                 if (fromDate.HasValue)
-                {
-                    query = query.Where(b =>
-                        b.CreatedAt.HasValue &&
-                        b.CreatedAt.Value >= fromDate.Value);
-                }
-
+                    query = query.Where(b => b.CreatedAt.HasValue && b.CreatedAt.Value >= fromDate.Value);
                 if (toDate.HasValue)
-                {
-                    query = query.Where(b =>
-                        b.CreatedAt.HasValue &&
-                        b.CreatedAt.Value <= toDate.Value);
-                }
+                    query = query.Where(b => b.CreatedAt.HasValue && b.CreatedAt.Value <= toDate.Value);
             }
+
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_created, filterCol_updated);
 
             // ===== الترتيب =====
             // name   = اسم الفرع
@@ -235,6 +308,10 @@ namespace ERP.Controllers
             ViewBag.SearchBy = searchBy;
             ViewBag.Sort = sort;
             ViewBag.Dir = dir;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             return View(result);
         }
@@ -522,10 +599,14 @@ namespace ERP.Controllers
             bool useDateRange,
             DateTime? fromDate,
             DateTime? toDate,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
             string? format = "excel")
         {
-            // تطبيق الفلاتر
             var query = FilterBranches(search, searchBy, useDateRange, fromDate, toDate);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_created, filterCol_updated);
 
             // تطبيق الترتيب مثل شاشة الـ Index
             query = (sort, dir?.ToLower()) switch

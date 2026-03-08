@@ -1137,6 +1137,82 @@ private async Task PopulateDropDownsAsync(
 
 
         // ================================================================
+        // GetLinesJson — جلب سطور طلب الشراء كـ JSON (للاستخدام بعد تحميل body بالأسهم/بحث)
+        // ================================================================
+        [RequirePermission("PurchaseRequests.Show")]
+        [HttpGet]
+        public async Task<IActionResult> GetLinesJson(int id)
+        {
+            if (id <= 0)
+                return BadRequest(new { ok = false, message = "رقم الطلب غير صحيح." });
+
+            var pr = await _context.PurchaseRequests.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.PRId == id);
+            if (pr == null)
+                return NotFound(new { ok = false, message = "طلب الشراء غير موجود." });
+
+            var linesNow = await _context.PRLines
+                .Where(l => l.PRId == id)
+                .OrderBy(l => l.LineNo)
+                .ToListAsync();
+
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products
+                .Where(p => prodIds.Contains(p.ProdId))
+                .Select(p => new { p.ProdId, p.ProdName })
+                .ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+            int totalLines = linesNow.Count;
+            int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
+            int totalQty = linesNow.Sum(x => x.QtyRequested);
+            decimal totalRetail = linesNow.Sum(x => x.QtyRequested * x.PriceRetail);
+            decimal totalDiscount = linesNow.Sum(x => (x.QtyRequested * x.PriceRetail) * (x.PurchaseDiscountPct / 100m));
+            decimal totalAfterDiscount = totalRetail - totalDiscount;
+            decimal taxAmount = pr.TaxAmount;
+            decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
+
+            var linesDto = linesNow.Select(l =>
+            {
+                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                var lv = (l.QtyRequested * l.PriceRetail) * (1 - (l.PurchaseDiscountPct / 100m));
+                return new
+                {
+                    lineNo = l.LineNo,
+                    prodId = l.ProdId,
+                    prodName = name,
+                    qty = l.QtyRequested,
+                    qtyRequested = l.QtyRequested,
+                    priceRetail = l.PriceRetail,
+                    discPct = l.PurchaseDiscountPct,
+                    purchaseDiscountPct = l.PurchaseDiscountPct,
+                    batchNo = l.PreferredBatchNo,
+                    preferredBatchNo = l.PreferredBatchNo,
+                    expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"),
+                    preferredExpiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"),
+                    lineValue = lv
+                };
+            }).ToList();
+
+            return Json(new
+            {
+                ok = true,
+                lines = linesDto,
+                totals = new
+                {
+                    totalLines,
+                    totalItems,
+                    totalQty,
+                    totalRetail,
+                    totalDiscount,
+                    totalAfterDiscount,
+                    taxAmount,
+                    totalAfterDiscountAndTax,
+                    netTotal = totalAfterDiscountAndTax
+                }
+            });
+        }
+
+        // ================================================================
         // DTO: بيانات مسح سطر (جاية من AJAX) — طلب الشراء
         // ================================================================
         public class RemoveLineJsonDto
@@ -1471,43 +1547,44 @@ private async Task PopulateDropDownsAsync(
                 }
 
                 // =========================
-                // 3) طلب الشراء لا يحفظ ضريبة (حسب الموديل الحالي)
+                // 3) حفظ قيمة الضريبة في طلب الشراء (مثل فاتورة المبيعات)
                 // =========================
-                // لو الواجهة بتبعت taxTotal بالخطأ أو لسبب UI قديم:
-                // - نمنع حفظ قيمة غير صفرية حتى لا يفتكر المستخدم أنها اتخزنت.
-                if (dto.taxTotal != 0m)
-                {
-                    return BadRequest(new
-                    {
-                        ok = false,
-                        message = "طلب الشراء لا يدعم حفظ الضريبة حالياً. (لا يوجد TaxTotal داخل PurchaseRequest)."
-                    });
-                }
+                pr.TaxAmount = Math.Round(dto.taxTotal, 2);
+                pr.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
 
                 // =========================
-                // 4) إعادة حساب إجماليات طلب الشراء
+                // 4) إعادة حساب إجماليات طلب الشراء (TotalQtyRequested + ExpectedItemsTotal)
                 // =========================
                 await _docTotals.RecalcPurchaseRequestTotalsAsync(dto.PRId);
 
                 // =========================
-                // 5) قراءة الإجماليات بعد الحساب وإرجاعها للواجهة
+                // 5) قراءة الإجماليات بعد الحساب وإرجاعها للواجهة (مع الضريبة)
                 // =========================
                 var headerTotals = await _context.PurchaseRequests.AsNoTracking()
                     .Where(p => p.PRId == dto.PRId)
                     .Select(p => new
                     {
-                        p.TotalQtyRequested,   // متغير: إجمالي الكمية المطلوبة
-                        p.ExpectedItemsTotal   // متغير: إجمالي التكلفة/القيمة المتوقعة
+                        p.TotalQtyRequested,
+                        p.ExpectedItemsTotal,
+                        p.TaxAmount
                     })
                     .FirstAsync();
+
+                decimal totalAfterDiscount = headerTotals.ExpectedItemsTotal; // في طلب الشراء الإجمالي بعد الخصم = المتوقع
+                decimal totalAfterDiscountAndTax = totalAfterDiscount + headerTotals.TaxAmount;
 
                 return Json(new
                 {
                     ok = true,
                     totals = new
                     {
-                        totalQty = headerTotals.TotalQtyRequested,          // إجمالي الكميات
-                        expectedTotal = headerTotals.ExpectedItemsTotal      // إجمالي القيمة المتوقعة
+                        totalQty = headerTotals.TotalQtyRequested,
+                        expectedTotal = headerTotals.ExpectedItemsTotal,
+                        totalAfterDiscount = totalAfterDiscount,
+                        taxAmount = headerTotals.TaxAmount,
+                        totalAfterDiscountAndTax = totalAfterDiscountAndTax,
+                        netTotal = totalAfterDiscountAndTax
                     }
                 });
             }
@@ -1560,10 +1637,12 @@ private async Task PopulateDropDownsAsync(
 
             return new
             {
-                // ملاحظة: totalLines/totalItems غالبًا هنجيبهم من دالة تحميل السطور للواجهة
-                // لكن totalQty موجود جاهز في الهيدر حسب تصميمك
-                totalQty = header.TotalQtyRequested,       // متغير: إجمالي الكمية المطلوبة
-                expectedTotal = header.ExpectedItemsTotal  // متغير: إجمالي التكلفة/القيمة المتوقعة
+                totalQty = header.TotalQtyRequested,
+                expectedTotal = header.ExpectedItemsTotal,
+                taxAmount = header.TaxAmount,
+                totalAfterDiscount = header.ExpectedItemsTotal,
+                totalAfterDiscountAndTax = header.ExpectedItemsTotal + header.TaxAmount,
+                netTotal = header.ExpectedItemsTotal + header.TaxAmount
             };
         }
 

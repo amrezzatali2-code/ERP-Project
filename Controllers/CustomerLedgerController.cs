@@ -26,6 +26,27 @@ namespace ERP.Controllers
             _context = context;
         }
 
+        private static string SourceTypeDisplayAr(LedgerSourceType t)
+        {
+            return t switch
+            {
+                LedgerSourceType.Opening => "رصيد افتتاحي",
+                LedgerSourceType.SalesInvoice => "فاتورة مبيعات",
+                LedgerSourceType.SalesReturn => "مرتجع بيع",
+                LedgerSourceType.PurchaseInvoice => "فاتورة مشتريات",
+                LedgerSourceType.PurchaseReturn => "مرتجع شراء",
+                LedgerSourceType.Receipt => "إذن استلام",
+                LedgerSourceType.Payment => "إذن دفع",
+                LedgerSourceType.Journal => "قيد يومية",
+                LedgerSourceType.Adjustment => "تسوية",
+                LedgerSourceType.StockTransfer => "تحويل مخزني",
+                LedgerSourceType.StockAdjustment => "تسوية جرد",
+                LedgerSourceType.DebitNote => "إشعار خصم",
+                LedgerSourceType.CreditNote => "إشعار إضافة",
+                _ => t.ToString()
+            };
+        }
+
         /// <summary>
         /// كشف حساب عميل — القيود المحاسبية للعميل مع فلتر التاريخ
         /// عند عدم اختيار عميل: يعرض نموذج اختيار العميل
@@ -98,6 +119,9 @@ namespace ERP.Controllers
                 .Include(e => e.Account)
                 .Where(e => e.CustomerId == customerId.Value);
 
+            // استبعاد قيود "عكس ترحيل" — نعرض القيد النهائي فقط دون ظهور عكس الترحيل
+            q = q.Where(e => e.Description == null || !e.Description.Contains("عكس ترحيل"));
+
             // استبعاد القيود المرتبطة بمستندات محذوفة (مثل فاتورة تم حذفها ثم عُكست قيودها)
             q = q.Where(e =>
                 !e.SourceId.HasValue
@@ -114,6 +138,27 @@ namespace ERP.Controllers
                 || (e.SourceType == LedgerSourceType.Payment && _context.CashPayments.Any(p => p.CashPaymentId == e.SourceId))
                 || (e.SourceType == LedgerSourceType.DebitNote && _context.DebitNotes.Any(d => d.DebitNoteId == e.SourceId))
                 || (e.SourceType == LedgerSourceType.CreditNote && _context.CreditNotes.Any(c => c.CreditNoteId == e.SourceId)));
+
+            // لكل مستند (نوع + رقم) نأخذ آخر مرحلة ترحيل فقط — حتى لا يتكرر رقم المستند
+            q = q.Where(e => !e.SourceId.HasValue ||
+                e.PostVersion == (_context.LedgerEntries
+                    .Where(x => x.CustomerId == customerId.Value && x.SourceType == e.SourceType && x.SourceId == e.SourceId
+                        && (x.Description == null || !x.Description.Contains("عكس ترحيل"))
+                        && (!x.SourceId.HasValue
+                            || x.SourceType == LedgerSourceType.Opening
+                            || x.SourceType == LedgerSourceType.Journal
+                            || x.SourceType == LedgerSourceType.Adjustment
+                            || x.SourceType == LedgerSourceType.StockTransfer
+                            || x.SourceType == LedgerSourceType.StockAdjustment
+                            || (x.SourceType == LedgerSourceType.SalesInvoice && _context.SalesInvoices.Any(s => s.SIId == x.SourceId))
+                            || (x.SourceType == LedgerSourceType.SalesReturn && _context.SalesReturns.Any(s => s.SRId == x.SourceId))
+                            || (x.SourceType == LedgerSourceType.PurchaseInvoice && _context.PurchaseInvoices.Any(p => p.PIId == x.SourceId))
+                            || (x.SourceType == LedgerSourceType.PurchaseReturn && _context.PurchaseReturns.Any(p => p.PRetId == x.SourceId))
+                            || (x.SourceType == LedgerSourceType.Receipt && _context.CashReceipts.Any(r => r.CashReceiptId == x.SourceId))
+                            || (x.SourceType == LedgerSourceType.Payment && _context.CashPayments.Any(p => p.CashPaymentId == x.SourceId))
+                            || (x.SourceType == LedgerSourceType.DebitNote && _context.DebitNotes.Any(d => d.DebitNoteId == x.SourceId))
+                            || (x.SourceType == LedgerSourceType.CreditNote && _context.CreditNotes.Any(c => c.CreditNoteId == x.SourceId))))
+                    .Max(x => (int?)x.PostVersion) ?? 0));
 
             if (fromDate.HasValue)
                 q = q.Where(e => e.EntryDate >= fromDate.Value.Date);
@@ -253,7 +298,8 @@ namespace ERP.Controllers
             var q = _context.LedgerEntries
                 .AsNoTracking()
                 .Include(e => e.Account)
-                .Where(e => e.CustomerId == customerId.Value);
+                .Where(e => e.CustomerId == customerId.Value)
+                .Where(e => e.Description == null || !e.Description.Contains("عكس ترحيل"));
 
             List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
             {
@@ -261,7 +307,7 @@ namespace ERP.Controllers
                     .Select(v => (v.ToString(), v.ToString())).ToList(),
                 "entrydate" => (await q.Select(e => new { e.EntryDate.Year, Month = e.EntryDate.Month }).Distinct().OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
                     .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
-                "sourcetype" => Enum.GetNames(typeof(LedgerSourceType)).Select(n => (n, n)).ToList(),
+                "sourcetype" => Enum.GetValues<LedgerSourceType>().Select(t => (t.ToString(), SourceTypeDisplayAr(t))).OrderBy(x => x.Item2).ToList(),
                 "voucherno" => string.IsNullOrEmpty(searchTerm)
                     ? (await q.Where(e => e.VoucherNo != null).Select(e => e.VoucherNo!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
                     : (await q.Where(e => e.VoucherNo != null && EF.Functions.Like(e.VoucherNo, "%" + searchTerm + "%")).Select(e => e.VoucherNo!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),

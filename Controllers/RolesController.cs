@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التوقيت DateTime
+using System;                                     // متغيرات التوقيت DateTime
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لتكوين ملف CSV
 using System.Threading.Tasks;                     // async / await
@@ -119,7 +119,122 @@ namespace ERP.Controllers
             return query;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static IQueryable<Role> ApplyColumnFilters(
+            IQueryable<Role> query,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_description,
+            string? filterCol_system,
+            string? filterCol_active,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(r => ids.Contains(r.RoleId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(r => vals.Contains(r.Name));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_description))
+            {
+                var vals = filterCol_description.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(r => r.Description != null && vals.Contains(r.Description));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_system))
+            {
+                var vals = filterCol_system.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant()).ToList();
+                var wantTrue = vals.Any(v => v == "true" || v == "1" || v == "نعم");
+                var wantFalse = vals.Any(v => v == "false" || v == "0" || v == "لا");
+                if (wantTrue && !wantFalse) query = query.Where(r => r.IsSystemRole);
+                else if (wantFalse && !wantTrue) query = query.Where(r => !r.IsSystemRole);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_active))
+            {
+                var vals = filterCol_active.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant()).ToList();
+                var wantTrue = vals.Any(v => v == "true" || v == "1" || v == "نعم");
+                var wantFalse = vals.Any(v => v == "false" || v == "0" || v == "لا");
+                if (wantTrue && !wantFalse) query = query.Where(r => r.IsActive);
+                else if (wantFalse && !wantTrue) query = query.Where(r => !r.IsActive);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(r => dates.Contains(r.CreatedAt));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(r => r.UpdatedAt.HasValue && dates.Contains(r.UpdatedAt.Value));
+                }
+            }
+            return query;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.Roles.AsNoTracking();
+
+            if (columnLower == "id")
+            {
+                var ids = await q.Select(r => r.RoleId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "name")
+            {
+                var list = await q.Select(r => r.Name).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "description")
+            {
+                var list = await q.Where(r => r.Description != null && r.Description != "").Select(r => r.Description!).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = (v != null && v.Length > 50 ? v.Substring(0, 50) + "..." : v) ?? "" }));
+            }
+            if (columnLower == "system" || columnLower == "issystemrole")
+                return Json(new[] { new { value = "true", display = "\u0646\u0639\u0645" }, new { value = "false", display = "\u0644\u0627" } });
+            if (columnLower == "active" || columnLower == "isactive")
+                return Json(new[] { new { value = "true", display = "\u0646\u0639\u0645" }, new { value = "false", display = "\u0644\u0627" } });
+            if (columnLower == "created" || columnLower == "createdat")
+            {
+                var list = await q.Select(r => r.CreatedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "updated" || columnLower == "updatedat")
+            {
+                var list = await q.Where(r => r.UpdatedAt.HasValue).Select(r => r.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            return Json(Array.Empty<object>());
+        }
 
 
 
@@ -132,25 +247,29 @@ namespace ERP.Controllers
         // ===============================================================
         [RequirePermission("Roles.Index")]
         public async Task<IActionResult> Index(
-       string? search,
-       string? searchBy,
-       string? sort,
-       string? dir,
-       int page = 1,
-       int pageSize = 25,
-       bool useDateRange = false,
-       DateTime? fromDate = null,
-       DateTime? toDate = null,
-       string? dateField = "CreatedAt",
-       int? fromCode = null,
-       int? toCode = null)
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            int page = 1,
+            int pageSize = 25,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? dateField = "CreatedAt",
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_description = null,
+            string? filterCol_system = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
-            // ❶ استعلام أساسي بدون تتبع (قراءة فقط)
-            var query = _context.Roles
-                .AsNoTracking();
-
-            // ❷ تطبيق البحث + فلاتر الكود + فلاتر التاريخ
+            var query = _context.Roles.AsNoTracking();
             query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_description, filterCol_system, filterCol_active, filterCol_created, filterCol_updated);
 
             // ❸ الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -217,6 +336,13 @@ namespace ERP.Controllers
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "CreatedAt";
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Description = filterCol_description;
+            ViewBag.FilterCol_System = filterCol_system;
+            ViewBag.FilterCol_Active = filterCol_active;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             return View(model);
         }
@@ -434,84 +560,27 @@ namespace ERP.Controllers
         // ===============================================================
         [HttpGet]
         public async Task<IActionResult> Export(
-         string? search,
-         string? searchBy,
-         string? sort,
-         string? dir,
-         bool useDateRange = false,
-         DateTime? fromDate = null,
-         DateTime? toDate = null,
-         string? dateField = "CreatedAt",
-         int? fromCode = null,
-         int? toCode = null)
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? dateField = "CreatedAt",
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_description = null,
+            string? filterCol_system = null,
+            string? filterCol_active = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
-            // 1) الاستعلام الأساسي من جدول الأدوار (قراءة فقط)
             IQueryable<Role> query = _context.Roles.AsNoTracking();
-
-            // =========================
-            // فلتر كود من / إلى (RoleId)
-            // =========================
-            if (fromCode.HasValue)
-                query = query.Where(r => r.RoleId >= fromCode.Value);
-
-            if (toCode.HasValue)
-                query = query.Where(r => r.RoleId <= toCode.Value);
-
-            // =========================
-            // فلتر التاريخ (CreatedAt / UpdatedAt)
-            // =========================
-            if (useDateRange && fromDate.HasValue && toDate.HasValue)
-            {
-                var from = fromDate.Value;
-                var to = toDate.Value;
-
-                // لو التاريخ بدون وقت نخليه آخر اليوم
-                if (to.TimeOfDay == TimeSpan.Zero)
-                    to = to.Date.AddDays(1).AddTicks(-1);
-
-                if (string.Equals(dateField, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
-                {
-                    query = query.Where(r => r.UpdatedAt >= from && r.UpdatedAt <= to);
-                }
-                else
-                {
-                    // الافتراضي: CreatedAt
-                    query = query.Where(r => r.CreatedAt >= from && r.CreatedAt <= to);
-                }
-            }
-
-            // =========================
-            // فلتر البحث
-            // =========================
-            search = (search ?? string.Empty).Trim();
-            searchBy = string.IsNullOrWhiteSpace(searchBy) ? "all" : searchBy.ToLower();
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                switch (searchBy)
-                {
-                    case "id":
-                        query = query.Where(r => r.RoleId.ToString().Contains(search));
-                        break;
-
-                    case "name":
-                        query = query.Where(r => r.Name.Contains(search));
-                        break;
-
-                    case "description":
-                        query = query.Where(r => r.Description != null &&
-                                                 r.Description.Contains(search));
-                        break;
-
-                    case "all":
-                    default:
-                        query = query.Where(r =>
-                            r.RoleId.ToString().Contains(search) ||
-                            r.Name.Contains(search) ||
-                            (r.Description != null && r.Description.Contains(search)));
-                        break;
-                }
-            }
+            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_description, filterCol_system, filterCol_active, filterCol_created, filterCol_updated);
 
             // =========================
             // الترتيب (نفس فكرة الاندكس)

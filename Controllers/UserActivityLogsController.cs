@@ -521,7 +521,8 @@ namespace ERP.Controllers
             }
             if (col == "time" || col == "actiontime")
             {
-                var list = await q.Select(x => x.ActionTime.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var dates = await q.Select(x => x.ActionTime).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var list = dates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct().ToList();
                 if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
                 return Json(list.Select(v => new { value = v, display = v }));
             }

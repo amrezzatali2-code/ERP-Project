@@ -1,4 +1,4 @@
-﻿using ClosedXML.Excel;
+using ClosedXML.Excel;
 using ERP.Data;                             // كائن الاتصال بقاعدة البيانات AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                  // كلاس PagedResult لتقسيم الصفحات + الفلاتر
@@ -63,9 +63,12 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate)
         {
-            // 1) الاستعلام الأساسي (قراءة فقط لتحسين الأداء)
+            // 1) الاستعلام الأساسي مع تحميل أسماء السياسة والمخزن
             IQueryable<WarehousePolicyRule> q =
-                _context.WarehousePolicyRules.AsNoTracking();
+                _context.WarehousePolicyRules
+                    .Include(r => r.Warehouse)
+                    .Include(r => r.Policy)
+                    .AsNoTracking();
 
             // 2) فلتر الكود من/إلى (كود القاعدة نفسها Id)
             if (fromCode.HasValue)
@@ -130,7 +133,9 @@ namespace ERP.Controllers
                 {
                     ["id"] = x => x.Id,
                     ["warehouse"] = x => x.WarehouseId,
+                    ["warehousename"] = x => x.Warehouse != null ? x.Warehouse.WarehouseName ?? "" : "",
                     ["policy"] = x => x.PolicyId,
+                    ["policyname"] = x => x.Policy != null ? x.Policy.Name ?? "" : "",
                     ["profit"] = x => x.ProfitPercent,
                     ["maxdisc"] = x => x.MaxDiscountToCustomer ?? 0m,
                     ["created"] = x => x.CreatedAt
@@ -152,7 +157,150 @@ namespace ERP.Controllers
             return q;
         }
 
+        private static readonly char[] _filterSep = { '|', ',', ';' };
 
+        private IQueryable<WarehousePolicyRule> ApplyColumnFilters(
+            IQueryable<WarehousePolicyRule> q,
+            string? filterCol_id,
+            string? filterCol_warehouse,
+            string? filterCol_warehousename,
+            string? filterCol_policy,
+            string? filterCol_policyname,
+            string? filterCol_profit,
+            string? filterCol_maxdisc,
+            string? filterCol_created)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.Id));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.WarehouseId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehousename))
+            {
+                var terms = filterCol_warehousename.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.Warehouse != null && terms.Contains(x.Warehouse.WarehouseName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_policy))
+            {
+                var ids = filterCol_policy.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.PolicyId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_policyname))
+            {
+                var terms = filterCol_policyname.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.Policy != null && terms.Contains(x.Policy.Name));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_profit))
+            {
+                var terms = filterCol_profit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim())
+                    .Select(t => decimal.TryParse(t, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => terms.Contains(x.ProfitPercent));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_maxdisc))
+            {
+                var terms = filterCol_maxdisc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim())
+                    .Select(t => decimal.TryParse(t, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => x.MaxDiscountToCustomer.HasValue && terms.Contains(x.MaxDiscountToCustomer.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var terms = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(t => t.Trim()).Where(t => t.Length > 0).ToList();
+                if (terms.Count > 0)
+                    q = q.Where(x => terms.Any(t => x.CreatedAt.ToString("yyyy-MM-dd HH:mm").Contains(t)));
+            }
+            return q;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.WarehousePolicyRules
+                .Include(r => r.Warehouse)
+                .Include(r => r.Policy)
+                .AsNoTracking();
+
+            if (col == "id")
+            {
+                var ids = await q.Select(x => x.Id).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (col == "warehouse")
+            {
+                var ids = await q.Select(x => x.WarehouseId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (col == "warehousename")
+            {
+                var list = await q.Where(x => x.Warehouse != null).Select(x => x.Warehouse!.WarehouseName!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (col == "policy")
+            {
+                var ids = await q.Select(x => x.PolicyId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (col == "policyname")
+            {
+                var list = await q.Where(x => x.Policy != null).Select(x => x.Policy!.Name!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (col == "profit")
+            {
+                var values = await q.Select(x => x.ProfitPercent).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                var list = values.Select(v => v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Distinct().ToList();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "maxdisc")
+            {
+                var values = await q.Where(x => x.MaxDiscountToCustomer.HasValue).Select(x => x.MaxDiscountToCustomer!.Value).Distinct().OrderBy(x => x).Take(300).ToListAsync();
+                var list = values.Select(v => v.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Distinct().ToList();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            if (col == "created")
+            {
+                var dates = await q.Select(x => x.CreatedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var list = dates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct().ToList();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v, display = v }));
+            }
+            return Json(new List<object>());
+        }
 
 
 
@@ -253,7 +401,15 @@ namespace ERP.Controllers
             int? toCode = null,             // فلتر كود إلى
             bool useDateRange = false,      // تفعيل فلتر التاريخ
             DateTime? fromDate = null,
-            DateTime? toDate = null)
+            DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_warehousename = null,
+            string? filterCol_policy = null,
+            string? filterCol_policyname = null,
+            string? filterCol_profit = null,
+            string? filterCol_maxdisc = null,
+            string? filterCol_created = null)
         {
             // بناء الاستعلام طبقاً للفلاتر
             var q = BuildRulesQuery(
@@ -266,6 +422,8 @@ namespace ERP.Controllers
                 useDateRange,
                 fromDate,
                 toDate);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_warehouse, filterCol_warehousename, filterCol_policy, filterCol_policyname, filterCol_profit, filterCol_maxdisc, filterCol_created);
 
             // تقسيم الصفحات (النظام الثابت)
             var model = await PagedResult<WarehousePolicyRule>.CreateAsync(q, page, pageSize);
@@ -284,6 +442,15 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.CodeFrom = fromCode;
             ViewBag.CodeTo = toCode;
+
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_Warehousename = filterCol_warehousename;
+            ViewBag.FilterCol_Policy = filterCol_policy;
+            ViewBag.FilterCol_Policyname = filterCol_policyname;
+            ViewBag.FilterCol_Profit = filterCol_profit;
+            ViewBag.FilterCol_Maxdisc = filterCol_maxdisc;
+            ViewBag.FilterCol_Created = filterCol_created;
 
             // حقل التاريخ المستخدم في الفلترة (للنموذج الموحد)
             ViewBag.DateField = "CreatedAt";
@@ -315,13 +482,19 @@ namespace ERP.Controllers
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
+            string? filterCol_id = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_warehousename = null,
+            string? filterCol_policy = null,
+            string? filterCol_policyname = null,
+            string? filterCol_profit = null,
+            string? filterCol_maxdisc = null,
+            string? filterCol_created = null,
             string format = "excel")
         {
             if (!fromCode.HasValue && codeFrom.HasValue) fromCode = codeFrom;
             if (!toCode.HasValue && codeTo.HasValue) toCode = codeTo;
 
-            // 1) بناء الاستعلام بنفس فلاتر الواجهة
-            // BuildRulesQuery موجودة عندك بالفعل في الكنترولر
             var query = BuildRulesQuery(
                 search,
                 searchBy,
@@ -333,12 +506,9 @@ namespace ERP.Controllers
                 fromDate,
                 toDate);
 
-            // نضيف Include للمخزن والسياسة عشان نجيب الأسماء
-            query = query
-                .Include(r => r.Warehouse)   // 🔴 لو اسم الـ navigation مختلف عدّله
-                .Include(r => r.Policy);     // 🔴 برضه هنا
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_warehouse, filterCol_warehousename, filterCol_policy, filterCol_policyname, filterCol_profit, filterCol_maxdisc, filterCol_created);
 
-            // 2) جلب كل النتائج (بدون Paging)
+            // 2) جلب كل النتائج (بدون Paging) — Include موجود في BuildRulesQuery
             var list = await query.ToListAsync();
 
             // 3) لو المطلوب Excel (افتراضي)
@@ -350,7 +520,7 @@ namespace ERP.Controllers
                 int row = 1;
 
                 // عناوين الأعمدة
-                worksheet.Cell(row, 1).Value = "كود القاعدة";
+                worksheet.Cell(row, 1).Value = "المعرف";
                 worksheet.Cell(row, 2).Value = "كود المخزن";
                 worksheet.Cell(row, 3).Value = "اسم المخزن";
                 worksheet.Cell(row, 4).Value = "كود السياسة";

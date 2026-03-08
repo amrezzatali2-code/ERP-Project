@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ
 using System.Text;                                // StringBuilder للتصدير
@@ -138,7 +138,92 @@ namespace ERP.Controllers
             return query;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static IQueryable<UserRole> ApplyColumnFilters(
+            IQueryable<UserRole> query,
+            string? filterCol_id,
+            string? filterCol_user,
+            string? filterCol_role,
+            string? filterCol_primary,
+            string? filterCol_assigned)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(x => ids.Contains(x.Id));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_user))
+            {
+                var vals = filterCol_user.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(x => x.User != null && vals.Contains(x.User.UserName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_role))
+            {
+                var vals = filterCol_role.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(x => x.Role != null && vals.Contains(x.Role.Name));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_primary))
+            {
+                var vals = filterCol_primary.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim().ToLowerInvariant()).ToList();
+                var wantTrue = vals.Any(v => v == "true" || v == "1" || v == "نعم");
+                var wantFalse = vals.Any(v => v == "false" || v == "0" || v == "لا");
+                if (wantTrue && !wantFalse) query = query.Where(x => x.IsPrimary);
+                else if (wantFalse && !wantTrue) query = query.Where(x => !x.IsPrimary);
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_assigned))
+            {
+                var parts = filterCol_assigned.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(x => dates.Contains(x.AssignedAt));
+                }
+            }
+            return query;
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.UserRoles.AsNoTracking().Include(x => x.User).Include(x => x.Role);
+
+            if (columnLower == "id")
+            {
+                var ids = await q.Select(x => x.Id).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "user" || columnLower == "username")
+            {
+                var list = await q.Where(x => x.User != null).Select(x => x.User!.UserName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "role" || columnLower == "rolename")
+            {
+                var list = await q.Where(x => x.Role != null).Select(x => x.Role!.Name).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "primary" || columnLower == "isprimary")
+                return Json(new[] { new { value = "true", display = "\u0646\u0639\u0645" }, new { value = "false", display = "\u0644\u0627" } });
+            if (columnLower == "assigned" || columnLower == "assignedat")
+            {
+                var list = await q.Select(x => x.AssignedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            return Json(Array.Empty<object>());
+        }
 
 
 
@@ -200,16 +285,20 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             string? dateField = "AssignedAt",
             int? fromCode = null,
-            int? toCode = null)
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_user = null,
+            string? filterCol_role = null,
+            string? filterCol_primary = null,
+            string? filterCol_assigned = null)
         {
-            // استعلام أساسي مع Include على المستخدم والدور
             IQueryable<UserRole> query = _context.UserRoles
                 .AsNoTracking()
                 .Include(x => x.User)
                 .Include(x => x.Role);
 
-            // تطبيق الفلاتر
             query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_user, filterCol_role, filterCol_primary, filterCol_assigned);
 
             // الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -270,13 +359,14 @@ namespace ERP.Controllers
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "AssignedAt";
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_User = filterCol_user;
+            ViewBag.FilterCol_Role = filterCol_role;
+            ViewBag.FilterCol_Primary = filterCol_primary;
+            ViewBag.FilterCol_Assigned = filterCol_assigned;
 
             return View(model);
         }
-
-
-
-
 
 
 
@@ -717,35 +807,31 @@ namespace ERP.Controllers
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> Export(
-       string? search,
-       string? searchBy,
-       string? sort,
-       string? dir,
-       bool useDateRange = false,
-       DateTime? fromDate = null,
-       DateTime? toDate = null,
-       int? fromCode = null,
-       int? toCode = null,
-       string format = "excel")
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_user = null,
+            string? filterCol_role = null,
+            string? filterCol_primary = null,
+            string? filterCol_assigned = null,
+            string format = "excel")
         {
-            // 1) الاستعلام الأساسي: ربط المستخدمين بالأدوار + تحميل بياناتهم
             IQueryable<UserRole> query = _context.UserRoles
                 .AsNoTracking()
                 .Include(x => x.User)
                 .Include(x => x.Role);
 
-            // 2) تطبيق نفس الفلاتر المستخدمة في Index
-            query = ApplyFilters(
-                query,
-                search,
-                searchBy,
-                useDateRange,
-                fromDate,
-                toDate,
-                fromCode,
-                toCode);
+            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_user, filterCol_role, filterCol_primary, filterCol_assigned);
 
-            // 3) ترتيب افتراضي: باسم الدخول ثم اسم الدور
+            // ترتيب افتراضي: باسم الدخول ثم اسم الدور
             query = query
                 .OrderBy(x => x.User.UserName)
                 .ThenBy(x => x.Role.Name);

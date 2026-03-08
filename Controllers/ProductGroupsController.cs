@@ -216,14 +216,16 @@ namespace ERP.Controllers
             }
             if (col == "created")
             {
-                var list = await q.Select(x => x.CreatedAt.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var dates = await q.Select(x => x.CreatedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var list = dates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct().ToList();
                 if (!string.IsNullOrEmpty(searchTerm))
                     list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
                 return Json(list.Select(v => new { value = v, display = v }));
             }
             if (col == "updated")
             {
-                var list = await q.Where(x => x.UpdatedAt != null).Select(x => x.UpdatedAt!.Value.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var dates = await q.Where(x => x.UpdatedAt != null).Select(x => x.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                var list = dates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct().ToList();
                 if (!string.IsNullOrEmpty(searchTerm))
                     list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
                 return Json(list.Select(v => new { value = v, display = v }));

@@ -4,6 +4,29 @@
 @using Microsoft.AspNetCore.Html
 @model PagedResult<LedgerEntry>
 
+@functions {
+    string SourceTypeAr(LedgerSourceType t)
+    {
+        switch (t)
+        {
+            case LedgerSourceType.Opening: return "رصيد افتتاحي";
+            case LedgerSourceType.SalesInvoice: return "فاتورة مبيعات";
+            case LedgerSourceType.SalesReturn: return "مرتجع بيع";
+            case LedgerSourceType.PurchaseInvoice: return "فاتورة مشتريات";
+            case LedgerSourceType.PurchaseReturn: return "مرتجع شراء";
+            case LedgerSourceType.Receipt: return "إذن استلام";
+            case LedgerSourceType.Payment: return "إذن دفع";
+            case LedgerSourceType.Journal: return "قيد يومية";
+            case LedgerSourceType.Adjustment: return "تسوية";
+            case LedgerSourceType.StockTransfer: return "تحويل مخزني";
+            case LedgerSourceType.StockAdjustment: return "تسوية جرد";
+            case LedgerSourceType.DebitNote: return "إشعار خصم";
+            case LedgerSourceType.CreditNote: return "إشعار إضافة";
+            default: return t.ToString();
+        }
+    }
+}
+
 @{
     ViewData["Title"] = "كشف حساب عميل";
     var customer = ViewBag.Customer as Customer;
@@ -73,6 +96,39 @@
     };
 }
 
+<style>
+    /* خانات التجميعات — كشف حساب عميل: أكبر وأوضح */
+    .customer-ledger-summary-card {
+        min-height: 72px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+    .customer-ledger-summary-label {
+        font-size: 0.95rem;
+        font-weight: 600;
+        opacity: 0.95;
+        margin-bottom: 0.25rem;
+    }
+    .customer-ledger-summary-value {
+        font-size: 1.35rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+    }
+    .customer-ledger-summary-debit {
+        background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+        box-shadow: 0 2px 8px rgba(59, 130, 246, 0.35);
+    }
+    .customer-ledger-summary-credit {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        box-shadow: 0 2px 8px rgba(34, 197, 94, 0.35);
+    }
+    .customer-ledger-summary-net {
+        background: linear-gradient(135deg, #a855f7 0%, #7c3aed 100%);
+        box-shadow: 0 2px 8px rgba(168, 85, 247, 0.35);
+    }
+</style>
+
 <div dir="rtl" class="container-fluid">
     <h4 class="mb-3">كشف حساب عميل — @(customer?.CustomerName ?? "اختر عميلاً")</h4>
 
@@ -122,23 +178,34 @@
             @if (customer != null)
             {
                 <div class="col-12 col-md-2 erp-filter-section">
-                    <a asp-action="Show" asp-controller="Customers" asp-route-id="@customer.CustomerId"
-                       class="btn btn-erp btn-erp-secondary btn-erp-sm w-100 text-decoration-none">← حجم التعامل</a>
+                    <a asp-action="Show" asp-controller="Customers" asp-route-id="@customer.CustomerId" asp-route-frame="1"
+                       class="btn btn-erp btn-erp-secondary btn-erp-sm w-100 text-decoration-none app-menu-link"
+                       data-tab-id="customer-engagement"
+                       data-tab-title="حجم تعامل عميل">📊 حجم التعامل</a>
                 </div>
             }
         </form>
     </div>
 
-    @* ملخص الإجماليات *@
-    <div class="row g-2 mb-3">
-        <div class="col-auto">
-            <span class="badge bg-primary">إجمالي المدين: @totalDebit.ToString("N2")</span>
+    @* خانات التجميعات — أكبر وأوضح *@
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-4">
+            <div class="customer-ledger-summary-card customer-ledger-summary-debit rounded-3 shadow-sm border-0 p-3 text-white">
+                <div class="customer-ledger-summary-label">إجمالي المدين</div>
+                <div class="customer-ledger-summary-value">@totalDebit.ToString("N2")</div>
+            </div>
         </div>
-        <div class="col-auto">
-            <span class="badge bg-success">إجمالي الدائن: @totalCredit.ToString("N2")</span>
+        <div class="col-12 col-md-4">
+            <div class="customer-ledger-summary-card customer-ledger-summary-credit rounded-3 shadow-sm border-0 p-3 text-white">
+                <div class="customer-ledger-summary-label">إجمالي الدائن</div>
+                <div class="customer-ledger-summary-value">@totalCredit.ToString("N2")</div>
+            </div>
         </div>
-        <div class="col-auto">
-            <span class="badge @(netBalance >= 0 ? "bg-warning text-dark" : "bg-info")">صافي الحركة: @netBalance.ToString("N2")</span>
+        <div class="col-12 col-md-4">
+            <div class="customer-ledger-summary-card customer-ledger-summary-net rounded-3 shadow-sm border-0 p-3 text-white">
+                <div class="customer-ledger-summary-label">صافي الحركة</div>
+                <div class="customer-ledger-summary-value">@netBalance.ToString("N2")</div>
+            </div>
         </div>
     </div>
 
@@ -176,8 +243,8 @@
                         var descShort = desc.Length > 60 ? desc.Substring(0, 60) + "…" : desc;
                         <tr>
                             <td data-col="id">@e.Id</td>
-                            <td data-col="entryDate">@e.EntryDate.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td data-col="sourceType">@e.SourceType</td>
+                            <td data-col="entryDate">@e.EntryDate.ToString("HH:mm yyyy-MM-dd")</td>
+                            <td data-col="sourceType">@SourceTypeAr(e.SourceType)</td>
                             <td data-col="voucherNo">@e.VoucherNo</td>
                             <td data-col="account">@(e.Account != null ? $"{e.Account.AccountCode} - {e.Account.AccountName}" : "")</td>
                             <td class="text-end" data-col="debit">@(e.Debit > 0 ? e.Debit.ToString("N2") : "")</td>

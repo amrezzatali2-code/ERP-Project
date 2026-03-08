@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ
 using System.Text;                                // StringBuilder للتصدير
@@ -434,12 +434,14 @@ namespace ERP.Controllers
                     break;
                 case "created":
                 case "createdat":
-                    items = (await q.Select(rp => rp.CreatedAt.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                    var createdDates = await q.Select(rp => rp.CreatedAt).Distinct().OrderBy(v => v).Take(300).ToListAsync();
+                    items = createdDates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct()
                         .Select(v => (object)new { value = v, display = v }).ToList();
                     break;
                 case "updated":
                 case "updatedat":
-                    items = (await q.Where(rp => rp.UpdatedAt != null).Select(rp => rp.UpdatedAt!.Value.ToString("yyyy-MM-dd HH:mm")).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                    var updatedDates = await q.Where(rp => rp.UpdatedAt != null).Select(rp => rp.UpdatedAt!.Value).Distinct().OrderBy(v => v).Take(300).ToListAsync();
+                    items = updatedDates.Select(d => d.ToString("yyyy-MM-dd HH:mm")).Distinct()
                         .Select(v => (object)new { value = v, display = v }).ToList();
                     break;
                 default:

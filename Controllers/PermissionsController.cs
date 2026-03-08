@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لبناء CSV
@@ -113,8 +113,124 @@ namespace ERP.Controllers
             return query;
         }
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static IQueryable<Permission> ApplyColumnFilters(
+            IQueryable<Permission> query,
+            string? filterCol_id,
+            string? filterCol_code,
+            string? filterCol_name,
+            string? filterCol_module,
+            string? filterCol_description,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(p => ids.Contains(p.PermissionId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            {
+                var vals = filterCol_code.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(p => vals.Contains(p.Code));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(p => p.NameAr != null && vals.Contains(p.NameAr));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_module))
+            {
+                var vals = filterCol_module.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(p => p.Module != null && vals.Contains(p.Module));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_description))
+            {
+                var vals = filterCol_description.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(p => p.Description != null && vals.Contains(p.Description));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(p => dates.Contains(p.CreatedAt));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime?>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(p => p.UpdatedAt.HasValue && dates.Contains(p.UpdatedAt));
+                }
+            }
+            return query;
+        }
 
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _context.Permissions.AsNoTracking();
+
+            if (columnLower == "id" || columnLower == "permissionid")
+            {
+                var ids = await q.Select(p => p.PermissionId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "code")
+            {
+                var list = await q.Select(p => p.Code).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "name" || columnLower == "namear")
+            {
+                var list = await q.Select(p => p.NameAr).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "module")
+            {
+                var list = await q.Where(p => p.Module != null).Select(p => p.Module!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "description")
+            {
+                var list = await q.Where(p => p.Description != null).Select(p => p.Description!).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "created" || columnLower == "createdat")
+            {
+                var list = await q.Select(p => p.CreatedAt).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "updated" || columnLower == "updatedat")
+            {
+                var list = await q.Where(p => p.UpdatedAt.HasValue).Select(p => p.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            return Json(Array.Empty<object>());
+        }
 
 
 
@@ -142,14 +258,19 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             string? dateField = "CreatedAt",
             int? fromCode = null,
-            int? toCode = null)
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_code = null,
+            string? filterCol_name = null,
+            string? filterCol_module = null,
+            string? filterCol_description = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null)
         {
-            // استعلام أساسي بدون تتبع (للقراءة فقط)
-            var query = _context.Permissions
-                .AsNoTracking();
+            var query = _context.Permissions.AsNoTracking();
 
-            // تطبيق البحث + فلاتر الكود + فلاتر التاريخ
             query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_code, filterCol_name, filterCol_module, filterCol_description, filterCol_created, filterCol_updated);
 
             // الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -205,11 +326,17 @@ namespace ERP.Controllers
             };
 
 
-            // إرسال قيم إضافية للـ ViewBag لاحتياج الواجهة
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "CreatedAt";
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Code = filterCol_code;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Module = filterCol_module;
+            ViewBag.FilterCol_Description = filterCol_description;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             return View(model);
         }
@@ -499,33 +626,30 @@ namespace ERP.Controllers
         /// </summary>
         [HttpGet]
         public async Task<IActionResult> Export(
-         string? search,
-         string? searchBy,
-         string? sort,
-         string? dir,
-         bool useDateRange = false,
-         DateTime? fromDate = null,
-         DateTime? toDate = null,
-         int? fromCode = null,
-         int? toCode = null,
-         string format = "excel")
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_code = null,
+            string? filterCol_name = null,
+            string? filterCol_module = null,
+            string? filterCol_description = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string format = "excel")
         {
-            // 1) الاستعلام الأساسي من جدول الصلاحيات (قراءة فقط)
-            var query = _context.Permissions
-                .AsNoTracking();
+            var query = _context.Permissions.AsNoTracking();
 
-            // 2) تطبيق نفس الفلاتر المستخدمة في Index
-            query = ApplyFilters(
-                query,
-                search,
-                searchBy,
-                useDateRange,
-                fromDate,
-                toDate,
-                fromCode,
-                toCode);
+            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_code, filterCol_name, filterCol_module, filterCol_description, filterCol_created, filterCol_updated);
 
-            // 3) ترتيب ثابت بالتصدير برقم الصلاحية
+            // ترتيب ثابت بالتصدير
             var list = await query
                 .OrderBy(p => p.PermissionId)
                 .ToListAsync();

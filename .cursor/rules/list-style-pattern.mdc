@@ -31,11 +31,13 @@ alwaysApply: true
   - استخدام **`filterableCol(colKey, sortKey, caption)`** لرؤوس أعمدة البيانات (ليس عمودي التحديد والإجراءات).
   - زر الفلتر يحمل `data-col` و `data-sort-key` و `data-col-title`؛ النقر يفتح **لوحة فلتر الأعمدة** (`erpColumnFilterPanel`).
   - السكربت يجلِب القيم من `GetColumnValues(column, search)` ويعرضها في اللوحة؛ تطبيق/مسح الفلتر يحدّث الـ URL بمعاملات `filterCol_*`.
+  - **الفلاتر تراكمية:** عند تطبيق فلتر عمود **لا يُمسح** فلتر بقية الأعمدة؛ يحدّث السكربت فقط معامل `filterCol_العمودالحالي` (أو يحذفه إذا تم مسح الاختيار). بهذا تعمل كل الفلاتر معاً (AND) دون تعديل كل جدول على حدة إذا استُخدم السكربت المشترك `erp-list-column-filter.js`.
 - في الـ **Controller:** معاملات `filterCol_*` لجميع الأعمدة القابلة للفلترة، تطبيقها في Index و Export، و action **GetColumnValues** ترجع قيم مميزة لكل عمود.
 - **التمرير الأفقي:** عند فتح الصفحة يكون الشريط السفلي في **أقصى اليمين** (`scrollLeft = scrollWidth - clientWidth` للحاوية).
 - **صف الإجمالي (tfoot):** محاذاة `text-start` مع عرض الإجماليات تحت الأعمدة المناسبة.
 - **الشريط السفلي للصفحة:** (حجم الصفحة + الترقيم + «عرض X–Y من Z») **محاذاة لليمين** — حاوية واحدة بـ `justify-content-end` و `dir="rtl"` بحيث تظهر العناصر من اليمين إلى اليسار.
 - **لوحة فلتر الأعمدة:** عنصر الرأس (`.erp-col-header-filterable`) يكون له `position: relative; z-index: 2` حتى لا يغطي مقبض التوسيع زر الفلتر؛ تجنّب تكرار تعريف المتغيرات في السكربت (مثل `const selectAll`) حتى لا يتوقف تنفيذ السكربت ولا تُربط أحداث النقر.
+- **السكربت المشترك:** لتفادي تعديل كل جدول على حدة، استخدم **`wwwroot/js/erp-list-column-filter.js`** مع استدعاء `ERP.initListColumnFilter({ panelId, tableId, wrapperId, getColumnValuesUrl, defaultSort?, defaultDir? })` في الـ View؛ اللوحة يجب أن تحتوي الأصناف المعتادة (`.erp-column-filter-header`, `.erp-column-filter-body`, `.erp-column-filter-list`, أزرار تطبيق/مسح). أي تعديل لاحق على سلوك الفلاتر (تراكمية، ترتيب، إغلاق) يتم مرة واحدة في هذا الملف.
 
 ## التصدير والحذف
 

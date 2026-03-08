@@ -452,8 +452,18 @@
 </form>
 
 @section Scripts {
+<script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
 <script>
     document.getElementById("btnPrintCashReceipts")?.addEventListener("click", function () { window.print(); });
+
+    ERP.initListColumnFilter({
+        panelId: 'erpColumnFilterPanelCashReceipts',
+        tableId: 'cashReceiptsTable',
+        wrapperId: 'cashReceiptsTableScrollWrapper',
+        getColumnValuesUrl: '@Url.Action("GetColumnValues", "CashReceipts")',
+        defaultSort: 'ReceiptDate',
+        defaultDir: 'desc'
+    });
 
     (function () {
         const table = document.getElementById("cashReceiptsTable");
@@ -534,169 +544,5 @@
         btnApply?.addEventListener("click", function () { window.location.href = buildUrl(fromInp.value.trim(), toInp.value.trim()); });
         btnClear?.addEventListener("click", function () { fromInp.value = ""; toInp.value = ""; window.location.href = buildUrl("", ""); });
     })();
-
-    (function () {
-        var panel = document.getElementById("erpColumnFilterPanelCashReceipts");
-        if (!panel) return;
-        var titleEl = document.getElementById("erpColumnFilterTitleCashReceipts");
-        var searchInp = document.getElementById("erpColumnFilterSearchCashReceipts");
-        var listEl = document.getElementById("erpColumnFilterListCashReceipts");
-        var btnOk = document.getElementById("erpColumnFilterOkCashReceipts");
-        var btnClear = document.getElementById("erpColumnFilterClearCashReceipts");
-        var btnClose = document.getElementById("erpColumnFilterCloseCashReceipts");
-        var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-
-        function getCurrentFilterValue(col) { return new URL(window.location.href).searchParams.get("filterCol_" + col) || ""; }
-        function getCurrentSort() { var url = new URL(window.location.href); return { sort: url.searchParams.get("sort") || "ReceiptDate", dir: url.searchParams.get("dir") || "desc" }; }
-        function adjustPanelPosition() {
-            if (!panel || !anchorRect) return;
-            setTimeout(function () {
-                var r = panel.getBoundingClientRect();
-                var top = anchorRect.bottom + 4, left = anchorRect.left;
-                if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                panel.style.top = top + "px"; panel.style.left = left + "px";
-            }, 50);
-        }
-
-        function showPanel(btn) {
-            currentCol = btn.dataset.col;
-            currentSortKey = btn.dataset.sortKey || currentCol;
-            titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-            searchInp.value = "";
-            currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split(/[|,;]/).filter(Boolean));
-            anchorRect = btn.getBoundingClientRect();
-            panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
-            panel.classList.remove("d-none");
-            var currentSort = getCurrentSort();
-            var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-            var currentDir = isCurrent ? currentSort.dir : "asc";
-            panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                if (isCurrent && b.dataset.sortDir === currentDir) { b.classList.add("active", "btn-primary"); b.classList.remove("btn-outline-secondary"); }
-                else { b.classList.remove("active", "btn-primary"); b.classList.add("btn-outline-secondary"); }
-            });
-            adjustPanelPosition();
-            document.getElementById("erpColumnFilterSearchRowCashReceipts").classList.remove("d-none");
-            listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-            var url = "/CashReceipts/GetColumnValues?column=" + encodeURIComponent(currentCol);
-            var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-            if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-            fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                allItems = items;
-                renderList(searchInp ? searchInp.value : "");
-            }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
-        }
-
-        function renderList(search) {
-            var term = (search || "").toLowerCase();
-            var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-            var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-            var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-            listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAllCR" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAllCR">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                var v = String(x.value);
-                var checked = currentSelected.has(v);
-                return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-            }).join("") + "</div>";
-            var selectAllCb = listEl.querySelector("#erpFilterSelectAllCR");
-            if (selectAllCb) {
-                selectAllCb.indeterminate = someChecked && !allChecked;
-                selectAllCb.onchange = function () {
-                    filtered.forEach(function (x) { if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value)); }.bind(this));
-                    renderList(searchInp.value);
-                };
-            }
-            listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                cb.onchange = function () { if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value); renderList(searchInp.value); };
-            });
-            adjustPanelPosition();
-        }
-
-        function applyFilter(applySort, sortDir) {
-            if (!currentCol) return;
-            var url = new URL(window.location.href);
-            url.searchParams.forEach(function (_, key) { if (key.startsWith("filterCol_")) url.searchParams.delete(key); });
-            if (applySort !== undefined && sortDir !== undefined) { url.searchParams.set("sort", applySort); url.searchParams.set("dir", sortDir); }
-            else if (currentSortKey) { var cur = getCurrentSort(); url.searchParams.set("sort", cur.sort); url.searchParams.set("dir", cur.dir); }
-            var val = Array.from(currentSelected).filter(Boolean).join("|");
-            if (val) url.searchParams.set("filterCol_" + currentCol, val);
-            url.searchParams.set("page", "1");
-            window.location.href = url.toString();
-        }
-        function clearFilter() {
-            if (!currentCol) return;
-            var url = new URL(window.location.href);
-            url.searchParams.delete("filterCol_" + currentCol);
-            url.searchParams.set("page", "1");
-            window.location.href = url.toString();
-        }
-
-        document.querySelectorAll("#cashReceiptsTable .erp-col-filter-btn").forEach(function (btn) {
-            btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); });
-        });
-        document.addEventListener("click", function (e) {
-            if (e.target.closest(".erp-sort-btn") && panel && !panel.classList.contains("d-none")) {
-                var sortBtn = e.target.closest(".erp-sort-btn");
-                if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir);
-            }
-        });
-        var fetchDebounce = null;
-        searchInp && searchInp.addEventListener("input", function () {
-            renderList(this.value);
-            if (fetchDebounce) clearTimeout(fetchDebounce);
-            fetchDebounce = setTimeout(function () {
-                fetchDebounce = null;
-                if (!currentCol) return;
-                var url = "/CashReceipts/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) { allItems = items; renderList(searchInp ? searchInp.value : ""); });
-            }, 400);
-        });
-        searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
-        btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
-        btnClear && btnClear.addEventListener("click", clearFilter);
-        btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
-        document.addEventListener("click", function (e) {
-            if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
-                panel.classList.add("d-none");
-        });
-    })();
-
-    document.addEventListener("DOMContentLoaded", function () {
-        var wrapper = document.getElementById("cashReceiptsTableScrollWrapper");
-        if (!wrapper) return;
-        var table = wrapper.querySelector("table#cashReceiptsTable");
-        if (table) {
-            var ths = table.querySelectorAll("thead th");
-            ths.forEach(function (th) {
-                if (th.hasAttribute("data-col-fixed")) return;
-                th.style.position = "relative";
-                var handle = document.createElement("div");
-                handle.className = "erp-col-resize-handle";
-                th.appendChild(handle);
-                var startX, startWidth;
-                handle.addEventListener("mousedown", function (e) {
-                    e.preventDefault();
-                    startX = e.pageX;
-                    startWidth = th.offsetWidth;
-                    function onMouseMove(eMove) {
-                        var diffX = eMove.pageX - startX;
-                        var newWidth = startWidth + diffX;
-                        if (newWidth < 50) newWidth = 50;
-                        th.style.minWidth = newWidth + "px";
-                        th.style.width = newWidth + "px";
-                    }
-                    function onMouseUp() {
-                        document.removeEventListener("mousemove", onMouseMove);
-                        document.removeEventListener("mouseup", onMouseUp);
-                    }
-                    document.addEventListener("mousemove", onMouseMove);
-                    document.addEventListener("mouseup", onMouseUp);
-                });
-            });
-        }
-        if (wrapper.scrollWidth > wrapper.clientWidth)
-            wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
-    });
 </script>
 }

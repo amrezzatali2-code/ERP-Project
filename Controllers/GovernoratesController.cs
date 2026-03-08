@@ -1,4 +1,4 @@
-﻿using Azure.Core;
+using Azure.Core;
 using ClosedXML.Excel;                            // مكتبة Excel
 using DocumentFormat.OpenXml.Wordprocessing;
 using ERP.Data;                                   // AppDbContext
@@ -55,6 +55,55 @@ namespace ERP.Controllers
                 ["updated"] = g => g.UpdatedAt ?? g.CreatedAt ?? DateTime.MinValue
             };
 
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
+        private static IQueryable<Governorate> ApplyColumnFilters(
+            IQueryable<Governorate> query,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_created,
+            string? filterCol_updated)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            {
+                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) query = query.Where(g => ids.Contains(g.GovernorateId));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_name))
+            {
+                var vals = filterCol_name.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0) query = query.Where(g => g.GovernorateName != null && vals.Contains(g.GovernorateName));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_created))
+            {
+                var parts = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime?>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(g => g.CreatedAt.HasValue && dates.Contains(g.CreatedAt));
+                }
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_updated))
+            {
+                var parts = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => x.Length >= 8).ToList();
+                if (parts.Count > 0)
+                {
+                    var dates = new List<DateTime?>();
+                    foreach (var p in parts)
+                        if (DateTime.TryParse(p, out var d)) dates.Add(d);
+                    if (dates.Count > 0) query = query.Where(g => g.UpdatedAt.HasValue && dates.Contains(g.UpdatedAt));
+                }
+            }
+            return query;
+        }
+
         private IQueryable<Governorate> SearchSortFilter(
             string? search,
             string? searchBy,
@@ -65,7 +114,11 @@ namespace ERP.Controllers
             DateTime? toDate,
             string? dateField,
             int? codeFrom,
-            int? codeTo)
+            int? codeTo,
+            string? filterCol_id,
+            string? filterCol_name,
+            string? filterCol_created,
+            string? filterCol_updated)
         {
             var q = _db.Governorates.AsNoTracking().AsQueryable();
 
@@ -94,6 +147,8 @@ namespace ERP.Controllers
                 q = q.Where(g => g.GovernorateId >= codeFrom.Value);
             if (codeTo.HasValue)
                 q = q.Where(g => g.GovernorateId <= codeTo.Value);
+
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_name, filterCol_created, filterCol_updated);
 
             // بحث + ترتيب (ApplySearchSort)
             q = q.ApplySearchSort(
@@ -128,6 +183,10 @@ namespace ERP.Controllers
             string? dateField = "created",
             int? codeFrom = null,
             int? codeTo = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
             int page = 1,
             int pageSize = 50)
         {
@@ -135,7 +194,8 @@ namespace ERP.Controllers
                 search, searchBy,
                 sort, dir,
                 useDateRange, fromDate, toDate, dateField ?? "created",
-                codeFrom, codeTo
+                codeFrom, codeTo,
+                filterCol_id, filterCol_name, filterCol_created, filterCol_updated
             );
 
             if (page < 1) page = 1;
@@ -156,8 +216,43 @@ namespace ERP.Controllers
             ViewBag.DateField = dateField ?? "created";
             ViewBag.CodeFrom = codeFrom;
             ViewBag.CodeTo = codeTo;
+            ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Updated = filterCol_updated;
 
             return View(model);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var q = _db.Governorates.AsNoTracking();
+
+            if (columnLower == "id" || columnLower == "governorateid")
+            {
+                var ids = await q.Select(g => g.GovernorateId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+            }
+            if (columnLower == "name" || columnLower == "governoratename")
+            {
+                var list = await q.Select(g => g.GovernorateName).Distinct().OrderBy(x => x).Take(500).ToListAsync();
+                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList();
+                return Json(list.Select(v => new { value = v ?? "", display = v ?? "" }));
+            }
+            if (columnLower == "created" || columnLower == "createdat")
+            {
+                var list = await q.Where(g => g.CreatedAt.HasValue).Select(g => g.CreatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            if (columnLower == "updated" || columnLower == "updatedat")
+            {
+                var list = await q.Where(g => g.UpdatedAt.HasValue).Select(g => g.UpdatedAt!.Value).Distinct().OrderByDescending(x => x).Take(300).ToListAsync();
+                return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd HH:mm"), display = d.ToString("yyyy-MM-dd HH:mm") }));
+            }
+            return Json(Array.Empty<object>());
         }
 
 
@@ -362,12 +457,31 @@ namespace ERP.Controllers
         // =========================================================================
         [RequirePermission("Governorates.Export")]
         [HttpGet]
-        public async Task<IActionResult> Export(string? format = "excel")
+        public async Task<IActionResult> Export(
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? dateField = "created",
+            int? codeFrom = null,
+            int? codeTo = null,
+            string? filterCol_id = null,
+            string? filterCol_name = null,
+            string? filterCol_created = null,
+            string? filterCol_updated = null,
+            string? format = "excel")
         {
-            var rows = await _db.Governorates
-                .AsNoTracking()
-                .OrderBy(g => g.GovernorateName)
-                .ToListAsync();
+            var q = SearchSortFilter(
+                search, searchBy,
+                sort ?? "name", dir ?? "asc",
+                useDateRange, fromDate, toDate, dateField ?? "created",
+                codeFrom, codeTo,
+                filterCol_id, filterCol_name, filterCol_created, filterCol_updated
+            );
+            var rows = await q.ToListAsync();
             var fmt = (format ?? "excel").Trim().ToLowerInvariant();
 
             // ---------------- CSV ----------------
