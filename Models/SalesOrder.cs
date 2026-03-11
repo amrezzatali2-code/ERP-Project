@@ -34,7 +34,10 @@ namespace ERP.Models
         [Required]
         [StringLength(20)]
         [Display(Name = "حالة الأمر")]
-        public string Status { get; set; } = "Open";            // Open / Approved / Closed / Cancelled
+        public string Status { get; set; } = "Draft";            // Draft / Converted / Cancelled (مثل طلب الشراء)
+
+        [Display(Name = "محوّل إلى فاتورة مبيعات؟")]
+        public bool IsConverted { get; set; }                     // true بعد التحويل إلى فاتورة مبيعات
 
         [StringLength(500)]
         [Display(Name = "ملاحظات")]

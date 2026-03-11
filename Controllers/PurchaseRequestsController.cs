@@ -3596,6 +3596,8 @@ private async Task PopulateDropDownsAsync(
                     // متغير: ربط الفاتورة بطلب الشراء (لو عندك عمود مرجعي)
                     RefPRId = request.PRId,
 
+                    TaxTotal = Math.Round(request.TaxAmount, 2),  // نقل الضريبة من طلب الشراء إلى الفاتورة
+
                     Status = "غير مرحلة",          // متغير: الحالة الافتراضية
                     IsPosted = false,              // متغير: غير مُرحلة مبدئياً (الترحيل سيتم بعد قليل)
 

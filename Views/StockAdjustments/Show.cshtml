@@ -7,93 +7,16 @@
 }
 
 @section Styles {
+    <link rel="stylesheet" href="~/css/invoice-cards.css" />
     <style>
-        .adjustment-page {
-            background-color: #f3f6fb;
-            min-height: 100vh;
-            padding-bottom: 2rem;
-        }
-
-        .adjustment-header-card,
-        .adjustment-lines-card,
-        .adjustment-add-card,
-        .invoice-side-card {
-            border-radius: 1rem;
-            overflow: hidden;
-        }
-
-        .adjustment-header-bar {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            color: #ffffff;
-            padding: 0.4rem 1rem;
-        }
-        .adjustment-header-bar h5 {
-            margin-bottom: 0;
-            font-size: 1rem;
-        }
-
-        /* خط ملون بدل عنوان الكارت */
-        .adjustment-card-line {
-            height: 4px;
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            border-radius: 2px;
-            margin-bottom: 0.4rem;
-        }
-
-        /* إخفاء حدود وظل الكروت */
-        .adjustment-header-card,
-        .adjustment-add-card,
-        .adjustment-lines-card {
-            border: none !important;
-            box-shadow: none !important;
-        }
-
-        .adjustment-add-card .card-header,
-        .adjustment-lines-card .card-header,
-        .invoice-side-card .card-header {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            color: #ffffff;
-            padding: 0.55rem 1rem;
-        }
-
-        /* شريط الأزرار: مثل فاتورة المبيعات */
-        .invoice-actions-sticky {
-            position: sticky;
-            top: 58px;
-            z-index: 3000;
-            background: #ffffff;
-            border: 1px solid rgba(13,110,253,.12);
-            padding: 10px 10px;
-            border-radius: 14px;
-            box-shadow: 0 10px 24px rgba(0,0,0,.05);
-        }
-
-        .invoice-side-card .btn-erp {
-            font-size: 0.85rem;
-            padding: 0.35rem 0.6rem;
-        }
-
-        .invoice-side-card .btn-erp + .btn-erp {
-            margin-top: 0.25rem;
-        }
-
-        .erp-table-wrapper {
-            max-height: 360px;
-            overflow: auto;
-        }
-
-        /* إصلاح مشكلة اتجاه النص في حقول التاريخ */
+        /* تنسيق طلب الشراء من invoice-cards.css — تسوية جردية */
+        .adjustment-page { min-height: 100vh; padding-bottom: 2rem; }
+        .adjustment-card-line { display: none; }
         input[type="date"],
         input[type="datetime-local"],
-        input[type="time"] {
-            direction: ltr !important;
-            text-align: left !important;
-        }
-
+        input[type="time"] { direction: ltr !important; text-align: left !important; }
         input[type="date"]::-webkit-calendar-picker-indicator,
-        input[type="datetime-local"]::-webkit-calendar-picker-indicator {
-            cursor: pointer;
-        }
+        input[type="datetime-local"]::-webkit-calendar-picker-indicator { cursor: pointer; }
     </style>
 }
 

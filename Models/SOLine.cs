@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;   // علشان NotMapped
@@ -29,6 +29,9 @@ namespace ERP.Models
 
         [Display(Name = "الكمية المطلوبة")]
         public int QtyRequested { get; set; }            // الكمية المطلوبة
+
+        [Display(Name = "الكمية المحوّلة")]
+        public int QtyConverted { get; set; }             // الكمية المحوّلة إلى فاتورة مبيعات (للتحويل الجزئي)
 
         [StringLength(100)]
         [Display(Name = "مرجع السعر")]
@@ -77,9 +80,12 @@ namespace ERP.Models
             get => ExpectedUnitPrice * QtyRequested;
         }
 
-        // ===== علاقة Navigation مع الهيدر =====
+        // ===== علاقات الملاحة =====
 
         [Display(Name = "أمر البيع")]
         public virtual SalesOrder SalesOrder { get; set; } = null!;
+
+        [Display(Name = "الصنف")]
+        public virtual Product? Product { get; set; }
     }
 }

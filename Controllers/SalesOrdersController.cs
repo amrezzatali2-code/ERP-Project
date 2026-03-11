@@ -1,8 +1,9 @@
 using ERP.Data;                               // تعليق: سياق قاعدة البيانات AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                    // PagedResult + ApplySearchSort + UserActivityLogger
-using ERP.Models;                            // SalesOrder, UserActionType
+using ERP.Models;                            // SalesOrder, SOLine, SalesInvoice, SalesInvoiceLine, UserActionType
 using ERP.Security;
+using ERP.Services;                          // DocumentTotalsService
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -28,13 +29,28 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly DocumentTotalsService _docTotals;
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        public SalesOrdersController(AppDbContext context, IUserActivityLogger activityLogger)
+        public SalesOrdersController(AppDbContext context, IUserActivityLogger activityLogger, DocumentTotalsService docTotals)
         {
             _context = context;
             _activityLogger = activityLogger;
+            _docTotals = docTotals ?? throw new ArgumentNullException(nameof(docTotals));
+        }
+
+        private string GetCurrentUserDisplayName()
+        {
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                var displayName = User.FindFirst("DisplayName")?.Value;
+                if (!string.IsNullOrWhiteSpace(displayName)) return displayName.Trim();
+                var claimName = User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+                if (!string.IsNullOrWhiteSpace(claimName)) return claimName.Trim();
+                if (!string.IsNullOrWhiteSpace(User.Identity?.Name)) return User.Identity.Name.Trim();
+            }
+            return "System";
         }
 
         #region خرائط الحقول للبحث والترتيب (مستخدمة في Index و Export)
@@ -680,26 +696,57 @@ namespace ERP.Controllers
 
 
         // =========================
-        // Create — GET: فتح شاشة أمر بيع جديد
+        // Create — GET: فتح شاشة أمر بيع جديد (نفس نمط طلب الشراء: Show مع SOId=0)
         // =========================
         [HttpGet]
-        public async Task<IActionResult> Create()
+        public async Task<IActionResult> Create(int? frame = null)
         {
-            // متغير: موديل أمر بيع جديد بقيم افتراضية
+            var defaultWarehouseId = await GetDefaultWarehouseIdAsync();
             var model = new SalesOrder
             {
-                SODate = DateTime.Today,                          // تاريخ الأمر = تاريخ اليوم
-                Status = "Draft",                                 // حالة مبدئية: مسودة
-               
-                CreatedAt = DateTime.Now,                           // وقت الإنشاء الآن
-                CreatedBy = User?.Identity?.Name ?? "system"        // اسم المستخدم الحالي إن وجد
+                SOId = 0,
+                SODate = DateTime.Today,
+                CustomerId = 0,
+                WarehouseId = defaultWarehouseId > 0 ? defaultWarehouseId : 0,
+                Status = "Draft",
+                IsConverted = false,
+                Notes = null,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = GetCurrentUserDisplayName(),
+                TotalQtyRequested = 0,
+                ExpectedItemsTotal = 0m
             };
 
-            // تعبئة القوائم المنسدلة (العملاء + المخازن + ... )
-            await PopulateDropDownsAsync();
+            await PopulateDropDownsAsync(null, model.WarehouseId);
+            await LoadProductsForShowAsync();
+            await FillSalesOrderNavAsync(0);
 
-            // نستخدم نفس شاشة Edit لعرض أمر جديد (قراءة + أزرار الحركة)
-            return View("Edit", model);
+            ViewBag.Fragment = null;
+            ViewBag.Frame = (frame == 1) ? 1 : 0;
+            ViewBag.IsLocked = false;
+
+            return View("Show", model);
+        }
+
+        private async Task<int> GetDefaultWarehouseIdAsync()
+        {
+            var id = await _context.Warehouses
+                .AsNoTracking()
+                .OrderBy(w => w.WarehouseId)
+                .Select(w => w.WarehouseId)
+                .FirstOrDefaultAsync();
+            return id;
+        }
+
+        private async Task LoadProductsForShowAsync()
+        {
+            var list = await _context.Products
+                .AsNoTracking()
+                .OrderBy(p => p.ProdName)
+                .Select(p => new { p.ProdId, p.ProdName })
+                .Take(1000)
+                .ToListAsync();
+            ViewBag.Products = list;
         }
 
 
@@ -708,41 +755,117 @@ namespace ERP.Controllers
 
 
         // =========================
-        // Create — POST: حفظ أمر البيع الجديد
+        // Create — POST: حفظ أمر البيع الجديد (من فورم تقليدي إن وُجد، وإلا الاعتماد على SaveHeader من Show)
         // =========================
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(SalesOrder order)
         {
-            // لو فيه أخطاء في الفاليديشن نرجّع نفس الشاشة
             if (!ModelState.IsValid)
             {
-                await PopulateDropDownsAsync();   // نرجّع القوائم المنسدلة عشان ما تفضاش
-                return View("Edit", order);
+                await PopulateDropDownsAsync();
+                return View("Show", order);
             }
 
-            // تأكيد قيم التتبع والحالة
-            order.Status ??= "Draft";                             // لو فارغة نخليها مسودة
-            
-            order.CreatedAt = DateTime.Now;                       // وقت الإنشاء
-            order.CreatedBy ??= User?.Identity?.Name ?? "system"; // اسم المستخدم
+            order.Status ??= "Draft";
+            order.IsConverted = false;
+            order.CreatedAt = DateTime.UtcNow;
+            order.CreatedBy ??= GetCurrentUserDisplayName();
 
-            // إضافة الهيدر في قاعدة البيانات
             _context.SalesOrders.Add(order);
             await _context.SaveChangesAsync();
 
             await _activityLogger.LogAsync(UserActionType.Create, "SalesOrder", order.SOId, $"إنشاء أمر بيع رقم {order.SOId}");
-
             TempData["Msg"] = "تم إنشاء أمر البيع بنجاح.";
-
-            // بعد الحفظ نفتح شاشة Edit للأمر الجديد
-            return RedirectToAction(nameof(Edit), new { id = order.SOId });
+            return RedirectToAction(nameof(Show), new { id = order.SOId, frame = 1 });
         }
 
 
 
 
 
+
+        // =========================
+        // Show — عرض أمر بيع (هيدر + سطور + تنقل أول/سابق/تالي/آخر، مثل طلب الشراء)
+        // =========================
+        [HttpGet]
+        [ResponseCache(NoStore = true, Duration = 0)]
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        {
+            bool isBodyOnly = string.Equals(frag, "body", StringComparison.OrdinalIgnoreCase);
+            if (!isBodyOnly && frame != 1)
+                return RedirectToAction(nameof(Show), new { id, frag, frame = 1 });
+
+            ViewBag.Fragment = frag;
+
+            if (id <= 0)
+            {
+                TempData["Error"] = "رقم أمر البيع غير صالح.";
+                return RedirectToAction(nameof(Create), new { frame = 1 });
+            }
+
+            var order = await _context.SalesOrders
+                .Include(o => o.Customer)
+                .Include(o => o.Warehouse)
+                .Include(o => o.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(o => o.SOId == id);
+
+            if (order == null)
+            {
+                if (isBodyOnly)
+                    return NotFound($"أمر البيع رقم ({id}) غير موجود.");
+                int? nextId = await _context.SalesOrders.AsNoTracking().Where(x => x.SOId > id).OrderBy(x => x.SOId).Select(x => (int?)x.SOId).FirstOrDefaultAsync();
+                if (nextId.HasValue && nextId.Value > 0)
+                {
+                    TempData["Error"] = $"رقم أمر البيع ({id}) غير موجود. تم فتح الأمر التالي ({nextId.Value}).";
+                    return RedirectToAction(nameof(Show), new { id = nextId.Value, frag = (string?)null, frame = 1 });
+                }
+                int? prevId = await _context.SalesOrders.AsNoTracking().Where(x => x.SOId < id).OrderByDescending(x => x.SOId).Select(x => (int?)x.SOId).FirstOrDefaultAsync();
+                if (prevId.HasValue && prevId.Value > 0)
+                {
+                    TempData["Error"] = $"رقم أمر البيع ({id}) غير موجود. تم فتح الأمر السابق ({prevId.Value}).";
+                    return RedirectToAction(nameof(Show), new { id = prevId.Value, frag = (string?)null, frame = 1 });
+                }
+                TempData["Error"] = "لا توجد أوامر بيع مسجلة.";
+                return RedirectToAction(nameof(Create), new { frame = 1 });
+            }
+
+            await PopulateDropDownsAsync(order.CustomerId, order.WarehouseId);
+            await LoadProductsForShowAsync();
+            ViewBag.IsLocked = order.IsConverted
+                || string.Equals(order.Status, "Converted", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
+            ViewBag.Frame = isBodyOnly ? 0 : 1;
+            await FillSalesOrderNavAsync(order.SOId);
+
+            return View("Show", order);
+        }
+
+        private async Task FillSalesOrderNavAsync(int currentId)
+        {
+            var minMax = await _context.SalesOrders.AsNoTracking().GroupBy(_ => 1)
+                .Select(g => new { FirstId = g.Min(x => x.SOId), LastId = g.Max(x => x.SOId) })
+                .FirstOrDefaultAsync();
+
+            int? prevId = null, nextId = null;
+            if (currentId > 0)
+            {
+                prevId = await _context.SalesOrders.AsNoTracking().Where(x => x.SOId < currentId).OrderByDescending(x => x.SOId).Select(x => (int?)x.SOId).FirstOrDefaultAsync();
+                nextId = await _context.SalesOrders.AsNoTracking().Where(x => x.SOId > currentId).OrderBy(x => x.SOId).Select(x => (int?)x.SOId).FirstOrDefaultAsync();
+            }
+            else
+            {
+                prevId = minMax?.LastId;
+                nextId = minMax?.FirstId;
+            }
+
+            ViewBag.NavFirstId = minMax?.FirstId ?? 0;
+            ViewBag.NavLastId = minMax?.LastId ?? 0;
+            ViewBag.NavPrevId = prevId ?? 0;
+            ViewBag.NavNextId = nextId ?? 0;
+        }
 
         // =========================
         // Edit — GET: فتح أمر بيع قديم للعرض/التعديل
@@ -833,5 +956,363 @@ namespace ERP.Controllers
             }
         }
 
+        #region أمر البيع — SaveHeader / سطور / تحويل إلى فاتورة مبيعات
+
+        public class SalesOrderHeaderDto
+        {
+            public int SOId { get; set; }
+            public int CustomerId { get; set; }
+            public int WarehouseId { get; set; }
+            public string? Notes { get; set; }
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> SaveHeader([FromBody] SalesOrderHeaderDto dto)
+        {
+            if (dto == null)
+                return BadRequest("حدث خطأ فى البيانات المرسلة.");
+            if (dto.CustomerId <= 0)
+                return BadRequest("يجب اختيار العميل قبل حفظ أمر البيع.");
+            if (dto.WarehouseId <= 0)
+                return BadRequest("يجب اختيار المخزن قبل حفظ أمر البيع.");
+
+            var now = DateTime.Now;
+            var userName = GetCurrentUserDisplayName();
+
+            if (dto.SOId == 0)
+            {
+                var so = new SalesOrder
+                {
+                    SODate = now.Date,
+                    CustomerId = dto.CustomerId,
+                    WarehouseId = dto.WarehouseId,
+                    Status = "Draft",
+                    IsConverted = false,
+                    Notes = dto.Notes,
+                    CreatedAt = now,
+                    CreatedBy = userName,
+                    TotalQtyRequested = 0,
+                    ExpectedItemsTotal = 0m
+                };
+                _context.SalesOrders.Add(so);
+                await _context.SaveChangesAsync();
+
+                return Json(new
+                {
+                    success = true,
+                    SOId = so.SOId,
+                    orderNumber = so.SOId.ToString(),
+                    orderDate = so.SODate.ToString("yyyy/MM/dd"),
+                    orderTime = so.CreatedAt.ToString("HH:mm"),
+                    status = so.Status,
+                    isConverted = so.IsConverted,
+                    createdBy = so.CreatedBy
+                });
+            }
+
+            var existing = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+            if (existing == null)
+                return NotFound("لم يتم العثور على أمر البيع المطلوب.");
+            if (existing.IsConverted)
+                return BadRequest("لا يمكن تعديل أمر بيع تم تحويله بالفعل إلى فاتورة مبيعات.");
+
+            existing.CustomerId = dto.CustomerId;
+            existing.WarehouseId = dto.WarehouseId;
+            existing.Notes = dto.Notes;
+            existing.UpdatedAt = now;
+            await _context.SaveChangesAsync();
+
+            return Json(new
+            {
+                success = true,
+                SOId = existing.SOId,
+                orderNumber = existing.SOId.ToString(),
+                orderDate = existing.SODate.ToString("yyyy/MM/dd"),
+                orderTime = existing.CreatedAt.ToString("HH:mm"),
+                status = existing.Status,
+                isConverted = existing.IsConverted,
+                createdBy = existing.CreatedBy
+            });
+        }
+
+        public class AddLineJsonDto
+        {
+            public int SOId { get; set; }
+            public int prodId { get; set; }
+            public int qty { get; set; }
+            public decimal requestRetailPrice { get; set; }
+            public decimal salesDiscountPct { get; set; }
+            public decimal expectedUnitPrice { get; set; }
+            public string? BatchNo { get; set; }
+            public string? expiryText { get; set; }
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
+        {
+            if (dto == null || dto.SOId <= 0 || dto.prodId <= 0)
+                return BadRequest(new { ok = false, message = "بيانات الأمر/الصنف غير صحيحة." });
+            if (dto.qty <= 0)
+                return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
+
+            var disc = Math.Clamp(dto.salesDiscountPct, 0, 100);
+            var expectedPrice = dto.expectedUnitPrice > 0 ? dto.expectedUnitPrice : dto.requestRetailPrice * (1m - disc / 100m);
+
+            DateTime? expiry = null;
+            if (!string.IsNullOrWhiteSpace(dto.expiryText))
+            {
+                var parts = dto.expiryText.Trim().Split('/');
+                if (parts.Length == 2 && int.TryParse(parts[0], out int mm) && int.TryParse(parts[1], out int yyyy) && mm >= 1 && mm <= 12)
+                    expiry = new DateTime(yyyy, mm, 1);
+            }
+            var batchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
+
+            var order = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+            if (order == null)
+                return NotFound(new { ok = false, message = "أمر البيع غير موجود." });
+            if (order.IsConverted)
+                return BadRequest(new { ok = false, message = "لا يمكن إضافة سطور: الأمر محوّل إلى فاتورة مبيعات." });
+
+            var product = await _context.Products.AsNoTracking().FirstOrDefaultAsync(p => p.ProdId == dto.prodId);
+            if (product == null)
+                return BadRequest(new { ok = false, message = "الصنف غير موجود." });
+
+            var currentLines = await _context.SOLines.Where(l => l.SOId == dto.SOId).ToListAsync();
+            var nextLineNo = (currentLines.Any() ? currentLines.Max(l => l.LineNo) : 0) + 1;
+
+            var newLine = new SOLine
+            {
+                SOId = dto.SOId,
+                LineNo = nextLineNo,
+                ProdId = dto.prodId,
+                QtyRequested = dto.qty,
+                RequestedRetailPrice = dto.requestRetailPrice,
+                SalesDiscountPct = disc,
+                ExpectedUnitPrice = expectedPrice,
+                PreferredBatchNo = batchNo,
+                PreferredExpiry = expiry?.Date,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = GetCurrentUserDisplayName()
+            };
+            _context.SOLines.Add(newLine);
+            await _context.SaveChangesAsync();
+            await _docTotals.RecalcSalesOrderTotalsAsync(dto.SOId);
+
+            var linesNow = await _context.SOLines.Where(l => l.SOId == dto.SOId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+            var linesDto = linesNow.Select(l =>
+            {
+                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                var lv = l.QtyRequested * l.ExpectedUnitPrice;
+                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
+            }).ToList();
+
+            var soHeader = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+            return Json(new
+            {
+                ok = true,
+                message = "تم إضافة السطر بنجاح.",
+                lines = linesDto,
+                totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m }
+            });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetLinesJson(int id)
+        {
+            if (id <= 0)
+                return BadRequest(new { ok = false, message = "رقم الأمر غير صحيح." });
+            var order = await _context.SalesOrders.AsNoTracking().FirstOrDefaultAsync(o => o.SOId == id);
+            if (order == null)
+                return NotFound(new { ok = false, message = "أمر البيع غير موجود." });
+
+            var linesNow = await _context.SOLines.Where(l => l.SOId == id).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+            var linesDto = linesNow.Select(l =>
+            {
+                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                var lv = l.QtyRequested * l.ExpectedUnitPrice;
+                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
+            }).ToList();
+
+            return Json(new { ok = true, lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = order.ExpectedItemsTotal } });
+        }
+
+        public class RemoveLineJsonDto { public int SOId { get; set; } public int LineNo { get; set; } }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> RemoveLineJson([FromBody] RemoveLineJsonDto dto)
+        {
+            if (dto == null || dto.SOId <= 0 || dto.LineNo <= 0)
+                return BadRequest(new { ok = false, message = "بيانات المسح غير صحيحة." });
+
+            var order = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+            if (order == null)
+                return NotFound(new { ok = false, message = "أمر البيع غير موجود." });
+            if (order.IsConverted)
+                return BadRequest(new { ok = false, message = "لا يمكن تعديل أمر محوّل." });
+
+            var line = await _context.SOLines.FirstOrDefaultAsync(l => l.SOId == dto.SOId && l.LineNo == dto.LineNo);
+            if (line == null)
+                return NotFound(new { ok = false, message = "السطر غير موجود." });
+
+            _context.SOLines.Remove(line);
+            await _context.SaveChangesAsync();
+            await _docTotals.RecalcSalesOrderTotalsAsync(dto.SOId);
+
+            var linesNow = await _context.SOLines.Where(l => l.SOId == dto.SOId).OrderBy(l => l.LineNo).ToListAsync();
+            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var linesDto = linesNow.Select(l =>
+            {
+                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = l.QtyRequested * l.ExpectedUnitPrice };
+            }).ToList();
+            var soHeader = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+            return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m } });
+        }
+
+        public class ClearAllLinesJsonDto { public int SOId { get; set; } }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> ClearAllLinesJson([FromBody] ClearAllLinesJsonDto dto)
+        {
+            if (dto == null || dto.SOId <= 0)
+                return BadRequest(new { ok = false, message = "بيانات المسح غير صحيحة." });
+
+            var order = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+            if (order == null)
+                return NotFound(new { ok = false, message = "أمر البيع غير موجود." });
+            if (order.IsConverted)
+                return BadRequest(new { ok = false, message = "لا يمكن تعديل أمر محوّل." });
+
+            var lines = await _context.SOLines.Where(l => l.SOId == dto.SOId).ToListAsync();
+            if (lines.Count == 0)
+                return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, expectedItemsTotal = 0m } });
+
+            _context.SOLines.RemoveRange(lines);
+            await _context.SaveChangesAsync();
+            await _docTotals.RecalcSalesOrderTotalsAsync(dto.SOId);
+            return Json(new { ok = true, message = "تم مسح جميع الأصناف.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, expectedItemsTotal = 0m } });
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> RecalcTotals(int id)
+        {
+            if (id <= 0)
+                return BadRequest(new { ok = false, message = "رقم الأمر غير صحيح." });
+            await _docTotals.RecalcSalesOrderTotalsAsync(id);
+            var so = await _context.SalesOrders.AsNoTracking().FirstOrDefaultAsync(o => o.SOId == id);
+            return Json(new { ok = true, expectedItemsTotal = so?.ExpectedItemsTotal ?? 0m, totalQtyRequested = so?.TotalQtyRequested ?? 0 });
+        }
+
+        [HttpPost]
+        [IgnoreAntiforgeryToken]
+        public async Task<IActionResult> ConvertToSalesInvoice(int id)
+        {
+            bool isAjax = string.Equals(Request.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+                || (Request.Headers["Accept"].ToString()?.Contains("application/json", StringComparison.OrdinalIgnoreCase) == true);
+
+            try
+            {
+                var order = await _context.SalesOrders.Include(o => o.Customer).Include(o => o.Warehouse).Include(o => o.Lines).FirstOrDefaultAsync(o => o.SOId == id);
+                if (order == null)
+                {
+                    if (isAjax) return NotFound(new { ok = false, message = "أمر البيع غير موجود." });
+                    TempData["Error"] = "أمر البيع غير موجود.";
+                    return RedirectToAction(nameof(Index));
+                }
+                if (order.IsConverted)
+                {
+                    if (isAjax) return BadRequest(new { ok = false, message = "هذا الأمر تم تحويله بالفعل إلى فاتورة مبيعات." });
+                    TempData["Error"] = "هذا الأمر تم تحويله بالفعل.";
+                    return RedirectToAction(nameof(Show), new { id = order.SOId, frame = 1 });
+                }
+                if (order.CustomerId <= 0) { var msg = "يجب اختيار العميل قبل التحويل."; if (isAjax) return BadRequest(new { ok = false, message = msg }); TempData["Error"] = msg; return RedirectToAction(nameof(Show), new { id = order.SOId, frame = 1 }); }
+                if (order.WarehouseId <= 0) { var msg = "يجب اختيار المخزن قبل التحويل."; if (isAjax) return BadRequest(new { ok = false, message = msg }); TempData["Error"] = msg; return RedirectToAction(nameof(Show), new { id = order.SOId, frame = 1 }); }
+                if (order.Lines == null || !order.Lines.Any()) { var msg = "لا يمكن تحويل أمر بيع بدون سطور."; if (isAjax) return BadRequest(new { ok = false, message = msg }); TempData["Error"] = msg; return RedirectToAction(nameof(Show), new { id = order.SOId, frame = 1 }); }
+
+                await using var tx = await _context.Database.BeginTransactionAsync();
+                var now = DateTime.Now;
+                var userName = GetCurrentUserDisplayName();
+
+                var si = new SalesInvoice
+                {
+                    SIDate = now.Date,
+                    SITime = now.TimeOfDay,
+                    CustomerId = order.CustomerId,
+                    WarehouseId = order.WarehouseId,
+                    RefSOId = order.SOId,
+                    Status = "مسودة",
+                    IsPosted = false,
+                    CreatedBy = userName,
+                    CreatedAt = now
+                };
+                _context.SalesInvoices.Add(si);
+                await _context.SaveChangesAsync();
+
+                var soLines = await _context.SOLines.Include(l => l.Product).Where(l => l.SOId == order.SOId).OrderBy(l => l.LineNo).ToListAsync();
+                int lineNo = 1;
+                foreach (var sl in soLines)
+                {
+                    var priceRetail = sl.RequestedRetailPrice > 0 ? sl.RequestedRetailPrice : (sl.Product?.PriceRetail ?? 0m);
+                    var unitSale = priceRetail * (1m - sl.SalesDiscountPct / 100m);
+                    var lineTotalAfterDiscount = sl.QtyRequested * unitSale;
+                    var sil = new SalesInvoiceLine
+                    {
+                        SIId = si.SIId,
+                        LineNo = lineNo++,
+                        ProdId = sl.ProdId,
+                        Qty = sl.QtyRequested,
+                        PriceRetail = priceRetail,
+                        Disc1Percent = sl.SalesDiscountPct,
+                        UnitSalePrice = unitSale,
+                        LineTotalAfterDiscount = lineTotalAfterDiscount,
+                        TaxPercent = 0,
+                        TaxValue = 0,
+                        LineNetTotal = lineTotalAfterDiscount,
+                        BatchNo = sl.PreferredBatchNo ?? "",
+                        Expiry = sl.PreferredExpiry
+                    };
+                    _context.SalesInvoiceLines.Add(sil);
+                }
+                await _context.SaveChangesAsync();
+
+                await _docTotals.RecalcSalesInvoiceTotalsAsync(si.SIId);
+                await _context.SaveChangesAsync();
+
+                order.IsConverted = true;
+                order.Status = "Converted";
+                order.UpdatedAt = now;
+                await _context.SaveChangesAsync();
+                await tx.CommitAsync();
+
+                try { await _activityLogger.LogAsync(UserActionType.Post, "SalesOrder", order.SOId, $"تحويل أمر بيع رقم {order.SOId} إلى فاتورة مبيعات رقم {si.SIId}"); } catch { }
+
+                if (isAjax)
+                    return Ok(new { ok = true, message = $"تم تحويل أمر البيع بنجاح إلى فاتورة مبيعات رقم {si.SIId}.", soId = order.SOId, siId = si.SIId, status = order.Status, isConverted = true });
+                TempData["Success"] = $"تم تحويل أمر البيع إلى فاتورة مبيعات رقم {si.SIId}.";
+                return RedirectToAction("Show", "SalesInvoices", new { id = si.SIId, frame = 1 });
+            }
+            catch (Exception ex)
+            {
+                var msg = string.IsNullOrWhiteSpace(ex.Message) ? "حدث خطأ أثناء التحويل." : ex.Message;
+                if (ex.InnerException != null && !string.IsNullOrWhiteSpace(ex.InnerException.Message)) msg = msg + " " + ex.InnerException.Message;
+                if (isAjax) return BadRequest(new { ok = false, message = "فشل التحويل: " + msg });
+                TempData["Error"] = "فشل التحويل: " + msg;
+                return RedirectToAction(nameof(Show), new { id, frame = 1 });
+            }
+        }
+
+        #endregion
     }
 }

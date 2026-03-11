@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;                    // علشان ICollection
 using System.ComponentModel.DataAnnotations;        // [Key] / [Required] / [Display] / [Timestamp]
 using System.ComponentModel.DataAnnotations.Schema; // [DatabaseGenerated]
+using Microsoft.EntityFrameworkCore;                  // [Precision]
 
 namespace ERP.Models
 {
@@ -50,6 +51,13 @@ namespace ERP.Models
         [Display(Name = "المخزن")]
         public virtual Warehouse? Warehouse { get; set; }  // متغير: كائن المخزن المرتبط
 
+        /// <summary>رقم أمر البيع المصدر (إن وُجد).</summary>
+        [Display(Name = "أمر البيع المصدر")]
+        public int? RefSOId { get; set; }
+
+        [Display(Name = "أمر البيع")]
+        public virtual SalesOrder? SalesOrder { get; set; }
+
         // ========== طريقة الدفع ==========
         [Display(Name = "طريقة الدفع")]
         [StringLength(20)]
@@ -75,6 +83,13 @@ namespace ERP.Models
 
         [Display(Name = "الصافي")]
         public decimal NetTotal { get; set; }                   // الصافي بعد الخصم + الضريبة
+
+        /// <summary>
+        /// الحساب السابق للعميل (رصيده قبل هذه الفاتورة) — يُثبت عند أول حفظ ولا يتغير مع تغير رصيد العميل لاحقاً.
+        /// </summary>
+        [Display(Name = "الحساب السابق للعميل عند الحفظ")]
+        [Precision(18, 2)]
+        public decimal CustomerBalanceAtSave { get; set; }      // الحساب السابق للعميل عند حفظ الفاتورة
 
         // ========== الحالة والترحيل ==========
         [Display(Name = "الحالة")]

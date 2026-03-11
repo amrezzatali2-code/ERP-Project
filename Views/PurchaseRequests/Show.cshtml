@@ -15,7 +15,6 @@
             -moz-appearance: textfield;
         }
 
-        /* ارتفاع الصفحة بحسب المحتوى فقط — إلغاء min-height: 100vh لتفادي المساحة الفارغة السفلية */
         .invoice-page {
             background-color: #f3f6fb;
             min-height: 0;
@@ -38,10 +37,10 @@
             top: 58px;
             z-index: 3000;
             background: #ffffff;
-            border: 1px solid rgba(13,110,253,.12);
+            border: 1px solid #6366f1;
             padding: 10px 10px;
             border-radius: 14px;
-            box-shadow: 0 10px 24px rgba(0,0,0,.05);
+            box-shadow: 0 10px 24px rgba(0,0,0,.08);
         }
         @@media (max-width: 992px) {
             .invoice-actions-sticky { top: 56px; }
@@ -74,17 +73,20 @@
         .invoice-side-card .btn-erp {
             font-size: 0.85rem;
             padding: 0.35rem 0.6rem;
-            border: 1px solid #94a3b8 !important;
+            border: 1px solid #64748b !important;
         }
         .invoice-side-card .btn-erp + .btn-erp { margin-top: 0.25rem; }
-        /* إخفاء الخطوط الفاصلة داخل كارت الأزرار */
         .invoice-side-card .invoice-actions-bar hr { display: none !important; }
+        .invoice-page .invoice-side-card { min-width: 220px; }
 
-        .invoice-lines-header {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            color: #fff;
+        /* هيدر جدول السطور — أرضية رمادي عادي ونص أغمق */
+        .invoice-lines-header th {
+            background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+            font-weight: 600;
+            padding: 0.5rem 0.55rem;
+            border: 1px solid #cbd5e1 !important;
         }
-        .invoice-lines-header th { border-color: #0b5ed7 !important; }
         /* جدول السطور: أرضية بيضاء */
         .invoice-lines-card .erp-table-wrapper .erp-table tbody tr,
         .invoice-lines-card .erp-table-wrapper .erp-table tbody td {
@@ -99,76 +101,139 @@
             display: none;
         }
 
-        /* حدود كل الكروت: نفس نمط القوائم — سمك أقل (1px) */
+        /* حدود كل الكروت: لون أغمق (#6366f1) — نفس نمط فاتورة المشتريات/المبيعات */
         div.card.invoice-side-card,
         div.card.invoice-header-card,
         div.card.invoice-product-card.invoice-product-card-list-style,
         div.card.invoice-Add-card,
         div.card.invoice-lines-card,
         div.card.invoice-totals-card {
-            border: 1px solid #c7d2fe !important;
+            border: 1px solid #6366f1 !important;
             border-radius: 12px !important;
-            box-shadow: 0 1px 3px rgba(59,130,246,.12) !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
             overflow: hidden;
         }
-
-        /* لون النص أعمق داخل كروت الطلب لظهور أوضح */
+        .invoice-product-card.invoice-product-card-list-style .card-body {
+            padding: 0.75rem 1rem 1rem;
+        }
+        /* لون النص أغمق داخل كروت الطلب */
         .invoice-header-card .card-body .form-label,
         .invoice-header-card .card-body .form-label-sm,
         .invoice-header-card .card-body label {
-            color: #1e293b !important;
+            color: #0f172a !important;
             font-weight: 500;
         }
         .invoice-header-card .card-body .form-control,
         .invoice-header-card .card-body .form-control-sm,
         .invoice-header-card .card-body .form-select,
         .invoice-header-card .card-body .form-select-sm {
-            color: #0f172a !important;
+            color: #020617 !important;
         }
         .invoice-product-card .card-body .form-label,
         .invoice-product-card .card-body .form-label-sm,
         .invoice-product-card .card-body label,
         .invoice-product-card .pr-card-field label {
-            color: #1e293b !important;
+            color: #0f172a !important;
             font-weight: 500;
         }
         .invoice-product-card .card-body .form-control,
         .invoice-product-card .card-body .form-control-sm,
-        .invoice-product-card .card-body .form-select,
         .invoice-product-card .pr-card-field .form-control-sm,
         .invoice-product-card .pr-card-field .form-select-sm {
-            color: #0f172a !important;
+            color: #020617 !important;
         }
         .invoice-Add-card .card-body .form-label,
         .invoice-Add-card .card-body .form-label-sm,
         .invoice-Add-card .card-body label {
-            color: #1e293b !important;
+            color: #0f172a !important;
             font-weight: 500;
         }
         .invoice-Add-card .card-body .form-control,
         .invoice-Add-card .card-body .form-control-sm,
         .invoice-Add-card .card-body .form-select,
         .invoice-Add-card .card-body .form-select-sm {
-            color: #0f172a !important;
-        }
-        .invoice-product-card .pr-card-table-wrap .table tbody td,
-        .invoice-product-card .pr-card-table-wrap .table tbody th {
-            color: #1e293b !important;
+            color: #020617 !important;
         }
         .invoice-lines-card .erp-table-wrapper .erp-table tbody td,
         .invoice-lines-card .erp-table-wrapper .erp-table tbody th {
-            color: #1e293b !important;
+            color: #0f172a !important;
         }
         .invoice-totals-card .card-body,
         .invoice-totals-card .card-body .form-label,
         .invoice-totals-card .invoice-summary-item label,
         .invoice-totals-card .invoice-summary-item .small {
-            color: #1e293b !important;
-        }
-        .invoice-totals-card .invoice-summary-badge {
             color: #0f172a !important;
         }
-        /* حدود الانبوتات أغمق لظهور أوضح في الكروت */
+        .invoice-totals-card .invoice-summary-badge {
+            color: #020617 !important;
+        }
+        /* كارت الإجماليات — مثل فاتورة المبيعات (بوكسات بحدود) */
+        .invoice-summary-row.invoice-summary-row-boxes,
+        .invoice-summary-row.invoice-summary-row-totals {
+            flex-wrap: wrap;
+            gap: 0.5rem 0.85rem;
+            align-items: stretch;
+            justify-content: space-between;
+        }
+        /* طلب الشراء: صف واحد فقط — بوكسات مصغّرة لتناسب الصف */
+        .invoice-summary-row.invoice-summary-row-single {
+            flex-wrap: nowrap;
+            gap: 0.35rem 0.5rem;
+            align-items: stretch;
+            overflow-x: auto;
+            min-width: 0;
+        }
+        .invoice-summary-row.invoice-summary-row-single .invoice-summary-item.invoice-summary-box {
+            flex: 1 1 0;
+            min-width: 0;
+            padding: 0.25rem 0.35rem;
+            gap: 0.15rem;
+        }
+        .invoice-summary-row.invoice-summary-row-single .invoice-summary-label {
+            font-size: 0.65rem;
+            line-height: 1.2;
+        }
+        .invoice-summary-row.invoice-summary-row-single .invoice-summary-value {
+            font-size: 0.8rem;
+        }
+        .invoice-summary-row.invoice-summary-row-single .invoice-summary-value-main {
+            font-size: 0.85rem;
+        }
+        .invoice-summary-item.invoice-summary-box {
+            flex: 1 1 0;
+            min-width: 90px;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0.4rem 0.6rem;
+            background: #f8fafc;
+            border: 1px solid #94a3b8;
+            border-radius: 6px;
+        }
+        .invoice-summary-label {
+            font-size: 0.78rem;
+            color: #64748b;
+            margin-bottom: 0;
+        }
+        .invoice-summary-value {
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #0f172a;
+        }
+        .invoice-summary-box-main {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+            border-color: #0284c7 !important;
+        }
+        .invoice-summary-box-main .invoice-summary-label {
+            color: rgba(255,255,255,.9);
+        }
+        .invoice-summary-value-main {
+            font-size: 1.05rem;
+            color: #fff !important;
+        }
         #PI_BodyHost .invoice-header-card .form-control,
         #PI_BodyHost .invoice-header-card .form-select,
         #PI_BodyHost .invoice-product-card .form-control,
@@ -181,9 +246,6 @@
         }
         #PI_BodyHost .invoice-lines-card .editable-line-field {
             border-color: #94a3b8 !important;
-        }
-        .invoice-product-card.invoice-product-card-list-style .card-body {
-            padding: 0.75rem 1rem 1rem;
         }
         /* انبوت اسم الصنف: حدود مميزة بدون لون داخلي */
         #ProdNameInput.pi-product-name-input,
@@ -228,6 +290,36 @@
             padding: 0.4rem 0.75rem;
         }
 
+        /* رسائل عابرة (Toast) — بدل صندوق الرسائل داخل كارت الأزرار */
+        #prToastContainer {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        #prToastContainer .pr-toast {
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,.15);
+            animation: prToastIn 0.25s ease;
+            pointer-events: auto;
+        }
+        #prToastContainer .pr-toast.text-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+        #prToastContainer .pr-toast.text-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+        #prToastContainer .pr-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        #prToastContainer .pr-toast.text-muted { background: #f1f5f9; color: #475569; border: 1px solid #94a3b8; }
+        @@keyframes prToastIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         /* ===== كارت بيانات الصنف (الثاني): تحسين التصميم والتوزيع ===== */
         .invoice-product-card.invoice-product-card-list-style .pr-card-fields-row {
             display: grid;
@@ -250,7 +342,6 @@
             font-size: 0.875rem;
             padding: 0.35rem 0.5rem;
             border-radius: 0.375rem;
-            border: 1px solid #94a3b8;
         }
         /* جداول الكارت الثاني: في سطر واحد وحجم متساوٍ */
         .invoice-product-card.invoice-product-card-list-style .pr-card-tables-row {
@@ -266,7 +357,7 @@
         .invoice-product-card.invoice-product-card-list-style .pr-card-table-wrap {
             border-radius: 8px;
             overflow: hidden;
-            border: 1px solid #94a3b8;
+            border: 1px solid #dee2e6;
             background: #fff;
         }
         .invoice-product-card.invoice-product-card-list-style .pr-card-table-title {
@@ -320,11 +411,6 @@
             max-width: 130px;
         }
 
-        /* جدول سطور الطلب: بدون ارتفاع ثابت لتفادي شريط تمرير ثانٍ — التمرير يكون للصفحة فقط */
-        .invoice-lines-card .erp-table-wrapper {
-            max-height: none;
-            overflow: visible;
-        }
         .erp-table-wrapper {
             max-height: 360px;
             overflow: auto;
@@ -415,7 +501,6 @@
             padding: 0.3rem 0.5rem;
             font-size: 0.875rem;
             min-height: 2rem;
-            border: 1px solid #94a3b8;
         }
         .invoice-header-card .pr-request-card-body .row.g-3 {
             --bs-gutter-x: 0.75rem;
@@ -427,35 +512,6 @@
                 max-height: none !important;
                 overflow: visible !important;
             }
-        }
-        /* حاوية الرسائل العابرة (تظهر وتختفي) */
-        #prToastContainer {
-            position: fixed;
-            top: 70px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 9999;
-            pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 0.5rem;
-        }
-        #prToastContainer .pr-toast {
-            padding: 0.6rem 1.2rem;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            box-shadow: 0 4px 12px rgba(0,0,0,.15);
-            animation: prToastIn 0.25s ease;
-            pointer-events: auto;
-        }
-        #prToastContainer .pr-toast.text-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
-        #prToastContainer .pr-toast.text-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-        #prToastContainer .pr-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-        #prToastContainer .pr-toast.text-muted { background: #f1f5f9; color: #475569; border: 1px solid #94a3b8; }
-        @@keyframes prToastIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
         }
     </style>
 }
@@ -514,12 +570,11 @@
                         }
 
                         <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
-                            @* أزرار التنقل: معالجة النقر في docCaptureHandler (بدون open-same-tab لتفادي تعارض مع site.js) *@
                             <button type="button"
                                     id="btnFirstInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="طلب  الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (navFirst ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(navFirst ?? 0)"
@@ -530,9 +585,9 @@
 
                             <button type="button"
                                     id="btnPrevInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="طلب  الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (prevEffective ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(prevEffective ?? 0)"
@@ -543,9 +598,9 @@
 
                             <button type="button"
                                     id="btnNextInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="طلب  الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (nextEffective ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(nextEffective ?? 0)"
@@ -556,9 +611,9 @@
 
                             <button type="button"
                                     id="btnLastInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
                                     data-tab-id="pr-show-tab"
-                                    data-tab-title="طلب الشراء"
+                                    data-tab-title="طلب  الشراء"
                                     data-url="@Url.Action("Show", "PurchaseRequests", new { id = (navLast ?? 0), frame = 1 })"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })"
                                     data-id="@(navLast ?? 0)"
@@ -578,6 +633,8 @@
                             <button type="button"
                                     id="btnNavInvoiceSearch"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-tab-id="pr-show-tab"
+                                    data-tab-title="طلب الشراء"
                                     data-base-url="@Url.Action("Show", "PurchaseRequests", new { frame = 1 })">
                                 بحث
                             </button>
@@ -601,20 +658,6 @@
                             🔄 تحويل إلى فاتورة مشتريات
                         </button>
 
-                        <a href="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "#")" id="btnSupplierVolume" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none @(Model?.CustomerId > 0 ? "" : "d-none")"
-                           data-tab-id="customer-engagement"
-                           data-tab-title="حجم تعامل عميل"
-                           data-base-url="@Url.Action("Show", "Customers", new { frame = 1 })">
-                            📊 حجم تعامل
-                        </a>
-
-                        <!-- ✅ في طلب  الشراء: لا يوجد فتح للطلب المحوّل (يتم التحويل فقط) -->
-                        <!-- <button type="button"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                                id="btnOpenInvoice">
-                            ⏪ فتح الطلب
-                        </button> -->
-
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
                                 id="btnClearInvoiceLines"
@@ -623,22 +666,31 @@
                             🗑️ مسح كل أصناف الطلب
                         </button>
 
+                        <div>
+                            <button type="button" id="btnOpenProductMovement"
+                                    class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                                📊 حركة الصنف
+                            </button>
+                        </div>
 
+                        <div>
+                            <button type="button" id="btnOpenProductEdit"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
+                                ✏️ تعديل بيانات الصنف
+                            </button>
+                        </div>
+
+                        <a href="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "#")" id="btnSupplierVolume" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none"
+                           data-tab-id="customer-engagement"
+                           data-tab-title="حجم تعامل عميل"
+                           data-base-url="@Url.Action("Show", "Customers", new { frame = 1 })">
+                            📊 حجم تعامل
+                        </a>
 
                         <button type="button"
                                 id="btnPrintInvoice"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
                             🖨️ طباعة الطلب
-                        </button>
-
-                        <button type="button" id="btnOpenProductMovement"
-                                class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
-                            📊 حركة الصنف
-                        </button>
-
-                        <button type="button" id="btnOpenProductEdit"
-                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
-                            ✏️ تعديل بيانات الصنف
                         </button>
 
 
@@ -1033,7 +1085,7 @@
                             <div class="card-body p-0">
                         <div class="erp-table-wrapper mb-0">
                             <table class="table table-sm table-hover mb-0 erp-table">
-                                <thead>
+                                <thead class="invoice-lines-header">
                                     <tr>
                                         <th class="text-center">#</th>
                                         <th>اسم الصنف</th>
@@ -1262,49 +1314,33 @@
                             l.QtyRequested * l.PriceRetail * (1m - (l.PurchaseDiscountPct / 100m))
                             );
 
-                            decimal expectedTotal = Model.ExpectedItemsTotal;
-                            decimal taxAmount = Model.TaxAmount;
-                            decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
-                            decimal netTotal = totalAfterDiscountAndTax;
                         }
 
-                        <div class="card shadow-sm invoice-totals-card">
+                        <div class="card shadow-sm mb-2 invoice-totals-card">
                             <div class="card-body">
-
-                                <div class="d-flex flex-wrap align-items-center invoice-summary-row">
-                                    <div class="invoice-summary-item">
-                                        <span class="small text-muted d-block">عدد السطور</span>
-                                        <span id="TotalLinesValue" class="badge bg-light text-dark invoice-summary-badge">@totalLines</span>
+                                @* كل البوكسات في صف واحد — مصغّرة لتناسب الصف *@
+                                <div class="d-flex flex-nowrap align-items-stretch gap-1 invoice-summary-row invoice-summary-row-single">
+                                    <div class="invoice-summary-item invoice-summary-box">
+                                        <span class="invoice-summary-label">عدد السطور</span>
+                                        <span id="TotalLinesValue" class="invoice-summary-value">@totalLines</span>
                                     </div>
-                                    <div class="invoice-summary-item">
-                                        <span class="small text-muted d-block">عدد الأصناف</span>
-                                        <span id="TotalItemsValue" class="badge bg-light text-dark invoice-summary-badge">@totalItems</span>
+                                    <div class="invoice-summary-item invoice-summary-box">
+                                        <span class="invoice-summary-label">عدد الأصناف</span>
+                                        <span id="TotalItemsValue" class="invoice-summary-value">@totalItems</span>
                                     </div>
-                                    <div class="invoice-summary-item">
-                                        <span class="small text-muted d-block">إجمالي الكمية</span>
-                                        <span id="TotalQtyValue" class="badge bg-light text-dark invoice-summary-badge">@totalQty</span>
+                                    <div class="invoice-summary-item invoice-summary-box">
+                                        <span class="invoice-summary-label">إجمالي الكمية</span>
+                                        <span id="TotalQtyValue" class="invoice-summary-value">@totalQty</span>
                                     </div>
-                                    <div class="invoice-summary-item">
-                                        <span class="small text-muted d-block">إجمالي سعر الجمهور</span>
-                                        <span id="TotalRetailValue" class="badge bg-light text-dark invoice-summary-badge">@totalRetail.ToString("0.00")</span>
+                                    <div class="invoice-summary-item invoice-summary-box">
+                                        <span class="invoice-summary-label">إجمالي سعر الجمهور</span>
+                                        <span id="TotalRetailValue" class="invoice-summary-value">@totalRetail.ToString("0.00")</span>
                                     </div>
-                                    <div class="invoice-summary-item">
-                                        <span class="small text-muted d-block">الإجمالي بعد الخصم</span>
-                                        <span id="TotalAfterDiscountValue" class="badge bg-light text-dark invoice-summary-badge">@totalAfterDiscount.ToString("0.00")</span>
-                                    </div>
-                                    <div class="invoice-summary-item">
-                                        <label class="form-label form-label-sm mb-0 small">قيمة الضريبة</label>
-                                        <input type="number" step="0.01" id="TaxAmountInput"
-                                               class="form-control form-control-sm text-center pi-input invoice-summary-tax"
-                                               value="@taxAmount.ToString("0.00")" />
-                                    </div>
-                                    <div class="invoice-summary-item invoice-summary-total">
-                                        <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
-                                        <span id="TotalAfterDiscountAndTaxValue" class="badge bg-primary text-white invoice-summary-badge fw-bold">@totalAfterDiscountAndTax.ToString("0.00")</span>
-                                        <span id="NetTotalValue" class="visually-hidden">@netTotal.ToString("0.00")</span>
+                                    <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main">
+                                        <span class="invoice-summary-label">الإجمالي بعد الخصم</span>
+                                        <span id="TotalAfterDiscountValue" class="invoice-summary-value invoice-summary-value-main fw-bold">@totalAfterDiscount.ToString("0.00")</span>
                                     </div>
                                 </div>
-
                             </div>
                         </div>
 
@@ -1378,6 +1414,34 @@
 
 
     <script>
+                         function showToast(text, type) {
+                             if (!text) return;
+                             var container = document.getElementById('prToastContainer');
+                             if (!container) return;
+                             type = type || 'muted';
+                             var el = document.createElement('div');
+                             el.className = 'pr-toast text-' + type;
+                             el.textContent = text;
+                             container.appendChild(el);
+                             setTimeout(function () {
+                                 el.style.opacity = '0';
+                                 el.style.transition = 'opacity 0.25s ease';
+                                 setTimeout(function () {
+                                     if (el.parentNode) el.parentNode.removeChild(el);
+                                 }, 250);
+                             }, 4000);
+                         }
+                         // ✅ إظهار المحتوى ككتلة واحدة بعد اكتمال الـ DOM (بدون ظهور تدريجي)
+                         (function () {
+                             function showContent() {
+                                 document.body.classList.add('pr-content-ready');
+                             }
+                             if (document.readyState === 'complete' || document.readyState === 'interactive') {
+                                 showContent();
+                             } else {
+                                 document.addEventListener('DOMContentLoaded', showContent);
+                             }
+                         })();
                          // ✅ رابط عرض طلب الشراء (من السيرفر) — لاستخدامه عند تحميل body بالأسهم/بحث
                          window.__PR_ShowBaseUrl__ = '@(Url.Action("Show", "PurchaseRequests", new { frame = 1 }))';
 
@@ -1399,25 +1463,6 @@
                                  if (btnOk) btnOk.focus();
                              };
                          })();
-
-                         // رسالة عابرة تظهر وتختفي (بدون كارت الأزرار)
-                         function showToast(text, type) {
-                             if (!text) return;
-                             var container = document.getElementById('prToastContainer');
-                             if (!container) return;
-                             type = type || 'muted';
-                             var el = document.createElement('div');
-                             el.className = 'pr-toast text-' + type;
-                             el.textContent = text;
-                             container.appendChild(el);
-                             setTimeout(function () {
-                                 el.style.opacity = '0';
-                                 el.style.transition = 'opacity 0.25s ease';
-                                 setTimeout(function () {
-                                     if (el.parentNode) el.parentNode.removeChild(el);
-                                 }, 250);
-                             }, 4000);
-                         }
 
                          // =========================================================
                          // (A) أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
@@ -1492,7 +1537,7 @@
                                      if (custAddressInput)  custAddressInput.value  = '';
                                      if (custCreditInput)   custCreditInput.value   = '';
                                      var btnVol = document.getElementById('btnSupplierVolume');
-                                     if (btnVol) { btnVol.href = '#'; btnVol.classList.add('d-none'); btnVol.setAttribute('data-url', ''); }
+                                     if (btnVol) { btnVol.href = '#'; btnVol.setAttribute('data-url', ''); }
                                      return;
                                  }
 
@@ -1520,11 +1565,10 @@
                                  // تحديث زر حجم تعامل عند تغيير المورد
                                  var btnVol = document.getElementById('btnSupplierVolume');
                                  if (btnVol) {
-                                     var cid = parseInt((custHiddenId && custHiddenId.value) || '0', 10) || 0;
+                                     var cid = parseInt(id || '0', 10) || 0;
                                      var volBase = btnVol.getAttribute('data-base-url') || '';
                                      var volUrl = cid > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + cid) : '#';
                                      btnVol.href = volUrl;
-                                     btnVol.classList.toggle('d-none', cid <= 0);
                                      btnVol.setAttribute('data-url', volUrl);
                                  }
                              }
@@ -2540,6 +2584,7 @@
                                              if (!currentRow) { delete self.dataset.skipBlur; return; }
                                              var rowsList = Array.from(tbody.querySelectorAll('tr[data-line-no]'));
                                              var idx = rowsList.indexOf(currentRow);
+                                             // انتر بعد آخر حقل في الصف (الخصم): الانتقال للصف التالي إن وُجد، وإلا حقل الصنف
                                              var isLastField = (fType === 'discount');
                                              if (isLastField && idx >= 0 && idx < rowsList.length - 1) {
                                                  var nextRow = rowsList[idx + 1];
@@ -2862,17 +2907,7 @@
                                          // حساب إجمالي الخصم
                                          const totalDiscount = totalRetail - totalAfterDiscount;
                                          
-                                         // قراءة الضريبة من الحقل
-                                         const taxInput = document.getElementById('TaxAmountInput');
-                                         const taxAmount = parseFloat(taxInput?.value || '0') || 0;
-                                         
-                                         // حساب الإجمالي بعد الخصم والضريبة
-                                         const totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
-                                         
-                                         // الصافي النهائي = الإجمالي بعد الخصم والضريبة
-                                         const netTotal = totalAfterDiscountAndTax;
-                                         
-                                         // تحديث الإجماليات
+                                         // تحديث الإجماليات (طلب الشراء بدون ضريبة)
                                         if (typeof updateSummaryBadges === 'function') {
                                             updateSummaryBadges({
                                                 totalLines: allRows.length,
@@ -2880,10 +2915,7 @@
                                                 totalQty: totalQty,
                                                 totalRetail: totalRetail,
                                                 totalDiscount: totalDiscount,
-                                                totalAfterDiscount: totalAfterDiscount,
-                                                taxAmount: taxAmount,
-                                                totalAfterDiscountAndTax: totalAfterDiscountAndTax,
-                                                netTotal: netTotal
+                                                totalAfterDiscount: totalAfterDiscount
                                             });
                                         }
                                         // لا نستدعي bindEditableLineFields هنا لأنها تستبدل الحقول بنسخ فتفقد الفوكس
@@ -2944,17 +2976,7 @@
                              // حساب إجمالي الخصم
                              const totalDiscount = totalRetail - totalAfterDiscount;
                              
-                             // قراءة الضريبة من الحقل
-                             const taxInput = document.getElementById('TaxAmountInput');
-                             const taxAmount = parseFloat(taxInput?.value || '0') || 0;
-                             
-                             // حساب الإجمالي بعد الخصم والضريبة
-                             const totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
-                             
-                             // الصافي النهائي = الإجمالي بعد الخصم والضريبة
-                             const netTotal = totalAfterDiscountAndTax;
-                             
-                             // تحديث الإجماليات
+                             // تحديث الإجماليات (طلب الشراء بدون ضريبة)
                              if (typeof updateSummaryBadges === 'function') {
                                  updateSummaryBadges({
                                      totalLines: allRows.length,
@@ -2962,10 +2984,7 @@
                                      totalQty: totalQty,
                                      totalRetail: totalRetail,
                                      totalDiscount: totalDiscount,
-                                     totalAfterDiscount: totalAfterDiscount,
-                                     taxAmount: taxAmount,
-                                     totalAfterDiscountAndTax: totalAfterDiscountAndTax,
-                                     netTotal: netTotal
+                                     totalAfterDiscount: totalAfterDiscount
                                  });
                              }
                          }
@@ -3039,35 +3058,15 @@
                              const totalDiscount = totals.totalDiscount ?? totals.discountTotal ?? 0;
 
                              // =====================================
-                             // 2) حساب الإجمالي بعد الخصم لو مش موجود
+                             // 2) حساب الإجمالي بعد الخصم لو مش موجود (expectedTotal من طلب الشراء)
                              // =====================================
-                             let totalAfterDiscount = totals.totalAfterDiscount;
+                             let totalAfterDiscount = totals.totalAfterDiscount ?? totals.expectedTotal;
                              if (totalAfterDiscount == null) {
                                  totalAfterDiscount = Number(totalRetail || 0) - Number(totalDiscount || 0);
                              }
 
                              // =====================================
-                             // 3) الضريبة لو مش موجودة نخليها 0 (لحين ربطها لاحقاً)
-                             // =====================================
-                             let taxAmount = totals.taxAmount;
-                             if (taxAmount == null) taxAmount = 0;
-
-                             // =====================================
-                             // 4) الإجمالي بعد الخصم والضريبة + الصافي
-                             // =====================================
-                             let totalAfterDiscountAndTax = totals.totalAfterDiscountAndTax;
-                             if (totalAfterDiscountAndTax == null) {
-                                 totalAfterDiscountAndTax = Number(totalAfterDiscount || 0) + Number(taxAmount || 0);
-                             }
-
-                             let netTotal = totals.netTotal;
-                             if (netTotal == null) {
-                                 // حالياً الصافي = الإجمالي بعد الخصم والضريبة
-                                 netTotal = Number(totalAfterDiscountAndTax || 0);
-                             }
-
-                             // =====================================
-                             // 5) تحديث العناصر على الصفحة (IDs كما هي)
+                             // 3) تحديث العناصر على الصفحة (طلب الشراء بدون ضريبة)
                              // =====================================
                              setText('TotalLinesValue', totalLines);
                              setText('TotalItemsValue', totalItems);
@@ -3075,11 +3074,6 @@
 
                              setText('TotalRetailValue', fmt2(totalRetail));
                              setText('TotalAfterDiscountValue', fmt2(totalAfterDiscount));
-                             const taxInp = document.getElementById('TaxAmountInput');
-                 if (taxInp) taxInp.value = fmt2(taxAmount);
-
-                             setText('TotalAfterDiscountAndTaxValue', fmt2(totalAfterDiscountAndTax));
-                             setText('NetTotalValue', fmt2(netTotal));
                          }
 
 
@@ -3724,7 +3718,6 @@
                              document.addEventListener("DOMContentLoaded", function () {
 
                                              const btnClearAll = document.getElementById("btnClearInvoiceLines"); // متغير: زر مسح كل الأصناف (غيّر الـ id لو مختلف عندك)
-
                                  if (!btnClearAll) return;
 
                                  // ✅ ربط مرة واحدة
@@ -3848,47 +3841,6 @@
 
 
 
-                 //حفظ الضريبة (Enter أو Blur)
-
-                 async function saveTaxAjax() {
-
-                     const token = getAntiForgeryToken();
-                     const invoiceId = parseInt('@(Model.PRId)', 10);
-
-                     const taxInput = document.getElementById('TaxAmountInput');
-                     const taxVal = parseFloat(taxInput?.value || '0') || 0;
-
-                     const res = await fetch('@Url.Action("SaveTaxJson", "PurchaseRequests")', {
-                         method: 'POST',
-                         headers: {
-                             'Content-Type': 'application/json',
-                             'RequestVerificationToken': token
-                         },
-                         body: JSON.stringify({ PRId: invoiceId, taxTotal: taxVal })
-                     });
-
-                     const data = await res.json();
-
-                     if (!data.ok) {
-                         alert(data.message || 'تعذر حفظ الضريبة.');
-                         return;
-                     }
-
-                     if (data.totals) updateSummaryBadges(data.totals);
-                 }
-
-                 document.getElementById('TaxAmountInput')?.addEventListener('keydown', function (e) {
-                     if (e.key === 'Enter') {
-                         e.preventDefault();
-                         saveTaxAjax();
-                     }
-                 });
-
-                 document.getElementById('TaxAmountInput')?.addEventListener('blur', function () {
-                     saveTaxAjax();
-                 });
-
-
 
 
 
@@ -3929,10 +3881,10 @@
                                      btnPost.innerHTML = "✅ تم تحويل الطلب";
 
                                      // ✅ تحديث علم الترحيل + تطبيق القفل
-                                if (typeof setInvoicePosted === "function") setInvoicePosted(true);
-                                    if (typeof applyPostedUiLock === "function") applyPostedUiLock();
+                                     if (typeof setInvoicePosted === "function") setInvoicePosted(true);
+                                     if (typeof applyPostedUiLock === "function") applyPostedUiLock();
 
-                                    return;
+                                     return;
                                  }
 
                                  btnPost.addEventListener("click", async function (e) {
@@ -3972,7 +3924,7 @@
                                          // =========================
                                          if (typeof window.__saveHeaderAndUpdateDom === 'function') {
                                              const saveResult = await window.__saveHeaderAndUpdateDom();
-                                                 if (!saveResult || !saveResult.ok) {
+                                             if (!saveResult || !saveResult.ok) {
                                                  showToast((saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل التحويل.', 'danger');
                                                  btnPost.disabled = false;
                                                  btnPost.innerHTML = oldHtml;
@@ -4189,8 +4141,7 @@
                              // ✅ تحديث نفس البوكس لحالة واحدة: "مفتوحة للتعديل" (لا ينطبق على طلب  الشراء المحوّل)
                              // if (isPostedBox) isPostedBox.value = "مفتوحة للتعديل";
 
-                             // ✅ رسالة نجاح
-                            showToast(okMsg, "success");
+                             showToast(okMsg, "success");
 
                                      }
                                      catch (err) {
@@ -4199,7 +4150,7 @@
                                          btnOpen.disabled = false;
                                          btnOpen.innerHTML = oldHtml;
 
-                                        showToast("فشل فتح الطلب: " + (err.message || "خطأ غير معروف"), "danger");
+                                         showToast("فشل فتح الطلب: " + (err.message || "خطأ غير معروف"), "danger");
                                      }
                                      finally {
                                          busy = false;
@@ -4616,38 +4567,6 @@
                                      // ✅ بعد تبديل الـ body: حدّث أزرار السايد بار
                                      refreshSideNavButtons();
 
-                                     // ✅ جلب سطور الطلب عبر GetLinesJson وعرضها (حل مشكلة ظهور السطور فارغة بعد التنقل بالأسهم/بحث)
-                                     if (bodyInvoiceId > 0) {
-                                         try {
-                                             const linesRes = await fetch('@Url.Action("GetLinesJson", "PurchaseRequests")?id=' + bodyInvoiceId, {
-                                                 method: 'GET',
-                                                 credentials: 'same-origin',
-                                                 headers: { 'X-Requested-With': 'XMLHttpRequest' }
-                                             });
-                                             if (linesRes.ok) {
-                                                 const linesData = await linesRes.json();
-                                                 if (linesData && linesData.ok && Array.isArray(linesData.lines)) {
-                                                     if (typeof renderGroupedLines === 'function') renderGroupedLines(linesData.lines);
-                                                     if (linesData.totals && typeof updateSummaryBadges === 'function') updateSummaryBadges(linesData.totals);
-                                                     var taxInp = document.getElementById('TaxAmountInput');
-                                                     if (taxInp && linesData.totals && linesData.totals.taxAmount != null) taxInp.value = Number(linesData.totals.taxAmount).toFixed(2);
-                                                     if (typeof bindEditableLineFields === 'function') setTimeout(function () { bindEditableLineFields(); }, 50);
-                                                 }
-                                             }
-                                         } catch (linesErr) { console.warn('GetLinesJson بعد التنقل:', linesErr); }
-                                     }
-
-                                     // ✅ تحديث زر حجم تعامل المورد (حسب CustomerId في الهيدر)
-                                     var custId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
-                                     var btnVol = document.getElementById('btnSupplierVolume');
-                                     if (btnVol) {
-                                         var volBase = btnVol.getAttribute('data-base-url') || '';
-                                         var volUrl = custId > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + custId) : '#';
-                                         btnVol.href = volUrl;
-                                         btnVol.classList.toggle('d-none', custId <= 0);
-                                         btnVol.setAttribute('data-url', volUrl);
-                                     }
-
                                      // ✅ بعد التبديل: أعد تهيئة tooltips للأسهم مرة واحدة وبشكل سليم
                                      setupTooltips();
 
@@ -4656,22 +4575,19 @@
                                          window.__ERP_INIT__();
                                      }
 
-                                     // ✅ مهم جداً: إعادة تهيئة event listeners للأصناف بعد إعادة تحميل الـ body
-                                     console.log('🔄 إعادة تهيئة event listeners للأصناف بعد حذف السطر...');
-                                     setTimeout(() => {
-                                         // إعادة تهيئة البحث عن الأصناف
+                                     // ✅ إعادة تهيئة event listeners للأصناف (تأخير بسيط لاستقرار الـ DOM)
+                                     setTimeout(function () {
                                          if (typeof window.__initProductSearch === 'function') {
                                              window.__initProductSearch();
                                          }
-                                     }, 100);
+                                     }, 50);
 
-                                     // ✅ مهم جداً: إعادة تهيئة event listeners لزر الترحيل بعد إعادة تحميل الـ body
-                                     console.log('🔄 إعادة تهيئة event listeners لزر الترحيل...');
-                                     setTimeout(() => {
+                                     // ✅ إعادة تهيئة event listeners لزر الترحيل
+                                     setTimeout(function () {
                                          if (typeof window.__initPostInvoice === 'function') {
                                              window.__initPostInvoice();
                                          }
-                                     }, 150);
+                                     }, 50);
 
 
                                  } catch (e) {
@@ -4787,14 +4703,10 @@
                                          purchaseDiscountPct: l.discPct ?? l.purchaseDiscountPct
                                      }));
                                      if (typeof renderGroupedLines === 'function') renderGroupedLines(lines);
-                                     if (data.totals) {
-                                         const taxInp = document.getElementById('TaxAmountInput');
-                                         if (taxInp) data.totals.taxAmount = parseFloat(taxInp.value) || 0;
-                                         if (typeof updateSummaryBadges === 'function') updateSummaryBadges(data.totals);
-                                     }
+                                     if (data.totals && typeof updateSummaryBadges === 'function') updateSummaryBadges(data.totals);
                                      if (typeof bindEditableLineFields === 'function') setTimeout(() => bindEditableLineFields(), 50);
 
-                                    showToast(data.message || 'تم حذف السطر.', 'success');
+                                     showToast(data.message || 'تم حذف السطر.', 'success');
 
                                  } catch (e) {
                                      console.error(e);
@@ -4964,9 +4876,6 @@
                          const totalQty = document.getElementById("TotalQtyValue")?.textContent?.trim() || "0";
                          const totalRetail = document.getElementById("TotalRetailValue")?.textContent?.trim() || "0";
                          const totalAfterDiscount = document.getElementById("TotalAfterDiscountValue")?.textContent?.trim() || "0";
-                         const tax = (document.getElementById("TaxAmountInput")?.value || "").trim() || "0";
-                         const totalAfterDiscountAndTax = document.getElementById("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
-                         const netTotal = document.getElementById("NetTotalValue")?.textContent?.trim() || "0";
 
                          totalsWrap.innerHTML = `
                              <table>
@@ -4981,12 +4890,7 @@
                                          <td>إجمالي سعر الجمهور</td><td><strong>${totalRetail}</strong></td>
                                      </tr>
                                      <tr>
-                                         <td>الإجمالي بعد الخصم</td><td><strong>${totalAfterDiscount}</strong></td>
-                                         <td>قيمة الضريبة</td><td><strong>${tax}</strong></td>
-                                     </tr>
-                                     <tr>
-                                         <td>الإجمالي بعد الخصم والضريبة</td><td><strong>${totalAfterDiscountAndTax}</strong></td>
-                                         <td>الصافي النهائي</td><td><strong>${netTotal}</strong></td>
+                                         <td>الإجمالي بعد الخصم / إجمالي الطلب</td><td colspan="3"><strong>${totalAfterDiscount}</strong></td>
                                      </tr>
                                  </tbody>
                              </table>
@@ -5001,13 +4905,13 @@
                          const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
                          if (invoiceId <= 0) {
-                            showToast("⚠️ لا يمكن طباعة الطلب قبل حفظه.", "warning");
+                             showToast("⚠️ لا يمكن طباعة طلب قبل حفظها.", "warning");
                              return;
                          }
 
                          // ✅ شرط البرنامج: لا طباعة إلا بعد الترحيل
                          if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
-                            showToast("❌ لا يمكن طباعة الطلب إلا بعد التحويل.", "danger");
+                             showToast("❌ لا يمكن طباعة الطلب إلا بعد التحويل.", "danger");
                              document.getElementById("btnPostInvoice")?.focus();
                              return;
                          }
@@ -5020,7 +4924,7 @@
                          const ok = preparePurchaseInvoicePrint();
                          if (!ok) {
                              printing = false;
-                            showToast("تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.", "danger");
+                             showToast("تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.", "danger");
                              return;
                          }
 

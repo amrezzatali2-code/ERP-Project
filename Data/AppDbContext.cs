@@ -1596,6 +1596,7 @@ namespace ERP.Data
                 e.Property(x => x.UpdatedAt).HasColumnType("datetime2(0)");
 
                 e.Property(x => x.RowVersion).IsRowVersion().IsConcurrencyToken();
+                e.Property(x => x.RefSOId);  // أمر البيع المصدر (اختياري)
 
                 // فهارس
                 e.HasIndex(x => new { x.SIDate, x.SIId }).HasDatabaseName("IX_SalesInvoices_Date_Id");
@@ -1619,6 +1620,12 @@ namespace ERP.Data
                 e.HasOne(x => x.Warehouse)
                  .WithMany()
                  .HasForeignKey(x => x.WarehouseId)
+                 .OnDelete(DeleteBehavior.Restrict);
+
+                // 🔹 علاقة اختيارية مع أمر البيع المصدر
+                e.HasOne(x => x.SalesOrder)
+                 .WithMany()
+                 .HasForeignKey(x => x.RefSOId)
                  .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -1887,7 +1894,10 @@ namespace ERP.Data
 
                 e.Property(x => x.Status)
                  .HasMaxLength(20)
-                 .HasDefaultValue("Open");           // الحالة الافتراضية للطلب
+                 .HasDefaultValue("Draft");          // Draft / Converted / Cancelled
+
+                e.Property(x => x.IsConverted)
+                 .HasDefaultValue(false);
 
                 e.Property(x => x.CreatedBy)
                  .HasMaxLength(50)
@@ -1947,11 +1957,18 @@ namespace ERP.Data
                 e.HasIndex(x => x.ProdId)
                  .HasDatabaseName("IX_SOL_ProdId");
 
+                e.Property(x => x.QtyConverted).HasDefaultValue(0);
+
                 // 🔹 العلاقة مع الهيدر SalesOrder
                 e.HasOne(x => x.SalesOrder)         // كل سطر يتبع أمر بيع واحد
                  .WithMany(o => o.Lines)            // والأمر له مجموعة سطور
                  .HasForeignKey(x => x.SOId)        // FK في جدول SOLines = SOId
                  .OnDelete(DeleteBehavior.Cascade); // حذف الأمر يمسح سطوره
+
+                e.HasOne(x => x.Product)
+                 .WithMany()
+                 .HasForeignKey(x => x.ProdId)
+                 .OnDelete(DeleteBehavior.Restrict);
             });
 
 

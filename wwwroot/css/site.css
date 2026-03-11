@@ -166,11 +166,11 @@ body {
 /* ================== تصميم احترافي موحد لشريط فلاتر القوائم ================== */
 .erp-list-filter-bar {
     background: #fff;
-    border: 2px solid #c7d2fe; /* حدود زرقاء/بنفسجية فاتحة */
+    border: 2px solid #a5b4fc; /* حدود موحدة أغمق */
     border-radius: 12px;
     padding: 1rem 1.25rem;
     margin-bottom: 1rem;
-    box-shadow: 0 1px 3px rgba(59,130,246,.12);
+    box-shadow: 0 1px 3px rgba(99,102,241,.18);
 }
 
 .erp-list-filter-bar .form-label {
@@ -577,7 +577,7 @@ main.erp-list-page-layout {
     max-height: 500px;
     overflow-y: auto;
     overflow-x: auto;
-    border: 2px solid #c7d2fe;
+    border: 2px solid #a5b4fc;
     border-radius: .5rem;
     background-color: #fff;
     direction: ltr;

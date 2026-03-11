@@ -109,36 +109,29 @@ if (window.__ERP_TABS_INITED__) {
             document.addEventListener('click', function (event) {
 
                 // =========================================================
-                // (0) زر البحث داخل فاتورة المشتريات (يبني URL حسب رقم المستخدم)
+                // (0) زر البحث داخل فاتورة المشتريات / طلب الشراء (يبني URL حسب رقم المستخدم)
                 // =========================================================
                 var navSearchBtn = event.target.closest('#btnNavInvoiceSearch');
                 if (navSearchBtn) {
+                    // طلب الشراء (PurchaseRequests): المعالج في الصفحة نفسها (docCaptureHandler) — لا نتدخل
+                    var baseUrl = (navSearchBtn.getAttribute('data-base-url') || '').toLowerCase();
+                    if (baseUrl.indexOf('purchaserequests') >= 0) return;
 
-                    // تعليق عربي: منع أي سلوك افتراضي
                     event.preventDefault();
 
-                    // متغير: رقم الفاتورة الذي كتبه المستخدم
                     var input = document.getElementById('NavInvoiceSearchInput');
                     var id = input ? parseInt(input.value || '0', 10) : 0;
 
-                    if (!id || id <= 0) {
-                        return;
-                    }
+                    if (!id || id <= 0) return;
 
-                    // متغير: tabId ثابت لفتح نفس شاشة فاتورة المشتريات
                     var tabIdS = normalizeTabId(navSearchBtn.getAttribute('data-tab-id') || 'pi-show-tab');
                     var titleS = (navSearchBtn.getAttribute('data-tab-title') || 'فاتورة المشتريات').trim();
 
-                    // متغير: baseUrl يأتي من الرازر مثل: /PurchaseInvoices/Show?frame=1
-                    var baseUrl = navSearchBtn.getAttribute('data-base-url') || '';
-                    baseUrl = normalizeUrl(baseUrl);
+                    baseUrl = normalizeUrl(navSearchBtn.getAttribute('data-base-url') || '');
                     baseUrl = ensureFrameParam(baseUrl);
 
-                    // تعليق عربي: إضافة id كرابط Query
                     var joiner = baseUrl.includes("?") ? "&" : "?";
                     var urlS = baseUrl + joiner + "id=" + encodeURIComponent(id);
-
-                    // منع الكاش
                     urlS = addNoCache(urlS);
 
                     window.top.postMessage({
@@ -165,8 +158,21 @@ if (window.__ERP_TABS_INITED__) {
                     var tabId = normalizeTabId(link.getAttribute('data-tab-id') || '');
                     var tabTitle = (link.getAttribute('data-tab-title') || link.textContent || '').trim();
 
-                    // ✅ نقرأ URL من data-url أو href
-                    var url = normalizeUrl(getTargetUrl(link));
+                    var url = '';
+                    // ✅ حجم تعامل عميل: نضمن فتح Customers/Show وليس فاتورة مشتريات — نبني الرابط من data-base-url + معرّف العميل من الصفحة
+                    if (tabId === 'customer-engagement') {
+                        var volBase = (link.getAttribute('data-base-url') || '').trim();
+                        if (volBase) {
+                            var doc = link.ownerDocument || document;
+                            var cidInput = doc.getElementById('CustomerId');
+                            var cid = cidInput ? parseInt((cidInput.value || '0'), 10) : 0;
+                            if (cid > 0) {
+                                var joiner = volBase.indexOf('?') >= 0 ? '&' : '?';
+                                url = normalizeUrl(volBase + joiner + 'id=' + cid);
+                            }
+                        }
+                    }
+                    if (!url) url = normalizeUrl(getTargetUrl(link));
 
                     if (!url) {
                         console.warn("⚠ open-same-tab: url غير موجود/فارغ (data-url/href)");

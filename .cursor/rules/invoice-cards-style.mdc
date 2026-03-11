@@ -12,25 +12,25 @@ alwaysApply: true
 **كل كارت** في الصفحة يجب أن يكون له حدود واضحة بنفس نمط القوائم:
 
 ```css
-/* حدود كل الكروت: نفس نمط القوائم (erp-list-filter-bar) — اللون اللبني #c7d2fe */
+/* حدود كل الكروت: لون أغمق #6366f1 — مطابق في طلب الشراء وفاتورة المشتريات وفاتورة المبيعات */
 div.card.invoice-side-card,
 div.card.invoice-header-card,
 div.card.invoice-product-card.invoice-product-card-list-style,
 div.card.invoice-Add-card,
 div.card.invoice-lines-card,
 div.card.invoice-totals-card {
-    border: 1px solid #c7d2fe !important;
-    border-radius: 12px !important;
-    box-shadow: 0 1px 3px rgba(59,130,246,.12) !important;
-    overflow: hidden;
+ border: 1px solid #6366f1 !important;
+ border-radius: 12px !important;
+ box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+ overflow: hidden;
 }
 ```
 
 **القيم:**
-- اللون: `#c7d2fe` (لبني/بنفسجي فاتح — نفس `erp-list-filter-bar`)
+- اللون: `#6366f1` (بنفسجي أغمق — موحّد لطلب الشراء وفاتورة المشتريات وفاتورة المبيعات)
 - السمك: `1px`
 - الزوايا: `12px`
-- الظل: `0 1px 3px rgba(59,130,246,.12)`
+- الظل: `0 1px 3px rgba(99,102,241,.25)`
 
 **ملاحظة:** استخدم محدد `div.card.` لزيادة الأولوية وتجاوز تنسيقات Bootstrap. أضف كل أصناف الكروت المستخدمة في الصفحة (مثل `invoice-side-card`, `invoice-header-card`, إلخ).
 

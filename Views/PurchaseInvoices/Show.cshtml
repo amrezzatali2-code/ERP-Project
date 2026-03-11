@@ -10,180 +10,327 @@
 
 @section Styles {
     <style>
+        /* ===== فاتورة المشتريات بدون invoice-cards.css (مثل فاتورة المبيعات) لتجنب حد/خلفية على PI_BodyHost ===== */
+        .pi-input[type="number"]::-webkit-outer-spin-button,
+        .pi-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .pi-input[type="number"] { -moz-appearance: textfield; }
 
-/* =========================================================
-   إخفاء أسهم الـ Number Inputs (علشان الشكل ما يتلخبطش)
-   - مهم عند فك readonly لأن الأسهم بتظهر وتغيّر شكل السطر
-   ========================================================= */
-.pi-input[type="number"]::-webkit-outer-spin-button,
-.pi-input[type="number"]::-webkit-inner-spin-button {
-    -webkit-appearance: none;
-    margin: 0;
-}
-.pi-input[type="number"] {
-    -moz-appearance: textfield;
-}
-
-
-        /* خلفية عامة للصفحة */
+        /* خلفية الصفحة والعمود — مثل فاتورة المبيعات */
         .invoice-page {
-            background-color: #f3f6fb; /* لون خفيف مريح للعين */
-            min-height: 100vh;
-            padding-bottom: 2rem;
+            background-color: #f3f6fb !important;
+            min-height: 0;
+            padding-bottom: 1rem;
+            border: none !important;
+            box-shadow: none !important;
         }
+        .invoice-page .container-fluid { padding: 0; max-width: 100%; }
+        .invoice-page .col-lg-2.order-1 { padding: 0.5rem 0.5rem; }
 
-        /* الكروت الرئيسية (الهيدر + تفاصيل + إدخال صنف + بيانات الصنف + السطور + الإجماليات + الكارت الجانبي) */
-        .invoice-header-card,
-        .invoice-details-card,
-        .invoice-lines-card,
-        .invoice-totals-card,
-        .invoice-side-card,
-        .invoice-Add-card,
-        .invoice-product-card {
-            border-radius: 1rem;
+        /* كارت الأزرار الجانبي — حدود مطابقة لطلب الشراء (#6366f1) */
+        .invoice-page div.card.invoice-side-card {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            background: #ffffff !important;
             overflow: hidden;
         }
-
-        /* شريط الأزرار: يفضل ظاهر ومثبت */
-        .invoice-actions-sticky {
-            position: sticky;
-            top: 58px; /* عدّلها حسب ارتفاع الـ Navbar عندك */
-            z-index: 3000; /* أعلى من أي كروت/هيدر */
-
-            background: #ffffff; /* ✅ أفتح لون (بدل الرمادي) */
-            border: 1px solid rgba(13,110,253,.12); /* ✅ بوردر خفيف */
-            padding: 10px 10px;
-            border-radius: 14px;
-            box-shadow: 0 10px 24px rgba(0,0,0,.05); /* ✅ ظل أخف */
+        .invoice-page .invoice-side-card {
+            border-inline-start: none !important;
+            min-width: 220px;
         }
-        /* لو عندك تبويب/هيدر ثابت أعلى من النافبار زوّد top */
-        @@media (max-width: 992px) {
-            .invoice-actions-sticky {
-                top: 56px;
-            }
-        }
-
-
-
-     
-
-
-        /* شريط الهيدر الملون للهيدر الرئيسي */
-        .invoice-header-bar {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            color: #ffffff;
-            padding: 0.4rem 1rem;
-        }
-
-            .invoice-header-bar h5 {
-                margin-bottom: 0;
-                font-size: 1rem;
-            }
-
-        /* نفس لون الهيدر لباقي الكروت */
-        .invoice-details-card .card-header,
-        .invoice-Add-card .card-header,
-        .invoice-product-card .card-header,
-        .invoice-lines-card .card-header,
         .invoice-side-card .card-header {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            color: #ffffff;
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
+            color: #ffffff !important;
+            border-bottom: none;
             padding: 0.55rem 1rem;
         }
-
-        .invoice-status-badge {
-            font-size: 0.8rem;
-            padding: 0.3rem 0.7rem;
+        .invoice-side-card .invoice-actions-bar hr { display: none !important; }
+        .invoice-side-card .btn-erp { font-size: 0.85rem; padding: 0.35rem 0.6rem; border: 1px solid #64748b !important; }
+        .invoice-side-card .btn-erp + .btn-erp { margin-top: 0.25rem; }
+        .invoice-actions-sticky {
+            position: sticky;
+            top: 58px;
+            z-index: 3000;
+            background: #ffffff !important;
+            border: 1px solid #6366f1 !important;
+            padding: 10px 10px !important;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
         }
+        @@media (max-width: 992px) { .invoice-actions-sticky { top: 56px; } }
+        .invoice-page .invoice-side-card .form-control { background: #fff; border-color: #64748b; color: #0f172a; }
+        .invoice-page .invoice-side-card .form-control::placeholder { color: #6c757d; }
 
-        .badge-status-draft {
-            background-color: #6f42c1; /* بنفسجي لمسودة */
+        /* حاوية الرسائل العابرة (Toast) — خارج كارت الإجراءات، مثل طلب الشراء */
+        #piToastContainer {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+            pointer-events: none;
         }
-
-        .badge-status-notposted {
-            background-color: #343a40; /* غامق لعدم الترحيل */
+        #piToastContainer .pi-toast {
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,.12);
+            transition: opacity 0.25s ease;
         }
+        #piToastContainer .pi-toast.text-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+        #piToastContainer .pi-toast.text-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+        #piToastContainer .pi-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        #piToastContainer .pi-toast.text-muted { background: #f1f5f9; color: #334155; border: 1px solid #64748b; }
 
-        .form-label-sm {
-            font-size: 0.85rem;
-        }
-
-        .invoice-small-input {
-            max-width: 150px;
-        }
-
-        .customer-summary-line {
-            font-size: 0.82rem;
-        }
-
-        /* كارت الإجراءات الجانبية: أزرار أرفع شوية */
-        .invoice-side-card .btn-erp {
-            font-size: 0.85rem;
-            padding: 0.35rem 0.6rem;
-        }
-
-            .invoice-side-card .btn-erp + .btn-erp {
-                margin-top: 0.25rem;
-            }
-
-        /* هيدر جدول السطور — لون واحد موحد لجميع العناوين */
-        .invoice-lines-container .erp-table-wrapper thead.invoice-lines-header th {
-            background-color: #374151 !important;
+        /* شريط الهيدر الملون + هيدر الكروت الداخلية */
+        .invoice-header-bar,
+        .invoice-page .invoice-header-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
             color: #ffffff !important;
-            border-color: rgba(255,255,255,.25) !important;
+            padding: 0.5rem 1rem;
             font-weight: 600;
-            box-shadow: 0 1px 0 0 rgba(255,255,255,.2);
         }
+        .invoice-header-bar h5, .invoice-header-bar h6 { margin-bottom: 0; font-size: 1rem; color: #fff !important; }
+        .invoice-product-card .card-header,
+        .invoice-Add-card .card-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
+            color: #ffffff !important;
+            padding: 0.55rem 1rem;
+        }
+        .invoice-product-card .card-header h6, .invoice-side-card .card-header h6 { color: #fff !important; margin-bottom: 0; }
 
-        /* إخفاء حدود وظل كروت بيانات الصنف وإضافة صنف — الخط الملون يكفي */
-        .invoice-product-card,
-        .invoice-Add-card {
+        /* العمود الرئيسي — شفاف وبدون أي حد (إزالة الخط العمودي المحيط بكل الكروت) */
+        .invoice-page .col-12.col-lg-10.order-2.order-lg-1,
+        .invoice-page .col-lg-10.order-2 {
+            background: transparent !important;
+            padding: 0.5rem 1rem;
             border: none !important;
             box-shadow: none !important;
         }
 
-        /* خط ملون بدل عنوان الكارت (بيانات الصنف + إضافة صنف) */
-        .invoice-card-line {
-            height: 4px;
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
-            border-radius: 2px;
-            margin-bottom: 0.4rem;
+        /* حاوية المحتوى — ليست كارت: بدون حد وبدون خلفية (حتى يظهر الحد السفلي لكل كارت لوحده) */
+        #PI_BodyHost,
+        div#PI_BodyHost,
+        .invoice-page div#PI_BodyHost {
+            display: block !important;
+            background: transparent !important;
+            background-color: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            padding: 0 !important;
         }
 
-        /* صف الإجماليات — توزيع flex مثل فاتورة المبيعات */
-        .invoice-summary-row {
+        /* الصف والحاوية العامة — بدون حدود */
+        .invoice-page .container-fluid,
+        .invoice-page .row {
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* حدود الكروت وخلفية بيضاء — مطابق لطلب الشراء (لون أغمق #6366f1) */
+        .invoice-page div.card.invoice-header-card,
+        .invoice-page div.card.invoice-product-card,
+        .invoice-page div.card.invoice-Add-card,
+        .invoice-page div.card.invoice-totals-card {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            background: #ffffff !important;
+            overflow: hidden;
+        }
+
+        /* الكارت الأول (الهيدر) — حدود مطابقة لطلب الشراء */
+        #PI_BodyHost > .invoice-header-card,
+        .invoice-page #PI_BodyHost > .invoice-header-card {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            background: #ffffff !important;
+        }
+        .invoice-page .invoice-lines-container {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            background: #fff !important;
+            overflow: hidden;
+        }
+
+        /* مسافات بين الكروت — مثل فاتورة المبيعات (0.85rem) */
+        .invoice-page #PI_BodyHost .invoice-header-card,
+        .invoice-page #PI_BodyHost .invoice-product-card,
+        .invoice-page #PI_BodyHost .invoice-Add-card,
+        .invoice-page .invoice-lines-container,
+        .invoice-page #PI_BodyHost .invoice-totals-card {
+            margin-bottom: 0.85rem !important;
+        }
+        .invoice-page #PI_BodyHost .invoice-header-card { margin-top: 0 !important; }
+        .invoice-page .invoice-lines-container { margin-top: 0.85rem; }
+        .invoice-page .card { margin-bottom: 0.85rem; }
+
+        /* إزالة الخط الفاصل السميك بين الكروت (مثل طلب الشراء) */
+        .invoice-card-line { display: none; }
+
+        /* حدود الانبوتات أغمق (#64748b) مثل طلب الشراء */
+        #PI_BodyHost .invoice-header-card .form-control,
+        #PI_BodyHost .invoice-header-card .form-select,
+        #PI_BodyHost .invoice-product-card .form-control,
+        #PI_BodyHost .invoice-product-card .form-select,
+        #PI_BodyHost .invoice-Add-card .form-control,
+        #PI_BodyHost .invoice-Add-card .form-select,
+        #PI_BodyHost .invoice-totals-card .form-control,
+        #PI_BodyHost .invoice-totals-card .form-select {
+            border-color: #64748b !important;
+        }
+
+        /* لون النص والتسميات أغمق مثل طلب الشراء */
+        .invoice-header-card .card-body .form-label,
+        .invoice-header-card .card-body .form-label-sm,
+        .invoice-header-card .card-body label {
+            color: #0f172a !important;
+            font-weight: 500;
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
+        }
+        .invoice-header-card .card-body .form-control,
+        .invoice-header-card .card-body .form-control-sm,
+        .invoice-header-card .card-body .form-select,
+        .invoice-header-card .card-body .form-select-sm {
+            color: #020617 !important;
+        }
+        .invoice-product-card .card-body .form-label,
+        .invoice-product-card .card-body .form-label-sm,
+        .invoice-product-card .card-body label,
+        .invoice-product-card .pr-card-field label {
+            color: #0f172a !important;
+            font-weight: 500;
+        }
+        .invoice-product-card .card-body .form-control,
+        .invoice-product-card .card-body .form-control-sm,
+        .invoice-product-card .card-body .form-select,
+        .invoice-product-card .pr-card-field .form-control-sm,
+        .invoice-product-card .pr-card-field .form-select-sm {
+            color: #020617 !important;
+        }
+        .invoice-Add-card .card-body .form-label,
+        .invoice-Add-card .card-body .form-label-sm,
+        .invoice-Add-card .card-body label {
+            color: #0f172a !important;
+            font-weight: 500;
+        }
+        .invoice-Add-card .card-body .form-control,
+        .invoice-Add-card .card-body .form-control-sm,
+        .invoice-Add-card .card-body .form-select,
+        .invoice-Add-card .card-body .form-select-sm {
+            color: #020617 !important;
+        }
+        .invoice-totals-card .card-body .form-label,
+        .invoice-totals-card .card-body label,
+        .invoice-totals-card .invoice-summary-item label {
+            color: #0f172a !important;
+            font-weight: 500;
+        }
+
+        /* انبوتات الكارت الأول (الهيدر): حجم مثل طلب الشراء (0.875rem، padding 0.3rem 0.5rem) */
+        #PI_BodyHost .invoice-header-card .form-control,
+        #PI_BodyHost .invoice-header-card .form-select,
+        #PI_BodyHost .invoice-header-card .card-body .form-control,
+        #PI_BodyHost .invoice-header-card .card-body .form-control-sm,
+        #PI_BodyHost .invoice-header-card .card-body .form-select,
+        #PI_BodyHost .invoice-header-card .card-body .form-select-sm {
+            border-radius: 0.375rem;
+            padding: 0.3rem 0.5rem;
+            min-height: 2rem;
+            font-size: 0.875rem;
+        }
+        /* محاذاة النص في المنتصف لكل بوكسات الكارت الأول ما عدا اسم المورد */
+        #PI_BodyHost .invoice-header-card .card-body .form-control,
+        #PI_BodyHost .invoice-header-card .card-body .form-select {
+            text-align: center;
+        }
+        #PI_BodyHost .invoice-header-card #CustomerNameInput {
+            text-align: right !important;
+        }
+        #PI_BodyHost .invoice-header-card .form-control:focus,
+        #PI_BodyHost .invoice-header-card .form-select:focus {
+            border-color: #64748b !important;
+            box-shadow: 0 0 0 0.2rem rgba(100,116,139,.2);
+        }
+
+        /* انبوتات الكارت الثاني (بيانات الصنف): حجم مثل كارت الإضافة */
+        #PI_BodyHost .invoice-product-card .card-body .form-control,
+        #PI_BodyHost .invoice-product-card .card-body .form-control-sm,
+        #PI_BodyHost .invoice-product-card .card-body .form-select,
+        #PI_BodyHost .invoice-product-card .card-body .form-select-sm {
+            padding: 0.4rem 0.55rem;
+            min-height: 2rem;
+            font-size: 0.875rem;
+        }
+        #PI_BodyHost .invoice-product-card .form-control,
+        #PI_BodyHost .invoice-product-card .form-select,
+        #PI_BodyHost .invoice-Add-card .form-control,
+        #PI_BodyHost .invoice-Add-card .form-select,
+        #PI_BodyHost .invoice-totals-card .form-control,
+        #PI_BodyHost .invoice-totals-card .form-select {
+            border-radius: 0.375rem;
+        }
+        #PI_BodyHost .invoice-product-card .form-control:focus,
+        #PI_BodyHost .invoice-product-card .form-select:focus,
+        #PI_BodyHost .invoice-Add-card .form-control:focus,
+        #PI_BodyHost .invoice-Add-card .form-select:focus,
+        #PI_BodyHost .invoice-totals-card .form-control:focus,
+        #PI_BodyHost .invoice-totals-card .form-select:focus {
+            border-color: #64748b !important;
+            box-shadow: 0 0 0 0.2rem rgba(100,116,139,.2);
+        }
+
+        /* هيدر جدول السطور — أرضية رمادي عادي ونص أسود (مثل طلب الشراء) */
+        .invoice-lines-container .erp-table-wrapper thead.invoice-lines-header th {
+            background-color: #e9ecef !important;
+            color: #212529 !important;
+            font-weight: 600;
+            padding: 0.5rem 0.55rem;
+            border: 1px solid #dee2e6 !important;
+        }
+        .invoice-page .invoice-lines-container .erp-table-wrapper {
+            max-height: 420px;
+            border: none;
+        }
+
+        /* كارت الإجماليات — نفس درجة طلب الشراء: حجم البوكسات والكلام وغمقان الحدود والنص */
+        .invoice-totals-card .card-body { padding: 0.9rem 1rem !important; }
+        .invoice-totals-card .invoice-summary-row.invoice-summary-row-boxes {
             flex-wrap: wrap;
-            gap: 0.75rem 1.25rem !important;
+            gap: 0.35rem 0.5rem;
+            align-items: stretch;
         }
-        .invoice-summary-item {
+        .invoice-totals-card .invoice-summary-item.invoice-summary-box {
             flex: 1 1 0;
-            min-width: 90px;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            align-items: center;
+            padding: 0.25rem 0.35rem;
+            background: #f8fafc;
+            border: 1px solid #94a3b8;
+            border-radius: 6px;
         }
-        .invoice-summary-total {
-            flex: 0 0 auto;
-            margin-inline-start: auto;
+        .invoice-totals-card .invoice-summary-label { font-size: 0.65rem; line-height: 1.2; color: #64748b; margin-bottom: 0; }
+        .invoice-totals-card .invoice-summary-value { font-size: 0.8rem; font-weight: 500; color: #0f172a; }
+        .invoice-summary-box-main {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+            border-color: #0284c7 !important;
         }
-        .invoice-summary-badge {
-            font-size: 0.95rem;
-            padding: 0.4rem 0.8rem;
-            min-width: 78px;
-            text-align: center;
-            display: inline-block;
-        }
-        .invoice-summary-tax {
-            max-width: 95px;
-            font-size: 0.95rem;
-        }
+        .invoice-totals-card .invoice-summary-box-main .invoice-summary-label { color: rgba(255,255,255,.9); }
+        .invoice-totals-card .invoice-summary-value-main { font-size: 0.85rem; color: #fff !important; }
 
-        .erp-table-wrapper {
-            max-height: 360px;
-            overflow: auto;
-        }
-
-        .summary-badge {
-            min-width: 80px;
-            text-align: center;
-        }
+        .badge-status-draft { background-color: #6f42c1; }
+        .badge-status-notposted { background-color: #343a40; }
 
         /* =========================================================
            ERP — Print Template (Purchase Invoice)
@@ -261,14 +408,15 @@
 
 
 <div class="invoice-page" dir="rtl">
-    <div class="container-fluid pt-3">
+    <div id="piToastContainer" aria-live="polite"></div>
+    <div class="container-fluid pt-0">
 
         @* فورم مخفي لتوليد Anti-Forgery Token لاستخدامه في نداءات AJAX *@
         <form id="__AntiForgeryForm" method="post" style="display:none">
             @Html.AntiForgeryToken()
         </form>
 
-        <div class="row g-3">
+        <div class="row g-0 align-items-start">
 
 
 
@@ -278,8 +426,10 @@
             <div class="col-12 col-lg-2 order-1 order-lg-2">
 
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
-                    <div class="card-header py-2 text-center">
-                        <h6 class="mb-0">الأزرار</h6>
+                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <h6 class="mb-0">إجراءات فاتورة المشتريات</h6>
+                        </div>
                     </div>
 
 
@@ -383,8 +533,6 @@
                             </button>
                         </div>
 
-                        <hr class="my-1" />
-
                         <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
                            data-tab-id="pi-show-tab"
                            data-tab-title="فاتورة المشتريات"
@@ -402,8 +550,6 @@
                         <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnPostInvoice" data-lock-posted="1">
                             📤 ترحيل الفاتورة
                         </button>
-
-                        <div id="postInvoiceMsg" class="small mt-2"></div>
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
@@ -432,25 +578,30 @@
                         @* <div class="col-lg-6 col-md-12"> *@
                         <div>
                                 <button type="button" id="btnOpenProductMovement"
-                                        class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100">
-                                    حركة الصنف
+                                        class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                                    📊 حركة الصنف
                                 </button>
                          </div>
 
                         <div>
-
                                 <button type="button" id="btnOpenProductEdit"
-                                        class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100">
-                                     بيانات الصنف
+                                        class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
+                                    ✏️ تعديل بيانات الصنف
                                 </button>
-                         </div>
-                        
+                        </div>
 
-                       <button type="button"
-                         id="btnPrintInvoice"
-                         class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
-                         >
-                         🖨️ طباعة الفاتورة
+                        <a href="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "#")" id="btnSupplierVolume" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none"
+                           data-tab-id="customer-engagement"
+                           data-tab-title="حجم تعامل عميل"
+                           data-base-url="@Url.Action("Show", "Customers", new { frame = 1 })"
+                           data-keep-active-posted="1">
+                            📊 حجم تعامل
+                        </a>
+
+                        <button type="button"
+                                id="btnPrintInvoice"
+                                class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
+                            🖨️ طباعة الفاتورة
                         </button>
 
 
@@ -681,7 +832,7 @@
                        2) كارت بيانات الصنف
                        ===================================================== *@
                     <div class="card shadow-sm mb-2 invoice-product-card">
-                        <div id="ProductCardCollapse" class="collapse show">
+                        
                             <div class="card-body pt-0 pb-0">
                                 <div class="invoice-card-line"></div>
 
@@ -719,7 +870,7 @@
                                 
 
                             </div>
-                        </div>
+                        
                     </div>
 
                     @* =====================================================
@@ -826,17 +977,9 @@
                     </div>
 
                     @* =====================================================
-                       5) جدول السطور
+                       5) جدول السطور — حاوية مباشرة مثل فاتورة المبيعات (بدون كارت خارجي)
                        ===================================================== *@
-                    @* <div class="card shadow-sm mb-3 invoice-lines-card"> *@
-                        @* <div class="card-header py-2 invoice-lines-header">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span class="fw-semibold">سطور فاتورة المشتريات</span>
-                            </div>
-                        </div> *@
-
-                        @* <div class="card-body p-0"> *@
-                            <div class="invoice-lines-container">
+                    <div class="invoice-lines-container">
                             <div class="erp-table-wrapper mb-0">
                                 <table class="table table-sm table-striped table-hover mb-0 erp-table">
                                     <thead class="invoice-lines-header">
@@ -968,9 +1111,7 @@
                                     </tbody>
                                 </table>
                             </div>
-                            </div>
-                    @*     </div>
-                    </div> *@
+                    </div>
 
                     @* =====================================================
                        6) ملخص الفاتورة
@@ -992,44 +1133,33 @@
                         decimal netTotal = totalAfterDiscountAndTax;
                     }
 
-                    <div class="card shadow-sm invoice-totals-card">
+                    <div class="card shadow-sm mb-2 invoice-totals-card">
                         <div class="card-body">
-
-                            <div class="d-flex flex-wrap align-items-center invoice-summary-row">
-                                <div class="invoice-summary-item">
-                                    <span class="small text-muted d-block">عدد السطور</span>
-                                    <span id="TotalLinesValue" class="badge bg-light text-dark invoice-summary-badge">@totalLines</span>
+                            <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-boxes">
+                                <div class="invoice-summary-item invoice-summary-box">
+                                    <span class="invoice-summary-label">عدد السطور</span>
+                                    <span id="TotalLinesValue" class="invoice-summary-value">@totalLines</span>
                                 </div>
-                                <div class="invoice-summary-item">
-                                    <span class="small text-muted d-block">عدد الأصناف</span>
-                                    <span id="TotalItemsValue" class="badge bg-light text-dark invoice-summary-badge">@totalItems</span>
+                                <div class="invoice-summary-item invoice-summary-box">
+                                    <span class="invoice-summary-label">عدد الأصناف</span>
+                                    <span id="TotalItemsValue" class="invoice-summary-value">@totalItems</span>
                                 </div>
-                                <div class="invoice-summary-item">
-                                    <span class="small text-muted d-block">إجمالي الكمية</span>
-                                    <span id="TotalQtyValue" class="badge bg-light text-dark invoice-summary-badge">@totalQty</span>
+                                <div class="invoice-summary-item invoice-summary-box">
+                                    <span class="invoice-summary-label">إجمالي الكمية</span>
+                                    <span id="TotalQtyValue" class="invoice-summary-value">@totalQty</span>
                                 </div>
-                                <div class="invoice-summary-item">
-                                    <span class="small text-muted d-block">إجمالي سعر الجمهور</span>
-                                    <span id="TotalRetailValue" class="badge bg-light text-dark invoice-summary-badge">@totalRetail.ToString("0.00")</span>
+                                <div class="invoice-summary-item invoice-summary-box">
+                                    <span class="invoice-summary-label">إجمالي سعر الجمهور</span>
+                                    <span id="TotalRetailValue" class="invoice-summary-value">@totalRetail.ToString("0.00")</span>
                                 </div>
-                                <div class="invoice-summary-item">
-                                    <span class="small text-muted d-block">الإجمالي بعد الخصم</span>
-                                    <span id="TotalAfterDiscountValue" class="badge bg-light text-dark invoice-summary-badge">@totalAfterDiscount.ToString("0.00")</span>
-                                </div>
-                                <div class="invoice-summary-item">
-                                    <label class="form-label form-label-sm mb-0 small">قيمة الضريبة</label>
-                                    <input type="number" step="0.01" id="TaxAmountInput"
-                                           class="form-control form-control-sm text-center pi-input invoice-summary-tax"
-                                           value="@taxAmount.ToString("0.00")" />
-                                </div>
-                                <div class="invoice-summary-item invoice-summary-total">
-                                    <span class="small text-muted d-block">الإجمالي بعد الخصم والضريبة</span>
-                                    <span id="TotalAfterDiscountAndTaxValue" class="badge bg-primary text-white invoice-summary-badge fw-bold">@totalAfterDiscountAndTax.ToString("0.00")</span>
+                                <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main">
+                                    <span class="invoice-summary-label">الإجمالي بعد الخصم</span>
+                                    <span id="TotalAfterDiscountValue" class="invoice-summary-value invoice-summary-value-main fw-bold">@totalAfterDiscount.ToString("0.00")</span>
+                                    <span id="TotalAfterDiscountAndTaxValue" class="visually-hidden">@totalAfterDiscount.ToString("0.00")</span>
                                     <span id="NetTotalValue" class="visually-hidden">@netTotal.ToString("0.00")</span>
                                 </div>
                             </div>
-                            </div>
-
+                            <input type="hidden" id="TaxAmountInput" value="0" />
                         </div>
                     </div>
 
@@ -1109,6 +1239,27 @@
 
 @section Scripts {
     <script>
+        // =========================================================
+        // رسائل عابرة (Toast) — خارج كارت الإجراءات، مثل طلب الشراء
+        // =========================================================
+        function showToast(text, type) {
+            if (!text) return;
+            var container = document.getElementById('piToastContainer');
+            if (!container) return;
+            type = type || 'muted';
+            var el = document.createElement('div');
+            el.className = 'pi-toast text-' + type;
+            el.textContent = text;
+            container.appendChild(el);
+            setTimeout(function () {
+                el.style.opacity = '0';
+                el.style.transition = 'opacity 0.25s ease';
+                setTimeout(function () {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                }, 250);
+            }, 4000);
+        }
+
         // =========================================================
         // (A) أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
         // =========================================================
@@ -1289,6 +1440,13 @@
             const prodExpiryInput = document.getElementById('ProdExpiryInput');   // متغير: تاريخ الصلاحية
             const prodHiddenId    = document.getElementById('ProdId');            // متغير: المعرّف الداخلي للصنف
             const btnAddLine      = document.getElementById('btnAddInvoiceLine'); // متغير: زر إضافة السطر
+
+            // تنسيق الصلاحية عند الخروج من الحقل (شهر+سنة بدون شرطة -> شهر/سنة) — مثل طلب الشراء
+            if (prodExpiryInput && typeof formatExpiryWithSlash === 'function') {
+                prodExpiryInput.addEventListener('blur', function () {
+                    if (this.value) this.value = formatExpiryWithSlash(this.value);
+                });
+            }
 
             console.log('📋 العناصر:', {
                 prodCodeInput: !!prodCodeInput,
@@ -1971,6 +2129,18 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             return window.parseDecimalSafe(val).toFixed(2);
         };
 
+        // دالة: إضافة الشرطة تلقائياً لتاريخ الصلاحية (شهر+سنة بدون شرطة -> شهر/سنة) — مثل طلب الشراء
+        window.formatExpiryWithSlash = window.formatExpiryWithSlash || function (val) {
+            const s = (val || '').toString().trim().replace(/\s/g, '');
+            if (!s) return '';
+            const digits = s.replace(/\D/g, '');
+            if (digits.length === 3) { const m = digits[0]; const yy = digits.slice(1, 3); return ('0' + m).slice(-2) + '/' + '20' + yy; }
+            if (digits.length === 4) { const mm = digits.slice(0, 2); const yy = digits.slice(2, 4); return mm + '/' + '20' + yy; }
+            if (digits.length === 5) { const m = digits[0]; const yyyy = digits.slice(1, 5); return ('0' + m).slice(-2) + '/' + yyyy; }
+            if (digits.length >= 6) { const mm = digits.slice(0, 2); const yyyy = digits.slice(2, 6); return mm + '/' + yyyy; }
+            return s;
+        };
+
         // متغير/دالة: حماية النص قبل إدخاله في innerHTML
         window.escapeHtml = window.escapeHtml || function (text) {
             return (text ?? '').toString()
@@ -2048,7 +2218,11 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
             const purchaseDiscountPct = prodDisc1Input ? parseDecimalSafe(prodDisc1Input.value) : 0; // متغير: خصم الشراء %
 
             const batchNo = prodBatchInput ? (prodBatchInput.value || '').trim() : '';       // متغير: التشغيلة
-            const expiryText = prodExpiryInput ? (prodExpiryInput.value || '').trim() : '';  // متغير: الصلاحية
+            let expiryText = prodExpiryInput ? (prodExpiryInput.value || '').trim() : '';  // متغير: الصلاحية
+            if (expiryText && typeof formatExpiryWithSlash === 'function') {
+                expiryText = formatExpiryWithSlash(expiryText);
+                if (prodExpiryInput) prodExpiryInput.value = expiryText;
+            }
 
             // 3) تحقق قبل الإرسال
             if (!prodId || prodId <= 0) {
@@ -2315,6 +2489,16 @@ if (taxInp) taxInp.value = fmt2(taxAmount);
         // =========================================================
         document.addEventListener('DOMContentLoaded', () => {
 
+            // ✅ زر حجم التعامل: نفس أسلوب طلب الشراء (رابط استعلام + data-url) لتمكين البحث عن عميل آخر داخل الصفحة
+            const btnVolumeInit = document.getElementById("btnSupplierVolume");
+            if (btnVolumeInit) {
+                var cid = parseInt((document.getElementById("CustomerId")?.value || "0"), 10) || 0;
+                var volBase = btnVolumeInit.getAttribute("data-base-url") || "";
+                var volUrl = cid > 0 ? (volBase + (volBase.indexOf("?") >= 0 ? "&" : "?") + "id=" + cid) : "#";
+                btnVolumeInit.href = volUrl;
+                btnVolumeInit.setAttribute("data-url", volUrl);
+            }
+
             // ==========================
             // 1) فوكس على المورد لو فاتورة جديدة
             // ==========================
@@ -2579,7 +2763,7 @@ if (isPostedDisplay) {
             document.addEventListener("DOMContentLoaded", function () {
 
                             const btnClearAll = document.getElementById("btnClearInvoiceLines"); // متغير: زر مسح كل الأصناف (غيّر الـ id لو مختلف عندك)
-                const msg = document.getElementById("postInvoiceMsg");           // متغير: صندوق الرسائل
+                // الرسائل عبر showToast (piToastContainer)
 
                 if (!btnClearAll) return;
 
@@ -2615,19 +2799,13 @@ if (isPostedDisplay) {
                     const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
                     if (invoiceId <= 0) {
-                        if (msg) {
-                            msg.textContent = "⚠️ لا يمكن مسح الأصناف قبل حفظ الفاتورة.";
-                            msg.className = "small mt-2 text-warning";
-                        }
+                        showToast("⚠️ لا يمكن مسح الأصناف قبل حفظ الفاتورة.", "warning");
                         return;
                     }
 
                     // ✅ منع المسح لو الفاتورة مُرحّلة (نفس سياسة البرنامج)
                     if (typeof isInvoicePosted === "function" && isInvoicePosted()) {
-                        if (msg) {
-                            msg.textContent = "الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.";
-                            msg.className = "small mt-2 text-danger";
-                        }
+                        showToast("الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.", "danger");
                         return;
                     }
 
@@ -2639,10 +2817,7 @@ if (isPostedDisplay) {
                     btnClearAll.disabled = true;
                     btnClearAll.innerHTML = "⏳ جاري المسح...";
 
-                    if (msg) {
-                        msg.textContent = "جاري مسح جميع الأصناف...";
-                        msg.className = "small mt-2 text-muted";
-                    }
+                    showToast("جاري مسح جميع الأصناف...", "muted");
 
                     try {
 
@@ -2684,20 +2859,14 @@ if (isPostedDisplay) {
                         // مثال:
                         // if (typeof applyTotals === "function" && data.totals) applyTotals(data.totals);
 
-                        if (msg) {
-                            msg.textContent = data.message || "تم مسح جميع الأصناف.";
-                            msg.className = "small mt-2 text-success";
-                        }
+                        showToast(data.message || "تم مسح جميع الأصناف.", "success");
 
                     } catch (err) {
 
                         btnClearAll.disabled = false;
                         btnClearAll.innerHTML = oldHtml;
 
-                        if (msg) {
-                            msg.textContent = "فشل مسح الأصناف: " + (err.message || "خطأ غير معروف");
-                            msg.className = "small mt-2 text-danger";
-                        }
+                        showToast("فشل مسح الأصناف: " + (err.message || "خطأ غير معروف"), "danger");
 
                     } finally {
                         busy = false;
@@ -2841,7 +3010,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('🔄 تهيئة زر الترحيل...');
 
                 const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر الترحيل
-                const msg = document.getElementById("postInvoiceMsg");                  // متغير: مكان الرسائل
                 const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة "مرحّلة؟" (عرض فقط)
 
                 if (!btnPost) {
@@ -2868,10 +3036,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (typeof setInvoicePosted === "function") setInvoicePosted(true);
                     if (typeof applyPostedUiLock === "function") applyPostedUiLock();
 
-                    if (msg) {
-                        msg.textContent = "هذه الفاتورة مترحّلة بالفعل.";
-                        msg.className = "small mt-2 text-muted";
-                    }
+                    showToast("هذه الفاتورة مترحّلة بالفعل.", "muted");
                     return;
                 }
 
@@ -2887,10 +3052,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log('📤 تم الضغط على زر الترحيل - InvoiceId:', invoiceId);
 
                     if (invoiceId <= 0) {
-                        if (msg) {
-                            msg.textContent = "⚠️ لازم تحفظ الفاتورة أولاً قبل الترحيل.";
-                            msg.className = "small mt-2 text-warning";
-                        }
+                        showToast("⚠️ لازم تحفظ الفاتورة أولاً قبل الترحيل.", "warning");
                         const saveBtn = document.getElementById("btnSaveInvoiceHeader");
                         if (saveBtn) saveBtn.focus();
                         return;
@@ -2901,15 +3063,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     const ok = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
                     if (!ok) return;
 
-                    // تجهيز الزر
+                    // تجهيز الزر (بدون تغيير النص داخل كارت الإجراءات — الرسالة في Toast فقط مثل فاتورة المبيعات)
                     btnPost.disabled = true;
                     const oldHtml = btnPost.innerHTML;
-                    btnPost.innerHTML = "⏳ جاري الترحيل...";
 
-                    if (msg) {
-                        msg.textContent = "يتم حفظ التعديلات ثم الترحيل...";
-                        msg.className = "small mt-2 text-muted";
-                    }
+                    showToast("يتم حفظ التعديلات ثم الترحيل...", "muted");
 
                     try {
 
@@ -2919,8 +3077,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         const custId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
                         const whId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
                         if (custId <= 0 || whId <= 0) {
-                            if (msg) { msg.textContent = "يجب اختيار المورد والمخزن قبل الترحيل."; msg.className = "small mt-2 text-danger"; }
-                            btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                            showToast("يجب اختيار المورد والمخزن قبل الترحيل.", "danger");
+                            btnPost.disabled = false;
+                            btnPost.innerHTML = "📤 ترحيل الفاتورة";
                             return;
                         }
                         let refPrId = null;
@@ -2938,16 +3097,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         try { const txt = await saveRes.text(); if (txt) saveData = JSON.parse(txt); } catch { }
                         if (!saveRes.ok || !saveData?.success) {
                             const errMsg = (saveData && saveData.message) ? saveData.message : 'تعذر حفظ التعديلات قبل الترحيل.';
-                            if (msg) { msg.textContent = errMsg; msg.className = "small mt-2 text-danger"; }
-                            alert(errMsg);
-                            btnPost.disabled = false; btnPost.innerHTML = oldHtml;
+                            showToast(errMsg, "danger");
+                            btnPost.disabled = false;
+                            btnPost.innerHTML = "📤 ترحيل الفاتورة";
                             return;
                         }
 
-                        if (msg) {
-                            msg.textContent = "يتم الآن ترحيل الفاتورة...";
-                            msg.className = "small mt-2 text-muted";
-                        }
+                        showToast("يتم الآن ترحيل الفاتورة...", "muted");
 
                         // =========================
                         // 1) طلب الترحيل
@@ -3015,20 +3171,14 @@ document.addEventListener('DOMContentLoaded', () => {
                         btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
                         btnPost.disabled = true;
 
-                        if (msg) {
-                            msg.textContent = okMsg;
-                            msg.className = "small mt-2 text-success";
-                        }
+                        showToast(okMsg, "success");
 
                     } catch (err) {
 
                         btnPost.disabled = false;
-                        btnPost.innerHTML = oldHtml;
+                        btnPost.innerHTML = "📤 ترحيل الفاتورة";
 
-                        if (msg) {
-                            msg.textContent = "فشل الترحيل: " + (err.message || "خطأ غير معروف");
-                            msg.className = "small mt-2 text-danger";
-                        }
+                        showToast("فشل الترحيل: " + (err.message || "خطأ غير معروف"), "danger");
                         console.error('❌ خطأ في الترحيل:', err);
                     }
                 });
@@ -3049,14 +3199,13 @@ document.addEventListener('DOMContentLoaded', () => {
             // زر: مرتجع فاتورة بالكامل (بنفس أسلوب تحويل طلب الشراء)
             document.addEventListener("DOMContentLoaded", function () {
                 const btnFullReturn = document.getElementById("btnCreateFullReturn");
-                const msg = document.getElementById("postInvoiceMsg");
                 if (!btnFullReturn) return;
                 if (btnFullReturn.dataset.boundFullReturn) return;
                 btnFullReturn.dataset.boundFullReturn = "1";
                 btnFullReturn.addEventListener("click", async function () {
                     const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
                     if (invoiceId <= 0) {
-                        if (msg) { msg.textContent = "⚠️ لازم تحفظ الفاتورة أولاً."; msg.className = "small mt-2 text-warning"; }
+                        showToast("⚠️ لازم تحفظ الفاتورة أولاً.", "warning");
                         return;
                     }
                     if (btnFullReturn.disabled) return;
@@ -3064,7 +3213,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const oldHtml = btnFullReturn.innerHTML;
                     btnFullReturn.innerHTML = "⏳ جاري الإنشاء...";
                     btnFullReturn.disabled = true;
-                    if (msg) { msg.textContent = "يتم إنشاء المرتجع وترحيله..."; msg.className = "small mt-2 text-muted"; }
+                    showToast("يتم إنشاء المرتجع وترحيله...", "muted");
                     try {
                         const res = await fetch(`/PurchaseInvoices/CreateFullReturn?id=${invoiceId}`, {
                             method: "POST",
@@ -3079,7 +3228,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error(errMsg);
                         }
                         const okMsg = (data && data.message) ? data.message : "تم إنشاء المرتجع بنجاح.";
-                        if (msg) { msg.textContent = okMsg; msg.className = "small mt-2 text-success"; }
+                        showToast(okMsg, "success");
                         if (data && data.invoiceReposted) {
                             if (typeof setInvoicePosted === "function") setInvoicePosted(true);
                             if (typeof applyPostedUiLock === "function") applyPostedUiLock();
@@ -3097,7 +3246,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     } catch (err) {
                         btnFullReturn.disabled = false;
                         btnFullReturn.innerHTML = oldHtml;
-                        if (msg) { msg.textContent = "فشل: " + (err.message || "خطأ غير معروف"); msg.className = "small mt-2 text-danger"; }
+                        showToast("فشل: " + (err.message || "خطأ غير معروف"), "danger");
                     }
                 });
             });
@@ -3129,7 +3278,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const btnOpen = document.getElementById("btnOpenInvoice");              // متغير: زر الفتح
                 const btnPost = document.getElementById("btnPostInvoice");              // متغير: زر الترحيل (لو موجود)
-                const msg = document.getElementById("postInvoiceMsg");                  // متغير: نفس بوكس الرسائل
                 const isPostedBox = document.getElementById("InvoiceIsPostedDisplay");  // متغير: خانة مُرحَّلة؟ (لو موجودة)
 
                 if (!btnOpen) return;
@@ -3158,10 +3306,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const oldHtml = btnOpen.innerHTML;
                     btnOpen.innerHTML = "⏳ جاري الفتح...";
 
-                    if (msg) {
-                        msg.textContent = "جاري فتح الفاتورة للتعديل...";
-                        msg.className = "small mt-2 text-muted";
-                    }
+                    showToast("جاري فتح الفاتورة للتعديل...", "muted");
 
                     try {
 
@@ -3170,10 +3315,7 @@ document.addEventListener('DOMContentLoaded', () => {
                  const invoiceId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
 
             if (invoiceId <= 0) {
-                if (msg) {
-                    msg.textContent = "⚠️ لا يمكن فتح فاتورة قبل حفظها.";
-                    msg.className = "small mt-2 text-warning";
-                }
+                showToast("⚠️ لا يمكن فتح فاتورة قبل حفظها.", "warning");
                 btnOpen.disabled = true;
                 btnOpen.innerHTML = oldHtml;
                 busy = false;
@@ -3228,10 +3370,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (isPostedBox) isPostedBox.value = "مفتوحة للتعديل";
 
             // ✅ رسالة نجاح
-            if (msg) {
-                msg.textContent = okMsg;
-                msg.className = "small mt-2 text-success";
-            }
+            showToast(okMsg, "success");
 
                     }
                     catch (err) {
@@ -3240,10 +3379,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         btnOpen.disabled = false;
                         btnOpen.innerHTML = oldHtml;
 
-                        if (msg) {
-                            msg.textContent = "فشل فتح الفاتورة: " + (err.message || "خطأ غير معروف");
-                            msg.className = "small mt-2 text-danger";
-                        }
+                        showToast("فشل فتح الفاتورة: " + (err.message || "خطأ غير معروف"), "danger");
                     }
                     finally {
                         busy = false;
@@ -3610,6 +3746,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     const btnOpen = document.getElementById("btnOpenInvoice");
                     if (btnOpen) btnOpen.disabled = !bodyIsPosted;
 
+                    // ✅ بعد تبديل الـ body: حدّث زر حجم تعامل المورد مثل طلب الشراء (رابط بصيغة الاستعلام + data-url لتمكين البحث عن عميل آخر داخل الصفحة)
+                    const customerIdEl = document.getElementById("CustomerId");
+                    const customerId = parseInt((customerIdEl?.value || "0"), 10) || 0;
+                    const btnVolume = document.getElementById("btnSupplierVolume");
+                    if (btnVolume) {
+                        var volBase = btnVolume.getAttribute("data-base-url") || "";
+                        var volUrl = customerId > 0 ? (volBase + (volBase.indexOf("?") >= 0 ? "&" : "?") + "id=" + customerId) : "#";
+                        btnVolume.href = volUrl;
+                        btnVolume.setAttribute("data-url", volUrl);
+                    }
+
                     // ✅ بعد تبديل الـ body: حدّث أزرار السايد بار
                     refreshSideNavButtons();
 
@@ -3745,11 +3892,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // =========================================================
 // ✅ إظهار رسالة "تم الحذف" بدل ما تضيع
 // =========================================================
-const msgBox = document.getElementById('postInvoiceMsg'); // متغير: مكان الرسائل (لو عندك عنصر آخر غيّره)
-if (msgBox) {
-    msgBox.textContent = data.message || 'تم حذف السطر.';
-    msgBox.className = 'small mt-2 text-success';
-}
+showToast(data.message || 'تم حذف السطر.', 'success');
 
 
                     // ✅ بعد المسح: Reload جزئي للفاتورة (frag=body)
@@ -3858,7 +4001,6 @@ if (msgBox) {
 document.addEventListener("DOMContentLoaded", function () {
 
     const btnPrint = document.getElementById("btnPrintInvoice"); // متغير: زر طباعة الفاتورة
-    const msg = document.getElementById("postInvoiceMsg");       // متغير: صندوق الرسائل
 
     if (!btnPrint) return;
 
@@ -3991,19 +4133,13 @@ document.addEventListener("DOMContentLoaded", function () {
         const invoiceId = parseInt((document.getElementById("InvoiceId")?.value || "0"), 10) || 0;
 
         if (invoiceId <= 0) {
-            if (msg) {
-                msg.textContent = "⚠️ لا يمكن طباعة فاتورة قبل حفظها.";
-                msg.className = "small mt-2 text-warning";
-            }
+            showToast("⚠️ لا يمكن طباعة فاتورة قبل حفظها.", "warning");
             return;
         }
 
         // ✅ شرط البرنامج: لا طباعة إلا بعد الترحيل
         if (typeof isInvoicePosted === "function" && !isInvoicePosted()) {
-            if (msg) {
-                msg.textContent = "❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة).";
-                msg.className = "small mt-2 text-danger";
-            }
+            showToast("❌ لا يمكن طباعة الفاتورة إلا بعد الترحيل (إغلاق الفاتورة).", "danger");
             document.getElementById("btnPostInvoice")?.focus();
             return;
         }
@@ -4016,10 +4152,7 @@ document.addEventListener("DOMContentLoaded", function () {
         const ok = preparePurchaseInvoicePrint();
         if (!ok) {
             printing = false;
-            if (msg) {
-                msg.textContent = "تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.";
-                msg.className = "small mt-2 text-danger";
-            }
+            showToast("تعذر تجهيز الطباعة. تأكد من وجود منطقة الطباعة piPrintArea.", "danger");
             return;
         }
 

@@ -3445,43 +3445,74 @@ namespace ERP.Controllers
             }
 
             // =========================================================
-            // 5) حساب الربح من البيع (SalesInvoiceLines)
-            // نفس منطق ProductProfits بالضبط
+            // 5) حساب الربح من البيع — من نفس مصدر الميزانية ليتطابق الرقمان
+            // - الإيراد: من SalesInvoices.NetTotal (نفس القيمة المُرحّلة في القيد)
+            // - التكلفة: من StockLedger (نفس GetSalesInvoiceCostTotal عند الترحيل)
             // =========================================================
-            var salesProfitQuery = _context.SalesInvoiceLines
+            var salesInvoicesInScope = _context.SalesInvoices
                 .AsNoTracking()
-                .Include(sil => sil.SalesInvoice)
-                .Where(sil =>
-                    customerIds.Contains(sil.SalesInvoice.CustomerId) &&
-                    sil.SalesInvoice.IsPosted);
+                .Where(si =>
+                    customerIds.Contains(si.CustomerId) &&
+                    si.IsPosted);
 
             if (fromDate.HasValue)
             {
                 var from = fromDate.Value.Date;
-                salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
+                salesInvoicesInScope = salesInvoicesInScope.Where(si => si.SIDate >= from);
             }
 
             if (toDate.HasValue)
             {
                 var to = toDate.Value.Date.AddDays(1);
-                salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate < to);
+                salesInvoicesInScope = salesInvoicesInScope.Where(si => si.SIDate < to);
             }
 
-            var salesProfitData = await salesProfitQuery
-                .GroupBy(sil => sil.SalesInvoice.CustomerId)
-                .Select(g => new
-                {
-                    CustomerId = g.Key,
-                    SalesRevenue = g.Sum(sil => sil.LineNetTotal),
-                    SalesCost = g.Sum(sil => 
-                        sil.CostTotal > 0 
-                            ? sil.CostTotal 
-                            : (sil.ProfitValue > 0 
-                                ? (sil.LineNetTotal - sil.ProfitValue) 
-                                : 0m)),
-                    InvoiceCount = g.Select(sil => sil.SIId).Distinct().Count()
-                })
+            var salesInvoiceIdsList = await salesInvoicesInScope.Select(si => si.SIId).ToListAsync();
+
+            // إيراد وتعداد من الفواتير (NetTotal = نفس المُرحّل في الميزانية)
+            var revenueAndCount = await salesInvoicesInScope
+                .GroupBy(si => si.CustomerId)
+                .Select(g => new { CustomerId = g.Key, SalesRevenue = g.Sum(si => si.NetTotal), InvoiceCount = g.Count() })
                 .ToDictionaryAsync(x => x.CustomerId);
+
+            // تكلفة من StockLedger (نفس منطق الترحيل) ثم تجميع حسب العميل
+            var stockSourceTypeSales = "Sales";
+            var costPerInvoice = salesInvoiceIdsList.Count > 0
+                ? await _context.StockLedger
+                    .AsNoTracking()
+                    .Where(x =>
+                        x.SourceType == stockSourceTypeSales &&
+                        salesInvoiceIdsList.Contains(x.SourceId) &&
+                        x.QtyOut > 0)
+                    .GroupBy(x => x.SourceId)
+                    .Select(g => new { SIId = g.Key, Cost = g.Sum(x => x.TotalCost ?? (x.QtyOut * x.UnitCost)) })
+                    .ToDictionaryAsync(x => x.SIId, x => x.Cost)
+                : new Dictionary<int, decimal>();
+
+            var siToCustomer = await salesInvoicesInScope
+                .Select(si => new { si.SIId, si.CustomerId })
+                .ToDictionaryAsync(x => x.SIId, x => x.CustomerId);
+
+            Dictionary<int, decimal> salesCostByCustomer = new Dictionary<int, decimal>();
+            foreach (var siId in salesInvoiceIdsList)
+            {
+                if (!siToCustomer.TryGetValue(siId, out int custId)) continue;
+                decimal cost = costPerInvoice.TryGetValue(siId, out var c) ? c : 0m;
+                if (salesCostByCustomer.ContainsKey(custId))
+                    salesCostByCustomer[custId] += cost;
+                else
+                    salesCostByCustomer[custId] = cost;
+            }
+
+            var salesProfitData = revenueAndCount.ToDictionary(
+                x => x.Key,
+                x => new
+                {
+                    CustomerId = x.Key,
+                    SalesRevenue = x.Value.SalesRevenue,
+                    SalesCost = salesCostByCustomer.TryGetValue(x.Key, out var sc) ? sc : 0m,
+                    InvoiceCount = x.Value.InvoiceCount
+                });
 
             // =========================================================
             // 6) حساب الربح من الميزانية (LedgerEntries)
@@ -3499,11 +3530,8 @@ namespace ERP.Controllers
 
             if (salesRevenueAccount != null && cogsAccount != null)
             {
-                // الحصول على فواتير المبيعات المرتبطة بالعملاء المحددين
-                var salesInvoiceIds = await salesProfitQuery
-                    .Select(sil => sil.SalesInvoice.SIId)
-                    .Distinct()
-                    .ToListAsync();
+                // الحصول على فواتير المبيعات المرتبطة بالعملاء المحددين (نفس نطاق الفلاتر أعلاه)
+                var salesInvoiceIds = salesInvoiceIdsList;
 
                 if (salesInvoiceIds.Any())
                 {
@@ -3845,29 +3873,8 @@ namespace ERP.Controllers
             // =========================================================
             if (salesRevenueAccount != null && cogsAccount != null)
             {
-                // الحصول على فواتير المبيعات المرتبطة بالعملاء المحددين
-                var salesInvoiceIdsQuery = _context.SalesInvoiceLines
-                    .AsNoTracking()
-                    .Where(sil =>
-                        customerIds.Contains(sil.SalesInvoice.CustomerId) &&
-                        sil.SalesInvoice.IsPosted);
-
-                if (fromDate.HasValue)
-                {
-                    var from = fromDate.Value.Date;
-                    salesInvoiceIdsQuery = salesInvoiceIdsQuery.Where(sil => sil.SalesInvoice.SIDate >= from);
-                }
-
-                if (toDate.HasValue)
-                {
-                    var to = toDate.Value.Date.AddDays(1);
-                    salesInvoiceIdsQuery = salesInvoiceIdsQuery.Where(sil => sil.SalesInvoice.SIDate < to);
-                }
-
-                var salesInvoiceIds = await salesInvoiceIdsQuery
-                    .Select(sil => sil.SalesInvoice.SIId)
-                    .Distinct()
-                    .ToListAsync();
+                // فواتير المبيعات في النطاق (نفس القائمة المستخدمة أعلاه)
+                var salesInvoiceIds = salesInvoiceIdsList;
 
                 if (salesInvoiceIds.Any())
                 {

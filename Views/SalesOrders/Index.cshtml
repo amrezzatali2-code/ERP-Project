@@ -236,6 +236,7 @@
                                 <td data-col="status">@so.Status</td>
                                 <td data-col="createdBy">@so.CreatedBy</td>
                                 <td class="text-nowrap no-print" data-col="actions">
+                                    <a class="btn btn-erp btn-erp-secondary btn-erp-sm" asp-action="Show" asp-route-id="@so.SOId">عرض</a>
                                     <a class="btn btn-erp btn-erp-primary btn-erp-sm" asp-action="Edit" asp-route-id="@so.SOId">تعديل</a>
                                     <a class="btn btn-erp btn-erp-danger btn-erp-sm" asp-action="Delete" asp-route-id="@so.SOId">حذف</a>
                                 </td>

@@ -236,7 +236,10 @@ namespace ERP.Controllers
                     // التتبع
                     // -------------------------
                     CreatedAt = now,                      // متغير: وقت الإنشاء
-                    CreatedBy = GetCurrentUserDisplayName() // متغير: اسم المستخدم الحالي
+                    CreatedBy = GetCurrentUserDisplayName(), // متغير: اسم المستخدم الحالي
+
+                    // الحساب السابق للعميل عند أول حفظ — يثبت ولا يتغير مع تغير رصيد العميل لاحقاً
+                    CustomerBalanceAtSave = customer.CurrentBalance
                 };
 
                 _context.SalesInvoices.Add(invoice);
@@ -245,6 +248,7 @@ namespace ERP.Controllers
                 // =========================================================
                 // الرد إلى الجافاسكربت
                 // - مهم: نرجّع invoiceId لأن الـ JS يستخدم هذا الاسم
+                // - customerBalanceAtSave: الحساب السابق للعميل المُثبت في الفاتورة (للتحديث في الواجهة دون إعادة تحميل)
                 // =========================================================
                 return Json(new
                 {
@@ -263,7 +267,10 @@ namespace ERP.Controllers
                     isPosted = invoice.IsPosted,
 
                     // تتبع
-                    createdBy = invoice.CreatedBy
+                    createdBy = invoice.CreatedBy,
+
+                    // الحساب السابق للعميل المُثبت في الفاتورة (لا يتغير مع تغير رصيد العميل لاحقاً)
+                    customerBalanceAtSave = invoice.CustomerBalanceAtSave
                 });
             }
 
