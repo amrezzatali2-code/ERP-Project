@@ -168,13 +168,16 @@ namespace ERP
             }
 
             // =========================================================
-            // 7) إعداد اللغة والثقافة (ar-EG)
+            // 7) إعداد اللغة والثقافة (ar-EG) — صيغة التاريخ: يوم/شهر/سنة (مثل 12/3/2026)
             // =========================================================
-            var supportedCultures = new[] { new CultureInfo("ar-EG") };
+            var arEg = (CultureInfo)CultureInfo.GetCultureInfo("ar-EG").Clone();
+            arEg.DateTimeFormat.ShortDatePattern = "d/M/yyyy";
+            arEg.DateTimeFormat.DateSeparator = "/";
+            var supportedCultures = new[] { arEg };
 
             var locOptions = new RequestLocalizationOptions
             {
-                DefaultRequestCulture = new RequestCulture("ar-EG"),
+                DefaultRequestCulture = new RequestCulture(arEg),
                 SupportedCultures = supportedCultures,
                 SupportedUICultures = supportedCultures
             };
@@ -182,8 +185,8 @@ namespace ERP
             app.UseRequestLocalization(locOptions);
 
             // تثبيت الثقافة الافتراضية على مستوى الثريدات
-            CultureInfo.DefaultThreadCurrentCulture = supportedCultures[0];
-            CultureInfo.DefaultThreadCurrentUICulture = supportedCultures[0];
+            CultureInfo.DefaultThreadCurrentCulture = arEg;
+            CultureInfo.DefaultThreadCurrentUICulture = arEg;
 
             // =========================================================
             // 8) الـ Middleware المعتادة

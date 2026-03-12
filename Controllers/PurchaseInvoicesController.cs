@@ -2654,7 +2654,7 @@ namespace ERP.Controllers
                 piId = invoice.PIId,                  // رقم الفاتورة الداخلي
                 invoiceNumber = invoice.PIId.ToString(),       // رقم الفاتورة المعروض
 
-                invoiceDate = invoice.PIDate.ToString("yyyy/MM/dd"),
+                invoiceDate = invoice.PIDate.ToString("d/M/yyyy"),
                 invoiceTime = invoice.CreatedAt.ToString("HH:mm"),
 
                 status = invoice.Status,
@@ -2690,7 +2690,7 @@ namespace ERP.Controllers
             piId = existing.PIId,
             invoiceNumber = existing.PIId.ToString(),
 
-            invoiceDate = existing.PIDate.ToString("yyyy/MM/dd"),
+            invoiceDate = existing.PIDate.ToString("d/M/yyyy"),
             invoiceTime = existing.CreatedAt.ToString("HH:mm"),
 
             status = existing.Status,
@@ -3325,13 +3325,16 @@ namespace ERP.Controllers
                         ? BadRequest(new { ok = false, message = "يجب اختيار المخزن قبل الترحيل." })
                         : RedirectToAction("Show", new { id = invoice.PIId });
 
+                // الاحتفاظ بوقت الإنشاء الأصلي لئلا يتغيّر بعد الترحيل
+                var originalCreatedAt = invoice.CreatedAt;
+
                 // ================================
                 // 4) تنفيذ الترحيل
                 // ================================
                 await _ledgerPostingService.PostPurchaseInvoiceAsync(invoice.PIId, User.Identity?.Name);
 
 
-        
+
 
 
                 // ================================
@@ -3356,7 +3359,9 @@ namespace ERP.Controllers
                 // ✅ النص المعروض في البوكس (مصدر الحقيقة = عمود Status)
                 string postedLabel = $"مرحلة {postVersion}";                 // متغير: النص الذي سيظهر للمستخدم
 
-                invoice.Status = postedLabel;                                // تعليق: تحديث حالة الفاتورة داخل نفس الجدول
+                invoice.Status = postedLabel;
+                invoice.CreatedAt = originalCreatedAt;                      // إعادة وقت الإنشاء الأصلي لئلا يتغيّر
+                _context.Entry(invoice).Property(x => x.CreatedAt).IsModified = true;
                 await _context.SaveChangesAsync();                           // تعليق: حفظ الحالة بعد الترحيل
 
                 // ================================

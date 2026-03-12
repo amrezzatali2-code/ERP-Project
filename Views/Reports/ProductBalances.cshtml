@@ -140,16 +140,16 @@
                         }
                     </select>
                 </div>
-                @* من تاريخ+وقت إلى تاريخ+وقت — جنب بعض *@
+                @* من تاريخ+وقت إلى تاريخ+وقت — فلتر الأصناف (شراء في المدة) والمبيعات (في المدة). الرصيد يبقى الحالي الكلي. *@
                 <div class="col-12 col-lg-auto erp-filter-section">
                     <div class="d-flex flex-nowrap align-items-end gap-2">
                         <div class="erp-pb-date-from-wrap">
-                            <label class="form-label small mb-0">من (تاريخ ووقت)</label>
-                            <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                            <label class="form-label small mb-0">من (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
+                            <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="بداية المدة (يوم/شهر/سنة ووقت)" />
                         </div>
                         <div class="erp-pb-date-to-wrap ms-2">
-                            <label class="form-label small mb-0">إلى (تاريخ ووقت)</label>
-                            <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                            <label class="form-label small mb-0">إلى (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
+                            <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="نهاية المدة (يوم/شهر/سنة ووقت)" />
                         </div>
                     </div>
                 </div>
@@ -296,7 +296,7 @@
                                 </td>
                                 <td data-col="name">@item.ProdName</td>
                                 <td data-col="batch"><small class="text-muted">@(hasBatches ? "—" : (!string.IsNullOrEmpty(item.FirstBatchNo) || item.FirstBatchExpiry.HasValue ? (item.FirstBatchNo ?? "—") : "—"))</small></td>
-                                <td data-col="date" class="text-nowrap"><small class="text-muted">@(hasBatches ? "—" : (item.FirstBatchExpiry.HasValue ? item.FirstBatchExpiry.Value.ToString("yyyy/MM/dd") : "—"))</small></td>
+                                <td data-col="date" class="text-nowrap"><small class="text-muted">@(hasBatches ? "—" : (item.FirstBatchExpiry.HasValue ? item.FirstBatchExpiry.Value.ToString("d/M/yyyy") : "—"))</small></td>
                                 <td data-col="category"><small class="text-muted">@item.CategoryName</small></td>
                                 <td data-col="productGroup"><small class="text-muted">@item.ProductGroupName</small></td>
                                 <td data-col="bonusGroup"><small class="text-muted">@item.ProductBonusGroupName</small></td>
@@ -332,7 +332,7 @@
                                         <td data-col="code"></td>
                                         <td data-col="name" class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
                                         <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
-                                        <td data-col="date"><small class="text-muted">@(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("yyyy/MM/dd") : "—")</small></td>
+                                        <td data-col="date"><small class="text-muted">@(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("d/M/yyyy") : "—")</small></td>
                                         <td data-col="category"></td>
                                         <td data-col="productGroup"></td>
                                         <td data-col="bonusGroup"></td>

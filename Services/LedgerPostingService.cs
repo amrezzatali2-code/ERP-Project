@@ -286,12 +286,15 @@ namespace ERP.Services
                 _db.LedgerEntries.Add(creditRow);
 
                 // =========================================================
-                // 9) تحديث حالة الفاتورة (قفل)
+                // 9) تحديث حالة الفاتورة (قفل) — مع الحفاظ على وقت الإنشاء الأصلي
                 // =========================================================
+                var originalCreatedAt = invoice.CreatedAt;   // لا نغيّر وقت الإنشاء بعد الترحيل
                 invoice.IsPosted = true;
                 invoice.Status = $"مرحلة {newStage}";
                 invoice.PostedAt = now;
                 invoice.PostedBy = postedBy;
+                invoice.CreatedAt = originalCreatedAt;
+                _db.Entry(invoice).Property(x => x.CreatedAt).IsModified = true; // إجبار كتابة وقت الإنشاء في UPDATE
 
                 // =========================================================
                 // 10) حفظ القيود + حالة الفاتورة أولاً

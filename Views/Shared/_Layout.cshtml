@@ -13,6 +13,8 @@
     @* Bootstrap + CSS الرئيسي *@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    @* Flatpickr: انتقاء تاريخ/وقت بنظام 24 ساعة *@
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
 
     @* خط عربي *@
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1067,10 +1069,32 @@
     @* ================= سكربتات JS ================= *@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
-
-
-
+    @* تهيئة حقول التاريخ والوقت بنظام 24 ساعة (بدلاً من AM/PM) *@
+    <script>
+        (function () {
+            function initDatetime24h(container) {
+                if (typeof flatpickr === 'undefined') return;
+                var inputs = (container || document).querySelectorAll('input[type="datetime-local"]');
+                inputs.forEach(function (el) {
+                    if (el._flatpickr) return;
+                    flatpickr(el, {
+                        enableTime: true,
+                        time_24hr: true,
+                        dateFormat: 'Y-m-d\\TH:i',
+                        allowInput: true,
+                        locale: { firstDayOfWeek: 6 }
+                    });
+                });
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function () { initDatetime24h(); });
+            } else {
+                initDatetime24h();
+            }
+        })();
+    </script>
 
 
 
@@ -1214,7 +1238,7 @@
                 var h = now.getHours();
                 var min = now.getMinutes();
                 var s = now.getSeconds();
-                var dateStr = y + '/' + (m < 10 ? '0' + m : m) + '/' + (d < 10 ? '0' + d : d);
+                var dateStr = d + '/' + m + '/' + y; // يوم/شهر/سنة مثل 12/3/2026
                 var timeStr = (h < 10 ? '0' + h : h) + ':' + (min < 10 ? '0' + min : min) + ':' + (s < 10 ? '0' + s : s);
                 return dateStr + ' ' + timeStr;
             }

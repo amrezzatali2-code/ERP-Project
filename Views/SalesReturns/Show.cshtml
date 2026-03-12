@@ -84,7 +84,7 @@
 
                         // نص تاريخ/وقت المرتجع المعروضين في الكروت
                         string returnDateText = hasReturn
-                        ? Model.SRDate.ToString("yyyy/MM/dd")
+                        ? Model.SRDate.ToString("d/M/yyyy")
                         : "";
 
                         string returnTimeText = hasReturn
@@ -434,7 +434,7 @@
                                     <div>
                                         آخر تعديل:
                                         <span class="fw-semibold">
-                                            @Model.UpdatedAt.Value.ToString("yyyy/MM/dd HH:mm")
+                                            @Model.UpdatedAt.Value.ToString("d/M/yyyy HH:mm")
                                         </span>
                                     </div>
                                 }

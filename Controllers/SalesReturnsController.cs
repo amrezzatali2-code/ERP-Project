@@ -307,7 +307,7 @@ namespace ERP.Controllers
 
                 await _activityLogger.LogAsync(UserActionType.Create, "SalesReturn", entity.SRId, $"إنشاء مرتجع بيع رقم {entity.SRId}");
 
-                return Json(new { success = true, srId = entity.SRId, returnNumber = entity.SRId.ToString(), returnDate = entity.SRDate.ToString("yyyy/MM/dd"), returnTime = DateTime.Today.Add(entity.SRTime).ToString("HH:mm"), status = entity.Status, isPosted = entity.IsPosted, createdBy = entity.CreatedBy });
+                return Json(new { success = true, srId = entity.SRId, returnNumber = entity.SRId.ToString(), returnDate = entity.SRDate.ToString("d/M/yyyy"), returnTime = DateTime.Today.Add(entity.SRTime).ToString("HH:mm"), status = entity.Status, isPosted = entity.IsPosted, createdBy = entity.CreatedBy });
             }
             var existing = await context.SalesReturns.FirstOrDefaultAsync(sr => sr.SRId == dto.SRId);
             if (existing == null)
@@ -320,7 +320,7 @@ namespace ERP.Controllers
             existing.UpdatedAt = now;
             await context.SaveChangesAsync();
 
-            return Json(new { success = true, srId = existing.SRId, returnNumber = existing.SRId.ToString(), returnDate = existing.SRDate.ToString("yyyy/MM/dd"), returnTime = DateTime.Today.Add(existing.SRTime).ToString("HH:mm"), status = existing.Status, isPosted = existing.IsPosted, createdBy = existing.CreatedBy });
+            return Json(new { success = true, srId = existing.SRId, returnNumber = existing.SRId.ToString(), returnDate = existing.SRDate.ToString("d/M/yyyy"), returnTime = DateTime.Today.Add(existing.SRTime).ToString("HH:mm"), status = existing.Status, isPosted = existing.IsPosted, createdBy = existing.CreatedBy });
         }
 
         // =========================================================

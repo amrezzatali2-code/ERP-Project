@@ -259,7 +259,7 @@ namespace ERP.Controllers
                     invoiceNumber = invoice.SIId.ToString(),  // متغير: رقم الفاتورة المعروض
 
                     // تاريخ/وقت
-                    invoiceDate = invoice.SIDate.ToString("yyyy/MM/dd"),
+                    invoiceDate = invoice.SIDate.ToString("d/M/yyyy"),
                     invoiceTime = DateTime.Today.Add(invoice.SITime).ToString("HH:mm"),
 
                     // حالة/ترحيل
@@ -324,7 +324,7 @@ namespace ERP.Controllers
                 invoiceId = existing.SIId,
                 invoiceNumber = existing.SIId.ToString(),
 
-                invoiceDate = existing.SIDate.ToString("yyyy/MM/dd"),
+                invoiceDate = existing.SIDate.ToString("d/M/yyyy"),
                 invoiceTime = DateTime.Today.Add(existing.SITime).ToString("HH:mm"),
 
                 status = existing.Status,

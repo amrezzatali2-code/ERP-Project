@@ -488,8 +488,22 @@ namespace ERP.Controllers
 
             // عند عدم تحديد تاريخ: لا نطبّق فلتر "أصناف تم شراؤها في الفترة" (نعرض الكل حسب الفلاتر الأخرى)
             // عند التحديد: نقتصر على أصناف لها حركة شراء (StockLedger SourceType=Purchase) في المدى [fromDate, toDate]
-            DateTime? fromDateUtc = fromDate.HasValue ? (DateTime?)DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local) : null;
-            DateTime? toDateUtc = toDate.HasValue ? (DateTime?)DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : null;
+            // حركات الشراء في StockLedger تُسجّل بـ UTC — نحوّل اختيار المستخدم (محلي) إلى UTC للمقارنة
+            DateTime? fromDateUtc = null;
+            DateTime? toDateUtc = null;
+            if (fromDate.HasValue)
+            {
+                var fromLocal = fromDate.Value.Kind == DateTimeKind.Utc ? fromDate.Value.ToLocalTime() : DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local);
+                fromDateUtc = TimeZoneInfo.ConvertTimeToUtc(fromLocal, TimeZoneInfo.Local);
+            }
+            if (toDate.HasValue)
+            {
+                var toLocal = toDate.Value.Kind == DateTimeKind.Utc ? toDate.Value.ToLocalTime() : DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local);
+                // إذا وقت "إلى" منتصف الليل (00:00) نعتبره نهاية نفس اليوم حتى تدخل فواتير مُورّدة خلال اليوم
+                if (toLocal.TimeOfDay.TotalSeconds < 1)
+                    toLocal = toLocal.Date.AddDays(1).AddSeconds(-1); // 23:59:59 من نفس اليوم
+                toDateUtc = TimeZoneInfo.ConvertTimeToUtc(toLocal, TimeZoneInfo.Local);
+            }
 
             // =========================================================
             // 4) بناء الاستعلام الأساسي للأصناف (عند طلب التقرير)
@@ -813,7 +827,7 @@ namespace ERP.Controllers
                         decimal calcCost = match != null ? match.WeightedCost / brQty : 0m;
                         var manualBatch = GetLatestOverride(prodId, warehouseId, m.BatchId);
                         var effectiveBatch = manualBatch ?? calcDisc;
-                        var batchKey = (prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: m.Expiry.Date);
+                        var batchKey = (ProdId: prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: (DateTime?)m.Expiry.Date);
                         decimal batchSalesQty = salesByBatchKey.TryGetValue(batchKey, out var bs) ? bs : 0m;
                         if (returnsByBatchKey.TryGetValue(batchKey, out var br))
                             batchSalesQty = Math.Max(0m, batchSalesQty - br);
@@ -2884,11 +2898,23 @@ namespace ERP.Controllers
 
             var productIds = await productsQuery.Select(p => p.ProdId).ToListAsync();
 
-            // أصناف تم شراؤها في الفترة (من إلى مع وقت) — نفس منطق ProductBalances
+            // أصناف تم شراؤها في الفترة (من إلى مع وقت) — نفس منطق ProductBalances (تحويل محلي → UTC لمقارنة TranDate)
             if (productIds.Count > 0 && (fromDate.HasValue || toDate.HasValue))
             {
-                var fromDateUtc = fromDate.HasValue ? (DateTime?)DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local) : null;
-                var toDateUtc = toDate.HasValue ? (DateTime?)DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : null;
+                DateTime? fromDateUtc = null;
+                DateTime? toDateUtc = null;
+                if (fromDate.HasValue)
+                {
+                    var fromLocal = fromDate.Value.Kind == DateTimeKind.Utc ? fromDate.Value.ToLocalTime() : DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local);
+                    fromDateUtc = TimeZoneInfo.ConvertTimeToUtc(fromLocal, TimeZoneInfo.Local);
+                }
+                if (toDate.HasValue)
+                {
+                    var toLocal = toDate.Value.Kind == DateTimeKind.Utc ? toDate.Value.ToLocalTime() : DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local);
+                    if (toLocal.TimeOfDay.TotalSeconds < 1)
+                        toLocal = toLocal.Date.AddDays(1).AddSeconds(-1);
+                    toDateUtc = TimeZoneInfo.ConvertTimeToUtc(toLocal, TimeZoneInfo.Local);
+                }
                 var purchaseInRangeQuery = _context.StockLedger
                     .AsNoTracking()
                     .Where(sl => sl.SourceType == "Purchase" && productIds.Contains(sl.ProdId));
@@ -2960,7 +2986,7 @@ namespace ERP.Controllers
                 .Select(g => new { g.Key.ProdId, g.Key.BatchNo, g.Key.Expiry, TotalRemaining = g.Sum(x => x.RemainingQty ?? 0), WeightedDiscount = g.Sum(x => (decimal)(x.RemainingQty ?? 0) * ((decimal?)(x.PurchaseDiscount) ?? 0m)), WeightedCost = g.Sum(x => (decimal)(x.RemainingQty ?? 0) * x.UnitCost) })
                 .ToListAsync();
             var batchesByProdIdExp = productIds.Distinct().ToDictionary(pid => pid, pid => batchRowsRawExp.Where(b => b.ProdId == pid).ToList());
-            var batchMasterListExp = await _context.Batches.AsNoTracking().Where(b => productIds.Contains(b.ProdId)).Select(b => new { b.BatchId, b.ProdId, b.BatchNo, b.Expiry }).ToListAsync();
+            var batchMasterListExp = await _context.Batches.AsNoTracking().Where(b => productIds.Contains(b.ProdId)).Select(b => new { b.BatchId, b.ProdId, b.BatchNo, b.Expiry, b.PriceRetailBatch }).ToListAsync();
             var batchLookupExp = batchMasterListExp.GroupBy(b => b.ProdId).ToDictionary(g => g.Key, g => g.ToList());
 
             // تحميل الخصم اليدوي للتصدير (نفس منطق ProductBalances)
@@ -3005,6 +3031,13 @@ namespace ERP.Controllers
                 .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m })
                 .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
 
+            var salesLinesByBatchExp = await salesQueryExp
+                .Select(sil => new { sil.ProdId, BatchNo = (sil.BatchNo ?? "").Trim(), sil.Expiry, Qty = (decimal)sil.Qty })
+                .ToListAsync();
+            var salesByBatchKeyExp = salesLinesByBatchExp
+                .GroupBy(x => new { x.ProdId, x.BatchNo, ExpiryDate = x.Expiry.HasValue ? x.Expiry!.Value.Date : (DateTime?)null })
+                .ToDictionary(g => (g.Key.ProdId, g.Key.BatchNo, g.Key.ExpiryDate), g => g.Sum(x => x.Qty));
+
             var returnsQueryExp = _context.SalesReturnLines
                 .AsNoTracking()
                 .Include(srl => srl.SalesReturn)
@@ -3019,6 +3052,13 @@ namespace ERP.Controllers
                 .GroupBy(srl => srl.ProdId)
                 .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(srl => (decimal?)srl.Qty) ?? 0m })
                 .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
+
+            var returnsLinesByBatchExp = await returnsQueryExp
+                .Select(srl => new { srl.ProdId, BatchNo = (srl.BatchNo ?? "").Trim(), srl.Expiry, Qty = (decimal)srl.Qty })
+                .ToListAsync();
+            var returnsByBatchKeyExp = returnsLinesByBatchExp
+                .GroupBy(x => new { x.ProdId, x.BatchNo, ExpiryDate = x.Expiry.HasValue ? x.Expiry!.Value.Date : (DateTime?)null })
+                .ToDictionary(g => (g.Key.ProdId, g.Key.BatchNo, g.Key.ExpiryDate), g => g.Sum(x => x.Qty));
 
             var reportData = new List<ProductBalanceReportDto>();
 
@@ -3083,7 +3123,12 @@ namespace ERP.Controllers
                         decimal brCost = matchExp != null ? matchExp.WeightedCost / brQty : 0m;
                         var manualBatchExp = GetLatestOverrideExp(prodId, warehouseId, m.BatchId);
                         var effectiveBatchExp = manualBatchExp ?? brDisc;
-                        batchRowsExp.Add(new ProductBalanceBatchRow { BatchNo = m.BatchNo, Expiry = m.Expiry, CurrentQty = (int)brQty, WeightedDiscount = brDisc, ManualDiscountPct = manualBatchExp, EffectiveDiscountPct = effectiveBatchExp, UnitCost = brCost, TotalCost = brQty * brCost });
+                        var batchKeyExp = (ProdId: prodId, BatchNo: (m.BatchNo ?? "").Trim(), ExpiryDate: (DateTime?)m.Expiry.Date);
+                        decimal batchSalesQtyExp = salesByBatchKeyExp.TryGetValue(batchKeyExp, out var bsExp) ? bsExp : 0m;
+                        if (returnsByBatchKeyExp.TryGetValue(batchKeyExp, out var brExp))
+                            batchSalesQtyExp = Math.Max(0m, batchSalesQtyExp - brExp);
+                        decimal batchPriceRetailExp = (m.PriceRetailBatch ?? 0m) > 0m ? (m.PriceRetailBatch ?? 0m) : product.PriceRetail;
+                        batchRowsExp.Add(new ProductBalanceBatchRow { BatchNo = m.BatchNo, Expiry = m.Expiry, CurrentQty = (int)brQty, WeightedDiscount = brDisc, ManualDiscountPct = manualBatchExp, EffectiveDiscountPct = effectiveBatchExp, UnitCost = brCost, TotalCost = brQty * brCost, SalesQty = batchSalesQtyExp, PriceRetail = batchPriceRetailExp });
                     }
                     if (batchRowsExp.Count >= 2)
                     {

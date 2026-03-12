@@ -84,7 +84,7 @@
 
                         // متغير: نص تاريخ المرتجع
                         string returnDateText = hasReturn
-                        ? Model.PRetDate.ToString("yyyy/MM/dd")
+                        ? Model.PRetDate.ToString("d/M/yyyy")
                         : "";
 
                         // متغير: وقت الإنشاء من CreatedAt
@@ -582,7 +582,7 @@
                                     <div>
                                         آخر تعديل:
                                         <span class="fw-semibold">
-                                            @Model.UpdatedAt.Value.ToLocalTime().ToString("yyyy/MM/dd HH:mm")
+                                            @Model.UpdatedAt.Value.ToLocalTime().ToString("d/M/yyyy HH:mm")
                                         </span>
                                     </div>
                                 }

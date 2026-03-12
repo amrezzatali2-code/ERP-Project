@@ -166,7 +166,7 @@
                             else if (row.ReportType == "SalesOrders") showUrl = Url.Action("Show", "SalesOrders", new { id = row.DocId });
 
                             <tr>
-                                <td data-col="date">@row.Date.ToString("yyyy/MM/dd")</td>
+                                <td data-col="date">@row.Date.ToString("d/M/yyyy")</td>
                                 <td data-col="docno">@row.DocNo</td>
                                 <td data-col="author">@(row.Author ?? "—")</td>
                                 <td data-col="region">@(row.Region ?? "—")</td>
@@ -179,7 +179,7 @@
                                 <td data-col="party">@(row.PartyName ?? "—")</td>
                                 <td data-col="warehouse">@(row.WarehouseName ?? "—")</td>
                                 <td>@(row.BatchNo ?? "—")</td>
-                                <td>@(row.Expiry.HasValue ? row.Expiry.Value.ToString("yyyy/MM/dd") : "—")</td>
+                                <td>@(row.Expiry.HasValue ? row.Expiry.Value.ToString("d/M/yyyy") : "—")</td>
                                 <td>@(row.Notes ?? "—")</td>
                                 <td data-col="actions">
                                     @if (!string.IsNullOrEmpty(showUrl))
@@ -191,7 +191,7 @@
                             <tr class="erp-pdr-detail-row d-none" data-pdr-detail-for>
                                 <td colspan="17" class="bg-light small py-3">
                                     <div class="row g-2 text-start">
-                                        <div class="col-md-6 col-lg-4"><strong>التاريخ:</strong> @row.Date.ToString("yyyy/MM/dd")</div>
+                                        <div class="col-md-6 col-lg-4"><strong>التاريخ:</strong> @row.Date.ToString("d/M/yyyy")</div>
                                         <div class="col-md-6 col-lg-4"><strong>رقم المستند:</strong> @row.DocNo</div>
                                         <div class="col-md-6 col-lg-4"><strong>الكاتب:</strong> @(row.Author ?? "—")</div>
                                         <div class="col-md-6 col-lg-4"><strong>المنطقة:</strong> @(row.Region ?? "—")</div>
@@ -204,7 +204,7 @@
                                         <div class="col-md-6 col-lg-4"><strong>الطرف:</strong> @(row.PartyName ?? "—")</div>
                                         <div class="col-md-6 col-lg-4"><strong>المخزن:</strong> @(row.WarehouseName ?? "—")</div>
                                         <div class="col-md-6 col-lg-4"><strong>التشغيلة:</strong> @(row.BatchNo ?? "—")</div>
-                                        <div class="col-md-6 col-lg-4"><strong>الصلاحية:</strong> @(row.Expiry.HasValue ? row.Expiry.Value.ToString("yyyy/MM/dd") : "—")</div>
+                                        <div class="col-md-6 col-lg-4"><strong>الصلاحية:</strong> @(row.Expiry.HasValue ? row.Expiry.Value.ToString("d/M/yyyy") : "—")</div>
                                         <div class="col-12"><strong>ملاحظات:</strong> @(row.Notes ?? "—")</div>
                                     </div>
                                 </td>

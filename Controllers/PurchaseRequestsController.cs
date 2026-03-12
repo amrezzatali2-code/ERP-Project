@@ -3587,9 +3587,10 @@ private async Task PopulateDropDownsAsync(
                 // ================================
                 // 5) إنشاء هيدر فاتورة مشتريات جديدة
                 // ================================
+                // وقت إنشاء الفاتورة = وقت إنشاء الطلب (نفس القيمة المخزنة حتى يتطابق العرض مع الطلب)
                 var pi = new PurchaseInvoice
                 {
-                    PIDate = now.Date,              // متغير: تاريخ فاتورة المشتريات
+                    PIDate = request.PRDate,        // تاريخ الفاتورة = تاريخ الطلب
                     CustomerId = request.CustomerId,// متغير: المورد
                     WarehouseId = request.WarehouseId, // متغير: المخزن
 
@@ -3601,7 +3602,7 @@ private async Task PopulateDropDownsAsync(
                     Status = "غير مرحلة",          // متغير: الحالة الافتراضية
                     IsPosted = false,              // متغير: غير مُرحلة مبدئياً (الترحيل سيتم بعد قليل)
 
-                    CreatedAt = now,               // متغير: وقت الإنشاء
+                    CreatedAt = request.CreatedAt,  // وقت الإنشاء = وقت إنشاء الطلب (لا تحويل حتى لا يظهر فرق ساعتين)
                     CreatedBy = userName           // متغير: اسم المنشئ
                 };
 

@@ -644,11 +644,11 @@
                             bool hasInvoice = !isNewInvoice;
 
                             string invoiceDateText = hasInvoice
-                            ? Model.PIDate.ToString("yyyy/MM/dd")
+                            ? Model.PIDate.ToString("d/M/yyyy")
                             : "";
 
                             string invoiceTimeText = hasInvoice
-                            ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
+                            ? (Model.CreatedAt.Kind == DateTimeKind.Utc ? Model.CreatedAt.ToLocalTime().ToString("HH:mm") : Model.CreatedAt.ToString("HH:mm"))
                             : "";
                         }
 
