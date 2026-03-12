@@ -1,7 +1,7 @@
 @* قائمة الخصم اليدوي للبيع — بنفس نظام قائمة الأصناف (شريط فلاتر، جدول، ترقيم، تاب لتقرير الأرصدة) *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
-@model PagedResult<ERP.ViewModels.ProductDiscountEffectiveRow>
+@model PagedResult<ERP.ViewModels.ProductDiscountGroupRow>
 
 @{
     ViewData["Title"] = "قائمة الخصم اليدوي للبيع";
@@ -88,7 +88,7 @@
             <small class="text-muted">إجمالي السجلات: <span id="productDiscountOverridesCount">@total</span></small>
         }
     </div>
-    <p class="text-muted small mb-2">يظهر هنا <strong>كل صنف له رصيد</strong> (في أي مخزن). العمود «الخصم %» = الخصم الفعّال (يدوي إن وُجد، وإلا الخصم المرجّح). مصدر الخصم: يدوي = من جدول الخصم اليدوي، مرجّح = محسوب من المشتريات.</p>
+    <p class="text-muted small mb-2">يظهر هنا <strong>كل صنف له رصيد</strong> (في أي مخزن). الصنف الذي له <strong>أكثر من تشغيلة</strong> يظهر بجانبه سهم ▶ لفتح التشغيلات وتعديل الخصم اليدوي لكل تشغيلة. العمود «الخصم %» = الخصم الفعّال (يدوي إن وُجد، وإلا الخصم المرجّح). مصدر الخصم: يدوي = من جدول الخصم اليدوي، مرجّح = محسوب من المشتريات.</p>
 
     @* ===== جدول البيانات (نفس تنسيق قائمة الأصناف) ===== *@
     <div class="erp-table-scroll-container mt-3">
@@ -115,29 +115,53 @@
                     }
                     else
                     {
-                        foreach (var x in Model.Items)
+                        foreach (var group in Model.Items)
                         {
+                            var x = group.MainRow;
+                            var hasBatches = group.BatchRows != null && group.BatchRows.Count >= 2;
                             var isManual = x.IsManual && x.OverrideId.HasValue;
-                            <tr>
+                            var rowId = isManual ? x.OverrideId!.Value : 0;
+                            var formIdMain = "formUpdate_" + (isManual ? rowId.ToString() : "p_" + x.ProdId + "_" + (x.WarehouseId ?? 0));
+                            <tr data-pdo-row data-prod-id="@x.ProdId" data-wh-id="@(x.WarehouseId ?? 0)" data-has-batches="@(hasBatches ? "1" : "0")">
                                 <td>@(isManual ? x.OverrideId!.ToString() : "—")</td>
-                                <td>@(x.ProductName) (@(x.ProdCode))</td>
-                                <td>@x.WarehouseName</td>
-                                <td>الكل</td>
-                                <td class="text-end">
-                                    @if (isManual)
+                                <td>
+                                    @if (hasBatches)
                                     {
-                                        <input form="formUpdate_@(x.OverrideId)" type="number" name="overrideDiscountPct" step="0.01" min="0" max="100" value="@x.EffectiveDiscountPct.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm text-end" style="width:70px; margin-left:auto;" />
+                                        <button type="button" class="btn btn-link btn-sm p-0 text-secondary erp-pdo-toggle-batches" data-prod-id="@x.ProdId" data-wh-id="@(x.WarehouseId ?? 0)" tabindex="0" title="فتح/إغلاق التشغيلات" aria-label="فتح التشغيلات">
+                                            <span class="erp-pdo-chevron">▶</span>
+                                        </button>
+                                        <span class="me-1">@(x.ProductName + " (" + x.ProdCode + ")")</span>
+                                    }
+                                    else
+                                    {
+                                        @(x.ProductName + " (" + x.ProdCode + ")")
+                                    }
+                                </td>
+                                <td>@x.WarehouseName</td>
+                                <td>@(hasBatches ? "—" : "الكل")</td>
+                                <td class="text-end">
+                                    @if (hasBatches)
+                                    {
+                                        <span class="text-muted small">عدّل في التشغيلات أدناه</span>
+                                    }
+                                    else if (isManual)
+                                    {
+                                        <input form="@formIdMain" type="number" name="overrideDiscountPct" step="0.01" min="0" max="100" value="@x.EffectiveDiscountPct.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm text-end" style="width:70px; margin-left:auto;" />
                                     }
                                     else
                                     {
                                         @x.EffectiveDiscountPct.ToString("N2")
                                     }
                                 </td>
-                                <td>@(x.IsManual ? "يدوي" : "مرجّح")</td>
+                                <td>@(hasBatches ? "—" : (x.IsManual ? "يدوي" : "مرجّح"))</td>
                                 <td>
-                                    @if (isManual)
+                                    @if (hasBatches)
                                     {
-                                        <input form="formUpdate_@(x.OverrideId)" type="text" name="reason" value="@(x.Reason ?? "")" class="form-control form-control-sm" maxlength="200" style="max-width:140px;" />
+                                        <span class="text-muted">—</span>
+                                    }
+                                    else if (isManual)
+                                    {
+                                        <input form="@formIdMain" type="text" name="reason" value="@(x.Reason ?? "")" class="form-control form-control-sm" maxlength="200" style="max-width:140px;" />
                                     }
                                     else
                                     {
@@ -147,9 +171,13 @@
                                 <td>@(x.CreatedBy ?? "—")</td>
                                 <td>@(x.CreatedAt.HasValue ? x.CreatedAt.Value.ToString("yyyy/MM/dd HH:mm") : "—")</td>
                                 <td class="no-print">
-                                    @if (isManual)
+                                    @if (hasBatches)
                                     {
-                                        <form id="formUpdate_@(x.OverrideId)" method="post" asp-action="Update" asp-route-id="@(x.OverrideId)" class="d-inline">
+                                        <span class="text-muted">—</span>
+                                    }
+                                    else if (isManual)
+                                    {
+                                        <form id="@formIdMain" method="post" asp-action="Update" asp-route-id="@(x.OverrideId)" class="d-inline">
                                             @Html.AntiForgeryToken()
                                             <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">حفظ</button>
                                         </form>
@@ -166,6 +194,62 @@
                                     }
                                 </td>
                             </tr>
+                            @if (hasBatches)
+                            {
+                                @foreach (var batch in group.BatchRows)
+                                {
+                                    var batchIsManual = batch.IsManual && batch.OverrideId.HasValue;
+                                    var batchFormId = "formUpdate_" + (batchIsManual ? batch.OverrideId!.Value.ToString() : "b_" + batch.ProdId + "_" + (batch.WarehouseId ?? 0) + "_" + (batch.BatchId ?? 0));
+                                    <tr class="erp-pdo-batch-row erp-pdo-batches-for" data-pdo-batch-row data-prod-id="@batch.ProdId" data-wh-id="@(batch.WarehouseId ?? 0)" data-batch-id="@(batch.BatchId ?? 0)" data-pdo-batches-for="@(batch.ProdId)_@(batch.WarehouseId ?? 0)" style="display: none;">
+                                        <td>@(batchIsManual ? batch.OverrideId!.ToString() : "—")</td>
+                                        <td class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
+                                        <td>@batch.WarehouseName</td>
+                                        <td><small class="text-muted">@(batch.BatchNo ?? "—") @(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("yyyy/MM/dd") : "")</small></td>
+                                        <td class="text-end">
+                                            @if (batchIsManual)
+                                            {
+                                                <input form="@batchFormId" type="number" name="overrideDiscountPct" step="0.01" min="0" max="100" value="@batch.EffectiveDiscountPct.ToString("N2", System.Globalization.CultureInfo.InvariantCulture)" class="form-control form-control-sm text-end" style="width:70px; margin-left:auto;" />
+                                            }
+                                            else
+                                            {
+                                                @batch.EffectiveDiscountPct.ToString("N2")
+                                            }
+                                        </td>
+                                        <td>@(batch.IsManual ? "يدوي" : "مرجّح")</td>
+                                        <td>
+                                            @if (batchIsManual)
+                                            {
+                                                <input form="@batchFormId" type="text" name="reason" value="@(batch.Reason ?? "")" class="form-control form-control-sm" maxlength="200" style="max-width:140px;" />
+                                            }
+                                            else
+                                            {
+                                                @(batch.Reason ?? "—")
+                                            }
+                                        </td>
+                                        <td>@(batch.CreatedBy ?? "—")</td>
+                                        <td>@(batch.CreatedAt.HasValue ? batch.CreatedAt.Value.ToString("yyyy/MM/dd HH:mm") : "—")</td>
+                                        <td class="no-print">
+                                            @if (batchIsManual)
+                                            {
+                                                <form id="@batchFormId" method="post" asp-action="Update" asp-route-id="@(batch.OverrideId)" class="d-inline">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">حفظ</button>
+                                                </form>
+                                                <a asp-action="Edit" asp-route-id="@(batch.OverrideId)" class="btn btn-erp btn-erp-secondary btn-erp-sm">تعديل</a>
+                                                <form method="post" asp-action="Delete" asp-route-id="@(batch.OverrideId)" class="d-inline" onsubmit="return confirm('حذف سجل الخصم اليدوي لهذه التشغيلة؟');">
+                                                    @Html.AntiForgeryToken()
+                                                    <input type="hidden" name="id" value="@(batch.OverrideId)" />
+                                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">مسح</button>
+                                                </form>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">—</span>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
                         }
                     }
                 </tbody>
@@ -262,6 +346,24 @@
         </div>
     </div>
 
+    @* فتح/إغلاق صفوف التشغيلات عند النقر على السهم *@
+    <script>
+        (function () {
+            document.querySelectorAll('.erp-pdo-toggle-batches').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var prodId = this.getAttribute('data-prod-id');
+                    var whId = this.getAttribute('data-wh-id');
+                    var key = (prodId || '') + '_' + (whId || '');
+                    var chevron = this.querySelector('.erp-pdo-chevron');
+                    var batchRows = document.querySelectorAll('tr.erp-pdo-batches-for[data-pdo-batches-for="' + key + '"]');
+                    if (!batchRows.length || !chevron) return;
+                    var isHidden = batchRows[0].style.display === 'none';
+                    batchRows.forEach(function (tr) { tr.style.display = isHidden ? '' : 'none'; });
+                    chevron.textContent = isHidden ? '▼' : '▶';
+                });
+            });
+        })();
+    </script>
     @* فتح تقرير أرصدة الأصناف في تاب (نفس التاب إن كان مفتوحاً أو تاب جديد) *@
     <script>
         (function () {

@@ -940,6 +940,665 @@ namespace ERP.Controllers
             return View();
         }
 
+        private static readonly char[] _productDetailsFilterSep = new[] { '|', ',', ';' };
+
+        private static List<string> ParseProductDetailsFilterStrings(string? filterCol)
+        {
+            if (string.IsNullOrWhiteSpace(filterCol)) return new List<string>();
+            return filterCol.Split(_productDetailsFilterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+        }
+
+        private static List<DateTime> ParseProductDetailsFilterDates(string? filterCol)
+        {
+            var list = new List<DateTime>();
+            if (string.IsNullOrWhiteSpace(filterCol)) return list;
+            foreach (var part in filterCol.Split(_productDetailsFilterSep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length >= 8))
+                if (DateTime.TryParse(part, out var d)) list.Add(d.Date);
+            return list;
+        }
+
+        /// <summary>
+        /// تقرير أصناف مفصّلة: مبيعات، مشتريات، مرتجعات بيع/شراء، تسويات، تحويلات، طلبات شراء، أوامر بيع.
+        /// </summary>
+        [HttpGet]
+        [RequirePermission("Reports.ProductDetailsReport")]
+        public async Task<IActionResult> ProductDetailsReport(
+            string? reportType,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? search,
+            string? filterCol_date = null,
+            string? filterCol_docNo = null,
+            string? filterCol_productCode = null,
+            string? filterCol_productName = null,
+            string? filterCol_party = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_author = null,
+            string? filterCol_region = null,
+            string? filterCol_docNameAr = null,
+            int page = 1,
+            int pageSize = 100)
+        {
+            var reportTypes = new List<SelectListItem>
+            {
+                new SelectListItem { Value = "", Text = "— اختر نوع التقرير —", Selected = string.IsNullOrEmpty(reportType) },
+                new SelectListItem { Value = "Sales", Text = "مبيعات الصنف بالتفصيل", Selected = reportType == "Sales" },
+                new SelectListItem { Value = "Purchases", Text = "مشتريات الصنف", Selected = reportType == "Purchases" },
+                new SelectListItem { Value = "SalesReturns", Text = "مرتجعات البيع", Selected = reportType == "SalesReturns" },
+                new SelectListItem { Value = "PurchaseReturns", Text = "مرتجعات الشراء", Selected = reportType == "PurchaseReturns" },
+                new SelectListItem { Value = "Adjustments", Text = "تسويات", Selected = reportType == "Adjustments" },
+                new SelectListItem { Value = "Transfers", Text = "تحويلات", Selected = reportType == "Transfers" },
+                new SelectListItem { Value = "PurchaseRequests", Text = "طلبات شراء", Selected = reportType == "PurchaseRequests" },
+                new SelectListItem { Value = "SalesOrders", Text = "أوامر بيع", Selected = reportType == "SalesOrders" }
+            };
+            ViewBag.ReportTypes = reportTypes;
+            ViewBag.ReportType = reportType ?? "";
+            ViewBag.FromDate = fromDate;
+            ViewBag.ToDate = toDate;
+            ViewBag.Search = search ?? "";
+            ViewBag.Page = page;
+            ViewBag.PageSize = pageSize;
+            ViewBag.FilterCol_Date = filterCol_date;
+            ViewBag.FilterCol_DocNo = filterCol_docNo;
+            ViewBag.FilterCol_ProductCode = filterCol_productCode;
+            ViewBag.FilterCol_ProductName = filterCol_productName;
+            ViewBag.FilterCol_Party = filterCol_party;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_Author = filterCol_author;
+            ViewBag.FilterCol_Region = filterCol_region;
+            ViewBag.FilterCol_DocNameAr = filterCol_docNameAr;
+
+            var list = new List<ProductDetailsReportRow>();
+            int totalCount = 0;
+
+            if (string.IsNullOrWhiteSpace(reportType))
+            {
+                ViewBag.TotalCount = 0;
+                ViewBag.TotalPages = 0;
+                ViewBag.ReportData = list;
+                return View();
+            }
+
+            var fromDt = fromDate.HasValue ? DateTime.SpecifyKind(fromDate.Value, DateTimeKind.Local) : (DateTime?)null;
+            var toDt = toDate.HasValue ? DateTime.SpecifyKind(toDate.Value, DateTimeKind.Local) : (DateTime?)null;
+            var searchTrim = search?.Trim() ?? "";
+
+            switch (reportType)
+            {
+                case "Sales":
+                    var salesQuery = _context.SalesInvoiceLines
+                        .AsNoTracking()
+                        .Include(l => l.SalesInvoice).ThenInclude(h => h!.Customer)
+                        .Include(l => l.SalesInvoice).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch)
+                        .Include(l => l.Product)
+                        .Where(l => l.SalesInvoice != null);
+                    if (fromDt.HasValue) salesQuery = salesQuery.Where(l => l.SalesInvoice!.SIDate >= fromDt.Value);
+                    if (toDt.HasValue) salesQuery = salesQuery.Where(l => l.SalesInvoice!.SIDate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        salesQuery = salesQuery.Where(l =>
+                            (l.Product != null && (l.Product.ProdName != null && l.Product.ProdName.Contains(searchTrim) || l.Product.ProdId.ToString() == searchTrim)));
+                    var authorVals = ParseProductDetailsFilterStrings(filterCol_author);
+                    if (authorVals.Count > 0) salesQuery = salesQuery.Where(l => l.SalesInvoice!.CreatedBy != null && authorVals.Contains(l.SalesInvoice.CreatedBy));
+                    var regionVals = ParseProductDetailsFilterStrings(filterCol_region);
+                    if (regionVals.Count > 0) salesQuery = salesQuery.Where(l => l.SalesInvoice!.Warehouse != null && l.SalesInvoice.Warehouse.Branch != null && regionVals.Contains(l.SalesInvoice.Warehouse.Branch.BranchName));
+                    var docNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (docNoVals.Count > 0) salesQuery = salesQuery.Where(l => docNoVals.Contains(l.SalesInvoice!.SIId.ToString()));
+                    var partyVals = ParseProductDetailsFilterStrings(filterCol_party);
+                    if (partyVals.Count > 0) salesQuery = salesQuery.Where(l => l.SalesInvoice!.Customer != null && partyVals.Contains(l.SalesInvoice.Customer.CustomerName));
+                    var whVals = ParseProductDetailsFilterStrings(filterCol_warehouse);
+                    if (whVals.Count > 0) salesQuery = salesQuery.Where(l => l.SalesInvoice!.Warehouse != null && whVals.Contains(l.SalesInvoice.Warehouse.WarehouseName));
+                    var prodCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (prodCodeVals.Count > 0) salesQuery = salesQuery.Where(l => l.Product != null && prodCodeVals.Contains(l.Product.ProdId.ToString()));
+                    var prodNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (prodNameVals.Count > 0) salesQuery = salesQuery.Where(l => l.Product != null && l.Product.ProdName != null && prodNameVals.Any(v => l.Product.ProdName.Contains(v)));
+                    var dateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (dateVals.Count > 0) salesQuery = salesQuery.Where(l => dateVals.Contains(l.SalesInvoice!.SIDate.Date));
+                    totalCount = await salesQuery.CountAsync();
+                    var salesRows = await salesQuery
+                        .OrderByDescending(l => l.SalesInvoice!.SIDate)
+                        .ThenBy(l => l.SalesInvoice!.SIId)
+                        .ThenBy(l => l.LineNo)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(l => new ProductDetailsReportRow
+                        {
+                            ReportType = "Sales",
+                            Date = l.SalesInvoice!.SIDate,
+                            DocNo = l.SalesInvoice!.SIId.ToString(),
+                            DocId = l.SalesInvoice!.SIId,
+                            ProductId = l.ProdId,
+                            ProductCode = l.Product != null ? l.Product.ProdId.ToString() : "",
+                            ProductName = l.Product != null ? (l.Product.ProdName ?? "") : "",
+                            Qty = l.Qty,
+                            UnitPrice = l.PriceRetail,
+                            Total = l.LineNetTotal,
+                            PartyName = l.SalesInvoice!.Customer != null ? l.SalesInvoice.Customer.CustomerName : null,
+                            WarehouseName = l.SalesInvoice!.Warehouse != null ? l.SalesInvoice.Warehouse.WarehouseName : null,
+                            BatchNo = l.BatchNo,
+                            Expiry = l.Expiry,
+                            Notes = null,
+                            Author = l.SalesInvoice!.CreatedBy,
+                            Region = l.SalesInvoice!.Warehouse != null && l.SalesInvoice.Warehouse.Branch != null ? l.SalesInvoice.Warehouse.Branch.BranchName : null,
+                            DocumentNameAr = "فاتورة مبيعات"
+                        })
+                        .ToListAsync();
+                    list.AddRange(salesRows);
+                    break;
+
+                case "Purchases":
+                    var piQuery = _context.PILines
+                        .AsNoTracking()
+                        .Include(l => l.PurchaseInvoice).ThenInclude(h => h!.Customer)
+                        .Include(l => l.Product)
+                        .Where(l => l.PurchaseInvoice != null);
+                    if (fromDt.HasValue) piQuery = piQuery.Where(l => l.PurchaseInvoice!.PIDate >= fromDt.Value);
+                    if (toDt.HasValue) piQuery = piQuery.Where(l => l.PurchaseInvoice!.PIDate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        piQuery = piQuery.Where(l =>
+                            (l.Product != null && (l.Product.ProdName != null && l.Product.ProdName.Contains(searchTrim) || l.Product.ProdId.ToString() == searchTrim)));
+                    var piAuthorVals = ParseProductDetailsFilterStrings(filterCol_author);
+                    if (piAuthorVals.Count > 0) piQuery = piQuery.Where(l => l.PurchaseInvoice!.CreatedBy != null && piAuthorVals.Contains(l.PurchaseInvoice.CreatedBy));
+                    var piDocNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (piDocNoVals.Count > 0) piQuery = piQuery.Where(l => piDocNoVals.Contains(l.PurchaseInvoice!.PIId.ToString()));
+                    var piPartyVals = ParseProductDetailsFilterStrings(filterCol_party);
+                    if (piPartyVals.Count > 0) piQuery = piQuery.Where(l => l.PurchaseInvoice!.Customer != null && piPartyVals.Contains(l.PurchaseInvoice.Customer.CustomerName));
+                    var piProdCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (piProdCodeVals.Count > 0) piQuery = piQuery.Where(l => l.Product != null && piProdCodeVals.Contains(l.Product.ProdId.ToString()));
+                    var piProdNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (piProdNameVals.Count > 0) piQuery = piQuery.Where(l => l.Product != null && l.Product.ProdName != null && piProdNameVals.Any(v => l.Product.ProdName.Contains(v)));
+                    var piDateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (piDateVals.Count > 0) piQuery = piQuery.Where(l => piDateVals.Contains(l.PurchaseInvoice!.PIDate.Date));
+                    totalCount = await piQuery.CountAsync();
+                    var piRows = await piQuery
+                        .OrderByDescending(l => l.PurchaseInvoice!.PIDate)
+                        .ThenBy(l => l.PurchaseInvoice!.PIId)
+                        .ThenBy(l => l.LineNo)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(l => new ProductDetailsReportRow
+                        {
+                            ReportType = "Purchases",
+                            Date = l.PurchaseInvoice!.PIDate,
+                            DocNo = l.PurchaseInvoice!.PIId.ToString(),
+                            DocId = l.PurchaseInvoice!.PIId,
+                            ProductId = l.ProdId,
+                            ProductCode = l.Product != null ? l.Product.ProdId.ToString() : "",
+                            ProductName = l.Product != null ? (l.Product.ProdName ?? "") : "",
+                            Qty = l.Qty,
+                            UnitPrice = l.UnitCost,
+                            Total = l.Qty * l.UnitCost,
+                            PartyName = l.PurchaseInvoice!.Customer != null ? l.PurchaseInvoice.Customer.CustomerName : null,
+                            WarehouseName = null,
+                            BatchNo = l.BatchNo,
+                            Expiry = l.Expiry,
+                            Notes = null,
+                            Author = l.PurchaseInvoice!.CreatedBy,
+                            Region = null,
+                            DocumentNameAr = "فاتورة مشتريات"
+                        })
+                        .ToListAsync();
+                    list.AddRange(piRows);
+                    break;
+
+                case "SalesReturns":
+                    var srQuery = from line in _context.SalesReturnLines.AsNoTracking()
+                                 join sr in _context.SalesReturns on line.SRId equals sr.SRId
+                                 join c in _context.Customers on sr.CustomerId equals c.CustomerId
+                                 join p in _context.Products on line.ProdId equals p.ProdId
+                                 select new { line, sr, c, p };
+                    if (fromDt.HasValue) srQuery = srQuery.Where(x => x.sr.SRDate >= fromDt.Value);
+                    if (toDt.HasValue) srQuery = srQuery.Where(x => x.sr.SRDate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        srQuery = srQuery.Where(x => (x.p.ProdName != null && x.p.ProdName.Contains(searchTrim)) || x.p.ProdId.ToString() == searchTrim);
+                    var srAuthorVals = ParseProductDetailsFilterStrings(filterCol_author);
+                    if (srAuthorVals.Count > 0) srQuery = srQuery.Where(x => x.sr.CreatedBy != null && srAuthorVals.Contains(x.sr.CreatedBy));
+                    var srDocNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (srDocNoVals.Count > 0) srQuery = srQuery.Where(x => srDocNoVals.Contains(x.sr.SRId.ToString()));
+                    var srPartyVals = ParseProductDetailsFilterStrings(filterCol_party);
+                    if (srPartyVals.Count > 0) srQuery = srQuery.Where(x => srPartyVals.Contains(x.c.CustomerName));
+                    var srProdCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (srProdCodeVals.Count > 0) srQuery = srQuery.Where(x => srProdCodeVals.Contains(x.p.ProdId.ToString()));
+                    var srProdNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (srProdNameVals.Count > 0) srQuery = srQuery.Where(x => x.p.ProdName != null && srProdNameVals.Any(v => x.p.ProdName.Contains(v)));
+                    var srDateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (srDateVals.Count > 0) srQuery = srQuery.Where(x => srDateVals.Contains(x.sr.SRDate.Date));
+                    totalCount = await srQuery.CountAsync();
+                    var srRows = await srQuery
+                        .OrderByDescending(x => x.sr.SRDate)
+                        .ThenBy(x => x.sr.SRId)
+                        .ThenBy(x => x.line.LineNo)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(x => new ProductDetailsReportRow
+                        {
+                            ReportType = "SalesReturns",
+                            Date = x.sr.SRDate,
+                            DocNo = x.sr.SRId.ToString(),
+                            DocId = x.sr.SRId,
+                            ProductId = x.line.ProdId,
+                            ProductCode = x.p.ProdId.ToString(),
+                            ProductName = x.p.ProdName ?? "",
+                            Qty = x.line.Qty,
+                            UnitPrice = x.line.UnitSalePrice,
+                            Total = x.line.LineNetTotal,
+                            PartyName = x.c.CustomerName,
+                            WarehouseName = null,
+                            BatchNo = null,
+                            Expiry = null,
+                            Notes = null,
+                            Author = x.sr.CreatedBy,
+                            Region = null,
+                            DocumentNameAr = "مرتجع بيع"
+                        })
+                        .ToListAsync();
+                    list.AddRange(srRows);
+                    break;
+
+                case "PurchaseReturns":
+                    var prQuery = _context.PurchaseReturnLines
+                        .AsNoTracking()
+                        .Include(l => l.PurchaseReturn).ThenInclude(h => h!.Customer)
+                        .Include(l => l.Product)
+                        .Where(l => l.PurchaseReturn != null);
+                    if (fromDt.HasValue) prQuery = prQuery.Where(l => l.PurchaseReturn!.PRetDate >= fromDt.Value);
+                    if (toDt.HasValue) prQuery = prQuery.Where(l => l.PurchaseReturn!.PRetDate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        prQuery = prQuery.Where(l =>
+                            (l.Product != null && (l.Product.ProdName != null && l.Product.ProdName.Contains(searchTrim) || l.Product.ProdId.ToString() == searchTrim)));
+                    var prAuthorVals = ParseProductDetailsFilterStrings(filterCol_author);
+                    if (prAuthorVals.Count > 0) prQuery = prQuery.Where(l => l.PurchaseReturn!.CreatedBy != null && prAuthorVals.Contains(l.PurchaseReturn.CreatedBy));
+                    var prDocNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (prDocNoVals.Count > 0) prQuery = prQuery.Where(l => prDocNoVals.Contains(l.PurchaseReturn!.PRetId.ToString()));
+                    var prPartyVals = ParseProductDetailsFilterStrings(filterCol_party);
+                    if (prPartyVals.Count > 0) prQuery = prQuery.Where(l => l.PurchaseReturn!.Customer != null && prPartyVals.Contains(l.PurchaseReturn.Customer.CustomerName));
+                    var prProdCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (prProdCodeVals.Count > 0) prQuery = prQuery.Where(l => l.Product != null && prProdCodeVals.Contains(l.Product.ProdId.ToString()));
+                    var prProdNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (prProdNameVals.Count > 0) prQuery = prQuery.Where(l => l.Product != null && l.Product.ProdName != null && prProdNameVals.Any(v => l.Product.ProdName.Contains(v)));
+                    var prDateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (prDateVals.Count > 0) prQuery = prQuery.Where(l => prDateVals.Contains(l.PurchaseReturn!.PRetDate.Date));
+                    totalCount = await prQuery.CountAsync();
+                    var prRows = await prQuery
+                        .OrderByDescending(l => l.PurchaseReturn!.PRetDate)
+                        .ThenBy(l => l.PurchaseReturn!.PRetId)
+                        .ThenBy(l => l.LineNo)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(l => new ProductDetailsReportRow
+                        {
+                            ReportType = "PurchaseReturns",
+                            Date = l.PurchaseReturn!.PRetDate,
+                            DocNo = l.PurchaseReturn!.PRetId.ToString(),
+                            DocId = l.PurchaseReturn!.PRetId,
+                            ProductId = l.ProdId,
+                            ProductCode = l.Product != null ? l.Product.ProdId.ToString() : "",
+                            ProductName = l.Product != null ? (l.Product.ProdName ?? "") : "",
+                            Qty = l.Qty,
+                            UnitPrice = l.UnitCost,
+                            Total = l.Qty * l.UnitCost,
+                            PartyName = l.PurchaseReturn!.Customer != null ? l.PurchaseReturn.Customer.CustomerName : null,
+                            WarehouseName = null,
+                            BatchNo = l.BatchNo,
+                            Expiry = l.Expiry,
+                            Notes = null,
+                            Author = l.PurchaseReturn!.CreatedBy,
+                            Region = null,
+                            DocumentNameAr = "مرتجع شراء"
+                        })
+                        .ToListAsync();
+                    list.AddRange(prRows);
+                    break;
+
+                case "Adjustments":
+                    var adjQuery = _context.StockAdjustmentLines
+                        .AsNoTracking()
+                        .Include(l => l.StockAdjustment).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch)
+                        .Include(l => l.Product)
+                        .Where(l => l.StockAdjustment != null && l.Product != null);
+                    if (fromDt.HasValue) adjQuery = adjQuery.Where(l => l.StockAdjustment!.AdjustmentDate >= fromDt.Value);
+                    if (toDt.HasValue) adjQuery = adjQuery.Where(l => l.StockAdjustment!.AdjustmentDate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        adjQuery = adjQuery.Where(l =>
+                            (l.Product!.ProdName != null && l.Product.ProdName.Contains(searchTrim)) || l.Product.ProdId.ToString() == searchTrim);
+                    var adjAuthorVals = ParseProductDetailsFilterStrings(filterCol_author);
+                    if (adjAuthorVals.Count > 0) adjQuery = adjQuery.Where(l => l.StockAdjustment!.PostedBy != null && adjAuthorVals.Contains(l.StockAdjustment.PostedBy));
+                    var adjDocNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (adjDocNoVals.Count > 0) adjQuery = adjQuery.Where(l => adjDocNoVals.Contains(l.StockAdjustment!.Id.ToString()));
+                    var adjWhVals = ParseProductDetailsFilterStrings(filterCol_warehouse);
+                    if (adjWhVals.Count > 0) adjQuery = adjQuery.Where(l => l.StockAdjustment!.Warehouse != null && adjWhVals.Contains(l.StockAdjustment.Warehouse.WarehouseName));
+                    var adjRegionVals = ParseProductDetailsFilterStrings(filterCol_region);
+                    if (adjRegionVals.Count > 0) adjQuery = adjQuery.Where(l => l.StockAdjustment!.Warehouse != null && l.StockAdjustment.Warehouse.Branch != null && adjRegionVals.Contains(l.StockAdjustment.Warehouse.Branch.BranchName));
+                    var adjProdCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (adjProdCodeVals.Count > 0) adjQuery = adjQuery.Where(l => adjProdCodeVals.Contains(l.Product!.ProdId.ToString()));
+                    var adjProdNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (adjProdNameVals.Count > 0) adjQuery = adjQuery.Where(l => l.Product!.ProdName != null && adjProdNameVals.Any(v => l.Product.ProdName.Contains(v)));
+                    var adjDateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (adjDateVals.Count > 0) adjQuery = adjQuery.Where(l => adjDateVals.Contains(l.StockAdjustment!.AdjustmentDate.Date));
+                    totalCount = await adjQuery.CountAsync();
+                    var adjRows = await adjQuery
+                        .OrderByDescending(l => l.StockAdjustment!.AdjustmentDate)
+                        .ThenBy(l => l.StockAdjustmentId)
+                        .ThenBy(l => l.Id)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(l => new ProductDetailsReportRow
+                        {
+                            ReportType = "Adjustments",
+                            Date = l.StockAdjustment!.AdjustmentDate,
+                            DocNo = l.StockAdjustment!.Id.ToString(),
+                            DocId = l.StockAdjustment!.Id,
+                            ProductId = l.ProductId,
+                            ProductCode = l.Product!.ProdId.ToString(),
+                            ProductName = l.Product.ProdName ?? "",
+                            Qty = l.QtyDiff,
+                            UnitPrice = l.CostPerUnit,
+                            Total = l.CostDiff,
+                            PartyName = null,
+                            WarehouseName = l.StockAdjustment!.Warehouse != null ? l.StockAdjustment.Warehouse.WarehouseName : null,
+                            BatchNo = null,
+                            Expiry = null,
+                            Notes = l.Note,
+                            Author = l.StockAdjustment!.PostedBy,
+                            Region = l.StockAdjustment!.Warehouse != null && l.StockAdjustment.Warehouse.Branch != null ? l.StockAdjustment.Warehouse.Branch.BranchName : null,
+                            DocumentNameAr = "تسوية جرد"
+                        })
+                        .ToListAsync();
+                    list.AddRange(adjRows);
+                    break;
+
+                case "Transfers":
+                    var stQuery = _context.StockTransferLines
+                        .AsNoTracking()
+                        .Include(l => l.StockTransfer).ThenInclude(st => st!.FromWarehouse).ThenInclude(w => w!.Branch)
+                        .Include(l => l.Product)
+                        .Where(l => l.StockTransfer != null && l.Product != null);
+                    if (fromDt.HasValue) stQuery = stQuery.Where(l => l.StockTransfer!.TransferDate >= fromDt.Value);
+                    if (toDt.HasValue) stQuery = stQuery.Where(l => l.StockTransfer!.TransferDate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        stQuery = stQuery.Where(l =>
+                            (l.Product!.ProdName != null && l.Product.ProdName.Contains(searchTrim)) || l.Product.ProdId.ToString() == searchTrim);
+                    var stDocNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (stDocNoVals.Count > 0) stQuery = stQuery.Where(l => stDocNoVals.Contains(l.StockTransfer!.Id.ToString()));
+                    var stRegionVals = ParseProductDetailsFilterStrings(filterCol_region);
+                    if (stRegionVals.Count > 0) stQuery = stQuery.Where(l => l.StockTransfer!.FromWarehouse != null && l.StockTransfer.FromWarehouse.Branch != null && stRegionVals.Contains(l.StockTransfer.FromWarehouse.Branch.BranchName));
+                    var stProdCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (stProdCodeVals.Count > 0) stQuery = stQuery.Where(l => stProdCodeVals.Contains(l.Product!.ProdId.ToString()));
+                    var stProdNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (stProdNameVals.Count > 0) stQuery = stQuery.Where(l => l.Product!.ProdName != null && stProdNameVals.Any(v => l.Product.ProdName.Contains(v)));
+                    var stDateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (stDateVals.Count > 0) stQuery = stQuery.Where(l => stDateVals.Contains(l.StockTransfer!.TransferDate.Date));
+                    totalCount = await stQuery.CountAsync();
+                    var stRows = await stQuery
+                        .OrderByDescending(l => l.StockTransfer!.TransferDate)
+                        .ThenBy(l => l.StockTransferId)
+                        .ThenBy(l => l.LineNo)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(l => new ProductDetailsReportRow
+                        {
+                            ReportType = "Transfers",
+                            Date = l.StockTransfer!.TransferDate,
+                            DocNo = l.StockTransfer!.Id.ToString(),
+                            DocId = l.StockTransfer!.Id,
+                            ProductId = l.ProductId,
+                            ProductCode = l.Product!.ProdId.ToString(),
+                            ProductName = l.Product.ProdName ?? "",
+                            Qty = l.Qty,
+                            UnitPrice = l.UnitCost,
+                            Total = l.Qty * l.UnitCost,
+                            PartyName = null,
+                            WarehouseName = null,
+                            BatchNo = null,
+                            Expiry = null,
+                            Notes = l.Note,
+                            Author = l.StockTransfer!.PostedBy,
+                            Region = l.StockTransfer!.FromWarehouse != null && l.StockTransfer.FromWarehouse.Branch != null ? l.StockTransfer.FromWarehouse.Branch.BranchName : null,
+                            DocumentNameAr = "تحويل مخزني"
+                        })
+                        .ToListAsync();
+                    list.AddRange(stRows);
+                    break;
+
+                case "PurchaseRequests":
+                    var prReqQuery = _context.PRLines
+                        .AsNoTracking()
+                        .Include(l => l.PurchaseRequest).ThenInclude(h => h!.Customer)
+                        .Include(l => l.PurchaseRequest).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch)
+                        .Include(l => l.Product)
+                        .Where(l => l.PurchaseRequest != null);
+                    if (fromDt.HasValue) prReqQuery = prReqQuery.Where(l => l.PurchaseRequest!.PRDate >= fromDt.Value);
+                    if (toDt.HasValue) prReqQuery = prReqQuery.Where(l => l.PurchaseRequest!.PRDate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        prReqQuery = prReqQuery.Where(l =>
+                            (l.Product != null && (l.Product.ProdName != null && l.Product.ProdName.Contains(searchTrim) || l.Product.ProdId.ToString() == searchTrim)));
+                    var prReqAuthorVals = ParseProductDetailsFilterStrings(filterCol_author);
+                    if (prReqAuthorVals.Count > 0) prReqQuery = prReqQuery.Where(l => l.PurchaseRequest!.CreatedBy != null && prReqAuthorVals.Contains(l.PurchaseRequest.CreatedBy));
+                    var prReqDocNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (prReqDocNoVals.Count > 0) prReqQuery = prReqQuery.Where(l => prReqDocNoVals.Contains(l.PurchaseRequest!.PRId.ToString()));
+                    var prReqPartyVals = ParseProductDetailsFilterStrings(filterCol_party);
+                    if (prReqPartyVals.Count > 0) prReqQuery = prReqQuery.Where(l => l.PurchaseRequest!.Customer != null && prReqPartyVals.Contains(l.PurchaseRequest.Customer.CustomerName));
+                    var prReqWhVals = ParseProductDetailsFilterStrings(filterCol_warehouse);
+                    if (prReqWhVals.Count > 0) prReqQuery = prReqQuery.Where(l => l.PurchaseRequest!.Warehouse != null && prReqWhVals.Contains(l.PurchaseRequest.Warehouse.WarehouseName));
+                    var prReqRegionVals = ParseProductDetailsFilterStrings(filterCol_region);
+                    if (prReqRegionVals.Count > 0) prReqQuery = prReqQuery.Where(l => l.PurchaseRequest!.Warehouse != null && l.PurchaseRequest.Warehouse.Branch != null && prReqRegionVals.Contains(l.PurchaseRequest.Warehouse.Branch.BranchName));
+                    var prReqProdCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (prReqProdCodeVals.Count > 0) prReqQuery = prReqQuery.Where(l => l.Product != null && prReqProdCodeVals.Contains(l.Product.ProdId.ToString()));
+                    var prReqProdNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (prReqProdNameVals.Count > 0) prReqQuery = prReqQuery.Where(l => l.Product != null && l.Product.ProdName != null && prReqProdNameVals.Any(v => l.Product.ProdName.Contains(v)));
+                    var prReqDateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (prReqDateVals.Count > 0) prReqQuery = prReqQuery.Where(l => prReqDateVals.Contains(l.PurchaseRequest!.PRDate.Date));
+                    totalCount = await prReqQuery.CountAsync();
+                    var prReqRows = await prReqQuery
+                        .OrderByDescending(l => l.PurchaseRequest!.PRDate)
+                        .ThenBy(l => l.PRId)
+                        .ThenBy(l => l.LineNo)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(l => new ProductDetailsReportRow
+                        {
+                            ReportType = "PurchaseRequests",
+                            Date = l.PurchaseRequest!.PRDate,
+                            DocNo = l.PurchaseRequest!.PRId.ToString(),
+                            DocId = l.PurchaseRequest!.PRId,
+                            ProductId = l.ProdId,
+                            ProductCode = l.Product != null ? l.Product.ProdId.ToString() : "",
+                            ProductName = l.Product != null ? (l.Product.ProdName ?? "") : "",
+                            Qty = l.QtyRequested,
+                            UnitPrice = l.ExpectedCost,
+                            Total = l.QtyRequested * l.ExpectedCost,
+                            PartyName = l.PurchaseRequest!.Customer != null ? l.PurchaseRequest.Customer.CustomerName : null,
+                            WarehouseName = l.PurchaseRequest!.Warehouse != null ? l.PurchaseRequest.Warehouse.WarehouseName : null,
+                            BatchNo = l.PreferredBatchNo,
+                            Expiry = l.PreferredExpiry,
+                            Notes = null,
+                            Author = l.PurchaseRequest!.CreatedBy,
+                            Region = l.PurchaseRequest!.Warehouse != null && l.PurchaseRequest.Warehouse.Branch != null ? l.PurchaseRequest.Warehouse.Branch.BranchName : null,
+                            DocumentNameAr = "طلب شراء"
+                        })
+                        .ToListAsync();
+                    list.AddRange(prReqRows);
+                    break;
+
+                case "SalesOrders":
+                    var soQuery = _context.SOLines
+                        .AsNoTracking()
+                        .Include(l => l.SalesOrder).ThenInclude(h => h!.Customer)
+                        .Include(l => l.Product)
+                        .Where(l => l.SalesOrder != null);
+                    if (fromDt.HasValue) soQuery = soQuery.Where(l => l.SalesOrder!.SODate >= fromDt.Value);
+                    if (toDt.HasValue) soQuery = soQuery.Where(l => l.SalesOrder!.SODate <= toDt.Value);
+                    if (!string.IsNullOrEmpty(searchTrim))
+                        soQuery = soQuery.Where(l =>
+                            (l.Product != null && (l.Product.ProdName != null && l.Product.ProdName.Contains(searchTrim) || l.Product.ProdId.ToString() == searchTrim)));
+                    var soAuthorVals = ParseProductDetailsFilterStrings(filterCol_author);
+                    if (soAuthorVals.Count > 0) soQuery = soQuery.Where(l => l.SalesOrder!.CreatedBy != null && soAuthorVals.Contains(l.SalesOrder.CreatedBy));
+                    var soDocNoVals = ParseProductDetailsFilterStrings(filterCol_docNo);
+                    if (soDocNoVals.Count > 0) soQuery = soQuery.Where(l => soDocNoVals.Contains(l.SalesOrder!.SOId.ToString()));
+                    var soPartyVals = ParseProductDetailsFilterStrings(filterCol_party);
+                    if (soPartyVals.Count > 0) soQuery = soQuery.Where(l => l.SalesOrder!.Customer != null && soPartyVals.Contains(l.SalesOrder.Customer.CustomerName));
+                    var soProdCodeVals = ParseProductDetailsFilterStrings(filterCol_productCode);
+                    if (soProdCodeVals.Count > 0) soQuery = soQuery.Where(l => l.Product != null && soProdCodeVals.Contains(l.Product.ProdId.ToString()));
+                    var soProdNameVals = ParseProductDetailsFilterStrings(filterCol_productName);
+                    if (soProdNameVals.Count > 0) soQuery = soQuery.Where(l => l.Product != null && l.Product.ProdName != null && soProdNameVals.Any(v => l.Product.ProdName.Contains(v)));
+                    var soDateVals = ParseProductDetailsFilterDates(filterCol_date);
+                    if (soDateVals.Count > 0) soQuery = soQuery.Where(l => soDateVals.Contains(l.SalesOrder!.SODate.Date));
+                    totalCount = await soQuery.CountAsync();
+                    var soRows = await soQuery
+                        .OrderByDescending(l => l.SalesOrder!.SODate)
+                        .ThenBy(l => l.SOId)
+                        .ThenBy(l => l.LineNo)
+                        .Skip((page - 1) * pageSize)
+                        .Take(pageSize)
+                        .Select(l => new ProductDetailsReportRow
+                        {
+                            ReportType = "SalesOrders",
+                            Date = l.SalesOrder!.SODate,
+                            DocNo = l.SalesOrder!.SOId.ToString(),
+                            DocId = l.SalesOrder!.SOId,
+                            ProductId = l.ProdId,
+                            ProductCode = l.Product != null ? l.Product.ProdId.ToString() : "",
+                            ProductName = l.Product != null ? (l.Product.ProdName ?? "") : "",
+                            Qty = l.QtyRequested,
+                            UnitPrice = l.RequestedRetailPrice,
+                            Total = l.QtyRequested * l.RequestedRetailPrice * (1 - l.SalesDiscountPct / 100m),
+                            PartyName = l.SalesOrder!.Customer != null ? l.SalesOrder.Customer.CustomerName : null,
+                            WarehouseName = null,
+                            BatchNo = l.PreferredBatchNo,
+                            Expiry = l.PreferredExpiry,
+                            Notes = null,
+                            Author = l.SalesOrder!.CreatedBy,
+                            Region = null,
+                            DocumentNameAr = "أمر بيع"
+                        })
+                        .ToListAsync();
+                    list.AddRange(soRows);
+                    break;
+            }
+
+            int totalPages = pageSize > 0 ? (int)Math.Ceiling((double)totalCount / pageSize) : 0;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.TotalPages = totalPages;
+            ViewBag.ReportData = list;
+            return View();
+        }
+
+        /// <summary>
+        /// جلب قيم عمود للتقرير (للوحة فلتر الأعمدة الشبيهة بإكسل).
+        /// </summary>
+        [HttpGet]
+        [RequirePermission("Reports.ProductDetailsReport")]
+        public async Task<IActionResult> GetProductDetailsReportColumnValues(string reportType, string column, string? search = null)
+        {
+            var col = (column ?? "").Trim().ToLowerInvariant();
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            if (string.IsNullOrEmpty(reportType)) return Json(Array.Empty<object>());
+
+            if (reportType == "Sales")
+            {
+                var q = _context.SalesInvoiceLines.AsNoTracking()
+                    .Include(l => l.SalesInvoice).ThenInclude(h => h!.Customer)
+                    .Include(l => l.SalesInvoice).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch)
+                    .Include(l => l.Product)
+                    .Where(l => l.SalesInvoice != null);
+                if (col == "author") { var list = await q.Where(l => l.SalesInvoice!.CreatedBy != null).Select(l => l.SalesInvoice!.CreatedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "region") { var list = await q.Where(l => l.SalesInvoice!.Warehouse != null && l.SalesInvoice.Warehouse.Branch != null).Select(l => l.SalesInvoice!.Warehouse!.Branch!.BranchName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList()!; return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(l => l.SalesInvoice!.SIId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "party") { var list = await q.Where(l => l.SalesInvoice!.Customer != null).Select(l => l.SalesInvoice!.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "warehouse") { var list = await q.Where(l => l.SalesInvoice!.Warehouse != null).Select(l => l.SalesInvoice!.Warehouse!.WarehouseName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "productcode") { var list = await q.Where(l => l.Product != null).Select(l => l.Product!.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(l => l.Product != null && l.Product.ProdName != null).Select(l => l.Product!.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(l => l.SalesInvoice!.SIDate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (reportType == "Purchases")
+            {
+                var q = _context.PILines.AsNoTracking().Include(l => l.PurchaseInvoice).Include(l => l.Product).Where(l => l.PurchaseInvoice != null);
+                if (col == "author") { var list = await q.Where(l => l.PurchaseInvoice!.CreatedBy != null).Select(l => l.PurchaseInvoice!.CreatedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(l => l.PurchaseInvoice!.PIId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "party") { var list = await q.Where(l => l.PurchaseInvoice!.Customer != null).Select(l => l.PurchaseInvoice!.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "productcode") { var list = await q.Where(l => l.Product != null).Select(l => l.Product!.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(l => l.Product != null && l.Product.ProdName != null).Select(l => l.Product!.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(l => l.PurchaseInvoice!.PIDate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (reportType == "SalesReturns")
+            {
+                var q = from line in _context.SalesReturnLines.AsNoTracking() join sr in _context.SalesReturns on line.SRId equals sr.SRId join c in _context.Customers on sr.CustomerId equals c.CustomerId join p in _context.Products on line.ProdId equals p.ProdId select new { sr, c, p };
+                if (col == "author") { var list = await q.Where(x => x.sr.CreatedBy != null).Select(x => x.sr.CreatedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(x => x.sr.SRId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "party") { var list = await q.Select(x => x.c.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "productcode") { var list = await q.Select(x => x.p.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(x => x.p.ProdName != null).Select(x => x.p.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(x => x.sr.SRDate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (reportType == "PurchaseReturns")
+            {
+                var q = _context.PurchaseReturnLines.AsNoTracking().Include(l => l.PurchaseReturn).Include(l => l.Product).Where(l => l.PurchaseReturn != null);
+                if (col == "author") { var list = await q.Where(l => l.PurchaseReturn!.CreatedBy != null).Select(l => l.PurchaseReturn!.CreatedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(l => l.PurchaseReturn!.PRetId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "party") { var list = await q.Where(l => l.PurchaseReturn!.Customer != null).Select(l => l.PurchaseReturn!.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "productcode") { var list = await q.Where(l => l.Product != null).Select(l => l.Product!.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(l => l.Product != null && l.Product.ProdName != null).Select(l => l.Product!.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(l => l.PurchaseReturn!.PRetDate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (reportType == "Adjustments")
+            {
+                var q = _context.StockAdjustmentLines.AsNoTracking().Include(l => l.StockAdjustment).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch).Include(l => l.Product).Where(l => l.StockAdjustment != null && l.Product != null);
+                if (col == "author") { var list = await q.Where(l => l.StockAdjustment!.PostedBy != null).Select(l => l.StockAdjustment!.PostedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "region") { var list = await q.Where(l => l.StockAdjustment!.Warehouse != null && l.StockAdjustment.Warehouse.Branch != null).Select(l => l.StockAdjustment!.Warehouse!.Branch!.BranchName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList()!; return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(l => l.StockAdjustment!.Id).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "warehouse") { var list = await q.Where(l => l.StockAdjustment!.Warehouse != null).Select(l => l.StockAdjustment!.Warehouse!.WarehouseName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "productcode") { var list = await q.Select(l => l.Product!.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(l => l.Product!.ProdName != null).Select(l => l.Product!.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(l => l.StockAdjustment!.AdjustmentDate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (reportType == "Transfers")
+            {
+                var q = _context.StockTransferLines.AsNoTracking().Include(l => l.StockTransfer).ThenInclude(st => st!.FromWarehouse).ThenInclude(w => w!.Branch).Include(l => l.Product).Where(l => l.StockTransfer != null && l.Product != null);
+                if (col == "author") { var list = await q.Where(l => l.StockTransfer!.PostedBy != null).Select(l => l.StockTransfer!.PostedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "region") { var list = await q.Where(l => l.StockTransfer!.FromWarehouse != null && l.StockTransfer.FromWarehouse.Branch != null).Select(l => l.StockTransfer!.FromWarehouse!.Branch!.BranchName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList()!; return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(l => l.StockTransfer!.Id).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productcode") { var list = await q.Select(l => l.Product!.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(l => l.Product!.ProdName != null).Select(l => l.Product!.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(l => l.StockTransfer!.TransferDate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (reportType == "PurchaseRequests")
+            {
+                var q = _context.PRLines.AsNoTracking().Include(l => l.PurchaseRequest).ThenInclude(h => h!.Customer).Include(l => l.PurchaseRequest).ThenInclude(h => h!.Warehouse).ThenInclude(w => w!.Branch).Include(l => l.Product).Where(l => l.PurchaseRequest != null);
+                if (col == "author") { var list = await q.Where(l => l.PurchaseRequest!.CreatedBy != null).Select(l => l.PurchaseRequest!.CreatedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "region") { var list = await q.Where(l => l.PurchaseRequest!.Warehouse != null && l.PurchaseRequest.Warehouse.Branch != null).Select(l => l.PurchaseRequest!.Warehouse!.Branch!.BranchName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s != null && s.ToLower().Contains(searchTerm)).ToList()!; return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(l => l.PurchaseRequest!.PRId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "party") { var list = await q.Where(l => l.PurchaseRequest!.Customer != null).Select(l => l.PurchaseRequest!.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "warehouse") { var list = await q.Where(l => l.PurchaseRequest!.Warehouse != null).Select(l => l.PurchaseRequest!.Warehouse!.WarehouseName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "productcode") { var list = await q.Where(l => l.Product != null).Select(l => l.Product!.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(l => l.Product != null && l.Product.ProdName != null).Select(l => l.Product!.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(l => l.PurchaseRequest!.PRDate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (reportType == "SalesOrders")
+            {
+                var q = _context.SOLines.AsNoTracking().Include(l => l.SalesOrder).ThenInclude(h => h!.Customer).Include(l => l.Product).Where(l => l.SalesOrder != null);
+                if (col == "author") { var list = await q.Where(l => l.SalesOrder!.CreatedBy != null).Select(l => l.SalesOrder!.CreatedBy!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "docno") { var list = await q.Select(l => l.SalesOrder!.SOId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "party") { var list = await q.Where(l => l.SalesOrder!.Customer != null).Select(l => l.SalesOrder!.Customer!.CustomerName).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v })); }
+                if (col == "productcode") { var list = await q.Where(l => l.Product != null).Select(l => l.Product!.ProdId).Distinct().OrderBy(x => x).Take(500).ToListAsync(); return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() })); }
+                if (col == "productname") { var list = await q.Where(l => l.Product != null && l.Product.ProdName != null).Select(l => l.Product!.ProdName!).Distinct().OrderBy(x => x).Take(500).ToListAsync(); if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList(); return Json(list.Select(v => new { value = v, display = v.Length > 50 ? v.Substring(0, 50) + "…" : v })); }
+                if (col == "date") { var list = await q.Select(l => l.SalesOrder!.SODate.Date).Distinct().OrderByDescending(x => x).Take(300).ToListAsync(); return Json(list.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") })); }
+            }
+
+            if (col == "docnamear")
+            {
+                var name = reportType == "PurchaseReturns" ? "مرتجع شراء" : reportType == "Adjustments" ? "تسوية جرد" : reportType == "Transfers" ? "تحويل مخزني" : reportType == "PurchaseRequests" ? "طلب شراء" : reportType == "SalesOrders" ? "أمر بيع" : reportType == "Sales" ? "فاتورة مبيعات" : reportType == "Purchases" ? "فاتورة مشتريات" : reportType == "SalesReturns" ? "مرتجع بيع" : "";
+                if (!string.IsNullOrEmpty(name)) return Json(new[] { new { value = name, display = name } });
+            }
+
+            return Json(Array.Empty<object>());
+        }
+
         /// <summary>
         /// حفظ الخصم اليدوي للبيع من تقرير أرصدة الأصناف (AJAX).
         /// إذا القيمة فارغة: حذف أحدث override مطابق. وإلا: إدراج سجل جديد.

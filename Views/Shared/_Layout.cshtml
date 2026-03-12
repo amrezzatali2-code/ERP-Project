@@ -51,6 +51,34 @@
             z-index: 1050; /* فوق أى عناصر أخرى */
         }
 
+        /* ===== شريط المستخدم والوقت أسفل البرنامج (مطابق لوقت الجهاز) ===== */
+        .erp-app-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1030;
+            font-size: 0.7rem;
+            line-height: 1.3;
+            color: #6b7280;
+            background: #f9fafb;
+            border-top: 1px solid #e5e7eb;
+            padding: 0.2rem 0.75rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            direction: rtl;
+        }
+        body { padding-bottom: 28px; }
+        @@media (min-width: 768px) {
+            body { padding-bottom: 24px; }
+        }
+        /* عند فتح الصفحة داخل تاب (iframe) لا نعرض الشريط السفلي لتفادي التكرار — يبقى الظهور في النافذة الرئيسية فقط */
+        html.in-frame .erp-app-footer { display: none !important; }
+        html.in-frame body { padding-bottom: 0; }
+
         /* ===== شريط التابات — أصغر + التابات في المنتصف + radius أقل ===== */
         .app-tabs-bar {
             display: flex;
@@ -864,6 +892,14 @@
                                 </li>
                                 <li>
                                     <a class="dropdown-item app-menu-link"
+                                       asp-controller="Reports" asp-action="ProductDetailsReport"
+                                       data-tab-id="product-details-report"
+                                       data-tab-title="تقرير أصناف مفصّلة">
+                                        📋 تقرير أصناف مفصّلة
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
                                        asp-controller="Reports" asp-action="BonusReport"
                                        data-tab-id="bonus-report"
                                        data-tab-title="تقرير البونص">
@@ -1162,5 +1198,34 @@
 
 
     @RenderSection("Scripts", required: false)
+
+    @* شريط ثابت أسفل البرنامج: اسم المستخدم + التاريخ والوقت (وقت الجهاز) *@
+    <footer class="erp-app-footer no-print" id="erpAppFooter" aria-label="معلومات الجلسة">
+        <span class="erp-footer-user">المستخدم: @(User?.Identity?.Name ?? "—")</span>
+        <span class="erp-footer-datetime" id="erpFooterDateTime" dir="ltr">—</span>
+    </footer>
+    <script>
+        (function () {
+            function formatFooterTime() {
+                var now = new Date();
+                var d = now.getDate();
+                var m = now.getMonth() + 1;
+                var y = now.getFullYear();
+                var h = now.getHours();
+                var min = now.getMinutes();
+                var s = now.getSeconds();
+                var dateStr = y + '/' + (m < 10 ? '0' + m : m) + '/' + (d < 10 ? '0' + d : d);
+                var timeStr = (h < 10 ? '0' + h : h) + ':' + (min < 10 ? '0' + min : min) + ':' + (s < 10 ? '0' + s : s);
+                return dateStr + ' ' + timeStr;
+            }
+            var el = document.getElementById('erpFooterDateTime');
+            if (el) {
+                el.textContent = 'التاريخ والوقت: ' + formatFooterTime();
+                setInterval(function () {
+                    if (el) el.textContent = 'التاريخ والوقت: ' + formatFooterTime();
+                }, 1000);
+            }
+        })();
+    </script>
 </body>
 </html>

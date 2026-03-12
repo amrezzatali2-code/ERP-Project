@@ -273,15 +273,15 @@
                     <th data-col="net">@filterableCol("net", "net", "الصافي")</th>
                     <th data-col="status">@filterableCol("status", "status", "الحالة")</th>
                     <th data-col="posted">@filterableCol("posted", "posted", "مرحل؟")</th>
-
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:220px;"></th>
+                    <th class="text-center no-print" data-col="post" data-col-fixed="true" style="width:80px;">ترحيل</th>
+                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:140px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="10" class="text-center text-muted py-4">
+                        <td colspan="11" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -290,7 +290,7 @@
                 {
                     foreach (var si in Model.Items)
                     {
-                        <tr>
+                        <tr data-si-id="@si.SIId">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select"
@@ -305,8 +305,16 @@
                             <td data-col="net">@si.NetTotal.ToString("0.00")</td>
                             <td data-col="status">@si.Status</td>
                             <td data-col="posted">@(si.IsPosted ? "نعم" : "لا")</td>
+                            <td class="text-center no-print" data-col="post">
+                                @if (!si.IsPosted)
+                                {
+                                    <button type="button" class="btn btn-erp btn-erp-success btn-erp-sm btn-post-invoice" data-si-id="@si.SIId" title="ترحيل الفاتورة">
+                                        ترحيل
+                                    </button>
+                                }
+                            </td>
                             <td class="text-nowrap no-print" data-col="actions">
-                                <div class="btn-group" role="group">
+                                <div class="d-flex flex-wrap align-items-center gap-1">
                                     <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
                                        href="/SalesInvoices/Show?id=@si.SIId&frame=1"
                                        data-tab-id="si-show-tab"
@@ -314,7 +322,6 @@
                                        data-url="/SalesInvoices/Show?id=@si.SIId&frame=1">
                                         عرض
                                     </a>
-
                                     <form asp-action="Delete"
                                           asp-controller="SalesInvoices"
                                           asp-route-id="@si.SIId"
@@ -329,8 +336,6 @@
                                     </form>
                                 </div>
                             </td>
-
-
                         </tr>
                     }
                 }
@@ -346,6 +351,7 @@
                     <td data-col="net">@((ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m).ToString("0.00"))</td>
                     <td data-col="status"></td>
                     <td data-col="posted"></td>
+                    <td class="text-center no-print" data-col="post"></td>
                     <td class="text-nowrap no-print" data-col="actions"></td>
                 </tr>
             </tfoot>
@@ -665,6 +671,42 @@
             btnDeleteAll?.addEventListener("click", function () {
                 if (!confirm("تحذير: سيتم حذف جميع فواتير المبيعات وسطورها. هل أنت متأكد؟")) return;
                 deleteAllForm.submit();
+            });
+
+            // =========================
+            // زر ترحيل الفاتورة من الجدول (نفس وظيفة الترحيل داخل الفاتورة)
+            // =========================
+            table.addEventListener("click", async function (e) {
+                const btn = e.target.closest(".btn-post-invoice");
+                if (!btn || btn.disabled) return;
+                const siId = btn.getAttribute("data-si-id");
+                if (!siId) return;
+                if (!confirm("ترحيل فاتورة المبيعات رقم " + siId + "؟")) return;
+                btn.disabled = true;
+                try {
+                    const resp = await fetch("@Url.Action("PostInvoice", "SalesInvoices")/" + siId, {
+                        method: "POST",
+                        headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" }
+                    });
+                    const data = await resp.json().catch(() => ({}));
+                    if (resp.ok && data.ok) {
+                        const row = table.querySelector("tr[data-si-id='" + siId + "']");
+                        if (row) {
+                            const statusCell = row.querySelector("td[data-col='status']");
+                            const postedCell = row.querySelector("td[data-col='posted']");
+                            if (statusCell) statusCell.textContent = data.status || data.postedLabel || "مرحلة 1";
+                            if (postedCell) postedCell.textContent = "نعم";
+                            btn.remove();
+                        }
+                        if (typeof alert === "function") alert(data.message || "تم ترحيل الفاتورة بنجاح.");
+                    } else {
+                        btn.disabled = false;
+                        alert((data && data.message) || "فشل الترحيل.");
+                    }
+                } catch (err) {
+                    btn.disabled = false;
+                    alert("حدث خطأ أثناء الترحيل.");
+                }
             });
         })();
 

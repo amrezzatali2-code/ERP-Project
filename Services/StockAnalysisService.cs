@@ -151,6 +151,13 @@ namespace ERP.Services
                     .Select(x => (decimal?)x.OverrideDiscountPct)
                     .FirstOrDefaultAsync();
                 if (exact.HasValue) return ClampPercent(exact.Value);
+                // تشغيلة: إن لم يُوجد خصم لمخزن معيّن، جرّب خصم محفوظ بدون مخزن (من تقرير الأرصدة عند عدم تحديد مخزن)
+                var batchAnyWh = await overrideQuery
+                    .Where(x => x.WarehouseId == null && x.BatchId == batchId)
+                    .OrderByDescending(x => x.CreatedAt)
+                    .Select(x => (decimal?)x.OverrideDiscountPct)
+                    .FirstOrDefaultAsync();
+                if (batchAnyWh.HasValue) return ClampPercent(batchAnyWh.Value);
             }
             // ثانياً: (ProductId + WarehouseId) و BatchId = null
             if (warehouseId.HasValue)

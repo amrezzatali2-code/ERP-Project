@@ -679,6 +679,19 @@ main.erp-list-page-layout {
     color: #fff !important;
 }
 
+.erp-table-wrapper .btn-erp-success {
+    background-color: transparent !important;
+    color: var(--erp-success) !important;
+    border-width: 1px;
+    border-style: solid;
+    border-color: var(--erp-success) !important;
+}
+
+.erp-table-wrapper .btn-erp-success:hover {
+    background-color: var(--erp-success) !important;
+    color: #fff !important;
+}
+
 .erp-table-wrapper .btn-erp-secondary {
     background-color: transparent !important;
     color: var(--erp-secondary) !important;
@@ -1015,6 +1028,14 @@ main.erp-list-page-layout {
 .invoice-page .form-control,
 .invoice-page .form-select {
     border-radius: 0.5rem !important;
+}
+
+/* بوكس الباتش — توسيط النص (في النص) في فاتورة البيع */
+.invoice-page input.prod-batch-center,
+.invoice-page select.prod-batch-center,
+input#ProdBatchInput,
+select#ProdBatchSelectInRow {
+    text-align: center !important;
 }
 
 /* جدول السطور — radius */

@@ -1211,11 +1211,12 @@
                                                             <th style="width:100px;">الصلاحية</th>
                                                             <th style="width:80px;">الكمية</th>
                                                             <th style="width:110px;">سعر الجمهور</th>
+                                                            <th style="width:90px;">الخصم المرجّح %</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody id="BatchQueueBody">
                                                         <tr>
-                                                            <td colspan="5" class="text-muted">لا توجد تشغيلات بعد.</td>
+                                                            <td colspan="6" class="text-muted">لا توجد تشغيلات بعد.</td>
                                                         </tr>
                                                     </tbody>
                                                 </table>
@@ -1295,8 +1296,12 @@
                                     <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">الباتش</label>
                                         <input type="text" id="ProdBatchInput"
-                                               class="form-control form-control-sm text-center pi-input"
+                                               class="form-control form-control-sm text-center pi-input prod-batch-center"
+                                               style="text-align: center;"
                                                placeholder="باتش" data-lock-posted="1" data-is-posted="@(Model?.IsPosted == true ? "1" : "0")" />
+                                        <select id="ProdBatchSelectInRow" class="form-select form-select-sm text-center prod-batch-center d-none" style="text-align: center;" title="اختر تشغيلة (لمخالفة الفيفو يدوياً)">
+                                            <option value="">—</option>
+                                        </select>
                                     </div>
                                     <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">تاريخ الصلاحية</label>
@@ -2186,7 +2191,11 @@
                         if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
                         if (prodQtyAll) prodQtyAll.value = '0';
                         if (prodWeightedDisc) prodWeightedDisc.value = '0';
-                        if (batchQueueBody) batchQueueBody.innerHTML = `<tr><td colspan="5" class="text-muted">لا توجد تشغيلات بعد.</td></tr>`;
+                        if (batchQueueBody) batchQueueBody.innerHTML = `<tr><td colspan="6" class="text-muted">لا توجد تشغيلات بعد.</td></tr>`;
+                        const batchSelectInRowFail = document.getElementById('ProdBatchSelectInRow');
+                        const probatchInputFail = document.getElementById('ProdBatchInput');
+                        if (batchSelectInRowFail) { batchSelectInRowFail.innerHTML = '<option value="">—</option>'; batchSelectInRowFail.classList.add('d-none'); }
+                        if (probatchInputFail) probatchInputFail.classList.remove('d-none');
                         return;
                     }
 
@@ -2225,7 +2234,7 @@
 
                     if (batchQueueBody) {
                         if (!batches.length) {
-                            batchQueueBody.innerHTML = `<tr><td colspan="5" class="text-muted">لا توجد تشغيلات متاحة لهذا الصنف في هذا المخزن.</td></tr>`;
+                            batchQueueBody.innerHTML = `<tr><td colspan="6" class="text-muted">لا توجد تشغيلات متاحة لهذا الصنف في هذا المخزن.</td></tr>`;
                         } else {
                             batchQueueBody.innerHTML = batches.map((b, idx) => `
                                 <tr class="${idx === 0 ? 'table-success' : ''}" data-batch-index="${idx}">
@@ -2234,6 +2243,7 @@
                                     <td>${b.expiryText || ''}</td>
                                     <td>${b.qty ?? 0}</td>
                                     <td>${fmt2(b.priceRetailBatch ?? 0)}</td>
+                                    <td>${fmt2(b.weightedDiscount ?? 0)}</td>
                                 </tr>
                             `).join('');
                         }
@@ -2251,8 +2261,41 @@
                         }
                     }
 
-                    // 5) تعبئة Card 3 تلقائيًا من أول تشغيلة FEFO (Auto)
-                    if (data.auto) {
+                    // 4.1) دروب داون الباتش في صف الإضافة — عند وجود أكثر من تشغيلة
+                    const batchSelectInRow = document.getElementById('ProdBatchSelectInRow');
+                    const probatchInput = document.getElementById('ProdBatchInput');
+                    if (batchSelectInRow && probatchInput) {
+                        if (batches.length >= 2) {
+                            probatchInput.classList.add('d-none');
+                            batchSelectInRow.classList.remove('d-none');
+                            batchSelectInRow.innerHTML = '';
+                            batches.forEach((b, idx) => {
+                                const opt = document.createElement('option');
+                                opt.value = String(idx);
+                                opt.textContent = (b.batchNo || '').toString() || '—';
+                                if (idx === 0) opt.selected = true;
+                                batchSelectInRow.appendChild(opt);
+                            });
+                            const b0 = batches[0];
+                            if (prodBatchInput)  prodBatchInput.value  = b0.batchNo || '';
+                            if (prodExpiryInput) prodExpiryInput.value = b0.expiryText || '';
+                            if (prodPriceInput)  prodPriceInput.value  = fmt2(b0.priceRetailBatch ?? 0);
+                        } else {
+                            batchSelectInRow.innerHTML = '<option value="">—</option>';
+                            batchSelectInRow.classList.add('d-none');
+                            probatchInput.classList.remove('d-none');
+                            if (data.auto) {
+                                if (prodBatchInput)  prodBatchInput.value  = data.auto.batchNo || '';
+                                if (prodExpiryInput) prodExpiryInput.value = data.auto.expiryText || '';
+                                if (prodPriceInput)  prodPriceInput.value  = fmt2(data.auto.priceRetailBatch ?? 0);
+                            } else if (batches.length === 1 && batches[0]) {
+                                const b0 = batches[0];
+                                if (prodBatchInput)  prodBatchInput.value  = b0.batchNo || '';
+                                if (prodExpiryInput) prodExpiryInput.value = b0.expiryText || '';
+                                if (prodPriceInput)  prodPriceInput.value  = fmt2(b0.priceRetailBatch ?? 0);
+                            }
+                        }
+                    } else if (data.auto) {
                         if (prodBatchInput)  prodBatchInput.value  = data.auto.batchNo || '';
                         if (prodExpiryInput) prodExpiryInput.value = data.auto.expiryText || '';
                         if (prodPriceInput)  prodPriceInput.value  = fmt2(data.auto.priceRetailBatch ?? 0);
@@ -2269,23 +2312,43 @@
             }
 
             // =========================================================
-            // اختيار التشغيلة يدوياً (تجاوز FIFO) — عند تغيير الدروب داون نحدّث الباتش والصلاحية والسعر
+            // اختيار التشغيلة يدوياً (تجاوز FIFO) — من الدروب داون تحت البدائل أو من دروب داون الباتش في صف الإضافة
             // =========================================================
+            function applyBatchSelectionFromIndex(idx) {
+                const b = currentProductBatches[idx];
+                if (!b) return;
+                if (prodBatchInput)  prodBatchInput.value  = b.batchNo || '';
+                if (prodExpiryInput) prodExpiryInput.value = b.expiryText || '';
+                if (prodPriceInput)  prodPriceInput.value  = fmt2(b.priceRetailBatch ?? 0);
+                // الخصم المرجح وخصم البيع = خصم التشغيلة المختارة (من جدول الخصم اليدوي)
+                if (prodWeightedDisc) {
+                    const wd = Number(b.weightedDiscount ?? 0);
+                    prodWeightedDisc.value = (Number.isFinite(wd) && wd >= 0 && wd <= 100) ? Number(wd).toFixed(2) : '0.00';
+                }
+                if (prodDisc1Input) {
+                    const sd = Number(b.saleDisc1 ?? 0);
+                    prodDisc1Input.value = (Number.isFinite(sd) && sd >= 0 && sd <= 100) ? Number(sd).toFixed(2) : '0.00';
+                }
+                if (batchQueueBody) {
+                    batchQueueBody.querySelectorAll('tr[data-batch-index]').forEach(tr => {
+                        const i = parseInt(tr.getAttribute('data-batch-index'), 10);
+                        tr.classList.toggle('table-success', i === idx);
+                    });
+                }
+            }
             if (prodBatchSelect) {
                 prodBatchSelect.addEventListener('change', function () {
                     const idx = parseInt(this.value, 10);
                     if (isNaN(idx) || idx < 0 || idx >= currentProductBatches.length) return;
-                    const b = currentProductBatches[idx];
-                    if (!b) return;
-                    if (prodBatchInput)  prodBatchInput.value  = b.batchNo || '';
-                    if (prodExpiryInput) prodExpiryInput.value = b.expiryText || '';
-                    if (prodPriceInput)  prodPriceInput.value  = fmt2(b.priceRetailBatch ?? 0);
-                    if (batchQueueBody) {
-                        batchQueueBody.querySelectorAll('tr[data-batch-index]').forEach(tr => {
-                            const i = parseInt(tr.getAttribute('data-batch-index'), 10);
-                            tr.classList.toggle('table-success', i === idx);
-                        });
-                    }
+                    applyBatchSelectionFromIndex(idx);
+                });
+            }
+            const prodBatchSelectInRowEl = document.getElementById('ProdBatchSelectInRow');
+            if (prodBatchSelectInRowEl) {
+                prodBatchSelectInRowEl.addEventListener('change', function () {
+                    const idx = parseInt(this.value, 10);
+                    if (isNaN(idx) || idx < 0 || idx >= currentProductBatches.length) return;
+                    applyBatchSelectionFromIndex(idx);
                 });
             }
 
@@ -4606,11 +4669,15 @@
                                             const prodWeightedDisc = document.getElementById('ProdWeightedDiscount');
                                             const batchQueueBody = document.getElementById('BatchQueueBody');
                                             const prodBatchSelect = document.getElementById('ProdBatchSelect');
+                                            const prodBatchSelectInRow = document.getElementById('ProdBatchSelectInRow');
                                             if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
                                             if (prodQtyAll) prodQtyAll.value = '0';
                                             if (prodWeightedDisc) prodWeightedDisc.value = '0';
-                                            if (batchQueueBody) batchQueueBody.innerHTML = '<tr><td colspan="5" class="text-muted">لا توجد تشغيلات بعد.</td></tr>';
+                                            if (batchQueueBody) batchQueueBody.innerHTML = '<tr><td colspan="6" class="text-muted">لا توجد تشغيلات بعد.</td></tr>';
                                             if (prodBatchSelect) { prodBatchSelect.innerHTML = ''; prodBatchSelect.appendChild(new Option('لا توجد تشغيلات', '', true, true)); }
+                                            if (prodBatchSelectInRow) { prodBatchSelectInRow.innerHTML = '<option value="">—</option>'; prodBatchSelectInRow.classList.add('d-none'); }
+                                            const probatchInputShow = document.getElementById('ProdBatchInput');
+                                            if (probatchInputShow) probatchInputShow.classList.remove('d-none');
                                             const prodQtyInput = document.getElementById('ProdQtyInput');
                                             const prodDisc1Input = document.getElementById('ProdDisc1Input');
                                             const prodBatchInput = document.getElementById('ProdBatchInput');

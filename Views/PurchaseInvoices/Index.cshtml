@@ -326,7 +326,8 @@
                     <th data-col="createdat">@sortLink("createdat", "تاريخ الإنشاء")</th>
                     <th data-col="updatedat">@sortLink("updatedat", "آخر تعديل")</th>
                     <th data-col="linescount">@sortLink("linescount", "عدد السطور")</th>
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:220px;"></th>
+                    <th class="text-center no-print" data-col="post" data-col-fixed="true" style="width:80px;">ترحيل</th>
+                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:140px;"></th>
                 </tr>
             </thead>
 
@@ -334,7 +335,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="20" class="text-center text-muted py-4">
+                        <td colspan="21" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -347,7 +348,7 @@
                         var vendorName = pi.Customer != null ? pi.Customer.CustomerName : "";  @* اسم المورد *@
                         var linesCount = pi.Lines != null ? pi.Lines.Count : 0;               @* عدد السطور *@
 
-                        <tr>
+                        <tr data-pi-id="@pi.PIId">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox" class="row-select" value="@pi.PIId" />
                             </td>
@@ -379,30 +380,35 @@
 
                             <td data-col="linescount">@linesCount</td>
 
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-primary btn-sm open-same-tab"
-                                   href="/PurchaseInvoices/Show?id=@pi.PIId&frame=1"
-                                   data-tab-id="pi-show-tab"
-                                   data-tab-title="فاتورة المشتريات"
-                                   data-url="/PurchaseInvoices/Show?id=@pi.PIId&frame=1">
-                                    عرض
-                                </a>
-
-
-
-
-                                <form asp-action="Delete"
-                                      asp-route-id="@pi.PIId"
-                                      method="post"
-                                      class="d-inline"
-                                      onsubmit="return confirm('تأكيد حذف الفاتورة رقم @pi.PIId ؟');">
-                                    @Html.AntiForgeryToken()
-                                    <input type="hidden" name="from" value="list" />
-                                    <button type="submit" class="btn btn-danger btn-sm">
-                                        حذف
+                            <td class="text-center no-print" data-col="post">
+                                @if (!pi.IsPosted)
+                                {
+                                    <button type="button" class="btn btn-erp btn-erp-success btn-erp-sm btn-post-invoice" data-pi-id="@pi.PIId" title="ترحيل الفاتورة">
+                                        ترحيل
                                     </button>
-                                </form>
-
+                                }
+                            </td>
+                            <td class="text-nowrap no-print" data-col="actions">
+                                <div class="d-flex flex-wrap align-items-center gap-1">
+                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
+                                       href="/PurchaseInvoices/Show?id=@pi.PIId&frame=1"
+                                       data-tab-id="pi-show-tab"
+                                       data-tab-title="فاتورة المشتريات"
+                                       data-url="/PurchaseInvoices/Show?id=@pi.PIId&frame=1">
+                                        عرض
+                                    </a>
+                                    <form asp-action="Delete"
+                                          asp-route-id="@pi.PIId"
+                                          method="post"
+                                          class="d-inline"
+                                          onsubmit="return confirm('تأكيد حذف الفاتورة رقم @pi.PIId ؟');">
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="from" value="list" />
+                                        <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">
+                                            حذف
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     }
@@ -429,6 +435,7 @@
                     <td data-col="createdat"></td>
                     <td data-col="updatedat"></td>
                     <td data-col="linescount"></td>
+                    <td class="text-center no-print" data-col="post"></td>
                     <td class="text-nowrap no-print" data-col="actions"></td>
                 </tr>
             </tfoot>
@@ -729,6 +736,49 @@
             btnDeleteAll?.addEventListener("click", function () {
                 if (!confirm("تحذير: سيتم حذف جميع فواتير المشتريات وسطورها. هل أنت متأكد؟")) return;
                 deleteAllForm.submit();
+            });
+
+            // =========================
+            // زر ترحيل الفاتورة من الجدول (نفس وظيفة الترحيل داخل الفاتورة)
+            // =========================
+            table.addEventListener("click", async function (e) {
+                const btn = e.target.closest(".btn-post-invoice");
+                if (!btn || btn.disabled) return;
+                const piId = btn.getAttribute("data-pi-id");
+                if (!piId) return;
+                if (!confirm("ترحيل فاتورة المشتريات رقم " + piId + "؟")) return;
+                btn.disabled = true;
+                try {
+                    const resp = await fetch("@Url.Action("PostInvoice", "PurchaseInvoices")/" + piId, {
+                        method: "POST",
+                        headers: { "X-Requested-With": "XMLHttpRequest", "Accept": "application/json" }
+                    });
+                    const data = await resp.json().catch(() => ({}));
+                    if (resp.ok && data.ok) {
+                        const row = table.querySelector("tr[data-pi-id='" + piId + "']");
+                        if (row) {
+                            const statusCell = row.querySelector("td[data-col='status']");
+                            const ispostedCell = row.querySelector("td[data-col='isposted']");
+                            const postedatCell = row.querySelector("td[data-col='postedat']");
+                            const postedbyCell = row.querySelector("td[data-col='postedby']");
+                            if (statusCell) statusCell.textContent = data.status || data.postedLabel || "مرحلة 1";
+                            if (ispostedCell) ispostedCell.textContent = "نعم";
+                            if (postedatCell && data.postedAt) {
+                                const d = data.postedAt;
+                                postedatCell.textContent = (typeof d === 'string' && d.indexOf('T') !== -1) ? d.replace('T', ' ').substring(0, 16) : d;
+                            }
+                            if (postedbyCell && data.postedBy) postedbyCell.textContent = data.postedBy;
+                            btn.remove();
+                        }
+                        if (typeof alert === "function") alert(data.message || "تم ترحيل الفاتورة بنجاح.");
+                    } else {
+                        btn.disabled = false;
+                        alert((data && data.message) || "فشل الترحيل.");
+                    }
+                } catch (err) {
+                    btn.disabled = false;
+                    alert("حدث خطأ أثناء الترحيل.");
+                }
             });
         })();
 

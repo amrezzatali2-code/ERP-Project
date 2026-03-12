@@ -592,6 +592,7 @@ namespace ERP.Controllers
 
             var batchKeys = rawLedgerBatches.Select(x => new { ProdId = prodId, x.BatchNo, Expiry = x.Expiry!.Value.Date }).ToList();
             var batchPrices = new Dictionary<(string BatchNo, DateTime ExpiryDate), decimal>();
+            var batchIds = new Dictionary<(string BatchNo, DateTime ExpiryDate), int>();
             if (batchKeys.Any())
             {
                 var expiryDates = batchKeys.Select(k => k.Expiry).Distinct().ToList();
@@ -600,27 +601,67 @@ namespace ERP.Controllers
                     .AsNoTracking()
                     .Where(b => b.ProdId == prodId && batchNos.Contains(b.BatchNo)
                         && expiryDates.Contains(b.Expiry.Date))
-                    .Select(b => new { b.BatchNo, b.Expiry, b.PriceRetailBatch })
+                    .Select(b => new { b.BatchId, b.BatchNo, b.Expiry, b.PriceRetailBatch })
                     .ToListAsync();
                 foreach (var p in pricesFromDb)
+                {
                     batchPrices[(p.BatchNo, p.Expiry.Date)] = p.PriceRetailBatch ?? 0m;
+                    batchIds[(p.BatchNo, p.Expiry.Date)] = p.BatchId;
+                }
             }
 
-            var batches = rawLedgerBatches.Select(sb => new
-            {
-                batchNo = sb.BatchNo,
-                expiry = sb.Expiry,
-                expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("MM/yyyy") : "",
-                qty = sb.Qty,
-                priceRetailBatch = sb.Expiry.HasValue && batchPrices.TryGetValue((sb.BatchNo, sb.Expiry!.Value.Date), out var pr) ? pr : 0m
-            })
-                .OrderBy(x => x.expiry).ThenBy(x => x.batchNo)
+            // بناء قائمة التشغيلات مع الخصم الفعّال (من جدول الخصم اليدوي) لكل تشغيلة
+            var batchesOrdered = rawLedgerBatches
+                .OrderBy(x => x.Expiry).ThenBy(x => x.BatchNo)
                 .ToList();
+            var batches = new List<object>();
+            for (int i = 0; i < batchesOrdered.Count; i++)
+            {
+                var sb = batchesOrdered[i];
+                var expDate = sb.Expiry!.Value.Date;
+                int? batchId = batchIds.TryGetValue((sb.BatchNo, expDate), out var bid) ? bid : (int?)null;
+                decimal batchWeightedDiscount = weightedDiscount;
+                decimal batchSaleDisc1 = saleDisc1;
+                if (batchId.HasValue)
+                {
+                    decimal batchEffective = await _StockAnalysisService.GetEffectivePurchaseDiscountAsync(prodId, warehouseId, batchId);
+                    batchWeightedDiscount = batchEffective < 0m ? 0m : (batchEffective > 100m ? 100m : batchEffective);
+                    var batchDiscountDetails = await _StockAnalysisService.GetSaleDiscountDetailsAsync(prodId, warehouseId, customerId, batchWeightedDiscount);
+                    batchSaleDisc1 = batchDiscountDetails.SaleDiscount < 0 ? 0 : (batchDiscountDetails.SaleDiscount > 100 ? 100 : batchDiscountDetails.SaleDiscount);
+                }
+                batches.Add(new
+                {
+                    batchId = batchId,
+                    batchNo = sb.BatchNo,
+                    expiry = sb.Expiry,
+                    expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("MM/yyyy") : "",
+                    qty = sb.Qty,
+                    priceRetailBatch = batchPrices.TryGetValue((sb.BatchNo, expDate), out var pr) ? pr : 0m,
+                    weightedDiscount = batchWeightedDiscount,
+                    saleDisc1 = batchSaleDisc1
+                });
+                // الخصم المرجح المعروض افتراضياً = خصم التشغيلة الأولى (لأي عدد تشغيلات)
+                if (i == 0)
+                {
+                    weightedDiscount = batchWeightedDiscount;
+                    saleDisc1 = batchSaleDisc1;
+                }
+            }
 
             // =========================
             // (6) أول تشغيلة (Auto) لملء Card 3 تلقائيًا
             // =========================
-            var first = batches.FirstOrDefault();
+            string firstBatchNo = "";
+            string firstExpiryText = "";
+            decimal firstPriceRetailBatch = 0m;
+            if (batchesOrdered.Count > 0)
+            {
+                var sb0 = batchesOrdered[0];
+                var exp0 = sb0.Expiry!.Value.Date;
+                firstBatchNo = sb0.BatchNo ?? "";
+                firstExpiryText = sb0.Expiry.HasValue ? sb0.Expiry.Value.ToString("MM/yyyy") : "";
+                firstPriceRetailBatch = batchPrices.TryGetValue((sb0.BatchNo, exp0), out var pr0) ? pr0 : 0m;
+            }
 
             // نص البونص المعروض
             string bonusText = "بدون بونص";
@@ -647,15 +688,15 @@ namespace ERP.Controllers
                 appliedGroupPolicyName = discountDetails.AppliedGroupPolicyName,
                 policySource = discountDetails.PolicySource,
 
-                // تشغيلات FEFO
+                // تشغيلات FEFO (كل تشغيلة تحتوي weightedDiscount و saleDisc1)
                 batches,
 
                 // تعبئة تلقائية لأول تشغيلة
                 auto = new
                 {
-                    batchNo = first?.batchNo ?? "",
-                    expiryText = first?.expiryText ?? "",
-                    priceRetailBatch = first?.priceRetailBatch ?? 0m
+                    batchNo = firstBatchNo,
+                    expiryText = firstExpiryText,
+                    priceRetailBatch = firstPriceRetailBatch
                 }
             });
         }

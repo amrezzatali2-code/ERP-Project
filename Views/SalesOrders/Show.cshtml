@@ -8,31 +8,73 @@
     var linesList = Model?.Lines?.OrderBy(l => l.LineNo).ToList() ?? new List<ERP.Models.SOLine>();
     int totalLines = linesList.Count;
     int totalQty = linesList.Sum(l => l.QtyRequested);
+    decimal totalRetail = linesList.Sum(l => l.QtyRequested * l.RequestedRetailPrice);
     decimal expectedTotal = Model?.ExpectedItemsTotal ?? 0m;
+    int? navFirst = ViewBag.NavFirstId == null ? (int?)null : (int)ViewBag.NavFirstId;
+    int? navLast = ViewBag.NavLastId == null ? (int?)null : (int)ViewBag.NavLastId;
+    int? navPrev = ViewBag.NavPrevId == null ? (int?)null : (int)ViewBag.NavPrevId;
+    int? navNext = ViewBag.NavNextId == null ? (int?)null : (int)ViewBag.NavNextId;
+    int currentId = Model?.SOId ?? 0;
+    int? prevEffective = (currentId == 0) ? navLast : navPrev;
+    int? nextEffective = (currentId == 0) ? navFirst : navNext;
+    bool hasAny = (navFirst ?? 0) > 0 && (navLast ?? 0) > 0;
+    bool canFirst = hasAny && (navFirst ?? 0) != currentId;
+    bool canPrev = hasAny && (prevEffective ?? 0) != currentId;
+    bool canNext = hasAny && (nextEffective ?? 0) != currentId;
+    bool canLast = hasAny && (navLast ?? 0) != currentId;
+    string orderDateText = Model != null && Model.SOId > 0 ? Model.SODate.ToString("yyyy/MM/dd") : "";
+    string orderTimeText = Model != null && Model.SOId > 0 ? Model.CreatedAt.ToLocalTime().ToString("HH:mm") : "";
 }
 
 @section Styles {
     <link rel="stylesheet" href="~/css/invoice-cards.css" />
     <style>
+        .pi-input[type="number"]::-webkit-outer-spin-button,
+        .pi-input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .pi-input[type="number"] { -moz-appearance: textfield; }
         .invoice-page { background-color: #f3f6fb; min-height: 0; padding-bottom: 1rem; }
-        .invoice-header-card, .invoice-lines-card, .invoice-totals-card, .invoice-side-card, .invoice-Add-card { border: 1px solid #c7d2fe !important; border-radius: 12px !important; box-shadow: 0 1px 3px rgba(59,130,246,.12) !important; overflow: hidden; }
-        .invoice-header-bar { background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%); color: #fff; padding: 0.4rem 1rem; }
-        .invoice-header-bar h5, .invoice-header-bar h6 { margin-bottom: 0; font-size: 1rem; }
-        .invoice-lines-header th { background-color: #e9ecef !important; color: #212529 !important; font-weight: 600; padding: 0.5rem 0.55rem; border: 1px solid #dee2e6 !important; }
-        .invoice-side-card .btn-erp { font-size: 0.85rem; padding: 0.35rem 0.6rem; border: 1px solid #94a3b8 !important; }
-        .invoice-actions-sticky { position: sticky; top: 58px; z-index: 100; }
-        .erp-table-wrapper { max-height: 360px; overflow: auto; }
-        .customer-name-input { border: 2px solid #0d6efd !important; border-radius: 0.375rem; background-color: #f8fbff !important; }
-        .pi-product-name-input { border: 2px solid #4f46e5 !important; border-radius: 0.375rem; background-color: #fff !important; }
-        #soToastContainer { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 9999; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
-        #soToastContainer .so-toast { padding: 0.6rem 1.2rem; border-radius: 8px; font-size: 0.9rem; box-shadow: 0 4px 12px rgba(0,0,0,.15); pointer-events: auto; }
+        .invoice-page .container-fluid { padding: 0; max-width: 100%; }
+        .invoice-page .col-lg-2.order-1 { padding: 0.5rem 0.5rem; }
+        div.card.invoice-side-card,
+        div.card.invoice-header-card,
+        div.card.invoice-product-card,
+        div.card.invoice-Add-card,
+        div.card.invoice-lines-card,
+        div.card.invoice-totals-card {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            overflow: hidden;
+        }
+        .invoice-side-card { background: #ffffff !important; min-width: 220px; }
+        .invoice-side-card .card-header,
+        .invoice-header-bar { background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important; color: #fff !important; border-bottom: none; padding: 0.55rem 1rem; }
+        .invoice-side-card .invoice-actions-bar hr { display: none !important; }
+        .invoice-side-card .btn-erp { font-size: 0.85rem; padding: 0.35rem 0.6rem; border: 1px solid #64748b !important; }
+        .invoice-actions-sticky { position: sticky; top: 58px; z-index: 3000; background: #fff !important; border: 1px solid #6366f1 !important; padding: 10px; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25) !important; }
+        .invoice-page .col-lg-10.order-2 { background: transparent; padding: 0.5rem 1rem; }
+        #SO_BodyHost { display: block; }
+        .invoice-page .invoice-lines-container {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            overflow: hidden;
+            background: #fff;
+        }
+        .invoice-lines-header th { background: #e2e8f0 !important; color: #0f172a !important; font-weight: 600; padding: 0.5rem 0.55rem; border: 1px solid #cbd5e1 !important; }
+        .invoice-card-line { display: none; }
+        #soToastContainer { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 9999; pointer-events: none; display: flex; flex-direction: column; align-items: center; gap: 0.35rem; }
+        #soToastContainer .so-toast { padding: 0.6rem 1.2rem; border-radius: 8px; font-size: 0.9rem; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
         #soToastContainer .so-toast.text-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
         #soToastContainer .so-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
-        #soToastContainer .so-toast.text-muted { background: #f1f5f9; color: #475569; border: 1px solid #94a3b8; }
-        .invoice-summary-item.invoice-summary-box { flex: 1 1 0; min-width: 90px; padding: 0.4rem 0.6rem; background: #f8fafc; border: 1px solid #94a3b8; border-radius: 6px; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
+        #soToastContainer .so-toast.text-muted { background: #f1f5f9; color: #334155; border: 1px solid #64748b; }
+        .invoice-summary-item.invoice-summary-box { flex: 1 1 0; min-width: 90px; padding: 0.4rem 0.6rem; background: #f8fafc; border: 1px solid #64748b; border-radius: 6px; display: flex; flex-direction: column; align-items: center; gap: 0.25rem; }
         .invoice-summary-box-main { background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important; border-color: #0284c7 !important; }
         .invoice-summary-box-main .invoice-summary-label { color: rgba(255,255,255,.9); }
         .invoice-summary-value-main { font-size: 1.05rem; color: #fff !important; }
+        .customer-name-input { border: 2px solid #4f46e5 !important; border-radius: 0.375rem; background-color: #fff !important; }
+        .pi-product-name-input { border: 2px solid #4f46e5 !important; border-radius: 0.375rem; background-color: #fff !important; }
+        @@media (max-width: 992px) { .invoice-actions-sticky { top: 56px; } }
     </style>
 }
 
@@ -42,111 +84,228 @@
         <form id="__AntiForgeryForm" method="post" style="display:none">@Html.AntiForgeryToken()</form>
 
         <div class="row g-3">
-            @* الشريط الجانبي *@
+            @* الشريط الجانبي — نفس مكونات فاتورة المبيعات *@
             <div class="col-12 col-lg-2 order-1 order-lg-2">
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
-                    <div class="invoice-header-bar"><h6 class="mb-0">إجراءات أمر البيع</h6></div>
+                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h6 class="mb-0">إجراءات أمر البيع</h6>
+                    </div>
                     <input type="hidden" id="SOId" value="@(Model?.SOId ?? 0)" />
                     <input type="hidden" id="SOIsConverted" value="@(Model?.IsConverted == true ? "1" : "0")" />
 
-                    <div class="card-body invoice-actions-sticky d-flex flex-column gap-2">
-                        @{
-                            int navFirst = ViewBag.NavFirstId ?? 0;
-                            int navLast = ViewBag.NavLastId ?? 0;
-                            int navPrev = ViewBag.NavPrevId ?? 0;
-                            int navNext = ViewBag.NavNextId ?? 0;
-                            int currentId = Model?.SOId ?? 0;
-                            bool canFirst = navFirst > 0 && navFirst != currentId;
-                            bool canPrev = navPrev > 0 && navPrev != currentId;
-                            bool canNext = navNext > 0 && navNext != currentId;
-                            bool canLast = navLast > 0 && navLast != currentId;
-                        }
+                    <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
                         <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
-                            <a href="@Url.Action("Show", "SalesOrders", new { id = navFirst, frame = 1 })" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" title="أول أمر" @(canFirst ? "" : "disabled")>⏮</a>
-                            <a href="@Url.Action("Show", "SalesOrders", new { id = navPrev, frame = 1 })" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" title="السابق" @(canPrev ? "" : "disabled")>◀</a>
-                            <a href="@Url.Action("Show", "SalesOrders", new { id = navNext, frame = 1 })" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" title="التالي" @(canNext ? "" : "disabled")>▶</a>
-                            <a href="@Url.Action("Show", "SalesOrders", new { id = navLast, frame = 1 })" class="btn btn-erp btn-erp-outline-primary btn-erp-sm" title="آخر أمر" @(canLast ? "" : "disabled")>⏭</a>
+                            <button type="button" id="btnFirstInvoice" class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="so-show-tab" data-tab-title="أمر بيع"
+                                    data-base-url="@Url.Action("Show", "SalesOrders", new { frame = 1 })"
+                                    data-id="@(navFirst ?? 0)" title="أول أمر" @(canFirst ? "" : "disabled")>⏮</button>
+                            <button type="button" id="btnPrevInvoice" class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="so-show-tab" data-tab-title="أمر بيع"
+                                    data-base-url="@Url.Action("Show", "SalesOrders", new { id = prevEffective ?? 0, frame = 1 })"
+                                    data-id="@(prevEffective ?? 0)" title="السابق" @(canPrev ? "" : "disabled")>◀</button>
+                            <button type="button" id="btnNextInvoice" class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="so-show-tab" data-tab-title="أمر بيع"
+                                    data-base-url="@Url.Action("Show", "SalesOrders", new { id = nextEffective ?? 0, frame = 1 })"
+                                    data-id="@(nextEffective ?? 0)" title="التالي" @(canNext ? "" : "disabled")>▶</button>
+                            <button type="button" id="btnLastInvoice" class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
+                                    data-tab-id="so-show-tab" data-tab-title="أمر بيع"
+                                    data-base-url="@Url.Action("Show", "SalesOrders", new { id = navLast ?? 0, frame = 1 })"
+                                    data-id="@(navLast ?? 0)" title="آخر أمر" @(canLast ? "" : "disabled")>⏭</button>
+                        </div>
+                        <div class="d-flex align-items-center gap-1">
+                            <input type="number" id="NavOrderSearchInput" class="form-control form-control-sm" placeholder="بحث برقم الأمر" />
+                            <button type="button" id="btnNavOrderSearch" class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-tab-id="so-show-tab" data-tab-title="أمر بيع"
+                                    data-base-url="@Url.Action("Show", "SalesOrders", new { frame = 1 })">بحث</button>
                         </div>
 
-                        <a asp-action="Create" asp-route-frame="1" class="btn btn-erp btn-erp-success btn-erp-sm w-100">أمر بيع جديد</a>
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100"
+                           data-tab-id="so-show-tab" data-tab-title="أمر بيع"
+                           data-url="@Url.Action("Create", "SalesOrders", new { frame = 1 })">➕ أمر بيع جديد</a>
+
                         <button type="button" id="btnSaveHeader" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" @(isLocked ? "disabled" : "")>💾 حفظ الأمر</button>
                         <button type="button" id="btnConvertToSI" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" @(isLocked ? "disabled" : "")>🔄 تحويل إلى فاتورة مبيعات</button>
                         <button type="button" id="btnClearLines" class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100" data-so-id="@(Model?.SOId ?? 0)" @(isLocked ? "disabled" : "")>🗑️ مسح كل الأصناف</button>
+
+                        <div>
+                            <button type="button" id="btnOpenProductMovement" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">📊 حركة الصنف</button>
+                        </div>
+                        <div>
+                            <button type="button" id="btnOpenProductEdit" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">✏️ تعديل بيانات الصنف</button>
+                        </div>
+                        <a href="@(Model?.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = Model.CustomerId, frame = 1 }) : "#")" id="btnCustomerVolume" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none"
+                           data-tab-id="customer-engagement" data-tab-title="حجم تعامل عميل"
+                           data-base-url="@Url.Action("Show", "Customers", new { frame = 1 })">📊 حجم تعامل</a>
+
                         <a asp-action="Index" class="btn btn-erp btn-erp-secondary btn-erp-sm w-100">قائمة أوامر البيع</a>
                     </div>
                 </div>
             </div>
 
-            @* المحتوى الرئيسي *@
+            @* المحتوى الرئيسي — نفس ترتيب الكروت كفاتورة المبيعات *@
             <div class="col-12 col-lg-10 order-2 order-lg-1">
                 <div id="SO_BodyHost">
+                    @* 1) كارت بيانات الأمر + العميل + المخزن *@
                     <div class="card shadow-sm mb-2 invoice-header-card">
-                        <div class="invoice-header-bar"><h6 class="mb-0">بيانات أمر البيع</h6></div>
+                        <div class="invoice-header-bar"><h6 class="mb-0">أمر بيع</h6></div>
                         <div class="card-body">
                             <div class="row g-3 align-items-end">
-                                <div class="col-6 col-md-4 col-lg-2">
+                                <div class="col-lg-1 col-md-2">
                                     <label class="form-label form-label-sm">كود العميل</label>
                                     <input id="CustomerCodeDisplay" class="form-control form-control-sm text-center" type="number" readonly />
                                     <input type="hidden" id="CustomerId" value="@(Model?.CustomerId ?? 0)" />
                                 </div>
-                                <div class="col-12 col-md-8 col-lg-4">
+                                <div class="col-lg-4 col-md-3">
                                     <label class="form-label form-label-sm">اسم العميل</label>
-                                    <input id="CustomerNameInput" class="form-control form-control-sm customer-name-input" placeholder="اختر العميل" list="customersList" autocomplete="off" value="@(Model?.Customer?.CustomerName)" />
+                                    <input id="CustomerNameInput" class="form-control form-control-sm customer-name-input"
+                                           placeholder="اكتب اسم العميل ثم اختره من القائمة"
+                                           list="customersList" autocomplete="off"
+                                           value="@(Model?.Customer?.CustomerName)" />
                                     <datalist id="customersList">
                                         @if (ViewBag.Customers != null)
                                         {
-                                            foreach (var c in ViewBag.Customers)
+                                            foreach (dynamic c in ViewBag.Customers)
                                             {
-                                                <option value="@c.Name" data-id="@c.Id"></option>
+                                                <option value="@c.Name" data-id="@c.Id" data-phone="@(c.Phone ?? "")" data-address="@(c.Address ?? "")" data-credit="@(c.CreditLimit ?? 0)" data-balance="@(c.CurrentBalance ?? 0)" data-gov="@(c.Gov ?? "")" data-district="@(c.District ?? "")" data-area="@(c.Area ?? "")" data-policy-id="@(c.PolicyId ?? "")" data-policy-name="@(c.PolicyName ?? "")"></option>
                                             }
                                         }
                                     </datalist>
                                 </div>
-                                <div class="col-4 col-md-2">
+                                <div class="col-lg-1 col-md-2">
                                     <label class="form-label form-label-sm">رقم الأمر</label>
                                     <input id="OrderNumberDisplay" class="form-control form-control-sm text-center" value="@(Model?.SOId > 0 ? Model.SOId.ToString() : "")" readonly />
                                 </div>
-                                <div class="col-6 col-md-4 col-lg-2">
-                                    <label class="form-label form-label-sm">تاريخ الأمر</label>
-                                    <input id="OrderDateDisplay" class="form-control form-control-sm text-center" value="@(Model?.SOId > 0 ? Model.SODate.ToString("yyyy/MM/dd") : "")" readonly />
+                                <div class="col-lg-2 col-md-6">
+                                    <div class="row g-2">
+                                        <div class="col-6">
+                                            <label class="form-label form-label-sm">تاريخ الأمر</label>
+                                            <input id="OrderDateDisplay" class="form-control form-control-sm text-center" value="@orderDateText" readonly />
+                                        </div>
+                                        <div class="col-6">
+                                            <label class="form-label form-label-sm">وقت الإنشاء</label>
+                                            <input id="OrderTimeDisplay" class="form-control form-control-sm text-center" value="@orderTimeText" readonly />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="col-4 col-md-2">
-                                    <label class="form-label form-label-sm">الحالة</label>
-                                    <input id="StatusDisplay" class="form-control form-control-sm text-center" value="@(Model?.IsConverted == true ? "محول" : (Model?.Status ?? "Draft"))" readonly />
-                                </div>
-                            </div>
-                            <div class="row g-3 align-items-end mt-1">
-                                <div class="col-12 col-md-4 col-lg-3">
+                                <div class="col-lg-2 col-md-2">
                                     <label class="form-label form-label-sm">المخزن</label>
-                                    <select id="WarehouseId" class="form-select form-select-sm">
-                                        @if (ViewBag.Warehouses != null)
-                                        {
-                                            foreach (SelectListItem w in ViewBag.Warehouses)
-                                            {
-                                                <option value="@w.Value" selected="@(w.Selected)">@w.Text</option>
-                                            }
-                                        }
+                                    <select id="WarehouseId" asp-for="WarehouseId" asp-items="ViewBag.Warehouses" class="form-select form-select-sm">
+                                        <option value="">اختر المخزن</option>
                                     </select>
                                 </div>
-                                <div class="col-12 col-md-6">
-                                    <label class="form-label form-label-sm">ملاحظات</label>
-                                    <textarea id="NotesInput" class="form-control form-control-sm" rows="2" placeholder="ملاحظات">@(Model?.Notes)</textarea>
+                                <div class="col-lg-2 col-md-2">
+                                    <label class="form-label form-label-sm">كاتب الأمر</label>
+                                    <input id="OrderCreatedByDisplay" class="form-control form-control-sm text-center" value="@(Model?.CreatedBy ?? "")" readonly />
+                                </div>
+                            </div>
+                            <div class="row g-3 align-items-end mt-2">
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="form-label form-label-sm">حالة الأمر</label>
+                                    <input id="StatusDisplay" class="form-control form-control-sm text-center" value="@(Model?.IsConverted == true ? "محول" : (Model?.Status ?? "Draft"))" readonly />
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="form-label form-label-sm">سياسة العميل</label>
+                                    <input type="text" id="CustomerPolicyText" class="form-control form-control-sm" value="" readonly />
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="form-label form-label-sm">الهاتف</label>
+                                    <input id="CustomerPhone" class="form-control form-control-sm" value="@(Model?.Customer?.Phone1 ?? Model?.Customer?.Phone2 ?? Model?.Customer?.Whatsapp ?? "")" readonly />
+                                </div>
+                                <div class="col-md-6 col-lg-3">
+                                    <label class="form-label form-label-sm">الحد الائتماني</label>
+                                    <input id="CustomerCredit" class="form-control form-control-sm" value="@((Model?.Customer?.CreditLimit ?? 0m).ToString("0.##"))" readonly />
+                                </div>
+                            </div>
+                            <div class="row g-3 align-items-end mt-2">
+                                <div class="col-12 col-md-6 col-lg-6">
+                                    <label class="form-label form-label-sm">العنوان</label>
+                                    <input id="CustomerAddress" class="form-control form-control-sm" value="@(Model?.Customer?.Address ?? "")" readonly />
+                                </div>
+                                <div class="col-6 col-md-3 col-lg-2">
+                                    <label class="form-label form-label-sm">المحافظة</label>
+                                    <input id="CustomerGovernorate" class="form-control form-control-sm" value="@(Model?.Customer?.Governorate?.GovernorateName ?? "")" readonly />
+                                </div>
+                                <div class="col-6 col-md-3 col-lg-2">
+                                    <label class="form-label form-label-sm">الحي</label>
+                                    <input id="CustomerDistrict" class="form-control form-control-sm" value="@(Model?.Customer?.District?.DistrictName ?? "")" readonly />
+                                </div>
+                                <div class="col-6 col-md-3 col-lg-2">
+                                    <label class="form-label form-label-sm">المنطقة</label>
+                                    <input id="CustomerArea" class="form-control form-control-sm" value="@(Model?.Customer?.Area?.AreaName ?? "")" readonly />
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    @* كارت إضافة سطر *@
-                    <div class="card shadow-sm mb-2 invoice-Add-card" @(isLocked ? "style=display:none" : "")>
-                        <div class="card-body">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-2">
-                                    <label class="form-label form-label-sm">كود الصنف</label>
-                                    <input type="number" id="ProdCodeInput" class="form-control form-control-sm text-center" placeholder="كود" />
+                    @* 2) كارت بيانات الصنف (نفس مكونات فاتورة المبيعات) *@
+                    <div class="card shadow-sm mb-2 invoice-product-card" @(isLocked ? "style=display:none" : "")>
+                        <div class="card-body pt-0 pb-0">
+                            <div class="invoice-card-line"></div>
+                            <div class="row g-2 mb-2 align-items-center">
+                                <div class="col-3 col-md-1">
+                                    <label class="form-label form-label-sm">كمية المخزن</label>
+                                    <input type="text" id="ProdQtyCurrentWarehouse" class="form-control form-control-sm text-center" value="0" readonly />
                                 </div>
-                                <div class="col-4">
+                                <div class="col-3 col-md-1">
+                                    <label class="form-label form-label-sm">إجمالي الكمية</label>
+                                    <input type="text" id="ProdQtyAllWarehouses" class="form-control form-control-sm text-center" value="0" readonly />
+                                </div>
+                                <div class="col-3 col-md-2">
+                                    <label class="form-label form-label-sm">الكوتة</label>
+                                    <input type="text" id="ProdQuotaText" class="form-control form-control-sm text-center" value="بدون كوتة" readonly />
+                                </div>
+                                <div class="col-3 col-md-2">
+                                    <label class="form-label form-label-sm">البونص</label>
+                                    <input type="text" id="ProdBonusText" class="form-control form-control-sm text-center" value="بدون بونص" readonly />
+                                </div>
+                                <div class="col-3 col-md-2">
+                                    <label class="form-label form-label-sm">مجموعة الصنف</label>
+                                    <input type="text" id="ProdGroupText" class="form-control form-control-sm text-center" value="بدون مجموعة" readonly />
+                                </div>
+                                <div class="col-3 col-md-2">
+                                    <label class="form-label form-label-sm">سياسة المجموعة</label>
+                                    <input type="text" id="ProdGroupPolicyText" class="form-control form-control-sm text-center" value="—" readonly />
+                                </div>
+                                <div class="col-3 col-md-2">
+                                    <label class="form-label form-label-sm">الخصم المرجّح%</label>
+                                    <input type="text" id="ProdWeightedDiscount" class="form-control form-control-sm text-center" value="0" readonly />
+                                </div>
+                            </div>
+                            <div class="row g-3 align-items-center">
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label form-label-sm">بدائل الصنف</label>
+                                    <select id="AlternativeProducts" class="form-select form-select-sm w-100"></select>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-bordered align-middle text-center mb-0">
+                                            <thead><tr><th class="text-center">المسلسل</th><th class="text-center">التشغيلة</th><th class="text-center">الصلاحية</th><th class="text-center">الكمية</th><th class="text-center">سعر الجمهور</th></tr></thead>
+                                            <tbody id="BatchQueueBody"><tr><td colspan="5" class="text-muted">لا توجد تشغيلات.</td></tr></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    @* 3) كارت إضافة صنف — نفس أعمدة فاتورة المبيعات *@
+                    <div class="card shadow-sm mb-2 invoice-Add-card" @(isLocked ? "style=display:none" : "")>
+                        <div class="invoice-card-line"></div>
+                        <div class="card-body">
+                            <div class="row g-1 align-items-end">
+                                <div class="col-lg-1 col-md-2">
+                                    <label class="form-label form-label-sm">كود الصنف</label>
+                                    <input type="number" id="ProdCodeInput" class="form-control form-control-sm text-center pi-input" placeholder="بحث بالكود..." />
+                                </div>
+                                <div class="col-lg-4 col-md-8">
+                                    <label class="form-label form-label-sm mb-0">
+                                        <input type="checkbox" id="chkIncludeZeroQty" class="form-check-input me-1"
+                                               @(ViewBag.IncludeZeroQty == true ? "checked" : "")
+                                               title="عرض الأصناف التي رصيدها صفر">
+                                        <span class="small text-muted">عرض الصفر</span>
+                                    </label>
                                     <label class="form-label form-label-sm">اسم الصنف</label>
-                                    <input id="ProdNameInput" list="productsList" class="form-control form-control-sm pi-product-name-input" placeholder="اسم الصنف" autocomplete="off" />
+                                    <input id="ProdNameInput" list="productsList" class="form-control form-control-sm pi-input pi-product-name-input" placeholder="اكتب اسم الصنف..." autocomplete="off" />
                                     <datalist id="productsList">
                                         @if (ViewBag.Products != null)
                                         {
@@ -158,87 +317,92 @@
                                     </datalist>
                                     <input type="hidden" id="ProdId" />
                                 </div>
-                                <div class="col-1">
+                                <div class="col-lg-1 col-md-2">
+                                    <label id="ProdPriceLabel" class="form-label form-label-sm" style="cursor:pointer" title="اضغط لفتح/قفل السعر"><span>سعر الجمهور</span> <span id="ProdPriceLockState" class="small text-muted">(مغلق)</span></label>
+                                    <input type="number" id="ProdPriceInput" class="form-control form-control-sm text-center pi-input bg-light text-muted" step="0.01" readonly />
+                                </div>
+                                <div class="col-lg-1 col-md-2">
                                     <label class="form-label form-label-sm">الكمية</label>
-                                    <input type="number" id="ProdQtyInput" class="form-control form-control-sm text-center" min="1" value="1" />
+                                    <input type="number" id="ProdQtyInput" class="form-control form-control-sm text-center pi-input" min="1" value="1" />
                                 </div>
-                                <div class="col-1">
-                                    <label class="form-label form-label-sm">سعر الجمهور</label>
-                                    <input type="number" id="ProdPriceInput" class="form-control form-control-sm text-center" step="0.01" min="0" />
+                                <div class="col-lg-1 col-md-2">
+                                    <label class="form-label form-label-sm">الخصم</label>
+                                    <input type="number" id="ProdDiscInput" class="form-control form-control-sm text-center pi-input" value="0" min="0" max="100" step="0.01" />
                                 </div>
-                                <div class="col-1">
-                                    <label class="form-label form-label-sm">خصم %</label>
-                                    <input type="number" id="ProdDiscInput" class="form-control form-control-sm text-center" value="0" min="0" max="100" step="0.01" />
-                                </div>
-                                <div class="col-1">
+                                <div class="col-lg-1 col-md-2">
                                     <label class="form-label form-label-sm">الباتش</label>
-                                    <input type="text" id="ProdBatchInput" class="form-control form-control-sm text-center" placeholder="—" />
+                                    <input type="text" id="ProdBatchInput" class="form-control form-control-sm text-center pi-input prod-batch-center" placeholder="باتش" style="text-align:center" />
+                                    <select id="ProdBatchSelectInRow" class="form-select form-select-sm d-none" title="اختر تشغيلة (لمخالفة الفيفو يدوياً)">
+                                        <option value="">—</option>
+                                    </select>
                                 </div>
-                                <div class="col-1">
-                                    <label class="form-label form-label-sm">الصلاحية</label>
-                                    <input type="text" id="ProdExpiryInput" class="form-control form-control-sm text-center" placeholder="MM/YYYY" />
+                                <div class="col-lg-1 col-md-2">
+                                    <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                    <input type="text" id="ProdExpiryInput" class="form-control form-control-sm text-center pi-input" placeholder="MM/YYYY" />
                                 </div>
-                                <div class="col-1 d-grid">
+                                <div class="col-lg-1 col-md-2 d-grid">
                                     <label class="form-label form-label-sm">&nbsp;</label>
-                                    <button type="button" id="btnAddLine" class="btn btn-primary btn-sm">إضافة</button>
+                                    <button type="button" id="btnAddLine" class="btn btn-primary btn-sm w-100">إضافة</button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    @* جدول السطور *@
-                    <div class="card shadow-sm mb-2 invoice-lines-card">
-                        <div class="card-body p-0">
-                            <div class="erp-table-wrapper">
-                                <table class="table table-sm table-hover mb-0 erp-table">
-                                    <thead class="invoice-lines-header">
-                                        <tr>
-                                            <th class="text-center">#</th>
-                                            <th>اسم الصنف</th>
-                                            <th class="text-center">الكمية</th>
-                                            <th class="text-center">سعر الجمهور</th>
-                                            <th class="text-center">خصم %</th>
-                                            <th class="text-center">قيمة السطر</th>
-                                            <th class="text-center no-print">حذف</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="SOLinesTbody">
-                                        @if (!linesList.Any())
+                    @* 4) جدول السطور — نفس أعمدة فاتورة المبيعات *@
+                    <div class="invoice-lines-container mb-2">
+                        <div class="erp-table-wrapper mb-0">
+                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
+                                <thead class="invoice-lines-header">
+                                    <tr>
+                                        <th class="text-center">#</th>
+                                        <th>اسم الصنف</th>
+                                        <th class="text-center">التشغيلة</th>
+                                        <th class="text-center">الصلاحية</th>
+                                        <th class="text-center">الكمية</th>
+                                        <th class="text-center">سعر الجمهور</th>
+                                        <th class="text-center">خصم البيع %</th>
+                                        <th class="text-center">قيمة السطر</th>
+                                        <th class="text-center no-print">مسح</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="SOLinesTbody">
+                                    @if (!linesList.Any())
+                                    {
+                                        <tr><td colspan="9" class="text-center text-muted py-3">لا توجد سطور.</td></tr>
+                                    }
+                                    else
+                                    {
+                                        foreach (var line in linesList)
                                         {
-                                            <tr><td colspan="7" class="text-center text-muted py-3">لا توجد سطور.</td></tr>
+                                            var name = line.Product?.ProdName ?? ("صنف #" + line.ProdId);
+                                            var lv = line.QtyRequested * line.ExpectedUnitPrice;
+                                            <tr data-line-no="@line.LineNo" data-so-id="@(Model?.SOId ?? 0)">
+                                                <td class="text-center">@line.LineNo</td>
+                                                <td><strong>@name</strong> <span class="text-muted small">| @line.ProdId</span></td>
+                                                <td class="text-center">@(line.PreferredBatchNo ?? "—")</td>
+                                                <td class="text-center">@(line.PreferredExpiry.HasValue ? line.PreferredExpiry.Value.ToString("yyyy-MM-dd") : "—")</td>
+                                                <td class="text-center">@line.QtyRequested</td>
+                                                <td class="text-center">@line.RequestedRetailPrice.ToString("0.00")</td>
+                                                <td class="text-center">@line.SalesDiscountPct.ToString("0.##")</td>
+                                                <td class="text-center line-value">@lv.ToString("0.00")</td>
+                                                <td class="text-center no-print">
+                                                    @if (!isLocked)
+                                                    {
+                                                        <button type="button" class="btn btn-danger btn-sm btnRemoveLine" data-line-no="@line.LineNo">مسح</button>
+                                                    }
+                                                </td>
+                                            </tr>
                                         }
-                                        else
-                                        {
-                                            foreach (var line in linesList)
-                                            {
-                                                var name = line.Product?.ProdName ?? ("صنف #" + line.ProdId);
-                                                var lv = line.QtyRequested * line.ExpectedUnitPrice;
-                                                <tr data-line-no="@line.LineNo" data-so-id="@(Model?.SOId ?? 0)">
-                                                    <td class="text-center">@line.LineNo</td>
-                                                    <td>@name <span class="text-muted small">| @line.ProdId</span></td>
-                                                    <td class="text-center">@line.QtyRequested</td>
-                                                    <td class="text-center">@line.RequestedRetailPrice.ToString("0.00")</td>
-                                                    <td class="text-center">@line.SalesDiscountPct.ToString("0.##")</td>
-                                                    <td class="text-center line-value">@lv.ToString("0.00")</td>
-                                                    <td class="text-center no-print">
-                                                        @if (!isLocked)
-                                                        {
-                                                            <button type="button" class="btn btn-danger btn-sm btnRemoveLine" data-line-no="@line.LineNo">حذف</button>
-                                                        }
-                                                    </td>
-                                                </tr>
-                                            }
-                                        }
-                                    </tbody>
-                                </table>
-                            </div>
+                                    }
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    @* الإجماليات *@
+                    @* 5) كارت الإجماليات — نفس تخطيط فاتورة المبيعات *@
                     <div class="card shadow-sm mb-2 invoice-totals-card">
                         <div class="card-body">
-                            <div class="d-flex flex-wrap align-items-stretch gap-2">
+                            <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row">
                                 <div class="invoice-summary-item invoice-summary-box">
                                     <span class="invoice-summary-label small">عدد السطور</span>
                                     <span id="TotalLinesValue" class="invoice-summary-value">@totalLines</span>
@@ -247,9 +411,13 @@
                                     <span class="invoice-summary-label small">إجمالي الكمية</span>
                                     <span id="TotalQtyValue" class="invoice-summary-value">@totalQty</span>
                                 </div>
+                                <div class="invoice-summary-item invoice-summary-box">
+                                    <span class="invoice-summary-label small">اجمالي الجمهور</span>
+                                    <span id="TotalRetailValue" class="invoice-summary-value">@totalRetail.ToString("0.00")</span>
+                                </div>
                                 <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main">
-                                    <span class="invoice-summary-label small">الإجمالي المتوقع</span>
-                                    <span id="ExpectedTotalValue" class="invoice-summary-value invoice-summary-value-main fw-bold">@expectedTotal.ToString("0.00")</span>
+                                    <span class="invoice-summary-label small text-white">الاجمالي بعد الخصم</span>
+                                    <span id="ExpectedTotalValue" class="invoice-summary-value invoice-summary-value-main fw-bold text-white">@expectedTotal.ToString("0.00")</span>
                                 </div>
                             </div>
                         </div>
@@ -280,19 +448,104 @@
                 setTimeout(function () { el.remove(); }, 4000);
             }
 
-            function setCustomerFromDatalist() {
-                var inp = document.getElementById('CustomerNameInput');
-                var list = document.getElementById('customersList');
-                var val = (inp && inp.value) || '';
-                var opt = list && [].slice.call(list.querySelectorAll('option')).find(function (o) { return o.value === val; });
-                var id = opt ? parseInt(opt.getAttribute('data-id'), 10) : 0;
-                document.getElementById('CustomerId').value = id || '';
-                document.getElementById('CustomerCodeDisplay').value = id || '';
+            function setCustomerFromOption(opt) {
+                if (!opt) return;
+                document.getElementById('CustomerId').value = opt.getAttribute('data-id') || '';
+                document.getElementById('CustomerCodeDisplay').value = opt.getAttribute('data-id') || '';
+                document.getElementById('CustomerPolicyText').value = opt.getAttribute('data-policy-name') || '';
+                document.getElementById('CustomerPhone').value = opt.getAttribute('data-phone') || '';
+                document.getElementById('CustomerCredit').value = opt.getAttribute('data-credit') || '';
+                document.getElementById('CustomerAddress').value = opt.getAttribute('data-address') || '';
+                document.getElementById('CustomerGovernorate').value = opt.getAttribute('data-gov') || '';
+                document.getElementById('CustomerDistrict').value = opt.getAttribute('data-district') || '';
+                document.getElementById('CustomerArea').value = opt.getAttribute('data-area') || '';
+                var btnVol = document.getElementById('btnCustomerVolume');
+                if (btnVol) {
+                    var cid = parseInt(opt.getAttribute('data-id'), 10) || 0;
+                    var base = (btnVol.getAttribute('data-base-url') || '').trim();
+                    var url = cid > 0 ? (base + (base.indexOf('?') >= 0 ? '&' : '?') + 'id=' + cid) : '#';
+                    btnVol.href = url;
+                    btnVol.setAttribute('data-url', url);
+                }
             }
 
-            document.getElementById('CustomerNameInput').addEventListener('input', setCustomerFromDatalist);
-            document.getElementById('CustomerNameInput').addEventListener('change', setCustomerFromDatalist);
+            var customerNameInput = document.getElementById('CustomerNameInput');
+            var customersList = document.getElementById('customersList');
+            if (customerNameInput && customersList) {
+                customerNameInput.addEventListener('change', function () {
+                    var val = (this.value || '').trim();
+                    var opt = [].slice.call(customersList.querySelectorAll('option')).find(function (o) { return o.value === val; });
+                    setCustomerFromOption(opt || null);
+                });
+                customerNameInput.addEventListener('input', function () {
+                    var val = (this.value || '').trim();
+                    var opt = [].slice.call(customersList.querySelectorAll('option')).find(function (o) { return o.value === val; });
+                    if (opt) setCustomerFromOption(opt);
+                });
+                // Enter: من اسم العميل → زر الحفظ (مرة أولى) ثم تنفيذ الحفظ (مرة ثانية) — مثل فاتورة المبيعات
+                var isSaveButtonFocused = false;
+                customerNameInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        var val = (this.value || '').trim();
+                        var opt = [].slice.call(customersList.querySelectorAll('option')).find(function (o) { return o.value === val; });
+                        if (opt) setCustomerFromOption(opt);
+                        var saveBtn = document.getElementById('btnSaveHeader');
+                        if (!saveBtn) return;
+                        if (!isSaveButtonFocused) {
+                            isSaveButtonFocused = true;
+                            saveBtn.focus();
+                        } else {
+                            isSaveButtonFocused = false;
+                            saveBtn.click();
+                        }
+                    } else {
+                        isSaveButtonFocused = false;
+                    }
+                });
+                customerNameInput.addEventListener('blur', function () { isSaveButtonFocused = false; });
+            }
 
+            // عند فتح الأمر: الفوكس على اسم العميل (مثل فاتورة المبيعات)
+            if (customerNameInput) {
+                setTimeout(function () {
+                    customerNameInput.focus();
+                    if (typeof customerNameInput.select === 'function') customerNameInput.select();
+                }, 250);
+            }
+
+            // Enter على زر الحفظ: تنفيذ الحفظ ثم الانتقال لاسم الصنف
+            var btnSaveHeader = document.getElementById('btnSaveHeader');
+            if (btnSaveHeader) {
+                btnSaveHeader.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        this.click();
+                        setTimeout(function () {
+                            var prodNameInput = document.getElementById('ProdNameInput');
+                            if (prodNameInput) { prodNameInput.focus(); if (typeof prodNameInput.select === 'function') prodNameInput.select(); }
+                        }, 150);
+                    }
+                });
+            }
+
+            function normalizeText(txt) {
+                return (txt || '').toString().trim().toLowerCase().replace(/^[اأإآ]/, '').replace(/\s+/g, ' ');
+            }
+            function findProductByName(name) {
+                var search = normalizeText(name);
+                if (!search) return null;
+                var list = document.getElementById('productsList');
+                if (!list) return null;
+                var opts = [].slice.call(list.querySelectorAll('option'));
+                for (var i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value) === search) return opts[i];
+                }
+                for (var j = 0; j < opts.length; j++) {
+                    if (normalizeText(opts[j].value).indexOf(search) === 0) return opts[j];
+                }
+                return null;
+            }
             function setProductFromDatalist() {
                 var inp = document.getElementById('ProdNameInput');
                 var list = document.getElementById('productsList');
@@ -301,17 +554,260 @@
                 var id = opt ? parseInt(opt.getAttribute('data-id'), 10) : 0;
                 document.getElementById('ProdId').value = id || '';
                 if (id) document.getElementById('ProdCodeInput').value = id;
+                if (id) loadSalesProductInfo(id);
+            }
+            function setProductFromOption(opt) {
+                if (!opt) {
+                    document.getElementById('ProdId').value = '';
+                    document.getElementById('ProdCodeInput').value = '';
+                    if (document.getElementById('ProdNameInput')) document.getElementById('ProdNameInput').value = '';
+                    return;
+                }
+                var id = parseInt(opt.getAttribute('data-id'), 10) || 0;
+                document.getElementById('ProdId').value = id || '';
+                document.getElementById('ProdCodeInput').value = id || '';
+                if (document.getElementById('ProdNameInput')) document.getElementById('ProdNameInput').value = opt.value || '';
+                if (id) loadSalesProductInfo(id);
             }
             document.getElementById('ProdNameInput').addEventListener('change', setProductFromDatalist);
-            var productsListEl = document.getElementById('productsList');
+            // Enter: صنف → سعر (أو تخطيه لو مغلق) → كمية → إضافة — مثل فاتورة المبيعات، يتخطى البوكس المغلق
+            document.getElementById('ProdNameInput').addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var opt = findProductByName(this.value);
+                    setProductFromOption(opt);
+                    var priceInput = document.getElementById('ProdPriceInput');
+                    var qtyInput = document.getElementById('ProdQtyInput');
+                    if (priceInput && !priceInput.readOnly) {
+                        priceInput.focus(); if (typeof priceInput.select === 'function') priceInput.select();
+                    } else if (qtyInput) {
+                        qtyInput.focus(); if (typeof qtyInput.select === 'function') qtyInput.select();
+                    }
+                }
+            });
+            var prodPriceInputForEnter = document.getElementById('ProdPriceInput');
+            if (prodPriceInputForEnter) prodPriceInputForEnter.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var qtyInput = document.getElementById('ProdQtyInput');
+                    if (qtyInput) { qtyInput.focus(); if (typeof qtyInput.select === 'function') qtyInput.select(); }
+                }
+            });
+            var prodQtyInputForEnter = document.getElementById('ProdQtyInput');
+            if (prodQtyInputForEnter) prodQtyInputForEnter.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var btnAdd = document.getElementById('btnAddLine');
+                    if (btnAdd) btnAdd.focus();
+                }
+            });
+            var btnAddLineForEnter = document.getElementById('btnAddLine');
+            if (btnAddLineForEnter) btnAddLineForEnter.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.click();
+                    var nameInput = document.getElementById('ProdNameInput');
+                    if (nameInput) { setTimeout(function () { nameInput.focus(); if (typeof nameInput.select === 'function') nameInput.select(); }, 100); }
+                }
+            });
             document.getElementById('ProdCodeInput').addEventListener('change', function () {
                 var id = parseInt(this.value, 10) || 0;
                 document.getElementById('ProdId').value = id;
-                if (id && productsListEl) {
-                    var o = [].slice.call(productsListEl.querySelectorAll('option')).find(function (x) { return parseInt(x.getAttribute('data-id'), 10) === id; });
+                if (id && document.getElementById('productsList')) {
+                    var o = [].slice.call(document.getElementById('productsList').querySelectorAll('option')).find(function (x) { return parseInt(x.getAttribute('data-id'), 10) === id; });
                     if (o) document.getElementById('ProdNameInput').value = o.value;
                 }
+                if (id) loadSalesProductInfo(id);
             });
+
+            // تحميل بيانات الصنف من فاتورة المبيعات (كميات، كوتة، بونص، تشغيلات، سعر، خصم) — مثل فاتورة المبيعات بالضبط
+            var busyLoadInfo = false;
+            var currentProductBatches = [];
+            function loadSalesProductInfo(prodId) {
+                if (!prodId) return;
+                var warehouseId = parseInt((document.getElementById('WarehouseId') && document.getElementById('WarehouseId').value) || '0', 10) || 0;
+                if (!warehouseId) return;
+                var customerId = parseInt((document.getElementById('CustomerId') && document.getElementById('CustomerId').value) || '0', 10) || 0;
+                if (busyLoadInfo) return;
+                busyLoadInfo = true;
+                var url = '@Url.Action("GetSalesProductInfo", "SalesInvoices")' + '?prodId=' + encodeURIComponent(prodId) + '&warehouseId=' + encodeURIComponent(warehouseId) + '&customerId=' + encodeURIComponent(customerId);
+                fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (data) {
+                        busyLoadInfo = false;
+                        if (!data || !data.ok) {
+                            currentProductBatches = [];
+                            var batchSelectInRow0 = document.getElementById('ProdBatchSelectInRow');
+                            if (batchSelectInRow0) { batchSelectInRow0.innerHTML = '<option value="">—</option>'; batchSelectInRow0.classList.add('d-none'); }
+                            var probatchInput0 = document.getElementById('ProdBatchInput');
+                            if (probatchInput0) probatchInput0.classList.remove('d-none');
+                            var qw = document.getElementById('ProdQtyCurrentWarehouse'); if (qw) qw.value = '0';
+                            var qa = document.getElementById('ProdQtyAllWarehouses'); if (qa) qa.value = '0';
+                            var qt = document.getElementById('ProdQuotaText'); if (qt) qt.value = 'بدون كوتة';
+                            var bt = document.getElementById('ProdBonusText'); if (bt) bt.value = 'بدون بونص';
+                            var gt = document.getElementById('ProdGroupText'); if (gt) gt.value = 'بدون مجموعة';
+                            var gpt = document.getElementById('ProdGroupPolicyText'); if (gpt) gpt.value = '—';
+                            var wd = document.getElementById('ProdWeightedDiscount'); if (wd) wd.value = '0';
+                            var tbody = document.getElementById('BatchQueueBody'); if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-muted">لا توجد تشغيلات.</td></tr>';
+                            return;
+                        }
+                        var qw = document.getElementById('ProdQtyCurrentWarehouse'); if (qw) qw.value = (data.qtyCurrentWarehouse ?? 0);
+                        var qa = document.getElementById('ProdQtyAllWarehouses'); if (qa) qa.value = (data.qtyAllWarehouses ?? 0);
+                        var qt = document.getElementById('ProdQuotaText'); if (qt) qt.value = (data.quotaText || 'بدون كوتة').toString();
+                        var bt = document.getElementById('ProdBonusText'); if (bt) bt.value = (data.bonusText || 'بدون بونص').toString();
+                        var gt = document.getElementById('ProdGroupText'); if (gt) gt.value = (data.productGroupName || 'بدون مجموعة').toString();
+                        var gpt = document.getElementById('ProdGroupPolicyText'); if (gpt) gpt.value = (data.appliedGroupPolicyName || data.appliedGroupPolicyId || '—').toString() || '—';
+                        var wd = document.getElementById('ProdWeightedDiscount'); if (wd) { var w = Number(data.weightedDiscount ?? 0); wd.value = (w >= 0 && w <= 100) ? w.toFixed(2) : '0.00'; }
+                        var discInput = document.getElementById('ProdDiscInput'); if (discInput) { var sd = Number(data.saleDisc1 ?? 0); discInput.value = (sd >= 0 && sd <= 100) ? sd.toFixed(2) : '0.00'; }
+                        var batches = data.batches || [];
+                        currentProductBatches = batches;
+                        var tbody = document.getElementById('BatchQueueBody');
+                        if (tbody) {
+                            if (!batches.length) tbody.innerHTML = '<tr><td colspan="5" class="text-muted">لا توجد تشغيلات.</td></tr>';
+                            else {
+                                tbody.innerHTML = batches.map(function (b, idx) {
+                                    var p = (b.priceRetailBatch != null ? Number(b.priceRetailBatch).toFixed(2) : '0.00');
+                                    return '<tr data-batch-index="' + idx + '"' + (idx === 0 ? ' class="table-success"' : '') + '><td class="text-center">' + (idx + 1) + '</td><td class="text-center">' + (b.batchNo || '') + '</td><td class="text-center">' + (b.expiryText || '') + '</td><td class="text-center">' + (b.qty ?? 0) + '</td><td class="text-center">' + p + '</td></tr>';
+                                }).join('');
+                            }
+                        }
+                        var batchSelectInRow = document.getElementById('ProdBatchSelectInRow');
+                        var probatchInput = document.getElementById('ProdBatchInput');
+                        if (batchSelectInRow && probatchInput) {
+                            if (batches.length >= 2) {
+                                probatchInput.classList.add('d-none');
+                                batchSelectInRow.classList.remove('d-none');
+                                batchSelectInRow.innerHTML = '';
+                                batches.forEach(function (b, idx) {
+                                    var opt = document.createElement('option');
+                                    opt.value = String(idx);
+                                    opt.textContent = (b.batchNo || '').toString() || '—';
+                                    if (idx === 0) opt.selected = true;
+                                    batchSelectInRow.appendChild(opt);
+                                });
+                                applyBatchSelection(0);
+                            } else {
+                                batchSelectInRow.innerHTML = '<option value="">—</option>';
+                                batchSelectInRow.classList.add('d-none');
+                                probatchInput.classList.remove('d-none');
+                            }
+                        }
+                        var pb = document.getElementById('ProdBatchInput');
+                        var pe = document.getElementById('ProdExpiryInput');
+                        var pp = document.getElementById('ProdPriceInput');
+                        if (batches.length < 2) {
+                            if (data.auto) {
+                                if (pb) pb.value = data.auto.batchNo || '';
+                                if (pe) pe.value = data.auto.expiryText || '';
+                                if (pp) pp.value = (data.auto.priceRetailBatch != null ? Number(data.auto.priceRetailBatch).toFixed(2) : '0.00');
+                            } else if (batches.length === 1 && batches[0]) {
+                                if (pb) pb.value = batches[0].batchNo || '';
+                                if (pe) pe.value = batches[0].expiryText || '';
+                                if (pp) pp.value = (batches[0].priceRetailBatch != null ? Number(batches[0].priceRetailBatch).toFixed(2) : '0.00');
+                            }
+                        }
+                        applyPriceLockUI();
+                        // بدائل الصنف
+                        fetch('@Url.Action("GetAlternativeProducts", "SalesInvoices")' + '?prodId=' + encodeURIComponent(prodId), { method: 'GET', headers: { 'Accept': 'application/json' } })
+                            .then(function (r) { return r.ok ? r.json() : []; })
+                            .then(function (arr) {
+                                var sel = document.getElementById('AlternativeProducts');
+                                if (!sel) return;
+                                sel.innerHTML = '<option value="">اختر بديلاً (للمشاهدة فقط)</option>';
+                                (arr || []).forEach(function (p) {
+                                    var opt = document.createElement('option');
+                                    opt.value = (p.id || '').toString();
+                                    opt.textContent = (p.name || '') + (p.company ? ' — ' + p.company : '');
+                                    sel.appendChild(opt);
+                                });
+                            })
+                            .catch(function () { });
+                    })
+                    .catch(function () { busyLoadInfo = false; });
+            }
+
+            function applyBatchSelection(idx) {
+                var b = currentProductBatches[idx];
+                if (!b) return;
+                var pb = document.getElementById('ProdBatchInput'); if (pb) pb.value = b.batchNo || '';
+                var pe = document.getElementById('ProdExpiryInput'); if (pe) pe.value = b.expiryText || '';
+                var pp = document.getElementById('ProdPriceInput'); if (pp) pp.value = (b.priceRetailBatch != null ? Number(b.priceRetailBatch).toFixed(2) : '0.00');
+                var tbody = document.getElementById('BatchQueueBody');
+                if (tbody) {
+                    tbody.querySelectorAll('tr[data-batch-index]').forEach(function (tr) {
+                        var i = parseInt(tr.getAttribute('data-batch-index'), 10);
+                        tr.classList.toggle('table-success', i === idx);
+                    });
+                }
+            }
+            var prodBatchSelectInRowEl = document.getElementById('ProdBatchSelectInRow');
+            if (prodBatchSelectInRowEl) prodBatchSelectInRowEl.addEventListener('change', function () {
+                var idx = parseInt(this.value, 10);
+                if (isNaN(idx) || idx < 0 || idx >= currentProductBatches.length) return;
+                applyBatchSelection(idx);
+            });
+
+            // قفل/فتح السعر بالضغط على اللابل — مثل فاتورة المبيعات
+            var priceLocked = true;
+            var priceLabelEl = document.getElementById('ProdPriceLabel');
+            var priceLockStateEl = document.getElementById('ProdPriceLockState');
+            var prodPriceInputEl = document.getElementById('ProdPriceInput');
+            function applyPriceLockUI() {
+                if (!prodPriceInputEl) return;
+                prodPriceInputEl.readOnly = priceLocked;
+                if (priceLocked) {
+                    prodPriceInputEl.classList.add('bg-light', 'text-muted');
+                    if (priceLockStateEl) priceLockStateEl.textContent = '(مغلق)';
+                } else {
+                    prodPriceInputEl.classList.remove('bg-light', 'text-muted');
+                    if (priceLockStateEl) priceLockStateEl.textContent = '(مفتوح)';
+                }
+            }
+            if (priceLabelEl && !priceLabelEl.dataset.boundPriceToggle) {
+                priceLabelEl.dataset.boundPriceToggle = '1';
+                priceLabelEl.addEventListener('click', function () {
+                    priceLocked = !priceLocked;
+                    applyPriceLockUI();
+                    if (!priceLocked && prodPriceInputEl) { prodPriceInputEl.focus(); if (typeof prodPriceInputEl.select === 'function') prodPriceInputEl.select(); }
+                });
+            }
+
+            // تحديث قائمة الأصناف (أصناف لها رصيد فقط أو الكل حسب «عرض الصفر») — مثل فاتورة المبيعات
+            function refreshProductsDatalist() {
+                var list = document.getElementById('productsList');
+                if (!list) return;
+                list.innerHTML = '';
+                var chk = document.getElementById('chkIncludeZeroQty');
+                var warehouseId = parseInt((document.getElementById('WarehouseId') && document.getElementById('WarehouseId').value) || '0', 10) || 0;
+                var includeZero = chk ? !!chk.checked : false;
+                var url = '@Url.Action("GetProductsForDatalist", "SalesOrders")?includeZeroQty=' + includeZero + '&warehouseId=' + (warehouseId || '');
+                fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } })
+                    .then(function (r) { return r.ok ? r.json() : []; })
+                    .then(function (products) {
+                        if (!list.parentNode) return;
+                        list.innerHTML = '';
+                        (products || []).forEach(function (p) {
+                            var opt = document.createElement('option');
+                            opt.value = p.name || '';
+                            opt.setAttribute('data-id', (p.id || '').toString());
+                            list.appendChild(opt);
+                        });
+                        var currentId = (document.getElementById('ProdId') && document.getElementById('ProdId').value) || '';
+                        if (!includeZero && currentId) {
+                            var ids = (products || []).map(function (x) { return (x.id || '').toString(); });
+                            if (ids.indexOf(currentId) < 0) {
+                                document.getElementById('ProdId').value = '';
+                                if (document.getElementById('ProdCodeInput')) document.getElementById('ProdCodeInput').value = '';
+                                if (document.getElementById('ProdNameInput')) document.getElementById('ProdNameInput').value = '';
+                            }
+                        }
+                    })
+                    .catch(function () { });
+            }
+            var chkIncludeZero = document.getElementById('chkIncludeZeroQty');
+            if (chkIncludeZero) chkIncludeZero.addEventListener('change', refreshProductsDatalist);
+            var warehouseSelect = document.getElementById('WarehouseId');
+            if (warehouseSelect) warehouseSelect.addEventListener('change', refreshProductsDatalist);
 
             function refreshLines() {
                 if (soId <= 0) return;
@@ -322,19 +818,22 @@
                         var tbody = document.getElementById('SOLinesTbody');
                         tbody.innerHTML = '';
                         if (!data.lines || data.lines.length === 0) {
-                            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">لا توجد سطور.</td></tr>';
+                            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">لا توجد سطور.</td></tr>';
                         } else {
                             data.lines.forEach(function (l) {
                                 var tr = document.createElement('tr');
                                 tr.setAttribute('data-line-no', l.lineNo);
                                 tr.setAttribute('data-so-id', soId);
-                                tr.innerHTML = '<td class="text-center">' + l.lineNo + '</td><td>' + (l.prodName || '') + ' <span class="text-muted small">| ' + l.prodId + '</span></td><td class="text-center">' + l.qty + '</td><td class="text-center">' + (l.requestRetailPrice != null ? Number(l.requestRetailPrice).toFixed(2) : '') + '</td><td class="text-center">' + (l.salesDiscountPct != null ? Number(l.salesDiscountPct).toFixed(2) : '') + '</td><td class="text-center line-value">' + (l.lineValue != null ? Number(l.lineValue).toFixed(2) : '') + '</td><td class="text-center no-print">' + (isLocked ? '' : '<button type="button" class="btn btn-danger btn-sm btnRemoveLine" data-line-no="' + l.lineNo + '">حذف</button>') + '</td>';
+                                var batch = (l.batchNo != null && l.batchNo !== '') ? l.batchNo : '—';
+                                var expiry = (l.expiry != null && l.expiry !== '') ? l.expiry : '—';
+                                tr.innerHTML = '<td class="text-center">' + l.lineNo + '</td><td><strong>' + (l.prodName || '') + '</strong> <span class="text-muted small">| ' + l.prodId + '</span></td><td class="text-center">' + batch + '</td><td class="text-center">' + expiry + '</td><td class="text-center">' + l.qty + '</td><td class="text-center">' + (l.requestRetailPrice != null ? Number(l.requestRetailPrice).toFixed(2) : '') + '</td><td class="text-center">' + (l.salesDiscountPct != null ? Number(l.salesDiscountPct).toFixed(2) : '') + '</td><td class="text-center line-value">' + (l.lineValue != null ? Number(l.lineValue).toFixed(2) : '') + '</td><td class="text-center no-print">' + (isLocked ? '' : '<button type="button" class="btn btn-danger btn-sm btnRemoveLine" data-line-no="' + l.lineNo + '">مسح</button>') + '</td>';
                                 tbody.appendChild(tr);
                             });
                         }
                         if (data.totals) {
                             document.getElementById('TotalLinesValue').textContent = data.totals.totalLines || 0;
                             document.getElementById('TotalQtyValue').textContent = data.totals.totalQty || 0;
+                            var retailEl = document.getElementById('TotalRetailValue'); if (retailEl) retailEl.textContent = (data.totals.totalRetail != null ? Number(data.totals.totalRetail).toFixed(2) : '0.00');
                             document.getElementById('ExpectedTotalValue').textContent = (data.totals.expectedItemsTotal != null ? Number(data.totals.expectedItemsTotal).toFixed(2) : '0.00');
                         }
                         tbody.querySelectorAll('.btnRemoveLine').forEach(function (btn) {
@@ -360,26 +859,32 @@
             document.getElementById('btnSaveHeader').addEventListener('click', function () {
                 var customerId = parseInt(document.getElementById('CustomerId').value, 10) || 0;
                 var warehouseId = parseInt(document.getElementById('WarehouseId').value, 10) || 0;
-                var notes = (document.getElementById('NotesInput') && document.getElementById('NotesInput').value) || '';
+                var notes = '';
                 if (customerId <= 0) { showToast('يجب اختيار العميل', 'danger'); return; }
                 if (warehouseId <= 0) { showToast('يجب اختيار المخزن', 'danger'); return; }
                 fetch('@Url.Action("SaveHeader", "SalesOrders")', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ SOId: soId, CustomerId: customerId, WarehouseId: warehouseId, Notes: notes })
-                }).then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (data.success && data.SOId) {
+                }).then(function (r) {
+                    return r.text().then(function (text) {
+                        try { return { response: r, data: text ? JSON.parse(text) : {} }; } catch (e) { return { response: r, data: { message: text || 'خطأ في الحفظ' } }; }
+                    });
+                }).then(function (result) {
+                    var r = result.response, data = result.data;
+                    if (r.ok && data.success && data.SOId) {
                             soId = data.SOId;
                             document.getElementById('SOId').value = soId;
                             document.getElementById('OrderNumberDisplay').value = data.orderNumber || soId;
                             document.getElementById('OrderDateDisplay').value = data.orderDate || '';
+                            document.getElementById('OrderTimeDisplay').value = data.orderTime || '';
                             document.getElementById('StatusDisplay').value = data.isConverted ? 'محول' : (data.status || 'Draft');
+                            if (data.createdBy) document.getElementById('OrderCreatedByDisplay').value = data.createdBy;
                             if (data.isConverted) { document.getElementById('SOIsConverted').value = '1'; isLocked = true; }
                             showToast('تم حفظ الأمر', 'success');
                             if (soId > 0) { var u = '@Url.Action("Show", "SalesOrders")' + '/' + soId + '?frame=1'; if (window.location.pathname + window.location.search !== u) window.history.replaceState(null, '', u); }
                         } else {
-                            showToast(data.message || data || 'خطأ', 'danger');
+                            showToast(data.message || 'خطأ في الحفظ', 'danger');
                         }
                     }).catch(function () { showToast('فشل الحفظ', 'danger'); });
             });
@@ -392,18 +897,32 @@
                 if (qty <= 0) { showToast('أدخل كمية صحيحة', 'danger'); return; }
                 var price = parseFloat(document.getElementById('ProdPriceInput').value, 10) || 0;
                 var disc = parseFloat(document.getElementById('ProdDiscInput').value, 10) || 0;
-                var batch = (document.getElementById('ProdBatchInput') && document.getElementById('ProdBatchInput').value) || '';
-                var expiry = (document.getElementById('ProdExpiryInput') && document.getElementById('ProdExpiryInput').value) || '';
+                var batch = '';
+                var expiry = '';
+                var batchSelectInRow = document.getElementById('ProdBatchSelectInRow');
+                if (batchSelectInRow && !batchSelectInRow.classList.contains('d-none') && currentProductBatches.length > 0) {
+                    var idx = parseInt(batchSelectInRow.value, 10);
+                    if (!isNaN(idx) && idx >= 0 && idx < currentProductBatches.length) {
+                        var b = currentProductBatches[idx];
+                        if (b) { batch = (b.batchNo || '').toString().trim(); expiry = (b.expiryText || '').toString().trim(); }
+                    }
+                }
+                if (batch === '' && document.getElementById('ProdBatchInput')) batch = (document.getElementById('ProdBatchInput').value || '').trim();
+                if (expiry === '' && document.getElementById('ProdExpiryInput')) expiry = (document.getElementById('ProdExpiryInput').value || '').trim();
                 var expectedUnitPrice = price * (1 - disc / 100);
                 fetch('@Url.Action("AddLineJson", "SalesOrders")', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'RequestVerificationToken': getToken() },
                     body: JSON.stringify({ SOId: soId, prodId: pid, qty: qty, requestRetailPrice: price, salesDiscountPct: disc, expectedUnitPrice: expectedUnitPrice, BatchNo: batch || null, expiryText: expiry || null })
-                }).then(function (r) { return r.json(); })
-                    .then(function (data) {
-                        if (data.ok) { showToast(data.message || 'تمت الإضافة', 'success'); refreshLines(); document.getElementById('ProdQtyInput').value = '1'; }
-                        else showToast(data.message || 'خطأ', 'danger');
-                    }).catch(function () { showToast('فشل إضافة السطر', 'danger'); });
+                }).then(function (r) {
+                    return r.text().then(function (text) {
+                        try { return { ok: r.ok, data: text ? JSON.parse(text) : {} }; } catch (e) { return { ok: r.ok, data: { message: text || 'خطأ في الخادم' } }; }
+                    });
+                }).then(function (result) {
+                    var data = result.data;
+                    if (result.ok && data.ok) { showToast(data.message || 'تمت الإضافة', 'success'); refreshLines(); document.getElementById('ProdQtyInput').value = '1'; }
+                    else showToast(data.message || 'فشل إضافة السطر', 'danger');
+                }).catch(function () { showToast('فشل إضافة السطر', 'danger'); });
             });
 
             document.getElementById('btnClearLines').addEventListener('click', function () {
@@ -436,7 +955,6 @@
                             document.getElementById('btnSaveHeader').disabled = true;
                             document.getElementById('btnConvertToSI').disabled = true;
                             document.getElementById('btnClearLines').disabled = true;
-                            if (data.siId) window.location.href = '@Url.Action("Show", "SalesInvoices")/' + data.siId + '?frame=1';
                         } else showToast(data.message || 'خطأ', 'danger');
                     }).catch(function () { showToast('فشل التحويل', 'danger'); });
             });
@@ -444,6 +962,40 @@
             document.getElementById('SOLinesTbody').addEventListener('click', function (e) {
                 var btn = e.target.closest('.btnRemoveLine');
                 if (btn) removeLine(parseInt(btn.getAttribute('data-line-no'), 10));
+            });
+
+            var btnVol = document.getElementById('btnCustomerVolume');
+            if (btnVol) {
+                var cid = parseInt(document.getElementById('CustomerId').value, 10) || 0;
+                var base = (btnVol.getAttribute('data-base-url') || '').trim();
+                var url = cid > 0 ? (base + (base.indexOf('?') >= 0 ? '&' : '?') + 'id=' + cid) : '#';
+                btnVol.href = url;
+                btnVol.setAttribute('data-url', url);
+            }
+
+            var baseUrl = '@Url.Action("Show", "SalesOrders", new { frame = 1 })';
+            function setParam(u, key, val) {
+                if (!u) return u;
+                var sep = u.indexOf('?') >= 0 ? '&' : '?';
+                return u + sep + key + '=' + encodeURIComponent(val);
+            }
+            var btnFirst = document.getElementById('btnFirstInvoice');
+            var btnPrev = document.getElementById('btnPrevInvoice');
+            var btnNext = document.getElementById('btnNextInvoice');
+            var btnLast = document.getElementById('btnLastInvoice');
+            if (btnFirst) btnFirst.setAttribute('data-url', setParam(baseUrl, 'id', @(navFirst ?? 0)));
+            if (btnPrev) btnPrev.setAttribute('data-url', setParam(baseUrl, 'id', @(prevEffective ?? 0)));
+            if (btnNext) btnNext.setAttribute('data-url', setParam(baseUrl, 'id', @(nextEffective ?? 0)));
+            if (btnLast) btnLast.setAttribute('data-url', setParam(baseUrl, 'id', @(navLast ?? 0)));
+
+            document.getElementById('btnNavOrderSearch').addEventListener('click', function () {
+                var id = parseInt(document.getElementById('NavOrderSearchInput').value, 10) || 0;
+                if (id <= 0) return;
+                var url = setParam(baseUrl, 'id', id);
+                if (window.erpTabs && typeof window.erpTabs.openTab === 'function')
+                    window.erpTabs.openTab('so-show-tab', url, 'أمر بيع');
+                else
+                    window.location.href = url;
             });
         })();
     </script>

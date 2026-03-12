@@ -175,32 +175,21 @@
                         </button>
                         @if (reportData.Any())
                         {
+                            <input type="hidden" name="pageSize" value="@pageSize" />
                             <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, includeZeroQty, includeBatches, sortBy, sortDir })"
                                class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none">
                                 <span>📥</span> تصدير Excel
                             </a>
-                            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع">
+                            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع (يشمل الخصومات في صفوف التشغيلات)">
                                 <span>💾</span> حفظ الخصم اليدوي
                             </button>
+                            <span id="erpPbSaveSuccessMessage" class="d-none text-success fw-bold me-2 small align-middle" style="vertical-align: middle;">تم الحفظ</span>
                             <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbCopyWeightedToManual" title="ينقل الخصم المرجّح (بعد التقريب لخانتين عشريتين) إلى خانة الخصم اليدوي لكل صف ظاهر ثم يحفظ">
                                 <span>📋</span> نقل المرجّح → يدوي (بعد التقريب)
                             </button>
                         }
                     </div>
                 </div>
-                @if (reportData.Any() && totalPages > 1)
-                {
-                    <div class="col-12 col-lg-2 erp-filter-section">
-                        <label class="form-label">حجم الصفحة</label>
-                        <select name="pageSize" class="form-select erp-filter-input" onchange="this.form.submit()">
-                            <option value="200" @(pageSize == 200 ? "selected" : "")>200</option>
-                            <option value="500" @(pageSize == 500 ? "selected" : "")>500</option>
-                            <option value="1000" @(pageSize == 1000 ? "selected" : "")>1000</option>
-                            <option value="5000" @(pageSize == 5000 ? "selected" : "")>5000</option>
-                            <option value="0" @(pageSize == 0 || pageSize >= totalCount ? "selected" : "")>الكل</option>
-                        </select>
-                    </div>
-                }
             </div>
         </form>
     </div>
@@ -340,16 +329,16 @@
                                 @foreach (var batch in item.Batches!)
                                 {
                                     <tr class="erp-pb-batch-row erp-pb-batches-for" data-pb-batch-row data-prod-id="@item.ProdId" data-batch-id="@(batch.BatchId ?? 0)" data-qty="@batch.CurrentQty" data-pb-batches-for="@item.ProdId" data-weighted-discount="@batch.WeightedDiscount.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" style="display: none;">
-                                        <td></td>
-                                        <td class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
+                                        <td data-col="code"></td>
+                                        <td data-col="name" class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
                                         <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
                                         <td data-col="date"><small class="text-muted">@(batch.Expiry.HasValue ? batch.Expiry.Value.ToString("yyyy/MM/dd") : "—")</small></td>
-                                        <td></td>
-                                        <td></td>
-                                        <td></td>
-                                        <td></td>
-                                        <td></td>
-                                        <td></td>
+                                        <td data-col="category"></td>
+                                        <td data-col="productGroup"></td>
+                                        <td data-col="bonusGroup"></td>
+                                        <td data-col="company"></td>
+                                        <td data-col="imported"></td>
+                                        <td data-col="description"></td>
                                         <td data-col="qty" class="text-end">@batch.CurrentQty.ToString("N0")</td>
                                         <td data-col="discount" class="text-end">@(batch.WeightedDiscount.ToString("N2") + " %")</td>
                                         <td data-col="manualDiscount" class="text-end d-print-none">
@@ -357,8 +346,8 @@
                                         </td>
                                         <td data-col="sales" class="text-end">@batch.SalesQty.ToString("N2")</td>
                                         <td data-col="priceRetail" class="text-end">@batch.PriceRetail.ToString("N2")</td>
-                                        <td class="text-end">@batch.UnitCost.ToString("N2")</td>
-                                        <td class="text-end">@batch.TotalCost.ToString("N2")</td>
+                                        <td data-col="unitCost" class="text-end">@batch.UnitCost.ToString("N2")</td>
+                                        <td data-col="cost" class="text-end">@batch.TotalCost.ToString("N2")</td>
                                         <td data-col="actions" class="d-print-none"></td>
                                     </tr>
                                 }
@@ -370,14 +359,24 @@
                 {
                     <tfoot class="table-secondary fw-bold" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
                         <tr>
-                            <td colspan="8" class="text-end"><strong>المجموع الإجمالي:</strong></td>
-                            <td id="productBalancesFooterQty" class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
-                            <td></td>
-                            <td class="d-print-none"></td>
-                            <td id="productBalancesFooterSales" class="text-end"><strong>@totalSalesQty.ToString("N2")</strong></td>
-                            <td id="productBalancesFooterPriceRetail" class="text-end"><strong>@totalPriceRetail.ToString("N2")</strong></td>
-                            <td id="productBalancesFooterUnitCost" class="text-end"><strong>@totalUnitCost.ToString("N2")</strong></td>
-                            <td id="productBalancesFooterCost" class="text-end"><strong class="product-balances-total-value">@totalCost.ToString("N2")</strong></td>
+                            <td data-col="code" class="text-end"><strong>المجموع الإجمالي</strong></td>
+                            <td data-col="name"></td>
+                            <td data-col="batch"></td>
+                            <td data-col="date"></td>
+                            <td data-col="category"></td>
+                            <td data-col="productGroup"></td>
+                            <td data-col="bonusGroup"></td>
+                            <td data-col="company"></td>
+                            <td data-col="imported"></td>
+                            <td data-col="description"></td>
+                            <td data-col="qty" id="productBalancesFooterQty" class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
+                            <td data-col="discount" class="text-end text-muted"><small>—</small></td>
+                            <td data-col="manualDiscount" class="d-print-none text-muted"><small>—</small></td>
+                            <td data-col="sales" id="productBalancesFooterSales" class="text-end"><strong>@totalSalesQty.ToString("N2")</strong></td>
+                            <td data-col="priceRetail" id="productBalancesFooterPriceRetail" class="text-end"><strong>@totalPriceRetail.ToString("N2")</strong></td>
+                            <td data-col="unitCost" id="productBalancesFooterUnitCost" class="text-end"><strong>@totalUnitCost.ToString("N2")</strong></td>
+                            <td data-col="cost" id="productBalancesFooterCost" class="text-end"><strong class="product-balances-total-value">@totalCost.ToString("N2")</strong></td>
+                            <td data-col="actions" class="no-print"></td>
                         </tr>
                     </tfoot>
                 }
@@ -385,35 +384,60 @@
         </div>
     </div>
 
-    @* ===== Pagination + عرض من-إلى ===== *@
+    @* ===== شريط الترقيم تحت الجدول (حجم الصفحة + عرض من-إلى + تنقل) — محاذاة لليمين ===== *@
     @if (reportData.Any())
     {
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" id="productBalancesPaginationBar">
+        var startRow = (page - 1) * pageSize + 1;
+        var endRow = Math.Min(page * pageSize, totalCount);
+        <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" id="productBalancesPaginationBar" dir="rtl">
             <small class="text-muted" id="productBalancesPaginationText">
-                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
+                عرض @startRow - @endRow من @totalCount
             </small>
-            @if (totalPages > 1)
-            {
-                <nav aria-label="pagination">
-                    <ul class="pagination pagination-sm mb-0">
-                        <li class="page-item @(page == 1 ? "disabled" : "")">
-                            <a class="page-link" href="@pageUrl(1)">الأول</a>
-                        </li>
-                        <li class="page-item @(page == 1 ? "disabled" : "")">
-                            <a class="page-link" href="@pageUrl(page - 1)">السابق</a>
-                        </li>
-                        <li class="page-item disabled">
-                            <span class="page-link">صفحة @(page) من @(totalPages)</span>
-                        </li>
-                        <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                            <a class="page-link" href="@pageUrl(page + 1)">التالي</a>
-                        </li>
-                        <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                            <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
-                        </li>
-                    </ul>
-                </nav>
-            }
+            <form method="get" asp-action="ProductBalances" asp-controller="Reports" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="loadReport" value="true" />
+                <input type="hidden" name="search" value="@search" />
+                <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
+                <input type="hidden" name="productGroupId" value="@(productGroupId?.ToString() ?? "")" />
+                <input type="hidden" name="hasBonus" value="@(hasBonus == true ? "true" : "false")" />
+                <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
+                <input type="hidden" name="fromDate" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                <input type="hidden" name="toDate" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
+                <input type="hidden" name="includeBatches" value="true" />
+                <input type="hidden" name="sortBy" value="@(sortBy ?? "name")" />
+                <input type="hidden" name="sortDir" value="@(sortDir ?? "asc")" />
+                <input type="hidden" name="page" value="1" />
+                <label class="form-label m-0 nowrap">حجم الصفحة</label>
+                <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="25" @(pageSize == 25 ? "selected" : "")>25</option>
+                    <option value="50" @(pageSize == 50 ? "selected" : "")>50</option>
+                    <option value="100" @(pageSize == 100 ? "selected" : "")>100</option>
+                    <option value="200" @(pageSize == 200 ? "selected" : "")>200</option>
+                    <option value="500" @(pageSize == 500 ? "selected" : "")>500</option>
+                    <option value="1000" @(pageSize == 1000 ? "selected" : "")>1000</option>
+                    <option value="5000" @(pageSize == 5000 ? "selected" : "")>5000</option>
+                    <option value="0" @(pageSize == 0 || (totalCount > 0 && pageSize >= totalCount) ? "selected" : "")>الكل</option>
+                </select>
+            </form>
+            <nav aria-label="pagination">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item @(page == 1 ? "disabled" : "")">
+                        <a class="page-link" href="@pageUrl(1)">الأول</a>
+                    </li>
+                    <li class="page-item @(page == 1 ? "disabled" : "")">
+                        <a class="page-link" href="@pageUrl(page - 1)">السابق</a>
+                    </li>
+                    <li class="page-item disabled">
+                        <span class="page-link">صفحة @(page) من @(totalPages)</span>
+                    </li>
+                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                        <a class="page-link" href="@pageUrl(page + 1)">التالي</a>
+                    </li>
+                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                        <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
+                    </li>
+                </ul>
+            </nav>
         </div>
     }
 </div>
@@ -695,25 +719,40 @@
                     }).then(function (r) { return r.json(); });
                 }
 
-                function getOrderedManualDiscountInputs() {
+                // includeHidden: عند true يُضمّن صفوف التشغيلات المخفية (لحفظ الكل).
+                function getOrderedManualDiscountInputs(includeHidden) {
                     var rows = tbl.querySelectorAll('tbody tr[data-pb-row], tbody tr.erp-pb-batch-row');
                     var list = [];
                     rows.forEach(function (tr) {
-                        if (tr.style.display === 'none') return;
+                        if (!includeHidden && tr.style.display === 'none') return;
                         var inp = tr.querySelector('.erp-pb-manual-discount-inp');
                         if (inp) list.push(inp);
                     });
                     return list;
                 }
 
-                // Enter: حفظ الصف الحالي بدون رسالة ثم نقل الفوكس للصف التالي
+                function showSaveSuccessMessage() {
+                    var msg = document.getElementById('erpPbSaveSuccessMessage');
+                    if (msg) {
+                        msg.classList.remove('d-none');
+                        msg.textContent = 'تم الحفظ';
+                        window.clearTimeout(window._erpPbSaveSuccessTimeout);
+                        window._erpPbSaveSuccessTimeout = window.setTimeout(function () {
+                            msg.classList.add('d-none');
+                        }, 2500);
+                    } else {
+                        alert('تم الحفظ');
+                    }
+                }
+
+                // Enter: حفظ الصف الحالي ثم نقل الفوكس للصف التالي (بدون رسالة)
                 tbl.querySelectorAll('.erp-pb-manual-discount-inp').forEach(function (inp) {
                     inp.addEventListener('keydown', function (e) {
                         if (e.key !== 'Enter') return;
                         e.preventDefault();
                         var currentInp = this;
                         saveOneRow(currentInp).then(function () {
-                            var all = getOrderedManualDiscountInputs();
+                            var all = getOrderedManualDiscountInputs(false);
                             var idx = all.indexOf(currentInp);
                             if (idx >= 0 && idx < all.length - 1) {
                                 all[idx + 1].focus();
@@ -723,27 +762,28 @@
                     });
                 });
 
-                // زر الحفظ العام: حفظ كل الصفوف الظاهرة بدون رسالة
+                // زر الحفظ العام: حفظ كل الخصومات (الصف الرئيسي + كل صفوف التشغيلات حتى المخفية) ثم إظهار «تم الحفظ»
                 var btnAll = document.getElementById('erpPbSaveAllManualDiscount');
                 if (btnAll) {
                     btnAll.addEventListener('click', function () {
-                        var inputs = getOrderedManualDiscountInputs();
+                        var inputs = getOrderedManualDiscountInputs(true);
                         if (inputs.length === 0) return;
                         btnAll.disabled = true;
                         var promises = inputs.map(function (inp) { return saveOneRow(inp); });
                         Promise.all(promises).then(function () {
                             btnAll.disabled = false;
+                            showSaveSuccessMessage();
                         }).catch(function () {
                             btnAll.disabled = false;
                         });
                     });
                 }
 
-                // زر نقل المرجّح → يدوي (بعد التقريب): يملأ خانة الخصم اليدوي من الخصم المرجّح مقرّباً ثم يحفظ
+                // زر نقل المرجّح → يدوي: يملأ كل الخصومات (بما فيها التشغيلات المخفية) من المرجّح مقرّباً ثم يحفظ ويُظهر «تم الحفظ»
                 var btnCopy = document.getElementById('erpPbCopyWeightedToManual');
                 if (btnCopy) {
                     btnCopy.addEventListener('click', function () {
-                        var inputs = getOrderedManualDiscountInputs();
+                        var inputs = getOrderedManualDiscountInputs(true);
                         if (inputs.length === 0) return;
                         btnCopy.disabled = true;
                         var rounded = function (val) {
@@ -762,6 +802,7 @@
                         var promises = inputs.map(function (inp) { return saveOneRow(inp); });
                         Promise.all(promises).then(function () {
                             btnCopy.disabled = false;
+                            showSaveSuccessMessage();
                         }).catch(function () {
                             btnCopy.disabled = false;
                         });

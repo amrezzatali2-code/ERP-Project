@@ -95,21 +95,23 @@ namespace ERP.Controllers
         // =========================
         private async Task PopulateDropDownsAsync(int? selectedCustomerId = null, int? selectedWarehouseId = null)
         {
-            // قائمة العملاء للأوتوكومبليت في الهيدر
-            // هنا بنرجّع نفس الشكل المستخدم في فاتورة البيع:
-            // Name / Id / PolicyName / UserName / Phone / Address / CreditLimit
+            // قائمة العملاء للأوتوكومبليت في الهيدر (نفس شكل فاتورة المبيعات لملء الحقول)
             var customers = await _context.Customers
                 .Where(c => c.IsActive == true)
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
                 {
-                    Id = c.CustomerId,                 // كود العميل
-                    Name = c.CustomerName,             // اسم العميل
-                    PolicyName = "",                   // ممكن تربطها بسياسة العميل لاحقاً
-                    UserName = "",                     // ممكن تربطها بالمستخدم المسئول عن العميل
-                    Phone = c.Phone1,                  // التليفون
-                    Address = c.Address,               // العنوان
-                    CreditLimit = c.CreditLimit        // الحد الائتماني (لو موجود)
+                    Id = c.CustomerId,
+                    Name = c.CustomerName,
+                    PolicyName = c.Policy != null ? c.Policy.Name : "",
+                    PolicyId = c.PolicyId,
+                    Phone = c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "",
+                    Address = c.Address ?? "",
+                    CreditLimit = c.CreditLimit,
+                    CurrentBalance = c.CurrentBalance,
+                    Gov = c.Governorate != null ? c.Governorate.GovernorateName : "",
+                    District = c.District != null ? c.District.DistrictName : "",
+                    Area = c.Area != null ? c.Area.AreaName : ""
                 })
                 .ToListAsync();
 
@@ -699,7 +701,7 @@ namespace ERP.Controllers
         // Create — GET: فتح شاشة أمر بيع جديد (نفس نمط طلب الشراء: Show مع SOId=0)
         // =========================
         [HttpGet]
-        public async Task<IActionResult> Create(int? frame = null)
+        public async Task<IActionResult> Create(int? frame = null, bool includeZeroQty = false)
         {
             var defaultWarehouseId = await GetDefaultWarehouseIdAsync();
             var model = new SalesOrder
@@ -718,12 +720,13 @@ namespace ERP.Controllers
             };
 
             await PopulateDropDownsAsync(null, model.WarehouseId);
-            await LoadProductsForShowAsync();
+            await LoadProductsForShowAsync(includeZeroQty, model.WarehouseId > 0 ? model.WarehouseId : null);
             await FillSalesOrderNavAsync(0);
 
             ViewBag.Fragment = null;
             ViewBag.Frame = (frame == 1) ? 1 : 0;
             ViewBag.IsLocked = false;
+            ViewBag.IncludeZeroQty = includeZeroQty;
 
             return View("Show", model);
         }
@@ -738,15 +741,62 @@ namespace ERP.Controllers
             return id;
         }
 
-        private async Task LoadProductsForShowAsync()
+        private async Task LoadProductsForShowAsync(bool includeZeroQty = false, int? warehouseId = null)
         {
-            var list = await _context.Products
-                .AsNoTracking()
-                .OrderBy(p => p.ProdName)
-                .Select(p => new { p.ProdId, p.ProdName })
-                .Take(1000)
+            var productsQuery = _context.Products.AsNoTracking().OrderBy(p => p.ProdName);
+            if (!includeZeroQty)
+            {
+                var prodIdsWithStock = _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                    .Select(sl => sl.ProdId);
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    prodIdsWithStock = _context.StockLedger
+                        .AsNoTracking()
+                        .Where(sl => sl.WarehouseId == warehouseId.Value && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                        .Select(sl => sl.ProdId);
+                var ids = await prodIdsWithStock.Distinct().ToListAsync();
+                productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
+            }
+            var list = await productsQuery
+                .Select(p => new { ProdId = p.ProdId, ProdName = p.ProdName })
+                .Take(2000)
                 .ToListAsync();
             ViewBag.Products = list;
+        }
+
+        /// <summary>API: قائمة الأصناف للداتاليست (أصناف لها رصيد فقط أو الكل حسب عرض الصفر) — مثل فاتورة المبيعات.</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetProductsForDatalist(bool includeZeroQty = false, int? warehouseId = null)
+        {
+            var productsQuery = _context.Products.AsNoTracking().OrderBy(p => p.ProdName);
+            if (!includeZeroQty)
+            {
+                var prodIdsWithStock = _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                    .Select(sl => sl.ProdId);
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    prodIdsWithStock = _context.StockLedger
+                        .AsNoTracking()
+                        .Where(sl => sl.WarehouseId == warehouseId.Value && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                        .Select(sl => sl.ProdId);
+                var ids = await prodIdsWithStock.Distinct().ToListAsync();
+                productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
+            }
+            var products = await productsQuery
+                .Select(p => new
+                {
+                    id = p.ProdId,
+                    name = p.ProdName ?? string.Empty,
+                    genericName = p.GenericName ?? string.Empty,
+                    company = p.Company ?? string.Empty,
+                    hasQuota = p.HasQuota,
+                    hasBonus = p.ProductBonusGroupId != null,
+                    bonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null
+                })
+                .ToListAsync();
+            return Json(products);
         }
 
 
@@ -790,13 +840,14 @@ namespace ERP.Controllers
         // =========================
         [HttpGet]
         [ResponseCache(NoStore = true, Duration = 0)]
-        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null)
+        public async Task<IActionResult> Show(int id, string? frag = null, int? frame = null, bool includeZeroQty = false)
         {
             bool isBodyOnly = string.Equals(frag, "body", StringComparison.OrdinalIgnoreCase);
             if (!isBodyOnly && frame != 1)
                 return RedirectToAction(nameof(Show), new { id, frag, frame = 1 });
 
             ViewBag.Fragment = frag;
+            ViewBag.IncludeZeroQty = includeZeroQty;
 
             if (id <= 0)
             {
@@ -806,6 +857,13 @@ namespace ERP.Controllers
 
             var order = await _context.SalesOrders
                 .Include(o => o.Customer)
+                    .ThenInclude(c => c.Governorate)
+                .Include(o => o.Customer)
+                    .ThenInclude(c => c.District)
+                .Include(o => o.Customer)
+                    .ThenInclude(c => c.Area)
+                .Include(o => o.Customer)
+                    .ThenInclude(c => c.Policy)
                 .Include(o => o.Warehouse)
                 .Include(o => o.Lines)
                     .ThenInclude(l => l.Product)
@@ -833,7 +891,7 @@ namespace ERP.Controllers
             }
 
             await PopulateDropDownsAsync(order.CustomerId, order.WarehouseId);
-            await LoadProductsForShowAsync();
+            await LoadProductsForShowAsync(includeZeroQty, order.WarehouseId);
             ViewBag.IsLocked = order.IsConverted
                 || string.Equals(order.Status, "Converted", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(order.Status, "Cancelled", StringComparison.OrdinalIgnoreCase);
@@ -971,11 +1029,11 @@ namespace ERP.Controllers
         public async Task<IActionResult> SaveHeader([FromBody] SalesOrderHeaderDto dto)
         {
             if (dto == null)
-                return BadRequest("حدث خطأ فى البيانات المرسلة.");
+                return BadRequest(new { success = false, message = "حدث خطأ فى البيانات المرسلة." });
             if (dto.CustomerId <= 0)
-                return BadRequest("يجب اختيار العميل قبل حفظ أمر البيع.");
+                return BadRequest(new { success = false, message = "يجب اختيار العميل قبل حفظ أمر البيع." });
             if (dto.WarehouseId <= 0)
-                return BadRequest("يجب اختيار المخزن قبل حفظ أمر البيع.");
+                return BadRequest(new { success = false, message = "يجب اختيار المخزن قبل حفظ أمر البيع." });
 
             var now = DateTime.Now;
             var userName = GetCurrentUserDisplayName();
@@ -1013,9 +1071,9 @@ namespace ERP.Controllers
 
             var existing = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
             if (existing == null)
-                return NotFound("لم يتم العثور على أمر البيع المطلوب.");
+                return NotFound(new { success = false, message = "لم يتم العثور على أمر البيع المطلوب." });
             if (existing.IsConverted)
-                return BadRequest("لا يمكن تعديل أمر بيع تم تحويله بالفعل إلى فاتورة مبيعات.");
+                return BadRequest(new { success = false, message = "لا يمكن تعديل أمر بيع تم تحويله بالفعل إلى فاتورة مبيعات." });
 
             existing.CustomerId = dto.CustomerId;
             existing.WarehouseId = dto.WarehouseId;
@@ -1052,73 +1110,80 @@ namespace ERP.Controllers
         [IgnoreAntiforgeryToken]
         public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
         {
-            if (dto == null || dto.SOId <= 0 || dto.prodId <= 0)
-                return BadRequest(new { ok = false, message = "بيانات الأمر/الصنف غير صحيحة." });
-            if (dto.qty <= 0)
-                return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
-
-            var disc = Math.Clamp(dto.salesDiscountPct, 0, 100);
-            var expectedPrice = dto.expectedUnitPrice > 0 ? dto.expectedUnitPrice : dto.requestRetailPrice * (1m - disc / 100m);
-
-            DateTime? expiry = null;
-            if (!string.IsNullOrWhiteSpace(dto.expiryText))
+            try
             {
-                var parts = dto.expiryText.Trim().Split('/');
-                if (parts.Length == 2 && int.TryParse(parts[0], out int mm) && int.TryParse(parts[1], out int yyyy) && mm >= 1 && mm <= 12)
-                    expiry = new DateTime(yyyy, mm, 1);
+                if (dto == null || dto.SOId <= 0 || dto.prodId <= 0)
+                    return BadRequest(new { ok = false, message = "بيانات الأمر/الصنف غير صحيحة." });
+                if (dto.qty <= 0)
+                    return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
+
+                var disc = Math.Clamp(dto.salesDiscountPct, 0, 100);
+                var expectedPrice = dto.expectedUnitPrice > 0 ? dto.expectedUnitPrice : dto.requestRetailPrice * (1m - disc / 100m);
+
+                DateTime? expiry = null;
+                if (!string.IsNullOrWhiteSpace(dto.expiryText))
+                {
+                    var parts = dto.expiryText.Trim().Split('/');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out int mm) && int.TryParse(parts[1], out int yyyy) && mm >= 1 && mm <= 12)
+                        expiry = new DateTime(yyyy, mm, 1);
+                }
+                var batchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
+
+                var order = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+                if (order == null)
+                    return NotFound(new { ok = false, message = "أمر البيع غير موجود." });
+                if (order.IsConverted)
+                    return BadRequest(new { ok = false, message = "لا يمكن إضافة سطور: الأمر محوّل إلى فاتورة مبيعات." });
+
+                var product = await _context.Products.AsNoTracking().FirstOrDefaultAsync(p => p.ProdId == dto.prodId);
+                if (product == null)
+                    return BadRequest(new { ok = false, message = "الصنف غير موجود." });
+
+                var currentLines = await _context.SOLines.Where(l => l.SOId == dto.SOId).ToListAsync();
+                var nextLineNo = (currentLines.Any() ? currentLines.Max(l => l.LineNo) : 0) + 1;
+
+                var newLine = new SOLine
+                {
+                    SOId = dto.SOId,
+                    LineNo = nextLineNo,
+                    ProdId = dto.prodId,
+                    QtyRequested = dto.qty,
+                    RequestedRetailPrice = dto.requestRetailPrice,
+                    SalesDiscountPct = disc,
+                    ExpectedUnitPrice = expectedPrice,
+                    PreferredBatchNo = batchNo,
+                    PreferredExpiry = expiry?.Date,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = GetCurrentUserDisplayName()
+                };
+                _context.SOLines.Add(newLine);
+                await _context.SaveChangesAsync();
+                await _docTotals.RecalcSalesOrderTotalsAsync(dto.SOId);
+
+                var linesNow = await _context.SOLines.Where(l => l.SOId == dto.SOId).OrderBy(l => l.LineNo).ToListAsync();
+                var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
+                var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+
+                var linesDto = linesNow.Select(l =>
+                {
+                    var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                    var lv = l.QtyRequested * l.ExpectedUnitPrice;
+                    return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
+                }).ToList();
+
+                var soHeader = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+                return Json(new
+                {
+                    ok = true,
+                    message = "تم إضافة السطر بنجاح.",
+                    lines = linesDto,
+                    totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m }
+                });
             }
-            var batchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
-
-            var order = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
-            if (order == null)
-                return NotFound(new { ok = false, message = "أمر البيع غير موجود." });
-            if (order.IsConverted)
-                return BadRequest(new { ok = false, message = "لا يمكن إضافة سطور: الأمر محوّل إلى فاتورة مبيعات." });
-
-            var product = await _context.Products.AsNoTracking().FirstOrDefaultAsync(p => p.ProdId == dto.prodId);
-            if (product == null)
-                return BadRequest(new { ok = false, message = "الصنف غير موجود." });
-
-            var currentLines = await _context.SOLines.Where(l => l.SOId == dto.SOId).ToListAsync();
-            var nextLineNo = (currentLines.Any() ? currentLines.Max(l => l.LineNo) : 0) + 1;
-
-            var newLine = new SOLine
+            catch (Exception ex)
             {
-                SOId = dto.SOId,
-                LineNo = nextLineNo,
-                ProdId = dto.prodId,
-                QtyRequested = dto.qty,
-                RequestedRetailPrice = dto.requestRetailPrice,
-                SalesDiscountPct = disc,
-                ExpectedUnitPrice = expectedPrice,
-                PreferredBatchNo = batchNo,
-                PreferredExpiry = expiry?.Date,
-                CreatedAt = DateTime.UtcNow,
-                CreatedBy = GetCurrentUserDisplayName()
-            };
-            _context.SOLines.Add(newLine);
-            await _context.SaveChangesAsync();
-            await _docTotals.RecalcSalesOrderTotalsAsync(dto.SOId);
-
-            var linesNow = await _context.SOLines.Where(l => l.SOId == dto.SOId).OrderBy(l => l.LineNo).ToListAsync();
-            var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
-
-            var linesDto = linesNow.Select(l =>
-            {
-                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
-                var lv = l.QtyRequested * l.ExpectedUnitPrice;
-                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
-            }).ToList();
-
-            var soHeader = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
-            return Json(new
-            {
-                ok = true,
-                message = "تم إضافة السطر بنجاح.",
-                lines = linesDto,
-                totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m }
-            });
+                return StatusCode(500, new { ok = false, message = "خطأ أثناء إضافة السطر: " + (ex.Message ?? "خطأ غير متوقع.") });
+            }
         }
 
         [HttpGet]
@@ -1141,7 +1206,8 @@ namespace ERP.Controllers
                 return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
             }).ToList();
 
-            return Json(new { ok = true, lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = order.ExpectedItemsTotal } });
+            decimal totalRetail = linesNow.Sum(x => x.QtyRequested * x.RequestedRetailPrice);
+            return Json(new { ok = true, lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), totalRetail, expectedItemsTotal = order.ExpectedItemsTotal } });
         }
 
         public class RemoveLineJsonDto { public int SOId { get; set; } public int LineNo { get; set; } }
@@ -1176,7 +1242,8 @@ namespace ERP.Controllers
                 return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = l.QtyRequested * l.ExpectedUnitPrice };
             }).ToList();
             var soHeader = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
-            return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m } });
+            decimal totalRetail = linesNow.Sum(x => x.QtyRequested * x.RequestedRetailPrice);
+            return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), totalRetail, expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m } });
         }
 
         public class ClearAllLinesJsonDto { public int SOId { get; set; } }
@@ -1196,12 +1263,12 @@ namespace ERP.Controllers
 
             var lines = await _context.SOLines.Where(l => l.SOId == dto.SOId).ToListAsync();
             if (lines.Count == 0)
-                return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, expectedItemsTotal = 0m } });
+                return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, totalRetail = 0m, expectedItemsTotal = 0m } });
 
             _context.SOLines.RemoveRange(lines);
             await _context.SaveChangesAsync();
             await _docTotals.RecalcSalesOrderTotalsAsync(dto.SOId);
-            return Json(new { ok = true, message = "تم مسح جميع الأصناف.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, expectedItemsTotal = 0m } });
+            return Json(new { ok = true, message = "تم مسح جميع الأصناف.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, totalRetail = 0m, expectedItemsTotal = 0m } });
         }
 
         [HttpPost]

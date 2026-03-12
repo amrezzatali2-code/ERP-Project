@@ -63,7 +63,7 @@ namespace ERP.Controllers
 
             if (stockKeys.Count == 0)
             {
-                var emptyModel = new PagedResult<ProductDiscountEffectiveRow>(Array.Empty<ProductDiscountEffectiveRow>(), 1, pageSize, 0)
+                var emptyModel = new PagedResult<ProductDiscountGroupRow>(Array.Empty<ProductDiscountGroupRow>(), 1, pageSize, 0)
                 {
                     Search = s, SearchBy = sb, SortColumn = so, SortDescending = desc,
                     UseDateRange = useDateRange, FromDate = fromDate, ToDate = toDate
@@ -87,26 +87,51 @@ namespace ERP.Controllers
                 .Select(w => new { w.WarehouseId, w.WarehouseName })
                 .ToDictionaryAsync(w => w.WarehouseId);
 
-            // 3) أحدث override لكل (ProductId, WarehouseId) حيث BatchId = null
+            // 2.1) تشغيلات لكل (ProdId, WarehouseId) من StockBatches
+            var stockBatchDetails = await _db.StockBatches
+                .AsNoTracking()
+                .Where(x => x.QtyOnHand > 0 && prodIds.Contains(x.ProdId) && whIds.Contains(x.WarehouseId))
+                .Select(x => new { x.ProdId, x.WarehouseId, x.BatchNo, x.Expiry })
+                .ToListAsync();
+            var batchMasterList = await _db.Batches
+                .AsNoTracking()
+                .Where(b => prodIds.Contains(b.ProdId))
+                .Select(b => new { b.BatchId, b.ProdId, b.BatchNo, b.Expiry })
+                .ToListAsync();
+            var batchKeyToId = batchMasterList
+                .ToDictionary(b => (b.ProdId, BatchNo: (b.BatchNo ?? "").Trim(), ExpiryDate: b.Expiry.Date), b => b.BatchId);
+
+            var batchesPerKey = new Dictionary<(int ProdId, int WarehouseId), List<(int? BatchId, string BatchNo, DateTime? Expiry)>>();
+            foreach (var g in stockBatchDetails.GroupBy(x => new { x.ProdId, x.WarehouseId }))
+            {
+                var distinct = g.Select(x => (BatchNo: (x.BatchNo ?? "").Trim(), Expiry: x.Expiry)).Distinct().ToList();
+                var list = distinct.Select(x =>
+                {
+                    var expDate = x.Expiry?.Date ?? DateTime.MinValue;
+                    int? batchId = batchKeyToId.TryGetValue((g.Key.ProdId, x.BatchNo, expDate), out var bid) ? bid : null;
+                    return (BatchId: batchId, x.BatchNo, x.Expiry);
+                }).ToList();
+                batchesPerKey[(g.Key.ProdId, g.Key.WarehouseId)] = list;
+            }
+
+            // 3) أحدث override: مستوى صنف/مخزن (BatchId = null) ومستوى تشغيلة (BatchId != null)
             var overrides = await _db.ProductDiscountOverrides
                 .AsNoTracking()
-                .Where(o => prodIds.Contains(o.ProductId) && o.BatchId == null
-                    && (o.WarehouseId == null || whIds.Contains(o.WarehouseId!.Value)))
+                .Where(o => prodIds.Contains(o.ProductId) && (o.WarehouseId == null || whIds.Contains(o.WarehouseId!.Value)))
                 .OrderByDescending(o => o.CreatedAt)
-                .Select(o => new { o.Id, o.ProductId, o.WarehouseId, o.OverrideDiscountPct, o.Reason, o.CreatedBy, o.CreatedAt })
+                .Select(o => new { o.Id, o.ProductId, o.WarehouseId, o.BatchId, o.OverrideDiscountPct, o.Reason, o.CreatedBy, o.CreatedAt })
                 .ToListAsync();
 
-            // أحدث override لكل مفتاح (ProductId, WarehouseId) أو (ProductId, null) — القائمة مرتبة بـ CreatedAt تنازلي
-            var overrideByKey = new Dictionary<(int ProdId, int? WhId), (int Id, decimal Pct, string? Reason, string? CreatedBy, DateTime CreatedAt)>();
+            var overrideByKey = new Dictionary<(int ProdId, int? WhId, int? BatchId), (int Id, decimal Pct, string? Reason, string? CreatedBy, DateTime CreatedAt)>();
             foreach (var o in overrides)
             {
-                var key = (o.ProductId, o.WarehouseId);
+                var key = (o.ProductId, o.WarehouseId, o.BatchId);
                 if (!overrideByKey.ContainsKey(key))
                     overrideByKey[key] = (o.Id, o.OverrideDiscountPct, o.Reason, o.CreatedBy, o.CreatedAt);
             }
 
-            // 4) بناء الصفوف: لكل (ProdId, WarehouseId) له رصيد نحدد الخصم الفعّال
-            var rows = new List<ProductDiscountEffectiveRow>();
+            // 4) بناء المجموعات: كل (ProdId, WarehouseId) → صف رئيسي + صفوف تشغيلات إن وُجدت (2+)
+            var groups = new List<ProductDiscountGroupRow>();
             foreach (var k in stockKeys)
             {
                 var prodName = products.TryGetValue(k.ProdId, out var p) ? (p.ProdName ?? "") : "";
@@ -120,7 +145,7 @@ namespace ERP.Controllers
                 string? createdBy = null;
                 DateTime? createdAt = null;
 
-                if (overrideByKey.TryGetValue((k.ProdId, (int?)k.WarehouseId), out var ov))
+                if (overrideByKey.TryGetValue((k.ProdId, (int?)k.WarehouseId, null), out var ov))
                 {
                     effectivePct = ov.Pct;
                     isManual = true;
@@ -129,7 +154,7 @@ namespace ERP.Controllers
                     createdBy = ov.CreatedBy;
                     createdAt = ov.CreatedAt;
                 }
-                else if (overrideByKey.TryGetValue((k.ProdId, (int?)null), out var ovProd))
+                else if (overrideByKey.TryGetValue((k.ProdId, (int?)null, null), out var ovProd))
                 {
                     effectivePct = ovProd.Pct;
                     isManual = true;
@@ -144,7 +169,7 @@ namespace ERP.Controllers
                     isManual = false;
                 }
 
-                rows.Add(new ProductDiscountEffectiveRow
+                var mainRow = new ProductDiscountEffectiveRow
                 {
                     ProdId = k.ProdId,
                     ProductName = prodName,
@@ -157,41 +182,100 @@ namespace ERP.Controllers
                     Reason = reason,
                     CreatedBy = createdBy,
                     CreatedAt = createdAt
-                });
+                };
+
+                var batchRows = new List<ProductDiscountEffectiveRow>();
+                if (batchesPerKey.TryGetValue((k.ProdId, k.WarehouseId), out var batchList) && batchList.Count >= 2)
+                {
+                    foreach (var bt in batchList.OrderBy(x => x.Expiry).ThenBy(x => x.BatchNo))
+                    {
+                        decimal batchPct;
+                        bool batchManual;
+                        int? batchOverrideId = null;
+                        string? batchReason = null;
+                        string? batchCreatedBy = null;
+                        DateTime? batchCreatedAt = null;
+
+                        if (bt.BatchId.HasValue && overrideByKey.TryGetValue((k.ProdId, (int?)k.WarehouseId, bt.BatchId), out var bov))
+                        {
+                            batchPct = bov.Pct;
+                            batchManual = true;
+                            batchOverrideId = bov.Id;
+                            batchReason = bov.Reason;
+                            batchCreatedBy = bov.CreatedBy;
+                            batchCreatedAt = bov.CreatedAt;
+                        }
+                        else if (bt.BatchId.HasValue && overrideByKey.TryGetValue((k.ProdId, (int?)null, bt.BatchId), out var bovNullWh))
+                        {
+                            // خصم التشغيلة قد يكون محفوظاً من تقرير الأرصدة بدون تحديد مخزن — نعرضه كيدوي
+                            batchPct = bovNullWh.Pct;
+                            batchManual = true;
+                            batchOverrideId = bovNullWh.Id;
+                            batchReason = bovNullWh.Reason;
+                            batchCreatedBy = bovNullWh.CreatedBy;
+                            batchCreatedAt = bovNullWh.CreatedAt;
+                        }
+                        else
+                        {
+                            batchPct = await _stockAnalysis.GetEffectivePurchaseDiscountAsync(k.ProdId, k.WarehouseId, bt.BatchId);
+                            batchManual = false;
+                        }
+
+                        batchRows.Add(new ProductDiscountEffectiveRow
+                        {
+                            ProdId = k.ProdId,
+                            ProductName = prodName,
+                            ProdCode = prodCode,
+                            WarehouseId = k.WarehouseId,
+                            WarehouseName = whName,
+                            BatchId = bt.BatchId,
+                            BatchNo = bt.BatchNo,
+                            Expiry = bt.Expiry,
+                            EffectiveDiscountPct = batchPct,
+                            IsManual = batchManual,
+                            OverrideId = batchOverrideId,
+                            Reason = batchReason,
+                            CreatedBy = batchCreatedBy,
+                            CreatedAt = batchCreatedAt
+                        });
+                    }
+                }
+
+                groups.Add(new ProductDiscountGroupRow { MainRow = mainRow, BatchRows = batchRows });
             }
 
-            // 5) بحث
+            // 5) بحث (حسب الصف الرئيسي)
             if (!string.IsNullOrEmpty(s))
             {
                 var lower = s.ToLowerInvariant();
-                rows = rows.Where(r =>
-                    sb == "product" ? (r.ProductName?.ToLowerInvariant().Contains(lower) == true || r.ProdCode == s) :
-                    sb == "reason" ? (r.Reason?.ToLowerInvariant().Contains(lower) == true) :
-                    sb == "createdby" ? (r.CreatedBy?.ToLowerInvariant().Contains(lower) == true) :
-                    (r.ProductName?.ToLowerInvariant().Contains(lower) == true || r.ProdCode?.Contains(s) == true || r.Reason?.ToLowerInvariant().Contains(lower) == true || r.CreatedBy?.ToLowerInvariant().Contains(lower) == true)
+                groups = groups.Where(g =>
+                    sb == "product" ? (g.MainRow.ProductName?.ToLowerInvariant().Contains(lower) == true || g.MainRow.ProdCode == s) :
+                    sb == "reason" ? (g.MainRow.Reason?.ToLowerInvariant().Contains(lower) == true) :
+                    sb == "createdby" ? (g.MainRow.CreatedBy?.ToLowerInvariant().Contains(lower) == true) :
+                    (g.MainRow.ProductName?.ToLowerInvariant().Contains(lower) == true || g.MainRow.ProdCode?.Contains(s) == true || g.MainRow.Reason?.ToLowerInvariant().Contains(lower) == true || g.MainRow.CreatedBy?.ToLowerInvariant().Contains(lower) == true)
                 ).ToList();
             }
 
             if (useDateRange && (fromDate.HasValue || toDate.HasValue))
-                rows = rows.Where(r => r.CreatedAt.HasValue && (!fromDate.HasValue || r.CreatedAt >= fromDate) && (!toDate.HasValue || r.CreatedAt <= toDate)).ToList();
+                groups = groups.Where(g => g.MainRow.CreatedAt.HasValue && (!fromDate.HasValue || g.MainRow.CreatedAt >= fromDate) && (!toDate.HasValue || g.MainRow.CreatedAt <= toDate)).ToList();
 
-            // 6) ترتيب
-            rows = so switch
+            // 6) ترتيب حسب الصف الرئيسي
+            groups = so switch
             {
-                "id" => desc ? rows.OrderByDescending(r => r.OverrideId ?? r.ProdId).ToList() : rows.OrderBy(r => r.OverrideId ?? r.ProdId).ToList(),
-                "product" => desc ? rows.OrderByDescending(r => r.ProductName).ToList() : rows.OrderBy(r => r.ProductName).ToList(),
-                "warehouse" => desc ? rows.OrderByDescending(r => r.WarehouseName).ToList() : rows.OrderBy(r => r.WarehouseName).ToList(),
-                "discount" => desc ? rows.OrderByDescending(r => r.EffectiveDiscountPct).ToList() : rows.OrderBy(r => r.EffectiveDiscountPct).ToList(),
-                "created" => desc ? rows.OrderByDescending(r => r.CreatedAt ?? DateTime.MinValue).ToList() : rows.OrderBy(r => r.CreatedAt ?? DateTime.MinValue).ToList(),
-                _ => desc ? rows.OrderByDescending(r => r.ProductName).ToList() : rows.OrderBy(r => r.ProductName).ToList()
+                "id" => desc ? groups.OrderByDescending(g => g.MainRow.OverrideId ?? g.MainRow.ProdId).ToList() : groups.OrderBy(g => g.MainRow.OverrideId ?? g.MainRow.ProdId).ToList(),
+                "product" => desc ? groups.OrderByDescending(g => g.MainRow.ProductName).ToList() : groups.OrderBy(g => g.MainRow.ProductName).ToList(),
+                "warehouse" => desc ? groups.OrderByDescending(g => g.MainRow.WarehouseName).ToList() : groups.OrderBy(g => g.MainRow.WarehouseName).ToList(),
+                "discount" => desc ? groups.OrderByDescending(g => g.MainRow.EffectiveDiscountPct).ToList() : groups.OrderBy(g => g.MainRow.EffectiveDiscountPct).ToList(),
+                "created" => desc ? groups.OrderByDescending(g => g.MainRow.CreatedAt ?? DateTime.MinValue).ToList() : groups.OrderBy(g => g.MainRow.CreatedAt ?? DateTime.MinValue).ToList(),
+                _ => desc ? groups.OrderByDescending(g => g.MainRow.ProductName).ToList() : groups.OrderBy(g => g.MainRow.ProductName).ToList()
             };
 
-            int total = rows.Count;
+            int total = groups.Count;
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 25;
-            var items = rows.Skip((page - 1) * pageSize).Take(pageSize).ToList();
+            var items = groups.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
-            var model = new PagedResult<ProductDiscountEffectiveRow>(items, page, pageSize, total)
+            var model = new PagedResult<ProductDiscountGroupRow>(items, page, pageSize, total)
             {
                 Search = s,
                 SearchBy = sb,

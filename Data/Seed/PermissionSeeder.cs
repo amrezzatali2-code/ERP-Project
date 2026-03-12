@@ -235,6 +235,7 @@ namespace ERP.Data.Seed
             // ================== التقارير ==================
             Add("Reports", "التقارير", "Reports.CustomerBalances.View", "تقرير أرصدة العملاء");
             Add("Reports", "التقارير", "Reports.ProductBalances.View", "تقرير أرصدة الأصناف");
+            Add("Reports", "التقارير", "Reports.ProductDetailsReport", "تقرير أصناف مفصّلة");
             Add("Reports", "التقارير", "Reports.ProductProfits.View", "تقرير أرباح الأصناف");
             Add("Reports", "التقارير", "Reports.CustomerProfits.View", "تقرير أرباح العملاء");
 
