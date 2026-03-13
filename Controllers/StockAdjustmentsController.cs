@@ -997,12 +997,64 @@ namespace ERP.Controllers
                     .AverageAsync(sl => (decimal?)sl.UnitCost) ?? 0m;
             }
 
-            var batches = await (
-                from sb in _context.StockBatches.AsNoTracking()
-                where sb.ProdId == prodId && sb.WarehouseId == warehouseId && sb.QtyOnHand > 0
-                orderby sb.Expiry, sb.BatchNo
-                select new { batchNo = sb.BatchNo, expiry = sb.Expiry, expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("yyyy-MM-dd") : "", qty = sb.QtyOnHand }
-            ).ToListAsync();
+            // تشغيلات الصنف: نفس مصدر تقرير أرصدة الأصناف — StockLedger حركات الشراء فقط مع RemainingQty > 0
+            // (تقرير الأرصدة يعرض التشغيلات من batchLedgerQuery: Purchase + RemainingQty > 0 ثم يطابقها مع Batches)
+            var ledgerBatchList = await _context.StockLedger
+                .AsNoTracking()
+                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId
+                    && sl.SourceType == "Purchase" && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                .Select(sl => new { sl.BatchNo, sl.Expiry, RemainingQty = sl.RemainingQty ?? 0 })
+                .ToListAsync();
+
+            var rawLedgerBatches = ledgerBatchList
+                .GroupBy(x => new { BatchNo = (x.BatchNo ?? "").Trim(), Expiry = x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null })
+                .Where(g => g.Key.Expiry.HasValue)
+                .Select(g => new { g.Key.BatchNo, g.Key.Expiry, Qty = g.Sum(x => x.RemainingQty) })
+                .Where(x => x.Qty > 0)
+                .OrderBy(x => x.Expiry)
+                .ThenBy(x => x.BatchNo)
+                .ToList();
+
+            // إضافة أي تشغيلة من جدول Batches للصنف لها رصيد في الدفتر (حتى لو المصدر غير Purchase، كالتسويات أو التحويلات)
+            var ledgerKeys = new HashSet<string>(rawLedgerBatches.Select(x => (x.BatchNo ?? "").Trim() + "|" + (x.Expiry?.ToString("yyyy-MM-dd") ?? "")));
+            var fromBatches = await _context.Batches
+                .AsNoTracking()
+                .Where(b => b.ProdId == prodId && b.IsActive)
+                .OrderBy(b => b.Expiry).ThenBy(b => b.BatchNo)
+                .Select(b => new { b.BatchNo, b.Expiry })
+                .ToListAsync();
+
+            foreach (var b in fromBatches)
+            {
+                var batchExpiry = b.Expiry.Date;
+                var key = (b.BatchNo ?? "").Trim() + "|" + batchExpiry.ToString("yyyy-MM-dd");
+                if (ledgerKeys.Contains(key)) continue;
+                // تشغيلة من Batches بدون رصيد شراء: نتحقق إن كان لها رصيد من أي مصدر (تسوية/تحويل/مرتجع)
+                var anyQty = await _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0
+                        && (sl.BatchNo ?? "").Trim() == (b.BatchNo ?? "").Trim() && sl.Expiry.HasValue && sl.Expiry.Value.Date == batchExpiry)
+                    .SumAsync(sl => sl.RemainingQty ?? 0);
+                if (anyQty > 0)
+                {
+                    rawLedgerBatches.Add(new { BatchNo = (b.BatchNo ?? "").Trim(), Expiry = (DateTime?)batchExpiry, Qty = anyQty });
+                    ledgerKeys.Add(key);
+                }
+            }
+
+            rawLedgerBatches = rawLedgerBatches.OrderBy(x => x.Expiry).ThenBy(x => x.BatchNo).ToList();
+
+            var batches = rawLedgerBatches
+                .Select(x => new
+                {
+                    batchNo = x.BatchNo,
+                    expiry = x.Expiry,
+                    expiryText = x.Expiry.HasValue ? x.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                    qty = (int)x.Qty
+                })
+                .ToList();
+
+            int totalQty = batches.Sum(x => x.qty);
 
             return Json(new
             {
@@ -1011,6 +1063,7 @@ namespace ERP.Controllers
                 prodName = product.ProdName,
                 priceRetail = product.PriceRetail,
                 qtyBefore,
+                totalQty,
                 costPerUnit,
                 firstBatchNo = firstBatchNo ?? "",
                 firstExpiry = firstExpiry ?? "",

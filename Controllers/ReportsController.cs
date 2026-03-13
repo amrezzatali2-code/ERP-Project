@@ -3609,44 +3609,16 @@ namespace ERP.Controllers
                     .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
             }
 
-            // 6.3) تكلفة البضاعة في المخزن (نفس منطق تقرير أرصدة الأصناف)
-            // = StockBatches.QtyOnHand × متوسط التكلفة المرجح من StockLedger (Purchase) لكل صنف
-            var inventoryCostStockBatches = _context.StockBatches.AsNoTracking();
+            // 6.3) تكلفة البضاعة في المخزن — من StockLedger: كل الحركات ذات رصيد متبقٍ (شراء، تسوية جرد، مرتجعات، تحويل وارد)
+            // = مجموع (RemainingQty × UnitCost) لجميع السطور التي لها RemainingQty > 0
             var inventoryCostStockLedger = _context.StockLedger.AsNoTracking()
-                .Where(sl => (sl.RemainingQty ?? 0) > 0 && sl.SourceType == "Purchase");
+                .Where(sl => (sl.RemainingQty ?? 0) > 0);
 
             if (warehouseId.HasValue && warehouseId.Value > 0)
-            {
-                inventoryCostStockBatches = inventoryCostStockBatches.Where(sb => sb.WarehouseId == warehouseId.Value);
                 inventoryCostStockLedger = inventoryCostStockLedger.Where(sl => sl.WarehouseId == warehouseId.Value);
-            }
 
-            // متوسط التكلفة المرجح لكل صنف: Sum(RemainingQty*UnitCost) / Sum(RemainingQty)
-            var weightedCostByProd = await inventoryCostStockLedger
-                .GroupBy(sl => sl.ProdId)
-                .Select(g => new
-                {
-                    ProdId = g.Key,
-                    TotalRemaining = g.Sum(sl => (decimal)(sl.RemainingQty ?? 0)),
-                    WeightedCost = g.Sum(sl => (decimal)(sl.RemainingQty ?? 0) * sl.UnitCost)
-                })
-                .ToDictionaryAsync(x => x.ProdId);
-
-            // الكمية الحالية لكل صنف من StockBatches
-            var qtyByProd = await inventoryCostStockBatches
-                .GroupBy(sb => sb.ProdId)
-                .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sb => sb.QtyOnHand) })
-                .ToDictionaryAsync(x => x.ProdId, x => x.TotalQty);
-
-            foreach (var kvp in qtyByProd)
-            {
-                int prodId = kvp.Key;
-                int currentQty = kvp.Value;
-                decimal unitCost = 0m;
-                if (weightedCostByProd.TryGetValue(prodId, out var costData) && costData.TotalRemaining > 0)
-                    unitCost = costData.WeightedCost / costData.TotalRemaining;
-                inventoryCostTotal += currentQty * unitCost;
-            }
+            inventoryCostTotal = await inventoryCostStockLedger
+                .SumAsync(sl => (decimal)(sl.RemainingQty ?? 0) * sl.UnitCost);
 
             decimal balanceSheetProfit = customersDebitSum + treasuryBalance + inventoryCostTotal - customersCreditSum;
 

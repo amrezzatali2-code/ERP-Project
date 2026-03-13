@@ -224,7 +224,21 @@
     {
         <div class="erp-table-scroll-container mt-2" dir="rtl">
             <div id="productProfitsTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
-                <table id="productProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sortBy" data-current-dir="@sortDir" style="min-width: 1200px;">
+                <table id="productProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sortBy" data-current-dir="@sortDir" style="min-width: 1200px; table-layout: fixed;">
+                    <colgroup>
+                        <col style="width: 80px;" />
+                        <col style="width: 200px;" />
+                        <col style="width: 100px;" />
+                        <col style="width: 120px;" />
+                        <col style="width: 120px;" />
+                        <col style="width: 120px;" />
+                        <col style="width: 100px;" />
+                        <col style="width: 120px;" />
+                        <col style="width: 120px;" />
+                        <col style="width: 120px;" />
+                        <col style="width: 100px;" />
+                        <col style="width: 140px;" />
+                    </colgroup>
                     <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                         <tr>
                             <th style="min-width: 80px;" data-col="code">
@@ -610,6 +624,8 @@
     <style>
         #productProfitsTable thead th { background-color: #fafbfc !important; color: #212529; border-bottom: 1px solid #dee2e6; font-weight: 600; }
         #productProfitsTable tfoot { background-color: #e9ecef !important; border-top: 1px solid #dee2e6; }
+        #productProfitsTable tfoot td { box-sizing: border-box; }
+        #productProfitsTable tfoot td.text-end { text-align: end !important; }
         .erp-pp-col-filter-btn { color: #64748b; }
         .erp-pp-col-filter-btn:hover { color: #475569; }
         .erp-pp-col-filter-btn.erp-pp-filter-active { color: #0d6efd !important; }

@@ -891,7 +891,7 @@
                     </div>
                         </div>
                         <div class="col-12">
-                        <div class="card shadow-sm mb-2 invoice-product-card invoice-product-card-list-style">
+                        <div id="prProductDataCard" class="card shadow-sm mb-2 invoice-product-card invoice-product-card-list-style">
                             <div class="card-body">
 
                                     <div class="pr-card-fields-row">
@@ -3555,8 +3555,13 @@
                                              alert(r.message);
                                              if (r.focus) document.getElementById(r.focus)?.focus();
                                          } else {
-                                             document.getElementById('ProdNameInput')?.focus();
-                                             document.getElementById('ProdNameInput')?.select?.();
+                                             // تمرير حتى يكون كارت بيانات الصنف أعلى الشاشة (مثل فاتورة المبيعات)
+                                             var productCard = document.getElementById('prProductDataCard');
+                                             if (productCard) productCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                             setTimeout(function () {
+                                                 document.getElementById('ProdNameInput')?.focus();
+                                                 document.getElementById('ProdNameInput')?.select?.();
+                                             }, 100);
                                          }
                                      } finally {
                                          saveBusy = false;

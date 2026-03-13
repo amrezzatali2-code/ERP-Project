@@ -51,6 +51,7 @@ div.card.invoice-totals-card,
 div.card.adjustment-header-card,
 div.card.adjustment-lines-card,
 div.card.adjustment-add-card,
+div.card.adjustment-totals-card,
 div.card.transfer-header-card,
 div.card.transfer-lines-card,
 div.card.transfer-add-card {
@@ -73,7 +74,8 @@ div.card.transfer-add-card {
 /* شريط الهيدر الملون — نفس الشكل في طلب الشراء ومرتجع البيع ومرتجع الشراء وجميع الشاشات */
 .invoice-header-bar,
 .adjustment-header-bar,
-.transfer-header-bar {
+.transfer-header-bar,
+.adjustment-totals-card .adjustment-header-bar {
     background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
     color: #ffffff !important;
     padding: 0.5rem 1rem;
@@ -103,14 +105,19 @@ div.card.transfer-add-card {
 
 /* هيدر جدول السطور */
 .invoice-lines-header,
-.adjustment-lines-card .erp-table thead th,
 .transfer-lines-card .erp-table thead th {
     background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
     color: #fff !important;
 }
 .invoice-lines-header th,
-.adjustment-lines-card .erp-table thead th,
 .transfer-lines-card .erp-table thead th { border-color: #0b5ed7 !important; }
+
+/* هيدر جدول التسوية الجردية — رمادي مثل فاتورة المبيعات */
+.adjustment-lines-card .erp-table thead th {
+    background: #e9ecef !important;
+    color: #212529 !important;
+    border-color: #dee2e6 !important;
+}
 
 /* شريط الأزرار الجانبي */
 .invoice-actions-sticky {

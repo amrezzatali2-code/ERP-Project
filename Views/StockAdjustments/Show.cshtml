@@ -9,18 +9,190 @@
 @section Styles {
     <link rel="stylesheet" href="~/css/invoice-cards.css" />
     <style>
-        /* تنسيق طلب الشراء من invoice-cards.css — تسوية جردية */
-        .adjustment-page { min-height: 100vh; padding-bottom: 2rem; }
+        /* ===== تنسيق تسوية الجرد مثل فاتورة المبيعات ===== */
+        .adjustment-page {
+            background-color: #f3f6fb;
+            min-height: 100vh;
+            padding-bottom: 2rem;
+        }
+        .adjustment-page .container-fluid { padding: 0; max-width: 100%; }
+        .adjustment-page .row.g-3 { align-items: flex-start !important; }
+        .adjustment-page .col-lg-2.order-1.order-lg-2 {
+            padding: 0.5rem 0.5rem;
+            align-self: flex-start;
+            position: sticky !important;
+            top: 70px;
+            z-index: 1020;
+            height: fit-content;
+            margin-top: 0 !important;
+        }
+        .adjustment-page .col-lg-10.order-2 { margin-top: 0 !important; padding-top: 0 !important; }
+        .adjustment-page .adjustment-header-card { margin-top: 0 !important; }
+        html.in-frame .adjustment-page .col-lg-2.order-1.order-lg-2 { top: 0.5rem; }
+
+        /* كارت الإجراءات الجانبي — نفس فاتورة المبيعات */
+        .adjustment-page .invoice-side-card {
+            background: #ffffff !important;
+            min-width: 220px;
+            position: relative;
+        }
+        .adjustment-page .invoice-side-card .card-header {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
+            color: #ffffff !important;
+            border-bottom: none;
+            padding: 0.55rem 1rem;
+        }
+        .adjustment-page .invoice-side-card .invoice-actions-bar hr { display: none !important; }
+        .adjustment-page .invoice-side-card .btn-erp {
+            font-size: 0.85rem;
+            padding: 0.35rem 0.6rem;
+            border: 1px solid #64748b !important;
+            border-radius: 8px;
+        }
+        .adjustment-page .invoice-side-card .btn-erp + .btn-erp,
+        .adjustment-page .invoice-side-card .invoice-actions-bar > div + div { margin-top: 0.25rem; }
+        .adjustment-page .invoice-actions-sticky {
+            position: sticky;
+            top: 58px;
+            z-index: 3000;
+            background: #ffffff !important;
+            border: 1px solid #6366f1 !important;
+            padding: 10px 10px !important;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+        }
+        .adjustment-page .invoice-side-card .form-control {
+            background: #fff;
+            border-color: #64748b;
+            color: #0f172a;
+        }
+
+        /* العمود الرئيسي */
+        .adjustment-page .col-lg-10.order-2 {
+            background: transparent;
+            padding: 0.5rem 1rem;
+        }
+
+        /* الكروت الرئيسية — خلفية بيضاء، زوايا مستديرة، حدود */
+        .adjustment-header-card,
+        .adjustment-add-card,
+        .adjustment-lines-card,
+        .adjustment-totals-card {
+            border-radius: 1rem;
+            overflow: hidden;
+            background: #ffffff !important;
+        }
         .adjustment-card-line { display: none; }
+        .adjustment-header-card .card-body,
+        .adjustment-add-card .card-body,
+        .adjustment-totals-card .card-body { padding: 1rem 1.25rem !important; }
+        .adjustment-lines-card .card-body { padding: 0 !important; }
+
+        /* حدود وحجم حاوية جدول السطور مثل فاتورة المبيعات */
+        .adjustment-page .adjustment-lines-card .erp-table-wrapper,
+        .adjustment-page .adjustment-lines-table-wrap {
+            border: none;
+            border-radius: 0;
+            max-height: 360px;
+            overflow: auto;
+        }
+        .adjustment-page .adjustment-lines-card {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+        }
+        /* جدول السطور — نفس ألوان جدول طلب الشراء (هيدر رمادي فاتح + حدود + أرضية بيضاء) */
+        .adjustment-page .adjustment-lines-card .erp-table thead th {
+            background-color: #e2e8f0 !important;
+            color: #0f172a !important;
+            font-weight: 600;
+            padding: 0.5rem 0.55rem;
+            border: 1px solid #cbd5e1 !important;
+        }
+        .adjustment-page .adjustment-lines-card .erp-table tbody tr,
+        .adjustment-page .adjustment-lines-card .erp-table tbody td,
+        .adjustment-page .adjustment-lines-card .erp-table tbody tr:nth-of-type(odd) td {
+            background-color: #fff !important;
+        }
+        .adjustment-page .adjustment-lines-card .erp-table tbody tr:hover td {
+            background-color: #f8fafc !important;
+        }
+        .adjustment-page .adjustment-lines-card .erp-table tbody td,
+        .adjustment-page .adjustment-lines-card .erp-table tbody th {
+            color: #0f172a !important;
+            border: 1px solid #e2e8f0 !important;
+        }
+
+        /* حدود الانبوتات والتسميات مثل فاتورة المبيعات */
+        .adjustment-page .adjustment-header-card .form-control,
+        .adjustment-page .adjustment-header-card .form-select,
+        .adjustment-page .adjustment-add-card .form-control,
+        .adjustment-page .adjustment-add-card .form-select,
+        .adjustment-page .adjustment-totals-card .form-control {
+            border-color: #64748b !important;
+            border-radius: 8px;
+        }
+        .adjustment-page .adjustment-header-card .card-body .form-label,
+        .adjustment-page .adjustment-header-card .card-body label,
+        .adjustment-page .adjustment-add-card .card-body .form-label,
+        .adjustment-page .adjustment-add-card .card-body label,
+        .adjustment-page .adjustment-totals-card .card-body .form-label {
+            color: #0f172a !important;
+            font-weight: 500;
+        }
+        .adjustment-page .adjustment-header-card .card-body .form-control,
+        .adjustment-page .adjustment-header-card .card-body .form-select,
+        .adjustment-page .adjustment-add-card .card-body .form-control,
+        .adjustment-page .adjustment-add-card .card-body .form-select {
+            color: #020617 !important;
+        }
+
+        /* حقول التاريخ والوقت */
         input[type="date"],
         input[type="datetime-local"],
         input[type="time"] { direction: ltr !important; text-align: left !important; }
         input[type="date"]::-webkit-calendar-picker-indicator,
         input[type="datetime-local"]::-webkit-calendar-picker-indicator { cursor: pointer; }
+
+        /* سعر الجمهور — فتح بالضغط على اللابل */
+        .adjustment-price-label-unlock { cursor: pointer; }
+        .adjustment-price-label-unlock:hover { text-decoration: underline; }
+
+        /* بوكس اسم الصنف — حد ملون واضح */
+        .adjustment-page .adjustment-prod-name-input {
+            border: 2px solid #6366f1 !important;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
+        }
+
+        /* لوحة قائمة التشغيلات — تظهر عند النقر على حقل التشغيلة */
+        #batchDropdownPanel.dropdown-menu { display: none; padding: 0; min-width: 100%; }
+        #batchDropdownPanel.d-none { display: none !important; }
+        #batchDropdownPanel:not(.d-none) { display: block !important; }
+        #batchDropdownList .dropdown-item:hover { background-color: #e9ecef; }
+        #BatchDropdownToggle { inset-inline-end: 4px; left: auto; right: auto; }
+
+        /* كارت الإجماليات — بوكسات ملخصة مثل فاتورة المبيعات */
+        .adjustment-page .adjustment-totals-card .invoice-summary-box {
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 0.5rem 0.75rem;
+        }
+        .adjustment-page .adjustment-totals-card .invoice-summary-label {
+            color: #64748b;
+            font-size: 0.8rem;
+        }
+        .adjustment-page .adjustment-totals-card .invoice-summary-value {
+            color: #0f172a;
+            font-weight: 600;
+        }
     </style>
 }
 
 <div class="adjustment-page" dir="rtl">
+    @* حاوية رسائل الترحيل والعمليات (بوب أب خارج الكارت — مثل فاتورة المبيعات) *@
+    <div id="adjustmentToastContainer" class="position-fixed top-0 start-50 translate-middle-x p-2" style="z-index: 9999; margin-top: 60px;" aria-live="polite"></div>
+
     <div class="container-fluid pt-3">
         <form id="__AntiForgeryForm" method="post" style="display:none">
             @Html.AntiForgeryToken()
@@ -112,8 +284,6 @@
                             📤 ترحيل التسوية
                         </button>
 
-                        <div id="postAdjustmentMsg" class="small mt-2"></div>
-
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
                                 id="btnOpenAdjustment">
@@ -126,6 +296,17 @@
                                 data-lock-posted="1">
                             🗑️ مسح كل السطور
                         </button>
+
+                        <div>
+                            <button type="button" id="btnOpenProductMovement" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                                📊 حركة الصنف
+                            </button>
+                        </div>
+                        <div>
+                            <button type="button" id="btnOpenProductEdit" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
+                                ✏️ تعديل الصنف
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -151,16 +332,11 @@
                                     <input id="AdjustmentDateInput" type="date" class="form-control form-control-sm" value="@Model.AdjustmentDate.ToString("yyyy-MM-dd")" data-lock-posted="1" dir="ltr" style="text-align: left;" />
                                 </div>
 
-                                <div class="col-lg-3">
+                                <div class="col-lg-4">
                                     <label class="form-label form-label-sm">المخزن</label>
                                     <select asp-for="WarehouseId" asp-items="ViewBag.Warehouses" class="form-select form-select-sm" data-lock-posted="1">
                                         <option value="">اختر المخزن</option>
                                     </select>
-                                </div>
-
-                                <div class="col-lg-3">
-                                    <label class="form-label form-label-sm">رقم مرجعي</label>
-                                    <input asp-for="ReferenceNo" class="form-control form-control-sm" data-lock-posted="1" />
                                 </div>
 
                                 <div class="col-lg-2">
@@ -168,13 +344,10 @@
                                     <input id="AdjustmentStatusDisplay" class="form-control form-control-sm text-center" value="@(string.IsNullOrWhiteSpace(Model.Status) ? "مسودة" : Model.Status)" readonly />
                                 </div>
                             </div>
+                            <input type="hidden" asp-for="ReferenceNo" id="ReferenceNoHidden" />
 
-                            <div class="row g-3 mt-2">
-                                <div class="col-12">
-                                    <label class="form-label form-label-sm">السبب / ملاحظات</label>
-                                    <textarea asp-for="Reason" class="form-control form-control-sm" rows="2" data-lock-posted="1"></textarea>
-                                </div>
-                            </div>
+                            @* الملاحظات مُزالة من الواجهة — القيمة محفوظة في الهيدر عند الحفظ *@
+                            <input type="hidden" name="Reason" id="ReasonHidden" value="@(Model?.Reason ?? "")" />
                         </div>
                     </div>
                 </div>
@@ -184,14 +357,14 @@
                     <div class="adjustment-card-line"></div>
                     <div class="card-body">
                         <div class="row g-2 align-items-end">
-                            <div class="col-lg-2">
+                            <div class="col-lg-1">
                                 <label class="form-label form-label-sm">كود الصنف</label>
                                 <input type="number" id="ProdCodeInput" class="form-control form-control-sm text-center" placeholder="بحث بالكود..." data-lock-posted="1" />
                             </div>
 
-                            <div class="col-lg-3">
+                            <div class="col-lg-5">
                                 <label class="form-label form-label-sm">اسم الصنف</label>
-                                <input id="ProdNameInput" list="productsList" class="form-control form-control-sm" placeholder="اكتب اسم الصنف..." autocomplete="off" data-lock-posted="1" />
+                                <input id="ProdNameInput" list="productsList" class="form-control form-control-sm adjustment-prod-name-input" placeholder="اكتب اسم الصنف..." autocomplete="off" data-lock-posted="1" />
                                 <datalist id="productsList">
                                     @if (ViewBag.ProductsAuto != null)
                                     {
@@ -211,9 +384,16 @@
                                 <input type="hidden" id="ProdId" />
                             </div>
 
-                            <div class="col-lg-2">
+                            <div class="col-lg-1 col-md-2 position-relative">
                                 <label class="form-label form-label-sm">التشغيلة</label>
-                                <input type="text" id="BatchNoInput" class="form-control form-control-sm text-center" placeholder="باتش (قابل للتعديل)" data-lock-posted="1" />
+                                <div class="d-flex align-items-center position-relative">
+                                    <input type="text" id="BatchNoInput" class="form-control form-control-sm text-center flex-grow-1" autocomplete="off" data-lock-posted="1" />
+                                    <span id="BatchDropdownToggle" class="position-absolute px-2 text-muted" style="left: 4px; top: 50%; transform: translateY(-50%); cursor: pointer; pointer-events: none;" aria-hidden="true">▼</span>
+                                </div>
+                                <datalist id="batchList"></datalist>
+                                <div id="batchDropdownPanel" class="dropdown-menu shadow-sm border position-absolute start-0 w-100 mt-0 d-none" style="max-height: 200px; overflow-y: auto; z-index: 1050; top: 100%;">
+                                    <div id="batchDropdownList"></div>
+                                </div>
                             </div>
 
                             <div class="col-lg-2">
@@ -222,8 +402,12 @@
                             </div>
 
                             <div class="col-lg-1">
+                                <label class="form-label form-label-sm">اجمالي الكمية</label>
+                                <input type="number" id="TotalQtyInput" class="form-control form-control-sm text-center" value="0" readonly data-lock-posted="1" title="مجموع كميات كل التشغيلات" />
+                            </div>
+                            <div class="col-lg-1">
                                 <label class="form-label form-label-sm">الكمية قبل</label>
-                                <input type="number" id="QtyBeforeInput" class="form-control form-control-sm text-center" value="0" readonly data-lock-posted="1" />
+                                <input type="number" id="QtyBeforeInput" class="form-control form-control-sm text-center" value="0" readonly data-lock-posted="1" title="كمية التشغيلة المختارة فقط" />
                             </div>
 
                             <div class="col-lg-1">
@@ -239,8 +423,8 @@
                             </div>
 
                             <div class="col-lg-2">
-                                <label class="form-label form-label-sm">سعر الصنف</label>
-                                <input type="number" id="PriceRetailInput" class="form-control form-control-sm text-center" step="0.01" data-lock-posted="1" />
+                                <label id="PriceRetailLabel" class="form-label form-label-sm adjustment-price-label-unlock" title="اضغط لفتح التعديل">سعر الجمهور</label>
+                                <input type="number" id="PriceRetailInput" class="form-control form-control-sm text-center bg-light text-muted" step="0.01" data-lock-posted="1" readonly />
                             </div>
 
                             <div class="col-lg-6">
@@ -260,8 +444,8 @@
                 <div class="card shadow-sm mb-2 adjustment-lines-card">
                     <div class="adjustment-card-line"></div>
                     <div class="card-body p-0">
-                        <div class="erp-table-wrapper">
-                            <table class="table table-sm table-striped table-hover mb-0">
+                        <div class="erp-table-wrapper adjustment-lines-table-wrap">
+                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
                                 <thead>
                                     <tr>
                                         <th class="text-center">#</th>
@@ -307,6 +491,30 @@
                                     }
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+                </div>
+
+                @* كارت إجماليات التسوية — بدون هيدر ملون (مثل فاتورة المبيعات) *@
+                <div class="card shadow-sm mb-2 adjustment-totals-card">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap align-items-stretch gap-3 invoice-summary-row invoice-summary-row-boxes">
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">عدد السطور</span>
+                                <span id="AdjustmentTotalLinesValue" class="invoice-summary-value">@(Model.Lines?.Count ?? 0)</span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">إجمالي الكمية قبل</span>
+                                <span id="AdjustmentTotalQtyBeforeValue" class="invoice-summary-value">@(Model.Lines?.Sum(l => l.QtyBefore) ?? 0)</span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">إجمالي الكمية بعد</span>
+                                <span id="AdjustmentTotalQtyAfterValue" class="invoice-summary-value">@(Model.Lines?.Sum(l => l.QtyAfter) ?? 0)</span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">إجمالي فرق التكلفة</span>
+                                <span id="AdjustmentTotalCostDiffValue" class="invoice-summary-value">@((Model.Lines?.Sum(l => l.CostDiff ?? 0) ?? 0).ToString("0.00"))</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -417,12 +625,46 @@
             }
         })();
 
-        // تحميل بيانات الصنف تلقائياً (مثل فاتورة البيع)
+        // رسائل بوب أب خارج الكارت (مثل فاتورة المبيعات)
+        function showToast(text, type) {
+            if (!text) return;
+            var container = document.getElementById('adjustmentToastContainer');
+            if (!container) return;
+            type = type || 'muted';
+            var el = document.createElement('div');
+            el.className = 'alert alert-' + (type === 'danger' ? 'danger' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'secondary') + ' shadow-sm mb-0 py-2 px-3';
+            el.style.minWidth = '220px';
+            el.textContent = text;
+            container.appendChild(el);
+            setTimeout(function() {
+                el.style.opacity = '0';
+                el.style.transition = 'opacity 0.25s ease';
+                setTimeout(function() {
+                    if (el.parentNode) el.parentNode.removeChild(el);
+                }, 250);
+            }, 4000);
+        }
+
+        // تشغيلات الصنف الحالية (تُملأ عند تحميل بيانات الصنف — للاختيار من القائمة أو إدخال تشغيلة جديدة)
+        let currentBatches = [];
+
+        // تحميل بيانات الصنف تلقائياً + ملء قائمة التشغيلات
         let busyLoadInfo = false;
         async function loadProductInfo() {
             const prodId = parseInt(document.getElementById('ProdId').value || '0', 10);
             const warehouseId = parseInt(document.querySelector('[name="WarehouseId"]')?.value || '0', 10);
-            if (!prodId || prodId <= 0 || !warehouseId || warehouseId <= 0) return;
+            if (!prodId || prodId <= 0 || !warehouseId || warehouseId <= 0) {
+                currentBatches = [];
+                var bl = document.getElementById('batchList');
+                if (bl) bl.innerHTML = '';
+                var totalEl = document.getElementById('TotalQtyInput');
+                if (totalEl) totalEl.value = '0';
+                var qtyBeforeEl = document.getElementById('QtyBeforeInput');
+                if (qtyBeforeEl) qtyBeforeEl.value = '0';
+                var batchToggle = document.getElementById('BatchDropdownToggle');
+                if (batchToggle) batchToggle.style.visibility = 'hidden';
+                return;
+            }
             if (busyLoadInfo) return;
             busyLoadInfo = true;
             const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
@@ -436,34 +678,175 @@
                 const r = await fetch(url, { method: 'GET' });
                 const data = await r.json();
                 if (data && data.ok) {
+                    document.getElementById('TotalQtyInput').value = data.totalQty ?? 0;
                     document.getElementById('QtyBeforeInput').value = data.qtyBefore || 0;
                     document.getElementById('CostPerUnitInput').value = data.costPerUnit || '';
                     document.getElementById('PriceRetailInput').value = data.priceRetail || '';
-                    if (data.firstBatchNo && !document.getElementById('BatchNoInput').value) document.getElementById('BatchNoInput').value = data.firstBatchNo;
-                    if (data.firstExpiry && !document.getElementById('ExpiryInput').value) document.getElementById('ExpiryInput').value = data.firstExpiry;
+                    currentBatches = data.batches || [];
+                    var batchListEl = document.getElementById('batchList');
+                    if (batchListEl) {
+                        batchListEl.innerHTML = '';
+                        currentBatches.forEach(function(b) {
+                            var opt = document.createElement('option');
+                            opt.value = (b.batchNo || '').trim();
+                            opt.textContent = (b.batchNo || '') + (b.expiryText ? ' — ' + b.expiryText : '');
+                            batchListEl.appendChild(opt);
+                        });
+                    }
+                    // عند تحميل صنف جديد نعيّن دائماً التشغيلة وتاريخ الصلاحية لأول تشغيلة له (حتى بعد تغيير الصنف بالاسم/الكود + Enter)
+                    document.getElementById('BatchNoInput').value = data.firstBatchNo ?? '';
+                    document.getElementById('ExpiryInput').value = data.firstExpiry ?? '';
+                    var batchToggle = document.getElementById('BatchDropdownToggle');
+                    if (batchToggle) batchToggle.style.visibility = (currentBatches && currentBatches.length > 1) ? 'visible' : 'hidden';
+                } else {
+                    currentBatches = [];
+                    var bl = document.getElementById('batchList');
+                    if (bl) bl.innerHTML = '';
                 }
-            } catch (e) { console.warn('GetStockAdjustmentProductInfo:', e); }
+            } catch (e) { console.warn('GetStockAdjustmentProductInfo:', e); currentBatches = []; }
             finally { busyLoadInfo = false; }
         }
 
-        document.getElementById('ProdNameInput')?.addEventListener('input', function() {
-            const selectedOption = document.querySelector(`#productsList option[value="${this.value}"]`);
-            if (selectedOption) {
-                document.getElementById('ProdId').value = selectedOption.getAttribute('data-id');
-                document.getElementById('ProdCodeInput').value = selectedOption.getAttribute('data-id');
+        // عند اختيار أو كتابة التشغيلة: إن وافقت إحدى القائمة نملأ تاريخ الصلاحية أوتوماتيك ونحدّث الكمية قبل
+        document.getElementById('BatchNoInput')?.addEventListener('input', function() {
+            var v = this.value?.trim() || '';
+            var found = currentBatches.find(function(b) { return (b.batchNo || '').trim() === v; });
+            if (found && found.expiryText) {
+                document.getElementById('ExpiryInput').value = found.expiryText;
                 loadProductInfo();
             }
         });
 
-        document.getElementById('ProdCodeInput')?.addEventListener('input', function() {
-            const code = this.value;
-            if (code && code > 0) {
-                const selectedOption = document.querySelector(`#productsList option[data-id="${code}"]`);
-                if (selectedOption) {
-                    document.getElementById('ProdId').value = code;
-                    document.getElementById('ProdNameInput').value = selectedOption.value;
+        // لوحة قائمة التشغيلات الظاهرة عند النقر على حقل التشغيلة
+        (function() {
+            var batchInput = document.getElementById('BatchNoInput');
+            var panel = document.getElementById('batchDropdownPanel');
+            var listEl = document.getElementById('batchDropdownList');
+            if (!batchInput || !panel || !listEl) return;
+
+            function renderBatchList() {
+                listEl.innerHTML = '';
+                if (!currentBatches || currentBatches.length === 0) return;
+                currentBatches.forEach(function(b) {
+                    var batchNo = (b.batchNo || '').trim();
+                    var expiryText = b.expiryText || '';
+                    var label = batchNo + (expiryText ? ' — ' + expiryText : '');
+                    var btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'dropdown-item text-start w-100 border-0 bg-transparent py-2 px-2 small';
+                    btn.textContent = label;
+                    btn.dataset.batchNo = batchNo;
+                    btn.dataset.expiry = expiryText;
+                    btn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        batchInput.value = batchNo;
+                        document.getElementById('ExpiryInput').value = expiryText;
+                        loadProductInfo();
+                        panel.classList.add('d-none');
+                    });
+                    listEl.appendChild(btn);
+                });
+            }
+
+            function showPanel() {
+                if (!currentBatches || currentBatches.length <= 1) return;
+                renderBatchList();
+                panel.classList.remove('d-none');
+            }
+
+            function hidePanel() {
+                panel.classList.add('d-none');
+            }
+
+            batchInput.addEventListener('focus', function() { showPanel(); });
+            batchInput.addEventListener('click', function() { showPanel(); });
+
+            document.addEventListener('click', function(e) {
+                if (panel.classList.contains('d-none')) return;
+                if (!panel.contains(e.target) && e.target !== batchInput) hidePanel();
+            });
+        })();
+
+        // سعر الجمهور: مغلق افتراضياً — الضغط على اللابل يفتح التعديل
+        (function() {
+            var priceLabel = document.getElementById('PriceRetailLabel');
+            var priceInput = document.getElementById('PriceRetailInput');
+            if (!priceLabel || !priceInput) return;
+            var priceLocked = true;
+            function applyPriceLockUI() {
+                priceInput.readOnly = priceLocked;
+                if (priceLocked) {
+                    priceInput.classList.add('bg-light', 'text-muted');
+                } else {
+                    priceInput.classList.remove('bg-light', 'text-muted');
+                    priceInput.focus();
+                    priceInput.select();
+                }
+            }
+            priceLabel.addEventListener('click', function() {
+                priceLocked = !priceLocked;
+                applyPriceLockUI();
+            });
+        })();
+
+        function resolveProductByName(val, exactOnly) {
+            if (!(val || '').trim()) return null;
+            val = (val || '').trim();
+            var opt = document.querySelector('#productsList option[value="' + val.replace(/"/g, '\\"') + '"]');
+            if (!opt && !exactOnly) {
+                var opts = document.querySelectorAll('#productsList option');
+                for (var i = 0; i < opts.length; i++) {
+                    var v = (opts[i].getAttribute('value') || '').trim();
+                    if (v === val || v.indexOf(val) === 0) { opt = opts[i]; break; }
+                }
+            }
+            return opt;
+        }
+        document.getElementById('ProdNameInput')?.addEventListener('input', function() {
+            var opt = resolveProductByName(this.value, true);
+            if (opt) {
+                document.getElementById('ProdId').value = opt.getAttribute('data-id');
+                document.getElementById('ProdCodeInput').value = opt.getAttribute('data-id');
+                document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
+                loadProductInfo();
+            }
+        });
+        // عند الخروج من حقل اسم الصنف: إن كان النص يطابق صنفاً (تطابق تام أو يبدأ بـ) نحمّل بياناته
+        document.getElementById('ProdNameInput')?.addEventListener('blur', function() {
+            var val = (this.value || '').trim();
+            if (!val) return;
+            var opt = resolveProductByName(val, false);
+            if (opt) {
+                var newId = opt.getAttribute('data-id');
+                if (document.getElementById('ProdId').value !== newId) {
+                    document.getElementById('ProdId').value = newId;
+                    document.getElementById('ProdCodeInput').value = newId;
+                    document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
                     loadProductInfo();
                 }
+            }
+        });
+
+        document.getElementById('ProdCodeInput')?.addEventListener('input', function() {
+            const code = (this.value || '').trim();
+            if (code) {
+                const selectedOption = document.querySelector('#productsList option[data-id="' + code + '"]');
+                if (selectedOption) {
+                    document.getElementById('ProdId').value = code;
+                    document.getElementById('ProdNameInput').value = selectedOption.getAttribute('value') || selectedOption.value || '';
+                    loadProductInfo();
+                }
+            }
+        });
+        // عند الخروج من حقل كود الصنف: إن كان الكود يطابق صنفاً نحمّل بياناته
+        document.getElementById('ProdCodeInput')?.addEventListener('blur', function() {
+            var code = (this.value || '').trim();
+            if (!code) return;
+            var opt = document.querySelector('#productsList option[data-id="' + code + '"]');
+            if (opt && document.getElementById('ProdId').value !== code) {
+                document.getElementById('ProdId').value = code;
+                document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
+                loadProductInfo();
             }
         });
 
@@ -480,11 +863,17 @@
             document.getElementById('ProdNameInput').value = '';
             document.getElementById('BatchNoInput').value = '';
             document.getElementById('ExpiryInput').value = '';
+            document.getElementById('TotalQtyInput').value = '0';
             document.getElementById('QtyBeforeInput').value = '0';
             document.getElementById('QtyAfterInput').value = '0';
             document.getElementById('CostPerUnitInput').value = '';
             document.getElementById('PriceRetailInput').value = '';
             document.getElementById('LineNoteInput').value = '';
+            currentBatches = [];
+            var batchListEl = document.getElementById('batchList');
+            if (batchListEl) batchListEl.innerHTML = '';
+            var batchToggle = document.getElementById('BatchDropdownToggle');
+            if (batchToggle) batchToggle.style.visibility = 'hidden';
             const prodNameInput = document.getElementById('ProdNameInput');
             prodNameInput?.focus();
             prodNameInput?.select?.();
@@ -524,6 +913,31 @@
             }
         }
         function escapeHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+        // تحديث كارت الإجماليات من جدول السطور
+        function updateAdjustmentTotalsCard() {
+            var tbody = document.getElementById('AdjustmentLinesTbody');
+            var rows = tbody ? tbody.querySelectorAll('tr[data-line-id]') : [];
+            var totalLines = rows.length;
+            var totalQtyBefore = 0, totalQtyAfter = 0, totalCostDiff = 0;
+            for (var i = 0; i < rows.length; i++) {
+                var cells = rows[i].cells;
+                if (cells.length >= 10) {
+                    totalQtyBefore += parseInt(cells[4].textContent || '0', 10);
+                    totalQtyAfter += parseInt(cells[5].textContent || '0', 10);
+                    var costDiffText = (cells[8].textContent || '0').replace(',', '.');
+                    totalCostDiff += parseFloat(costDiffText) || 0;
+                }
+            }
+            var elLines = document.getElementById('AdjustmentTotalLinesValue');
+            var elBefore = document.getElementById('AdjustmentTotalQtyBeforeValue');
+            var elAfter = document.getElementById('AdjustmentTotalQtyAfterValue');
+            var elCostDiff = document.getElementById('AdjustmentTotalCostDiffValue');
+            if (elLines) elLines.textContent = totalLines;
+            if (elBefore) elBefore.textContent = totalQtyBefore;
+            if (elAfter) elAfter.textContent = totalQtyAfter;
+            if (elCostDiff) elCostDiff.textContent = totalCostDiff.toFixed(2);
+        }
 
         // Add line
         async function doAddAdjustmentLine() {
@@ -597,6 +1011,7 @@
                         lineNo = currentRows.length + 1;
                     }
                     upsertAdjustmentRow(result, lineNo);
+                    updateAdjustmentTotalsCard();
                     clearAddLineFormAndFocus();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء إضافة السطر.');
@@ -627,25 +1042,29 @@
         enterNavFields.forEach((el, idx) => {
             if (el.dataset.boundEnterNav === '1') return;
             el.dataset.boundEnterNav = '1';
-            el.addEventListener('keydown', function(e) {
+            el.addEventListener('keydown', async function(e) {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();
                 if (el === document.getElementById('ProdNameInput')) {
-                    const opt = document.querySelector(`#productsList option[value="${el.value}"]`);
-                    if (opt) {
-                        document.getElementById('ProdId').value = opt.getAttribute('data-id');
-                        document.getElementById('ProdCodeInput').value = opt.getAttribute('data-id');
-                        loadProductInfo();
+                    const val = (el.value || '').trim();
+                    if (val) {
+                        const opt = resolveProductByName(val, false);
+                        if (opt) {
+                            document.getElementById('ProdId').value = opt.getAttribute('data-id');
+                            document.getElementById('ProdCodeInput').value = opt.getAttribute('data-id');
+                            document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || val;
+                            await loadProductInfo();
+                        }
                     }
                 }
                 if (el === document.getElementById('ProdCodeInput')) {
-                    const code = el.value;
+                    const code = (el.value || '').trim();
                     if (code) {
-                        const opt = document.querySelector(`#productsList option[data-id="${code}"]`);
+                        let opt = document.querySelector('#productsList option[data-id="' + code + '"]');
                         if (opt) {
                             document.getElementById('ProdId').value = code;
-                            document.getElementById('ProdNameInput').value = opt.value;
-                            loadProductInfo();
+                            document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
+                            await loadProductInfo();
                         }
                     }
                 }
@@ -696,6 +1115,7 @@
                     if (tbody && tbody.querySelectorAll('tr[data-line-id]').length === 0) {
                         tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
                     }
+                    updateAdjustmentTotalsCard();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء حذف السطر.');
                 }
@@ -707,13 +1127,13 @@
             }
         });
 
-        // Save header
+        // Save header (رقم مرجعي مخفي — يُرسل من الحقل المخفي)
         document.getElementById('btnSaveAdjustmentHeader')?.addEventListener('click', async function() {
             const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
             const adjustmentDate = document.getElementById('AdjustmentDateInput').value;
             const warehouseId = document.querySelector('[name="WarehouseId"]').value;
-            const referenceNo = document.querySelector('[name="ReferenceNo"]').value;
-            const reason = document.querySelector('[name="Reason"]').value;
+            const referenceNo = document.getElementById('ReferenceNoHidden')?.value ?? '';
+            const reason = document.getElementById('ReasonHidden')?.value ?? '';
 
             if (!warehouseId || warehouseId <= 0) {
                 alert('من فضلك اختر مخزناً.');
@@ -775,30 +1195,28 @@
             }
         });
 
-        // Post adjustment — نفس أسلوب فاتورة البيع: تحديث الواجهة دون إعادة تحميل
+        // Post adjustment — رسالة الترحيل كـ Toast خارج الكارت (مثل فاتورة المبيعات)
         document.getElementById('btnPostAdjustment')?.addEventListener('click', async function() {
             const adjustmentId = parseInt(document.getElementById('AdjustmentId').value || '0', 10);
             if (!adjustmentId || adjustmentId <= 0) {
-                alert('يجب حفظ التسوية أولاً قبل الترحيل.');
+                showToast('يجب حفظ التسوية أولاً قبل الترحيل.', 'warning');
                 return;
             }
 
             if (!confirm('هل أنت متأكد من ترحيل هذه التسوية؟')) return;
 
             const token = getAntiForgeryToken();
-            const msgDiv = document.getElementById('postAdjustmentMsg');
             const btnPost = this;
             const oldHtml = btnPost.innerHTML;
             btnPost.disabled = true;
             btnPost.innerHTML = '⏳ جاري الترحيل...';
-            if (msgDiv) { msgDiv.textContent = 'يتم حفظ التعديلات ثم الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
+            showToast('يتم حفظ التعديلات ثم الترحيل...', 'muted');
 
             try {
-                // حفظ الهيدر أولاً (لتطبيق أي تعديل)
                 const adjustmentDate = document.getElementById('AdjustmentDateInput')?.value;
                 const warehouseId = parseInt(document.querySelector('[name="WarehouseId"]')?.value || '0', 10);
-                const referenceNo = document.querySelector('[name="ReferenceNo"]')?.value || '';
-                const reason = document.querySelector('[name="Reason"]')?.value || '';
+                const referenceNo = document.getElementById('ReferenceNoHidden')?.value ?? '';
+                const reason = document.getElementById('ReasonHidden')?.value ?? '';
                 if (warehouseId > 0) {
                     const saveDto = { id: adjustmentId, adjustmentDate: adjustmentDate, warehouseId: warehouseId, referenceNo: referenceNo, reason: reason };
                     const saveRes = await fetch('@Url.Action("UpdateHeaderJson", "StockAdjustments")', {
@@ -808,29 +1226,27 @@
                     });
                     if (!saveRes.ok) {
                         const errTxt = await saveRes.text();
-                        if (msgDiv) { msgDiv.textContent = 'تعذر حفظ التعديلات: ' + errTxt; msgDiv.className = 'small mt-2 text-danger'; }
+                        showToast('تعذر حفظ التعديلات: ' + errTxt, 'danger');
                         btnPost.disabled = false; btnPost.innerHTML = oldHtml;
                         return;
                     }
                     const saveResult = await saveRes.json();
                     if (!saveResult || !saveResult.ok) {
-                        if (msgDiv) { msgDiv.textContent = (saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل الترحيل.'; msgDiv.className = 'small mt-2 text-danger'; }
+                        showToast((saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل الترحيل.', 'danger');
                         btnPost.disabled = false; btnPost.innerHTML = oldHtml;
                         return;
                     }
                 }
-                if (msgDiv) { msgDiv.textContent = 'جاري الترحيل...'; msgDiv.className = 'small mt-2 text-muted'; }
+                showToast('جاري الترحيل...', 'muted');
 
                 const response = await fetch(`@Url.Action("PostAdjustment", "StockAdjustments")?id=${adjustmentId}`, {
                     method: 'POST',
-                    headers: {
-                        'RequestVerificationToken': token
-                    }
+                    headers: { 'RequestVerificationToken': token }
                 });
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    if (msgDiv) { msgDiv.textContent = 'خطأ: ' + errorText; msgDiv.className = 'small mt-2 text-danger'; }
+                    showToast('خطأ: ' + errorText, 'danger');
                     btnPost.disabled = false;
                     btnPost.innerHTML = oldHtml;
                     return;
@@ -838,37 +1254,23 @@
 
                 const result = await response.json();
                 if (result.ok) {
-                    // تحديث الواجهة دون إعادة تحميل (مثل فاتورة البيع)
                     setAdjustmentPosted(true);
                     applyPostedUiLock();
-
-                    const statusDisplay = document.getElementById('AdjustmentStatusDisplay');
+                    var statusDisplay = document.getElementById('AdjustmentStatusDisplay');
                     if (statusDisplay) statusDisplay.value = 'مترحلة';
-
-                    const btnOpen = document.getElementById('btnOpenAdjustment');
+                    var btnOpen = document.getElementById('btnOpenAdjustment');
                     if (btnOpen) btnOpen.disabled = false;
-
                     btnPost.innerHTML = '✅ تم ترحيل التسوية';
                     btnPost.disabled = true;
-
-                    if (msgDiv) {
-                        msgDiv.textContent = result.message || 'تم الترحيل بنجاح.';
-                        msgDiv.className = 'small mt-2 text-success';
-                    }
+                    showToast(result.message || 'تم الترحيل بنجاح.', 'success');
                 } else {
-                    if (msgDiv) {
-                        msgDiv.textContent = result.message || 'حدث خطأ أثناء الترحيل.';
-                        msgDiv.className = 'small mt-2 text-danger';
-                    }
+                    showToast(result.message || 'حدث خطأ أثناء الترحيل.', 'danger');
                     btnPost.disabled = false;
                     btnPost.innerHTML = oldHtml;
                 }
             } catch (error) {
                 console.error('Error posting adjustment:', error);
-                if (msgDiv) {
-                    msgDiv.textContent = 'حدث خطأ أثناء الترحيل.';
-                    msgDiv.className = 'small mt-2 text-danger';
-                }
+                showToast('حدث خطأ أثناء الترحيل.', 'danger');
                 btnPost.disabled = false;
                 btnPost.innerHTML = oldHtml;
             }
@@ -904,19 +1306,15 @@
                 if (result.ok) {
                     setAdjustmentPosted(false);
                     applyPostedUiLock();
-
-                    const statusDisplay = document.getElementById('AdjustmentStatusDisplay');
+                    var statusDisplay = document.getElementById('AdjustmentStatusDisplay');
                     if (statusDisplay) statusDisplay.value = 'مسودة';
-
-                    const btnPost = document.getElementById('btnPostAdjustment');
+                    var btnPost = document.getElementById('btnPostAdjustment');
                     if (btnPost) { btnPost.disabled = false; btnPost.innerHTML = '📤 ترحيل التسوية'; }
-
-                    const btnOpen = document.getElementById('btnOpenAdjustment');
+                    var btnOpen = document.getElementById('btnOpenAdjustment');
                     if (btnOpen) btnOpen.disabled = true;
-
-                    alert('تم فتح التسوية بنجاح.');
+                    showToast('تم فتح التسوية بنجاح.', 'success');
                 } else {
-                    alert(result.message || 'حدث خطأ أثناء فتح التسوية.');
+                    showToast(result.message || 'حدث خطأ أثناء فتح التسوية.', 'danger');
                 }
             } catch (error) {
                 console.error('Error opening adjustment:', error);
@@ -955,11 +1353,10 @@
 
                 const result = await response.json();
                 if (result.ok) {
-                    alert('تم مسح السطور بنجاح.');
-                    // مسح السطور يغيّر بنية الجدول — إعادة تحميل لعرض الحالة الجديدة
+                    showToast('تم مسح السطور بنجاح.', 'success');
                     window.location.reload();
                 } else {
-                    alert(result.message || 'حدث خطأ أثناء مسح السطور.');
+                    showToast(result.message || 'حدث خطأ أثناء مسح السطور.', 'danger');
                 }
             } catch (error) {
                 console.error('Error clearing lines:', error);
@@ -989,5 +1386,59 @@
             const lastId = @(ViewBag.NavLastId ?? 0);
             if (lastId > 0) navigateAdjustmentTab('@Url.Action("Show", "StockAdjustments")/' + lastId + '?frame=1');
         });
+
+        // حركة الصنف + تعديل الصنف (مثل فاتورة المبيعات)
+        (function() {
+            function getCurrentProdId() {
+                var pid = document.getElementById('ProdId');
+                if (pid && pid.value && pid.value.trim() !== '') return pid.value.trim();
+                var code = document.getElementById('ProdCodeInput');
+                if (code && code.value && code.value.trim() !== '') return code.value.trim();
+                return '';
+            }
+            function openTabFromFrame(url, tabId, title) {
+                try {
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({ type: 'erp-open-tab', tabId: tabId || '', title: title || '', url: url }, '*');
+                        return;
+                    }
+                } catch (e) { console.error(e); }
+                if (window.erpTabs && typeof window.erpTabs.openTab === 'function') {
+                    window.erpTabs.openTab(tabId, url, title);
+                } else {
+                    window.location.href = url;
+                }
+            }
+            var editBaseUrl = '@Url.Action("Edit", "Products")';
+            var movementBaseUrl = '@Url.Action("Show", "Products")';
+            function buildEditUrl(id) {
+                var base = editBaseUrl.replace(/\/$/, '');
+                return base + '/' + encodeURIComponent(id) + '?frame=1';
+            }
+            function buildMovementUrl(id) {
+                var sep = movementBaseUrl.indexOf('?') >= 0 ? '&' : '?';
+                return movementBaseUrl + sep + 'prodId=' + encodeURIComponent(id) + '&frame=1';
+            }
+            var btnEdit = document.getElementById('btnOpenProductEdit');
+            var btnMovement = document.getElementById('btnOpenProductMovement');
+            if (btnEdit && !btnEdit.dataset.boundEdit) {
+                btnEdit.dataset.boundEdit = '1';
+                btnEdit.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var id = getCurrentProdId();
+                    if (!id) { showToast('من فضلك اختر صنفاً أولاً.', 'warning'); document.getElementById('ProdNameInput')?.focus(); return; }
+                    openTabFromFrame(buildEditUrl(id), 'prod-edit-' + id, 'تعديل الصنف');
+                });
+            }
+            if (btnMovement && !btnMovement.dataset.boundMove) {
+                btnMovement.dataset.boundMove = '1';
+                btnMovement.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var id = getCurrentProdId();
+                    if (!id) { showToast('من فضلك اختر صنفاً أولاً.', 'warning'); document.getElementById('ProdNameInput')?.focus(); return; }
+                    openTabFromFrame(buildMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
+                });
+            }
+        })();
     </script>
 }

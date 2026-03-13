@@ -273,7 +273,7 @@
                 </tbody>
                 <tfoot class="table-secondary fw-bold">
                     <tr>
-                        <td colspan="5" class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                        <td colspan="4" class="text-end"><strong>المجموع الإجمالي:</strong></td>
                         <td data-col="debit" class="text-end"><strong>@totalDebit.ToString("N2")</strong></td>
                         <td data-col="credit" class="text-end"><strong>@totalCredit.ToString("N2")</strong></td>
                         <td data-col="creditlimit" class="text-end"><strong>@totalCreditLimit.ToString("N2")</strong></td>
@@ -283,6 +283,7 @@
                         <td data-col="availablecredit" class="text-end">
                             <strong class="customer-balances-total-value">@totalAvailableCredit.ToString("N2")</strong>
                         </td>
+                        <td class="no-print" data-col="actions"></td>
                     </tr>
                 </tfoot>
             </table>

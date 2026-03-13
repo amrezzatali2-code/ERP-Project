@@ -101,6 +101,21 @@
             color: #6c757d;
         }
 
+        /* كارت الإجراءات ثابت عند السكرول — العمود الجانبي نفسه يلتصق فلا يتحرك مع السكرول */
+        .invoice-page .col-lg-2.order-1.order-lg-2 {
+            align-self: flex-start;
+            position: sticky !important;
+            top: 70px;
+            z-index: 1020;
+            height: fit-content;
+        }
+        html.in-frame .invoice-page .col-lg-2.order-1.order-lg-2 {
+            top: 0.5rem;
+        }
+        .invoice-page .invoice-side-card {
+            position: relative;
+        }
+
         /* العمود الرئيسي — بدون سكرول داخلي (سكرول الصفحة فقط) */
         .invoice-page .col-lg-10.order-2 {
             background: transparent;
@@ -771,7 +786,7 @@
                ========================= *@
             <div class="col-12 col-lg-2 order-1 order-lg-2">
 
-                <div class="card shadow-sm invoice-side-card sticky-top" style="top: 0;">
+                <div class="card shadow-sm invoice-side-card sticky-top">
                     <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
                         <div>
                             <h6 class="mb-0">إجراءات فاتورة المبيعات</h6>
@@ -1149,7 +1164,7 @@
                         @* =====================================================
                        2) كارت بيانات الصنف
                        ===================================================== *@
-                        <div class="card shadow-sm mb-2 invoice-product-card">
+                        <div id="siProductDataCard" class="card shadow-sm mb-2 invoice-product-card">
                             <div class="card-body pt-0 pb-0">
                                 <div class="invoice-card-line"></div>
 
@@ -3925,10 +3940,14 @@
                                     }
                                 }
 
-                                // ✅ المطلوب: بعد الحفظ فوكس على الصنف
-                                                        const ProdNameInput = document.getElementById('ProdNameInput');
-                                ProdNameInput?.focus();
-                                ProdNameInput?.select?.();
+                                // ✅ بعد الحفظ: تمرير حتى كارت بيانات الصنف أعلى الشاشة ثم فوكس على الصنف (مثل طلب الشراء)
+                                var productCard = document.getElementById('siProductDataCard');
+                                if (productCard) productCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                setTimeout(function () {
+                                    var ProdNameInput = document.getElementById('ProdNameInput');
+                                    ProdNameInput?.focus();
+                                    ProdNameInput?.select?.();
+                                }, 100);
 
                             } catch (err) {
                                 console.error(err);
