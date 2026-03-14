@@ -87,6 +87,13 @@ namespace ERP.Models
         [Display(Name = "مجموعة البونص")]
         public ProductBonusGroup? ProductBonusGroup { get; set; } // متغير: مجموعة البونص المرتبطة
 
+        [Display(Name = "التصنيف")]
+        public int? ClassificationId { get; set; }      // متغير: تصنيف الصنف (عادي، ثلاجة، …) — لخط السير
+
+        [ForeignKey(nameof(ClassificationId))]
+        [Display(Name = "التصنيف")]
+        public ProductClassification? Classification { get; set; }
+
         // ================= علاقات أخرى =================
 
         public Category? Category { get; set; }         // متغير: كائن الفئة المرتبط بالصنف

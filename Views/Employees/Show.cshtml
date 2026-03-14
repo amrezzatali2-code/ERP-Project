@@ -1,0 +1,64 @@
+@model ERP.Models.Employee
+@{
+    ViewData["Title"] = "تفاصيل موظف — " + Model.FullName;
+}
+<div class="container" dir="rtl">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">@Model.FullName</h2>
+        <div class="d-flex gap-2">
+            <a asp-action="Edit" asp-route-id="@Model.Id" class="btn btn-primary">تعديل</a>
+            <a asp-action="Index" class="btn btn-secondary">قائمة الموظفين</a>
+        </div>
+    </div>
+
+    <div class="card border">
+        <div class="card-body">
+            <dl class="row mb-0">
+                <dt class="col-sm-3">كود الموظف</dt>
+                <dd class="col-sm-9">@Model.Id</dd>
+
+                <dt class="col-sm-3">الرقم القومي</dt>
+                <dd class="col-sm-9">@(Model.NationalId ?? "-")</dd>
+
+                <dt class="col-sm-3">تاريخ الميلاد</dt>
+                <dd class="col-sm-9">@(Model.BirthDate?.ToString("yyyy-MM-dd") ?? "-")</dd>
+
+                <dt class="col-sm-3">تاريخ التعيين</dt>
+                <dd class="col-sm-9">@(Model.HireDate?.ToString("yyyy-MM-dd") ?? "-")</dd>
+
+                <dt class="col-sm-3">القسم</dt>
+                <dd class="col-sm-9">@(Model.Department?.Name ?? "-")</dd>
+
+                <dt class="col-sm-3">الوظيفة / المسمى</dt>
+                <dd class="col-sm-9">@(Model.Job?.Name ?? "-")</dd>
+
+                <dt class="col-sm-3">هاتف 1</dt>
+                <dd class="col-sm-9">@(Model.Phone1 ?? "-")</dd>
+
+                <dt class="col-sm-3">هاتف 2</dt>
+                <dd class="col-sm-9">@(Model.Phone2 ?? "-")</dd>
+
+                <dt class="col-sm-3">البريد الإلكتروني</dt>
+                <dd class="col-sm-9">@(Model.Email ?? "-")</dd>
+
+                <dt class="col-sm-3">العنوان</dt>
+                <dd class="col-sm-9">@(Model.Address ?? "-")</dd>
+
+                <dt class="col-sm-3">الراتب الأساسي</dt>
+                <dd class="col-sm-9">@(Model.BaseSalary.HasValue ? Model.BaseSalary.Value.ToString("N2") : "-")</dd>
+
+                <dt class="col-sm-3">ربط بحساب مستخدم</dt>
+                <dd class="col-sm-9">@(Model.User != null ? Model.User.DisplayName ?? Model.User.UserName : "-")</dd>
+
+                <dt class="col-sm-3">نشط</dt>
+                <dd class="col-sm-9">@(Model.IsActive ? "نعم" : "لا")</dd>
+
+                @if (!string.IsNullOrWhiteSpace(Model.Notes))
+                {
+                    <dt class="col-sm-3">ملاحظات</dt>
+                    <dd class="col-sm-9">@Model.Notes</dd>
+                }
+            </dl>
+        </div>
+    </div>
+</div>

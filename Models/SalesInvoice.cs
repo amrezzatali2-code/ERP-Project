@@ -128,5 +128,8 @@ namespace ERP.Models
         [Display(Name = "سطور الفاتورة")]
         public virtual ICollection<SalesInvoiceLine> Lines { get; set; }
             = new List<SalesInvoiceLine>();                    // سطور فاتورة البيع
+
+        [Display(Name = "بيانات خط السير")]
+        public virtual SalesInvoiceRoute? Route { get; set; }  // سجل واحد لبيانات خط السير (عدد الشنط، البواكي، …)
     }
 }

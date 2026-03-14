@@ -329,6 +329,40 @@
                             </ul>
                         </li>
 
+                        @* ===== الموظفين ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="employeesMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                الموظفين
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="employeesMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Employees" asp-action="Index"
+                                       data-tab-id="employees"
+                                       data-tab-title="قائمة الموظفين">
+                                        قائمة الموظفين
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Departments" asp-action="Index"
+                                       data-tab-id="departments"
+                                       data-tab-title="الأقسام">
+                                        الأقسام
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Jobs" asp-action="Index"
+                                       data-tab-id="jobs"
+                                       data-tab-title="الوظائف">
+                                        الوظائف
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
                         @* ===== المناطق الجغرافية ===== *@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="geoMenu" role="button"
@@ -674,6 +708,48 @@
                                        data-tab-id="product-discount-overrides"
                                        data-tab-title="قائمة الخصم اليدوي للبيع">
                                         قائمة الخصم اليدوي للبيع
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
+                        @* ===== خط السير ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="routeMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                خط السير
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="routeMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="ProductClassifications" asp-action="Index"
+                                       data-tab-id="product-classifications"
+                                       data-tab-title="التصنيفات">
+                                        قائمة التصنيفات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Routes" asp-action="Index"
+                                       data-tab-id="routes"
+                                       data-tab-title="خطوط السير">
+                                        خطوط السير
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Reports" asp-action="RouteReport"
+                                       data-tab-id="route-report"
+                                       data-tab-title="تقرير خط السير">
+                                        تقرير خط السير
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="SalesInvoiceRoutes" asp-action="Entry"
+                                       data-tab-id="sales-invoice-routes"
+                                       data-tab-title="إدخال بيانات خط السير">
+                                        بيانات خط السير للفواتير
                                     </a>
                                 </li>
                             </ul>

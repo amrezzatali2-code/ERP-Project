@@ -1,0 +1,85 @@
+@model ERP.Models.Employee
+@{
+    ViewData["Title"] = "إضافة موظف";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3">إضافة موظف</h2>
+    <form asp-action="Create" method="post" class="row g-3">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+
+        <div class="col-md-12">
+            <label asp-for="FullName" class="form-label">الاسم بالكامل</label>
+            <input asp-for="FullName" class="form-control" />
+            <span asp-validation-for="FullName" class="text-danger"></span>
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="NationalId" class="form-label">الرقم القومي</label>
+            <input asp-for="NationalId" class="form-control" />
+        </div>
+        <div class="col-md-4">
+            <label asp-for="BirthDate" class="form-label">تاريخ الميلاد</label>
+            <input asp-for="BirthDate" class="form-control" type="date" />
+        </div>
+        <div class="col-md-4">
+            <label asp-for="HireDate" class="form-label">تاريخ التعيين</label>
+            <input asp-for="HireDate" class="form-control" type="date" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="DepartmentId" class="form-label">القسم</label>
+            <select asp-for="DepartmentId" asp-items="ViewBag.DepartmentId" class="form-select">
+                <option value="">-- اختر القسم --</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="JobId" class="form-label">الوظيفة / المسمى</label>
+            <select asp-for="JobId" asp-items="ViewBag.JobId" class="form-select">
+                <option value="">-- اختر الوظيفة --</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label asp-for="BaseSalary" class="form-label">الراتب الأساسي</label>
+            <input asp-for="BaseSalary" class="form-control" type="number" step="0.01" min="0" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="Phone1" class="form-label">هاتف 1</label>
+            <input asp-for="Phone1" class="form-control" />
+        </div>
+        <div class="col-md-4">
+            <label asp-for="Phone2" class="form-label">هاتف 2</label>
+            <input asp-for="Phone2" class="form-control" />
+        </div>
+        <div class="col-md-4">
+            <label asp-for="Email" class="form-label">البريد الإلكتروني</label>
+            <input asp-for="Email" class="form-control" type="email" />
+        </div>
+
+        <div class="col-12">
+            <label asp-for="Address" class="form-label">العنوان</label>
+            <input asp-for="Address" class="form-control" />
+        </div>
+
+        <div class="col-md-6">
+            <label asp-for="UserId" class="form-label">ربط بحساب مستخدم (تسجيل دخول)</label>
+            <select asp-for="UserId" asp-items="ViewBag.UserId" class="form-select">
+                <option value="">-- لا ربط --</option>
+            </select>
+        </div>
+        <div class="col-12">
+            <div class="form-check">
+                <input asp-for="IsActive" class="form-check-input" />
+                <label asp-for="IsActive" class="form-check-label">نشط</label>
+            </div>
+        </div>
+        <div class="col-12">
+            <label asp-for="Notes" class="form-label">ملاحظات</label>
+            <textarea asp-for="Notes" class="form-control" rows="2"></textarea>
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">حفظ</button>
+            <a class="btn btn-secondary" asp-action="Index">إلغاء</a>
+        </div>
+    </form>
+</div>

@@ -218,7 +218,8 @@ namespace ERP.Controllers
             int? selectedAccountId = null,        // رقم الحساب المحاسبي المختار (لو في تعديل)
             string? selectedPartyCategory = null, // نوع الطرف المختار (عميل / مورد / ...)
             int? selectedPolicyId = null,         // كود سياسة العميل المختارة
-            int? selectedUserId = null            // كود المستخدم المسئول (المندوب) المختار
+            int? selectedUserId = null,           // كود المستخدم المسئول (المندوب) المختار
+            int? selectedRouteId = null           // خط السير (للعميل)
         )
         {
             // 1) قائمة أنواع الأطراف (Customer / Supplier / ... )
@@ -307,6 +308,20 @@ namespace ERP.Controllers
                 "UserId",
                 "UserDisplay",
                 selectedUserId
+            );
+
+            // 5) قائمة خطوط السير
+            var routesList = _context.Routes
+                .AsNoTracking()
+                .Where(r => r.IsActive)
+                .OrderBy(r => r.SortOrder).ThenBy(r => r.Name)
+                .Select(r => new { r.Id, r.Name })
+                .ToList();
+            ViewBag.RouteId = new SelectList(
+                routesList,
+                "Id",
+                "Name",
+                selectedRouteId
             );
         }
 
@@ -860,10 +875,11 @@ namespace ERP.Controllers
                 return View(model: null);
 
             // =========================================================
-            // 4) قراءة بيانات العميل + الحساب المحاسبي
+            // 4) قراءة بيانات العميل + الحساب المحاسبي + خط السير
             // =========================================================
             var customer = await _context.Customers
                 .Include(c => c.Account)
+                .Include(c => c.Route)
                 .FirstOrDefaultAsync(c => c.CustomerId == id.Value);
 
             if (customer == null)
@@ -1330,7 +1346,8 @@ namespace ERP.Controllers
                 customer.AccountId,
                 customer.PartyCategory,
                 customer.PolicyId,
-                customer.UserId
+                customer.UserId,
+                customer.RouteId
             );
 
             await FillGeoDropDownsAsync(
@@ -1363,7 +1380,8 @@ namespace ERP.Controllers
                 customer.AccountId,
                 customer.PartyCategory,
                 customer.PolicyId,
-                customer.UserId
+                customer.UserId,
+                customer.RouteId
             );
 
             // ✅ مهم: نمرّر القيم المختارة عشان الكومبو يعرض المحافظة/الحي/المنطقة الحالية
@@ -1409,7 +1427,8 @@ namespace ERP.Controllers
                     customer.AccountId,
                     customer.PartyCategory,
                     customer.PolicyId,
-                    customer.UserId
+                    customer.UserId,
+                    customer.RouteId
                 );
 
                 await FillGeoDropDownsAsync(
@@ -1454,6 +1473,7 @@ namespace ERP.Controllers
                 existing.GovernorateId = customer.GovernorateId;
                 existing.DistrictId = customer.DistrictId;
                 existing.AreaId = customer.AreaId;
+                existing.RouteId = customer.RouteId;
 
                 // ===== السياسة والكوتة =====
                 existing.PolicyId = customer.PolicyId;

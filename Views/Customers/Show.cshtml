@@ -331,7 +331,13 @@
            ===================================================== *@
         <div class="erp-list-filter-bar mb-2">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
-                <h4 class="mb-0 fw-bold" style="font-size: 1.4rem;">@Model.CustomerName</h4>
+                <div>
+                    <h4 class="mb-0 fw-bold" style="font-size: 1.4rem;">@Model.CustomerName</h4>
+                    @if (Model.Route != null)
+                    {
+                        <small class="text-muted">خط السير: @Model.Route.Name</small>
+                    }
+                </div>
                 <div class="d-flex flex-wrap gap-2 flex-nowrap">
                     <a asp-controller="CustomerLedger" asp-action="Index" asp-route-customerId="@Model.CustomerId" 
                        class="btn btn-erp btn-outline-primary btn-erp-sm app-menu-link customer-volume-btn"

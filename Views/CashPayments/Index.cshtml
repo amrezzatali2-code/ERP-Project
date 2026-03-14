@@ -592,7 +592,8 @@
         function applyFilter(applySort, sortDir) {
             if (!currentCol) return;
             var url = new URL(window.location.href);
-            url.searchParams.forEach(function (_, key) { if (key.startsWith("filterCol_")) url.searchParams.delete(key); });
+            url.searchParams.delete("filterCol_" + currentCol);
+            url.searchParams.delete("filterCol_" + currentCol + "Expr");
             if (applySort !== undefined && sortDir !== undefined) { url.searchParams.set("sort", applySort); url.searchParams.set("dir", sortDir); }
             else if (currentSortKey) { var cur = getCurrentSort(); url.searchParams.set("sort", cur.sort); url.searchParams.set("dir", cur.dir); }
             var val = Array.from(currentSelected).filter(Boolean).join("|");

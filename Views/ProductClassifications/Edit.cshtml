@@ -1,0 +1,30 @@
+@model ERP.Models.ProductClassification
+@{
+    ViewData["Title"] = "تعديل تصنيف صنف";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تعديل تصنيف صنف</h2>
+    <form asp-action="Edit" method="post" class="row g-3">
+        <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        <input type="hidden" asp-for="Id" />
+        <div class="col-md-2">
+            <label class="form-label">كود التصنيف</label>
+            <input asp-for="Id" class="form-control" readonly />
+        </div>
+        <div class="col-md-8">
+            <label asp-for="Name" class="form-label">اسم التصنيف</label>
+            <input asp-for="Name" class="form-control" />
+            <span asp-validation-for="Name" class="text-danger"></span>
+        </div>
+        <div class="col-12">
+            <div class="form-check">
+                <input asp-for="IsActive" class="form-check-input" />
+                <label asp-for="IsActive" class="form-check-label">فعال</label>
+            </div>
+        </div>
+        <div class="col-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">حفظ التعديل</button>
+            <a class="btn btn-secondary" asp-action="Index">إلغاء</a>
+        </div>
+    </form>
+</div>

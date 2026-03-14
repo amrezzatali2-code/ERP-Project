@@ -50,6 +50,7 @@
     string? filterCol_isactive = ViewBag.FilterCol_IsActive as string;
     string? filterCol_id = ViewBag.FilterCol_Id as string;
     string? filterCol_name = ViewBag.FilterCol_Name as string;
+    string? filterCol_name_contains = ViewBag.FilterCol_NameContains as string;
     string? filterCol_barcode = ViewBag.FilterCol_Barcode as string;
     string? filterCol_generic = ViewBag.FilterCol_Generic as string;
     string? filterCol_category = ViewBag.FilterCol_Category as string;
@@ -85,6 +86,7 @@
         filterCol_isactive,
         filterCol_id,
         filterCol_name,
+        filterCol_name_contains,
         filterCol_barcode,
         filterCol_generic,
         filterCol_category,
@@ -128,6 +130,7 @@
             filterCol_isactive,
             filterCol_id,
             filterCol_name,
+            filterCol_name_contains,
             filterCol_barcode,
             filterCol_generic,
             filterCol_category,
@@ -162,7 +165,7 @@
                             colKey == "imported" ? filterCol_imported :
                             colKey == "isactive" ? filterCol_isactive :
                             colKey == "id" ? (filterCol_id ?? filterCol_idExpr) :
-                            colKey == "name" ? filterCol_name :
+                            colKey == "name" ? (filterCol_name ?? filterCol_name_contains) :
                             colKey == "barcode" ? filterCol_barcode :
                             colKey == "generic" ? filterCol_generic :
                             colKey == "category" ? filterCol_category :
@@ -281,6 +284,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_name_contains)) { <input type="hidden" name="filterCol_name_contains" value="@filterCol_name_contains" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
@@ -525,6 +529,7 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_name_contains)) { <input type="hidden" name="filterCol_name_contains" value="@filterCol_name_contains" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
@@ -655,6 +660,7 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_name_contains)) { <input type="hidden" name="filterCol_name_contains" value="@filterCol_name_contains" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_barcode)) { <input type="hidden" name="filterCol_barcode" value="@filterCol_barcode" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_generic)) { <input type="hidden" name="filterCol_generic" value="@filterCol_generic" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
@@ -1249,15 +1255,10 @@
             function applyFilter(applySort = null, sortDir = null) {
                 if (!currentCol) return;
                 const url = new URL(window.location.href);
-                
-                // إزالة كل الفلاتر حتى يبحث في كل الداتا
-                const keysToRemove = [];
-                url.searchParams.forEach(function(_, key) {
-                    if (key.startsWith("filterCol_") || key === "filterProductGroupId" || key === "filterCompany" || key === "filterImported" || key === "codeFrom" || key === "codeTo")
-                        keysToRemove.push(key);
-                });
-                keysToRemove.forEach(function(k) { url.searchParams.delete(k); });
-                
+                // تحديث فلتر العمود الحالي فقط — إبقاء فلاتر الأعمدة الأخرى (AND)
+                url.searchParams.delete("filterCol_" + currentCol);
+                url.searchParams.delete("filterCol_" + currentCol + "_contains");
+                url.searchParams.delete("filterCol_" + currentCol + "Expr");
                 if (applySort !== null && sortDir !== null) {
                     url.searchParams.set("sort", applySort);
                     url.searchParams.set("dir", sortDir);
@@ -1272,13 +1273,18 @@
                     const expr = exprInput ? String(exprInput.value || "").trim() : "";
                     if (expr) url.searchParams.set("filterCol_" + currentCol + "Expr", expr);
                 } else {
-                    const filterBoxText = (searchInp && searchInp.value) ? String(searchInp.value).trim() : "";
-                    if (filterBoxText) {
-                        url.searchParams.set("search", filterBoxText);
-                        url.searchParams.set("searchBy", columnToSearchBy[currentCol] || "all");
+                    // أولوية القيم المحددة (تشيك بوكسات): تطبيق فلتر عمود فقط — لا نستخدم بوكس البحث داخل اللوحة كـ search عام
+                    const val = Array.from(currentSelected).filter(Boolean).join("|");
+                    if (val) {
+                        url.searchParams.set("filterCol_" + currentCol, val);
+                        url.searchParams.delete("search");
+                        url.searchParams.delete("searchBy");
                     } else {
-                        const val = Array.from(currentSelected).filter(Boolean).join("|");
-                        if (val) url.searchParams.set("filterCol_" + currentCol, val);
+                        const filterBoxText = (searchInp && searchInp.value) ? String(searchInp.value).trim() : "";
+                        if (filterBoxText) {
+                            url.searchParams.set("search", filterBoxText);
+                            url.searchParams.set("searchBy", columnToSearchBy[currentCol] || "all");
+                        }
                     }
                 }
                 

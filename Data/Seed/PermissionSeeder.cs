@@ -79,6 +79,14 @@ namespace ERP.Data.Seed
                             targetModule = "الحسابات"; break;
                         case "Reports":
                             targetModule = "التقارير"; break;
+                        case "ProductClassifications":
+                        case "Routes":
+                        case "SalesInvoiceRoutes":
+                            targetModule = "خط السير"; break;
+                        case "Departments":
+                        case "Jobs":
+                        case "Employees":
+                            targetModule = "الموظفون"; break;
                         default:
                             // مفتاح غير معروف → ما نغيرش حاجة
                             break;
@@ -238,6 +246,57 @@ namespace ERP.Data.Seed
             Add("Reports", "التقارير", "Reports.ProductDetailsReport", "تقرير أصناف مفصّلة");
             Add("Reports", "التقارير", "Reports.ProductProfits.View", "تقرير أرباح الأصناف");
             Add("Reports", "التقارير", "Reports.CustomerProfits.View", "تقرير أرباح العملاء");
+            Add("Reports", "التقارير", "Reports.RouteReport", "تقرير خط السير");
+
+            // ================== خط السير ==================
+            Add("Route", "خط السير", "ProductClassifications.Index", "قائمة تصنيفات الأصناف");
+            Add("Route", "خط السير", "ProductClassifications.Create", "إضافة تصنيف صنف");
+            Add("Route", "خط السير", "ProductClassifications.Edit", "تعديل تصنيف صنف");
+            Add("Route", "خط السير", "ProductClassifications.Delete", "حذف تصنيف صنف");
+            Add("Route", "خط السير", "Routes.Index", "قائمة خطوط السير");
+            Add("Route", "خط السير", "Routes.Create", "إضافة خط سير");
+            Add("Route", "خط السير", "Routes.Edit", "تعديل خط سير");
+            Add("Route", "خط السير", "Routes.Delete", "حذف خط سير");
+            Add("Route", "خط السير", "ProductClassifications.DeleteConfirmed", "تنفيذ حذف تصنيف صنف");
+            Add("Route", "خط السير", "ProductClassifications.BulkDelete", "مسح مجموعة تصنيفات");
+            Add("Route", "خط السير", "ProductClassifications.DeleteAll", "مسح كل التصنيفات");
+            Add("Route", "خط السير", "ProductClassifications.GetColumnValues", "قيم عمود للفلتر");
+            Add("Route", "خط السير", "Routes.DeleteConfirmed", "تنفيذ حذف خط سير");
+            Add("Route", "خط السير", "Routes.BulkDelete", "مسح مجموعة خطوط سير");
+            Add("Route", "خط السير", "Routes.DeleteAll", "مسح كل خطوط السير");
+            Add("Route", "خط السير", "Routes.GetColumnValues", "قيم عمود للفلتر");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.Index", "قائمة بيانات خط السير للفواتير");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.Edit", "تعديل بيانات خط السير لفاتورة");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.Entry", "إدخال بيانات خط السير (شاشة التسلسل)");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.GetInvoiceInfo", "جلب بيانات الفاتورة");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.GetEmployeesByJob", "جلب الموظفين حسب الوظيفة");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.GetFridgeProducts", "جلب أصناف الثلاجة");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.SaveRouteEntry", "تسجيل بيانات خط السير من شاشة الإدخال");
+            Add("Route", "خط السير", "SalesInvoiceRoutes.SaveRouteJson", "حفظ بيانات خط السير (API)");
+
+            Add("Departments", "الموظفون", "Departments.Index", "قائمة الأقسام");
+            Add("Departments", "الموظفون", "Departments.Create", "إضافة قسم");
+            Add("Departments", "الموظفون", "Departments.Edit", "تعديل قسم");
+            Add("Departments", "الموظفون", "Departments.Delete", "حذف قسم");
+            Add("Departments", "الموظفون", "Departments.DeleteConfirmed", "تنفيذ حذف قسم");
+            Add("Departments", "الموظفون", "Departments.BulkDelete", "مسح مجموعة أقسام");
+            Add("Departments", "الموظفون", "Departments.DeleteAll", "مسح كل الأقسام");
+            Add("Jobs", "الموظفون", "Jobs.Index", "قائمة الوظائف");
+            Add("Jobs", "الموظفون", "Jobs.Create", "إضافة وظيفة");
+            Add("Jobs", "الموظفون", "Jobs.Edit", "تعديل وظيفة");
+            Add("Jobs", "الموظفون", "Jobs.Delete", "حذف وظيفة");
+            Add("Jobs", "الموظفون", "Jobs.DeleteConfirmed", "تنفيذ حذف وظيفة");
+            Add("Jobs", "الموظفون", "Jobs.BulkDelete", "مسح مجموعة وظائف");
+            Add("Jobs", "الموظفون", "Jobs.DeleteAll", "مسح كل الوظائف");
+            Add("Employees", "الموظفون", "Employees.Index", "قائمة الموظفين");
+            Add("Employees", "الموظفون", "Employees.Create", "إضافة موظف");
+            Add("Employees", "الموظفون", "Employees.Edit", "تعديل موظف");
+            Add("Employees", "الموظفون", "Employees.Delete", "حذف موظف");
+            Add("Employees", "الموظفون", "Employees.DeleteConfirmed", "تنفيذ حذف موظف");
+            Add("Employees", "الموظفون", "Employees.Show", "عرض تفاصيل موظف");
+            Add("Employees", "الموظفون", "Employees.Export", "تصدير الموظفين");
+            Add("Employees", "الموظفون", "Employees.BulkDelete", "مسح مجموعة موظفين");
+            Add("Employees", "الموظفون", "Employees.DeleteAll", "مسح كل الموظفين");
 
             // ================== توحيد أسماء الصلاحيات المكررة (مثل لوحة التحكم) ==================
             var dashOld = await db.Permissions.FirstOrDefaultAsync(p => p.Code == "Dashboard.View");

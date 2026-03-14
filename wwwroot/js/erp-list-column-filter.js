@@ -30,6 +30,9 @@
         function getCurrentFilterValue(col) {
             return new URL(window.location.href).searchParams.get('filterCol_' + col) || '';
         }
+        function getCurrentFilterContains(col) {
+            return new URL(window.location.href).searchParams.get('filterCol_' + col + '_contains') || '';
+        }
 
         function getCurrentSort() {
             var url = new URL(window.location.href);
@@ -55,6 +58,8 @@
             currentCol = btn.getAttribute('data-col');
             currentSortKey = btn.getAttribute('data-sort-key') || currentCol;
             if (titleEl) titleEl.textContent = 'ترتيب وفلتر: ' + (btn.getAttribute('data-col-title') || currentCol);
+            // لا نعبّئ بوكس البحث في الكارت من الرابط أبداً — حتى لا يظهر نص (مثل كليكسان) لم يكتبه المستخدم.
+            // البوكس للبحث داخل اللوحة فقط؛ الفلتر المطبّق يُقرأ من التشيك بوكسات (filterCol_X).
             if (searchInp) searchInp.value = '';
             currentSelected = new Set((getCurrentFilterValue(currentCol) || '').split(/[|,;]/).filter(Boolean));
             anchorRect = btn.getBoundingClientRect();
@@ -110,7 +115,7 @@
                 '<input type="checkbox" class="form-check-input" id="' + selectAllId + '">' +
                 '<label class="form-check-label small" for="' + selectAllId + '">(تحديد الكل)</label>' +
                 '</div>' +
-                '<div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' +
+                '<div class="erp-filter-items" style="max-height:200px;min-height:180px;overflow-y:auto;">' +
                 filtered.map(function (x) {
                     var v = String(x.value);
                     var checked = currentSelected.has(v);
@@ -139,10 +144,13 @@
                     renderList(searchInp ? searchInp.value : '');
                 };
             });
-            adjustPanelPosition();
         }
 
         // تراكمية: لا نمسح فلاتر الأعمدة الأخرى، نحدّث فقط العمود الحالي
+        // الفصل بين سلوكين: البحث في الجدول (شريط البحث الرئيسي) ≠ بوكس البحث في كارت الفلتر.
+        // في الكارت: البوكس فقط لتضييق القائمة لاختيار صنف/قيم؛ التطبيق يعتمد على التشيك بوكسات فقط (فلتر دقيق).
+        // "يحتوي" يُستخدم من شريط البحث في الجدول فقط، لا من بوكس الكارت.
+        // تحديث فلتر العمود الحالي فقط — إبقاء فلاتر الأعمدة الأخرى (AND)
         function applyFilter(applySort, sortDir) {
             if (!currentCol) return;
             var url = new URL(window.location.href);
@@ -155,8 +163,17 @@
                 url.searchParams.set('dir', cur.dir);
             }
             var val = Array.from(currentSelected).filter(Boolean).join('|');
-            if (val) url.searchParams.set('filterCol_' + currentCol, val);
-            else url.searchParams.delete('filterCol_' + currentCol);
+            var containsParam = 'filterCol_' + currentCol + '_contains';
+            if (val) {
+                url.searchParams.set('filterCol_' + currentCol, val);
+                url.searchParams.delete(containsParam);
+                // عند تطبيق فلتر من التشيك بوكسات نزيل البحث العام حتى لا يُطبَّق بحث "يحتوي" ولا يظهر نص في بوكس البحث — ينطبق على كل الأعمدة
+                url.searchParams.delete('search');
+                url.searchParams.delete('searchBy');
+            } else {
+                url.searchParams.delete('filterCol_' + currentCol);
+                url.searchParams.delete(containsParam);
+            }
             url.searchParams.set('page', '1');
             window.location.href = url.toString();
         }

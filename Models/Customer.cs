@@ -1,4 +1,4 @@
-﻿using System;                                   // استخدام DateTime للتواريخ
+using System;                                   // استخدام DateTime للتواريخ
 using System.Collections.Generic;               // القوائم List
 using System.ComponentModel.DataAnnotations;    // الخصائص مثل Required, StringLength
 using System.ComponentModel.DataAnnotations.Schema;
@@ -52,6 +52,12 @@ namespace ERP.Models
 
         [Display(Name = "المنطقة")]
         public int? AreaId { get; set; }                    // متغير: معرّف المنطقة (FK اختياري)
+
+        [Display(Name = "خط السير")]
+        public int? RouteId { get; set; }                    // متغير: خط السير الذي يتبعه العميل
+
+        [ForeignKey(nameof(RouteId))]
+        public virtual Route? Route { get; set; }
 
         // ===== الحالة والملاحظات =====
         [Display(Name = "نشط؟")]

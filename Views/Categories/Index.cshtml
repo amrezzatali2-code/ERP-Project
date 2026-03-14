@@ -759,7 +759,8 @@
             function applyFilter(applySort, sortDir) {
                 if (!currentCol) return;
                 var url = new URL(window.location.href);
-                url.searchParams.forEach(function (_, key) { if (key.startsWith("filterCol_")) url.searchParams.delete(key); });
+                // تحديث فلتر العمود الحالي فقط — إبقاء فلاتر الأعمدة الأخرى (AND)
+                url.searchParams.delete("filterCol_" + currentCol);
                 if (applySort !== undefined && sortDir !== undefined) {
                     url.searchParams.set("sort", applySort);
                     url.searchParams.set("dir", sortDir);

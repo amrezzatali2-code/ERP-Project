@@ -1,0 +1,24 @@
+@model ERP.Models.Employee
+@{
+    ViewData["Title"] = "حذف موظف";
+}
+<div class="container" dir="rtl">
+    <h2 class="mb-3">تأكيد حذف الموظف</h2>
+    <p class="text-danger">هل أنت متأكد من حذف الموظف التالي؟</p>
+    <dl class="row">
+        <dt class="col-sm-3">كود الموظف</dt>
+        <dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">الاسم</dt>
+        <dd class="col-sm-9">@Model.FullName</dd>
+        <dt class="col-sm-3">القسم</dt>
+        <dd class="col-sm-9">@(Model.Department?.Name ?? "-")</dd>
+        <dt class="col-sm-3">الوظيفة / المسمى</dt>
+        <dd class="col-sm-9">@(Model.Job?.Name ?? "-")</dd>
+    </dl>
+    <form asp-action="Delete" method="post">
+        <input type="hidden" asp-for="Id" />
+        @Html.AntiForgeryToken()
+        <button type="submit" class="btn btn-danger">نعم، احذف</button>
+        <a class="btn btn-secondary" asp-action="Index">إلغاء</a>
+    </form>
+</div>

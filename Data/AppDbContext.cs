@@ -85,7 +85,16 @@ namespace ERP.Data
         public DbSet<ProductBonusGroup> ProductBonusGroups { get; set; } = default!;
         public DbSet<ERP.Models.StockBatch> StockBatches { get; set; } = default!;
 
+        // ===== خط السير =====
+        public DbSet<ProductClassification> ProductClassifications { get; set; } = null!;
+        public DbSet<ERP.Models.Route> Routes { get; set; } = null!;
+        public DbSet<SalesInvoiceRoute> SalesInvoiceRoutes { get; set; } = null!;
+        public DbSet<SalesInvoiceRouteFridgeLine> SalesInvoiceRouteFridgeLines { get; set; } = null!;
 
+        // ===== الموظفون =====
+        public DbSet<Department> Departments { get; set; } = null!;
+        public DbSet<Job> Jobs { get; set; } = null!;
+        public DbSet<Employee> Employees { get; set; } = null!;
 
 
 
@@ -1351,6 +1360,11 @@ namespace ERP.Data
                       .HasForeignKey(c => c.UserId)
                       .OnDelete(DeleteBehavior.SetNull);
 
+                // ===== خط السير =====
+                e.HasOne(c => c.Route)
+                 .WithMany(r => r.Customers)
+                 .HasForeignKey(c => c.RouteId)
+                 .OnDelete(DeleteBehavior.SetNull);
             });
 
 
@@ -1432,6 +1446,11 @@ namespace ERP.Data
                 .WithMany(g => g.Products)                   // المجموعة تحتوي على عدة أصناف
                 .HasForeignKey(p => p.ProductGroupId)        // FK على ProductGroupId
                  .OnDelete(DeleteBehavior.SetNull);           // لو مسحنا المجموعة نخلي المجموعة = NULL في الأصناف
+
+                e.HasOne(p => p.Classification)
+                 .WithMany(c => c.Products)
+                 .HasForeignKey(p => p.ClassificationId)
+                 .OnDelete(DeleteBehavior.SetNull);
             });
 
 
@@ -1508,9 +1527,85 @@ namespace ERP.Data
                  .IsRequired();
             });
 
+            // ===== ProductClassifications (تصنيفات الأصناف — عادي، ثلاجة، …) =====
+            mb.Entity<ProductClassification>(e =>
+            {
+                e.ToTable("ProductClassifications");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+                e.Property(x => x.Code).HasMaxLength(20);
+            });
 
+            // ===== Routes (خطوط السير) =====
+            mb.Entity<ERP.Models.Route>(e =>
+            {
+                e.ToTable("Routes");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+                e.Property(x => x.Code).HasMaxLength(20);
+            });
 
+            // ===== SalesInvoiceRoute (بيانات خط السير لكل فاتورة) — العلاقة واحد-لواحد مع SalesInvoice مُعرّفة في SalesInvoice =====
+            mb.Entity<SalesInvoiceRoute>(e =>
+            {
+                e.ToTable("SalesInvoiceRoutes");
+                e.HasKey(x => x.SIId);
+                e.Property(x => x.Notes).HasMaxLength(500);
+                e.HasOne(x => x.ControlEmployee).WithMany().HasForeignKey(x => x.ControlEmployeeId).OnDelete(DeleteBehavior.SetNull);
+                e.HasOne(x => x.PreparerEmployee).WithMany().HasForeignKey(x => x.PreparerEmployeeId).OnDelete(DeleteBehavior.SetNull);
+                e.HasOne(x => x.DistributorEmployee).WithMany().HasForeignKey(x => x.DistributorEmployeeId).OnDelete(DeleteBehavior.SetNull);
+                e.HasMany(x => x.FridgeLines).WithOne(l => l.Route).HasForeignKey(l => l.SIId).OnDelete(DeleteBehavior.Cascade);
+            });
 
+            mb.Entity<SalesInvoiceRouteFridgeLine>(e =>
+            {
+                e.ToTable("SalesInvoiceRouteFridgeLines");
+                e.HasKey(x => x.Id);
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== Employees (الموظفون) =====
+            mb.Entity<Department>(e =>
+            {
+                e.ToTable("Departments");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+                e.Property(x => x.Code).HasMaxLength(20);
+            });
+
+            mb.Entity<Job>(e =>
+            {
+                e.ToTable("Jobs");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.Name).HasMaxLength(100).IsRequired();
+                e.Property(x => x.Code).HasMaxLength(20);
+            });
+
+            mb.Entity<Employee>(e =>
+            {
+                e.ToTable("Employees");
+                e.HasKey(x => x.Id);
+                e.Property(x => x.FullName).HasMaxLength(100).IsRequired();
+                e.Property(x => x.Code).HasMaxLength(20);
+                e.Property(x => x.NationalId).HasMaxLength(20);
+                e.Property(x => x.Phone1).HasMaxLength(20);
+                e.Property(x => x.Phone2).HasMaxLength(20);
+                e.Property(x => x.Email).HasMaxLength(100);
+                e.Property(x => x.Address).HasMaxLength(300);
+                e.Property(x => x.Notes).HasMaxLength(500);
+                e.HasOne(x => x.User)
+                 .WithMany()
+                 .HasForeignKey(x => x.UserId)
+                 .OnDelete(DeleteBehavior.SetNull);
+                e.HasOne(x => x.Department)
+                 .WithMany(d => d.Employees)
+                 .HasForeignKey(x => x.DepartmentId)
+                 .OnDelete(DeleteBehavior.SetNull);
+                e.HasOne(x => x.Job)
+                 .WithMany(j => j.Employees)
+                 .HasForeignKey(x => x.JobId)
+                 .OnDelete(DeleteBehavior.SetNull);
+            });
 
             // ===== price exchange table =====
 
@@ -1627,6 +1722,12 @@ namespace ERP.Data
                  .WithMany()
                  .HasForeignKey(x => x.RefSOId)
                  .OnDelete(DeleteBehavior.Restrict);
+
+                // 🔹 بيانات خط السير (واحد لواحد)
+                e.HasOne(x => x.Route)
+                 .WithOne(r => r.SalesInvoice)
+                 .HasForeignKey<SalesInvoiceRoute>(r => r.SIId)
+                 .OnDelete(DeleteBehavior.Cascade);
             });
 
 

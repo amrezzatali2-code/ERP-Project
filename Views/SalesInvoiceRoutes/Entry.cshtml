@@ -1,0 +1,423 @@
+@{
+    ViewData["Title"] = "إدخال بيانات خط السير";
+    var baseUrl = Url.Action("", "SalesInvoiceRoutes");
+}
+<style>
+    #routeEntryPage { max-height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+    #routeEntryPage .route-entry-form { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; border-radius: 12px; border: 1px solid #6366f1; box-shadow: 0 1px 3px rgba(99,102,241,.2); }
+    #routeEntryPage #fridgeList { max-height: 90px; overflow-y: auto; overflow-x: hidden; border-radius: 8px; }
+    #routeEntryPage .route-entry-form .form-label { margin-bottom: 0.2rem; font-size: 0.875rem; font-weight: 500; color: #374151; }
+    #routeEntryPage .route-entry-form .form-control,
+    #routeEntryPage .route-entry-form .form-select {
+        padding: 0.4rem 0.6rem; font-size: 0.9rem;
+        border-radius: 8px; border: 1px solid #d1d5db;
+        transition: border-color .15s, box-shadow .15s;
+    }
+    #routeEntryPage .route-entry-form .form-select {
+        appearance: none; -webkit-appearance: none; -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2363666f' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat; background-position: right 0.6rem center;
+        padding-right: 1.75rem;
+    }
+    #routeEntryPage .route-entry-form .form-control:focus,
+    #routeEntryPage .route-entry-form .form-select:focus {
+        border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,.2); outline: 0;
+    }
+    #routeEntryPage #invoiceSummary, #routeEntryPage #alreadyInRouteWarning { border-radius: 10px; border: none; }
+    #routeEntryPage .card { border-radius: 12px; }
+    #routeEntryPage .btn { border-radius: 8px; }
+    #routeEntryPage #fridgeList .table { border-radius: 8px; overflow: hidden; }
+    #routeEntryPage #fridgeProductSelect { min-width: 260px; max-width: 320px; }
+    #routeEntryPage #fridgeQty { width: 88px; min-width: 88px; }
+    #routeEntryPage .fridge-summary-box { width: 100px; border-radius: 8px; border: 1px solid #d1d5db; padding: 0.35rem 0.5rem; font-size: 0.9rem; background: #f9fafb; text-align: center; }
+</style>
+<div id="routeEntryPage" class="container-fluid px-3 py-2" dir="rtl">
+    <div class="d-flex align-items-center mb-2">
+        <h5 class="mb-0">إدخال بيانات خط السير للفواتير</h5>
+    </div>
+
+    <div id="invoiceSummary" class="alert alert-info py-2 d-none mb-2" role="alert">
+        <strong>العميل:</strong> <span id="sumCustomer"></span> —
+        <strong>إجمالي الفاتورة:</strong> <span id="sumTotal"></span> —
+        <strong>عدد الأصناف:</strong> <span id="sumLines"></span>
+    </div>
+    <div id="alreadyInRouteWarning" class="alert alert-warning py-2 d-none mb-2" role="alert">
+        <strong>تنبيه:</strong> الفاتورة مسجلة بالفعل في خط السير. يمكنك تعديل البيانات ثم الضغط على «تسجيل» لحفظ التعديلات.
+    </div>
+
+    <form id="routeEntryForm" class="card border route-entry-form p-2 flex-grow-1">
+        @Html.AntiForgeryToken()
+        <div class="row g-2">
+            <div class="col-6 col-md-3">
+                <label for="siId" class="form-label">رقم الفاتورة</label>
+                <input type="number" id="siId" class="form-control" placeholder="رقم الفاتورة" tabindex="1" min="1" />
+                <div id="siIdErr" class="text-danger small d-none">الفاتورة غير موجودة</div>
+            </div>
+            <div class="col-6 col-md-3">
+                <label for="controlEmployeeId" class="form-label">الكونترول</label>
+                <select id="controlEmployeeId" class="form-select" tabindex="2">
+                    <option value="">—</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label for="preparerEmployeeId" class="form-label">المحضر</label>
+                <select id="preparerEmployeeId" class="form-select" tabindex="3">
+                    <option value="">—</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3">
+                <label for="distributorEmployeeId" class="form-label">الموزع</label>
+                <select id="distributorEmployeeId" class="form-select" tabindex="4">
+                    <option value="">—</option>
+                </select>
+            </div>
+            <div class="col-4 col-md-2">
+                <label for="bagsCount" class="form-label">عدد الشنط</label>
+                <input type="number" id="bagsCount" class="form-control" value="0" min="0" tabindex="5" />
+            </div>
+            <div class="col-4 col-md-2">
+                <label for="packetsCount" class="form-label">البواكي</label>
+                <input type="number" id="packetsCount" class="form-control" value="0" min="0" tabindex="6" />
+            </div>
+            <div class="col-4 col-md-2">
+                <label for="cartonsCount" class="form-label">الكراتين</label>
+                <input type="number" id="cartonsCount" class="form-control" value="0" min="0" tabindex="7" />
+            </div>
+            <div class="col-12">
+                <label class="form-label">أصناف الثلاجة</label>
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div>
+                        <select id="fridgeProductSelect" class="form-select" tabindex="8">
+                            <option value="">— صنف ثلاجة</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label for="fridgeQty" class="form-label small">الكمية</label>
+                        <input type="number" id="fridgeQty" class="form-control" value="1" min="1" tabindex="9" />
+                    </div>
+                    <button type="button" id="btnAddFridge" class="btn btn-erp btn-erp-primary">إضافة صنف ثلاجة</button>
+                </div>
+                <div class="d-flex gap-2 align-items-end flex-wrap mt-2">
+                    <div>
+                        <label class="form-label small text-muted d-block mb-0">عدد أصناف الثلاجة</label>
+                        <div id="fridgeItemsCount" class="fridge-summary-box">0</div>
+                    </div>
+                    <div>
+                        <label class="form-label small text-muted d-block mb-0">إجمالي أصناف الثلاجة</label>
+                        <div id="fridgeTotalQty" class="fridge-summary-box">0</div>
+                    </div>
+                </div>
+                <div id="fridgeList" class="mt-1"></div>
+            </div>
+            <div class="col-12 d-flex gap-2 align-items-end flex-wrap">
+                <div class="flex-grow-1" style="min-width:180px">
+                    <label for="notes" class="form-label">ملاحظات</label>
+                    <input type="text" id="notes" class="form-control" maxlength="500" tabindex="10" />
+                </div>
+                <button type="button" id="btnRegister" class="btn btn-erp btn-erp-success">تسجيل</button>
+            </div>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+<script>
+(function () {
+    const baseUrl = '@(Url.Content("~"))';
+    const getInvoiceUrl = '@Url.Action("GetInvoiceInfo", "SalesInvoiceRoutes")';
+    const getControlUrl = '@Url.Action("GetEmployeesByJob", "SalesInvoiceRoutes")';
+    const getPreparerUrl = '@Url.Action("GetEmployeesByJob", "SalesInvoiceRoutes")';
+    const getFridgeByInvoiceUrl = '@Url.Action("GetFridgeProductsByInvoice", "SalesInvoiceRoutes")';
+    const getRouteEntryDataUrl = '@Url.Action("GetRouteEntryData", "SalesInvoiceRoutes")';
+    const saveUrl = '@Url.Action("SaveRouteEntry", "SalesInvoiceRoutes")';
+    const antiForgery = document.querySelector('input[name="__RequestVerificationToken"]')?.value || '';
+    const initialSIId = @(ViewBag.InitialSIId != null ? ViewBag.InitialSIId.ToString() : "null");
+
+    const fields = ['siId','controlEmployeeId','preparerEmployeeId','distributorEmployeeId','bagsCount','packetsCount','cartonsCount','fridgeProductSelect','fridgeQty','notes'];
+    const fieldIds = fields.map(f => (f === 'fridgeProductSearch' || f === 'fridgeQty') ? f : f);
+    let fridgeRows = [];
+
+    function focusNext(currentId) {
+        const idx = fields.indexOf(currentId);
+        if (idx < 0 || idx >= fields.length - 1) return;
+        const next = document.getElementById(fields[idx + 1]);
+        if (next) next.focus();
+    }
+
+    function loadInvoice(onLoaded) {
+        const siId = parseInt(document.getElementById('siId').value, 10);
+        if (!siId) return;
+        fetch(getInvoiceUrl + '?siId=' + siId)
+            .then(r => r.json())
+            .then(data => {
+                const sum = document.getElementById('invoiceSummary');
+                const err = document.getElementById('siIdErr');
+                const warn = document.getElementById('alreadyInRouteWarning');
+                if (data.found) {
+                    sum.classList.remove('d-none');
+                    document.getElementById('sumCustomer').textContent = data.customerName || '-';
+                    document.getElementById('sumTotal').textContent = (data.netTotal != null ? Number(data.netTotal).toLocaleString('ar-EG', { minimumFractionDigits: 2 }) : '0');
+                    document.getElementById('sumLines').textContent = data.linesCount ?? 0;
+                    err.classList.add('d-none');
+                    if (data.alreadyInRoute) warn.classList.remove('d-none'); else warn.classList.add('d-none');
+                    loadFridgeDropdown(siId);
+                    if (typeof onLoaded === 'function') onLoaded(siId);
+                    else document.getElementById('controlEmployeeId').focus();
+                } else {
+                    sum.classList.add('d-none');
+                    if (warn) warn.classList.add('d-none');
+                    err.classList.remove('d-none');
+                }
+            })
+            .catch(() => { document.getElementById('siIdErr').classList.remove('d-none'); });
+    }
+
+    function loadEmployees(selectId, jobName, onLoaded) {
+        if (!jobName) return;
+        fetch(getPreparerUrl + '?jobName=' + encodeURIComponent(jobName))
+            .then(r => r.json())
+            .then(arr => {
+                const sel = document.getElementById(selectId);
+                const oldVal = sel.value;
+                sel.innerHTML = '<option value="">—</option>';
+                (arr || []).forEach(o => {
+                    const opt = document.createElement('option');
+                    opt.value = o.id;
+                    opt.textContent = o.fullName;
+                    sel.appendChild(opt);
+                });
+                if (oldVal) sel.value = oldVal;
+                if (typeof onLoaded === 'function') onLoaded();
+            });
+    }
+
+    let fridgeProductsByInvoice = [];
+
+    function loadFridgeDropdown(siId) {
+        if (!siId) {
+            var sel = document.getElementById('fridgeProductSelect');
+            sel.innerHTML = '<option value="">— صنف ثلاجة</option>';
+            fridgeProductsByInvoice = [];
+            return;
+        }
+        fetch(getFridgeByInvoiceUrl + '?siId=' + siId)
+            .then(r => r.json())
+            .then(arr => {
+                fridgeProductsByInvoice = arr || [];
+                var sel = document.getElementById('fridgeProductSelect');
+                sel.innerHTML = '<option value="">— صنف ثلاجة</option>';
+                fridgeProductsByInvoice.forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = (p.name || '') + (p.qty != null ? ' (كمية الفاتورة: ' + p.qty + ')' : '');
+                    sel.appendChild(opt);
+                });
+            });
+    }
+
+    function updateFridgeTotals() {
+        var count = fridgeRows.length;
+        var total = fridgeRows.reduce(function(sum, r) { return sum + (r.qty || 0); }, 0);
+        document.getElementById('fridgeItemsCount').textContent = count;
+        document.getElementById('fridgeTotalQty').textContent = total;
+    }
+
+    function addFridgeRow() {
+        var sel = document.getElementById('fridgeProductSelect');
+        var pid = parseInt(sel.value, 10);
+        var qty = parseInt(document.getElementById('fridgeQty').value, 10) || 1;
+        var name = sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text.replace(/\s*\(كمية الفاتورة:.*\)$/, '').trim() : '';
+        if (!pid || !name) return;
+        fridgeRows.push({ productId: pid, name: name, qty: qty });
+        document.getElementById('fridgeQty').value = '1';
+        sel.value = '';
+        renderFridgeList();
+        updateFridgeTotals();
+    }
+
+    function loadRouteEntryData(siId) {
+        fetch(getRouteEntryDataUrl + '?siId=' + siId)
+            .then(r => r.json())
+            .then(data => {
+                if (!data.found) return;
+                document.getElementById('bagsCount').value = data.bagsCount ?? 0;
+                document.getElementById('packetsCount').value = data.packetsCount ?? 0;
+                document.getElementById('cartonsCount').value = data.cartonsCount ?? 0;
+                document.getElementById('notes').value = data.notes || '';
+                var cid = data.controlEmployeeId;
+                var pid = data.preparerEmployeeId;
+                var did = data.distributorEmployeeId;
+                loadEmployees('controlEmployeeId', 'كونترول', function() {
+                    if (cid) document.getElementById('controlEmployeeId').value = cid;
+                    loadEmployees('preparerEmployeeId', 'محضر', function() {
+                        if (pid) document.getElementById('preparerEmployeeId').value = pid;
+                        loadEmployees('distributorEmployeeId', 'موزع', function() {
+                            if (did) document.getElementById('distributorEmployeeId').value = did;
+                            document.getElementById('controlEmployeeId').focus();
+                        });
+                    });
+                });
+            });
+    }
+
+    document.getElementById('siId').addEventListener('focus', function () { setTimeout(function() { this.select(); }.bind(this), 0); });
+    document.getElementById('siId').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); loadInvoice(); }
+    });
+    document.getElementById('siId').addEventListener('blur', function () {
+        if (this.value) loadInvoice();
+    });
+
+    document.getElementById('controlEmployeeId').addEventListener('focus', function () {
+        loadEmployees('controlEmployeeId', 'كونترول');
+    });
+    document.getElementById('controlEmployeeId').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); focusNext('controlEmployeeId'); }
+    });
+
+    document.getElementById('preparerEmployeeId').addEventListener('focus', function () {
+        loadEmployees('preparerEmployeeId', 'محضر');
+    });
+    document.getElementById('preparerEmployeeId').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); focusNext('preparerEmployeeId'); }
+    });
+
+    document.getElementById('distributorEmployeeId').addEventListener('focus', function () {
+        loadEmployees('distributorEmployeeId', 'موزع');
+    });
+    document.getElementById('distributorEmployeeId').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); focusNext('distributorEmployeeId'); }
+    });
+
+    ['bagsCount','packetsCount','cartonsCount'].forEach(id => {
+        var el = document.getElementById(id);
+        el.addEventListener('focus', function () { setTimeout(function() { this.select(); }.bind(this), 0); });
+        el.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); const idx = fields.indexOf(id); if (idx >= 0 && idx < fields.length - 1) document.getElementById(fields[idx + 1]).focus(); }
+        });
+    });
+
+    document.getElementById('fridgeProductSelect').addEventListener('change', function () {
+        var id = parseInt(this.value, 10);
+        var p = fridgeProductsByInvoice.find(function(x) { return x.id === id; });
+        if (p && p.qty != null) document.getElementById('fridgeQty').value = p.qty;
+    });
+    document.getElementById('fridgeProductSelect').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('fridgeQty').focus(); }
+    });
+    document.getElementById('fridgeQty').addEventListener('focus', function () { setTimeout(function() { this.select(); }.bind(this), 0); });
+    document.getElementById('fridgeQty').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addFridgeRow();
+            document.getElementById('btnRegister').focus();
+        }
+    });
+
+    function renderFridgeList() {
+        const div = document.getElementById('fridgeList');
+        if (fridgeRows.length === 0) { div.innerHTML = ''; updateFridgeTotals(); return; }
+        div.innerHTML = '<table class="table table-sm table-bordered"><thead><tr><th>الصنف</th><th>الكمية</th><th></th></tr></thead><tbody id="fridgeTableBody"></tbody></table>';
+        const tbody = document.getElementById('fridgeTableBody');
+        fridgeRows.forEach((r, i) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = '<td>' + (r.name || '') + '</td><td>' + r.qty + '</td><td><button type="button" class="btn btn-sm btn-outline-danger btn-remove-fridge" data-i="' + i + '">حذف</button></td>';
+            tbody.appendChild(tr);
+        });
+        tbody.querySelectorAll('.btn-remove-fridge').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const i = parseInt(this.getAttribute('data-i'), 10);
+                fridgeRows.splice(i, 1);
+                renderFridgeList();
+            });
+        });
+        updateFridgeTotals();
+    }
+
+    document.getElementById('btnAddFridge').addEventListener('click', function () {
+        addFridgeRow();
+        document.getElementById('fridgeProductSelect').focus();
+    });
+
+    document.getElementById('notes').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); document.getElementById('btnRegister').focus(); }
+    });
+
+    document.getElementById('btnRegister').addEventListener('click', function () {
+        const siId = parseInt(document.getElementById('siId').value, 10);
+        if (!siId) { alert('أدخل رقم الفاتورة أولاً.'); document.getElementById('siId').focus(); return; }
+        const btn = document.getElementById('btnRegister');
+        btn.disabled = true;
+        btn.textContent = 'جاري التسجيل...';
+        const controlId = document.getElementById('controlEmployeeId').value ? parseInt(document.getElementById('controlEmployeeId').value, 10) : 0;
+        const preparerId = document.getElementById('preparerEmployeeId').value ? parseInt(document.getElementById('preparerEmployeeId').value, 10) : 0;
+        const distributorId = document.getElementById('distributorEmployeeId').value ? parseInt(document.getElementById('distributorEmployeeId').value, 10) : 0;
+        const dto = {
+            SIId: siId,
+            ControlEmployeeId: controlId || null,
+            PreparerEmployeeId: preparerId || null,
+            DistributorEmployeeId: distributorId || null,
+            BagsCount: parseInt(document.getElementById('bagsCount').value, 10) || 0,
+            PacketsCount: parseInt(document.getElementById('packetsCount').value, 10) || 0,
+            CartonsCount: parseInt(document.getElementById('cartonsCount').value, 10) || 0,
+            Notes: document.getElementById('notes').value || null,
+            FridgeLines: fridgeRows.map(r => ({ ProductId: r.productId, Qty: r.qty }))
+        };
+        fetch(saveUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'RequestVerificationToken': antiForgery
+            },
+            body: JSON.stringify(dto)
+        })
+        .then(function (r) {
+            if (!r.ok) {
+                return r.text().then(function (text) {
+                    var msg = 'خطأ (رمز ' + r.status + ')';
+                    try { var j = JSON.parse(text); if (j && j.message) msg = j.message; } catch (_) {}
+                    throw new Error(msg);
+                });
+            }
+            return r.json();
+        })
+        .then(function (data) {
+            if (data.success) {
+                document.getElementById('invoiceSummary').classList.add('d-none');
+                var w = document.getElementById('alreadyInRouteWarning'); if (w) w.classList.add('d-none');
+                document.getElementById('siId').value = '';
+                document.getElementById('siIdErr').classList.add('d-none');
+                document.getElementById('controlEmployeeId').value = '';
+                document.getElementById('preparerEmployeeId').value = '';
+                document.getElementById('distributorEmployeeId').value = '';
+                document.getElementById('bagsCount').value = '0';
+                document.getElementById('packetsCount').value = '0';
+                document.getElementById('cartonsCount').value = '0';
+                document.getElementById('notes').value = '';
+                fridgeRows = [];
+                loadFridgeDropdown();
+                renderFridgeList();
+                document.getElementById('fridgeQty').value = '1';
+                setTimeout(function () { document.getElementById('siId').focus(); }, 0);
+            } else {
+                alert(data.message || 'حدث خطأ.');
+            }
+        })
+        .catch(function (err) { alert(err.message || 'حدث خطأ في الاتصال.'); })
+        .finally(function () {
+            btn.disabled = false;
+            btn.textContent = 'تسجيل';
+        });
+    });
+
+    if (initialSIId) {
+        document.getElementById('siId').value = initialSIId;
+        loadInvoice(function(siId) { loadRouteEntryData(siId); });
+    } else {
+        document.getElementById('siId').focus();
+    }
+})();
+</script>
+}

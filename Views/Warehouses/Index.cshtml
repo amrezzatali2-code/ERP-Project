@@ -788,7 +788,8 @@
             function applyFilter(applySort, sortDir) {
                 if (!currentCol) return;
                 const url = new URL(window.location.href);
-                url.searchParams.forEach((_, key) => { if (key.startsWith("filterCol_")) url.searchParams.delete(key); });
+                url.searchParams.delete("filterCol_" + currentCol);
+                url.searchParams.delete("filterCol_" + currentCol + "Expr");
                 if (applySort != null && sortDir != null) { url.searchParams.set("sort", applySort); url.searchParams.set("dir", sortDir); } else { const cs = getCurrentSort(); url.searchParams.set("sort", cs.sort); url.searchParams.set("dir", cs.dir); }
                 const val = Array.from(currentSelected).filter(Boolean).join("|");
                 if (val) url.searchParams.set("filterCol_" + currentCol, val);

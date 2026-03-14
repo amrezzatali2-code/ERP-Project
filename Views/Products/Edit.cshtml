@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Product
+@model ERP.Models.Product
 
 @{
     ViewData["Title"] = "تعديل صنف";
@@ -83,10 +83,19 @@
             <span asp-validation-for="ProductBonusGroupId" class="text-danger"></span>
         </div>
 
-        @* السعر + الشركة + محلي/مستورد *@
+        <div class="col-md-4">
+            <label asp-for="ClassificationId" class="form-label"></label>
+            <select asp-for="ClassificationId"
+                    class="form-select"
+                    asp-items="ViewBag.ClassificationId">
+                <option value="">-- بدون تصنيف --</option>
+            </select>
+        </div>
+
+        @* السعر + الشركة + محلي/مستورد — نستخدم تنسيقاً عدديّاً ثابتاً (نقطة) لتفادي خطأ "must be a number" عند الفاصلة العشرية *@
         <div class="col-md-4">
             <label asp-for="PriceRetail" class="form-label"></label>
-            <input asp-for="PriceRetail" class="form-control" />
+            <input type="number" step="0.01" name="PriceRetail" id="PriceRetail" value="@(Model.PriceRetail.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))" class="form-control" />
             <span asp-validation-for="PriceRetail" class="text-danger"></span>
         </div>
 

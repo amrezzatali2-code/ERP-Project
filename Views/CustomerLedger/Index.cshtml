@@ -457,7 +457,8 @@
             function applyFilter(applySort, sortDir) {
                 if (!currentCol) return;
                 var url = new URL(window.location.href);
-                url.searchParams.forEach(function (_, key) { if (key.indexOf("filterCol_") === 0) url.searchParams.delete(key); });
+                url.searchParams.delete("filterCol_" + currentCol);
+                url.searchParams.delete("filterCol_" + currentCol + "Expr");
                 if (applySort !== undefined && applySort !== null && sortDir !== undefined && sortDir !== null) {
                     url.searchParams.set("sort", applySort);
                     url.searchParams.set("dir", sortDir);

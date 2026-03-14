@@ -5,7 +5,7 @@ using ERP.Models;                    // Permission (لضمان وجود صلاح
 using ERP.Services;                  // خدمة DocumentTotalsService
 using ERP.Seed;
 using ERP.Seeders;
-using ERP.Infrastructure;           // IUserActivityLogger, UserActivityLogger
+using ERP.Infrastructure;           // IUserActivityLogger, UserActivityLogger, DecimalModelBinderProvider
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;            // سياسة التوثيق
 using Microsoft.AspNetCore.Mvc.Authorization;        // AuthorizeFilter العام
@@ -37,6 +37,9 @@ namespace ERP
                 // إضافة الفلتر على مستوى كل الكنترولرات
                 options.Filters.Add(new AuthorizeFilter(policy));
                 options.Filters.Add<PopulateUserPermissionsFilter>();
+
+                // ربط القيم العشرية (الحد الائتماني، سعر الجمهور، إلخ) بقبول الفاصلة والنقطة لتفادي "must be a number"
+                options.ModelBinderProviders.Insert(0, new DecimalModelBinderProvider());
             })
             .AddJsonOptions(options =>
             {

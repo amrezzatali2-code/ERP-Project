@@ -5335,5 +5335,104 @@ namespace ERP.Controllers
 
             return View(vm);
         }
+
+        // =========================================================
+        // تقرير خط السير: فواتير المبيعات مع بيانات خط السير (شنط، بواكي، كراتين، ثلاجة، ملاحظات)
+        // =========================================================
+        [HttpGet]
+        [RequirePermission("Reports.RouteReport")]
+        public async Task<IActionResult> RouteReport(
+            DateTime? fromDate,
+            DateTime? toDate,
+            int? fromSIId,
+            int? toSIId,
+            int? routeId,
+            int? warehouseId,
+            bool loadReport = false,
+            int page = 1,
+            int pageSize = 100)
+        {
+            var routes = await _context.Routes
+                .AsNoTracking()
+                .Where(r => r.IsActive)
+                .OrderBy(r => r.SortOrder).ThenBy(r => r.Name)
+                .Select(r => new SelectListItem(r.Name ?? r.Id.ToString(), r.Id.ToString(), routeId == r.Id))
+                .ToListAsync();
+            var warehouses = await _context.Warehouses
+                .AsNoTracking()
+                .OrderBy(w => w.WarehouseName)
+                .Select(w => new SelectListItem(w.WarehouseName ?? w.WarehouseId.ToString(), w.WarehouseId.ToString(), warehouseId == w.WarehouseId))
+                .ToListAsync();
+
+            ViewBag.Routes = routes;
+            ViewBag.Warehouses = warehouses;
+            ViewBag.FromDate = fromDate;
+            ViewBag.ToDate = toDate;
+            ViewBag.FromSIId = fromSIId;
+            ViewBag.ToSIId = toSIId;
+            ViewBag.RouteId = routeId;
+            ViewBag.WarehouseId = warehouseId;
+            ViewBag.Page = page;
+            ViewBag.PageSize = pageSize;
+
+            if (!loadReport)
+            {
+                ViewBag.ReportData = new List<RouteReportRowDto>();
+                ViewBag.TotalCount = 0;
+                ViewBag.TotalPages = 1;
+                return View();
+            }
+
+            var q = _context.SalesInvoices
+                .AsNoTracking()
+                .Include(si => si.Customer).ThenInclude(c => c!.Route)
+                .Include(si => si.Warehouse)
+                .Include(si => si.Route)
+                .AsQueryable();
+
+            if (fromDate.HasValue)
+                q = q.Where(si => si.SIDate >= fromDate.Value.Date);
+            if (toDate.HasValue)
+                q = q.Where(si => si.SIDate <= toDate.Value.Date);
+            if (fromSIId.HasValue)
+                q = q.Where(si => si.SIId >= fromSIId.Value);
+            if (toSIId.HasValue)
+                q = q.Where(si => si.SIId <= toSIId.Value);
+            if (routeId.HasValue && routeId.Value > 0)
+                q = q.Where(si => si.Customer != null && si.Customer.RouteId == routeId.Value);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                q = q.Where(si => si.WarehouseId == warehouseId.Value);
+
+            q = q.OrderByDescending(si => si.SIDate).ThenByDescending(si => si.SIId);
+
+            int total = await q.CountAsync();
+            var list = await q.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+
+            var reportData = new List<RouteReportRowDto>();
+            foreach (var si in list)
+            {
+                var routeData = si.Route;
+                reportData.Add(new RouteReportRowDto
+                {
+                    SIId = si.SIId,
+                    SIDate = si.SIDate,
+                    CustomerName = si.Customer?.CustomerName ?? "",
+                    RouteId = si.Customer?.RouteId,
+                    RouteName = si.Customer?.Route?.Name ?? "",
+                    WarehouseName = si.Warehouse?.WarehouseName ?? "",
+                    BagsCount = routeData?.BagsCount ?? 0,
+                    PacketsCount = routeData?.PacketsCount ?? 0,
+                    CartonsCount = routeData?.CartonsCount ?? 0,
+                    FridgeItemsCount = routeData?.FridgeItemsCount ?? 0,
+                    FridgeBoxesCount = routeData?.FridgeBoxesCount ?? 0,
+                    Notes = routeData?.Notes
+                });
+            }
+
+            ViewBag.ReportData = reportData;
+            ViewBag.TotalCount = total;
+            ViewBag.TotalPages = (int)Math.Ceiling(total / (double)pageSize);
+            return View();
+        }
     }
 }

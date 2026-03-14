@@ -750,9 +750,9 @@
             function applyFilter(applySort, sortDir) {
                 if (!currentCol) return;
                 var url = new URL(window.location.href);
-                url.searchParams.forEach(function (_, key) {
-                    if (key.startsWith("filterCol_")) url.searchParams.delete(key);
-                });
+                // تحديث فلتر العمود الحالي فقط — إبقاء فلاتر الأعمدة الأخرى (AND)
+                url.searchParams.delete("filterCol_" + currentCol);
+                url.searchParams.delete("filterCol_" + currentCol + "Expr");
                 if (applySort !== undefined && applySort !== null && sortDir !== undefined && sortDir !== null) {
                     url.searchParams.set("sort", applySort);
                     url.searchParams.set("dir", sortDir);
@@ -766,13 +766,18 @@
                     var expr = exprInput ? String(exprInput.value || "").trim() : "";
                     if (expr) url.searchParams.set("filterCol_" + currentCol + "Expr", expr);
                 } else {
-                    var filterBoxText = (searchInp && searchInp.value) ? String(searchInp.value).trim() : "";
-                    if (filterBoxText) {
-                        url.searchParams.set("search", filterBoxText);
-                        url.searchParams.set("searchBy", columnToSearchBy[currentCol] || "all");
+                    // أولوية القيم المحددة (تشيك بوكسات): فلتر عمود فقط — لا نستخدم بوكس البحث داخل اللوحة كـ search عام
+                    var val = Array.from(currentSelected).filter(Boolean).join("|");
+                    if (val) {
+                        url.searchParams.set("filterCol_" + currentCol, val);
+                        url.searchParams.delete("search");
+                        url.searchParams.delete("searchBy");
                     } else {
-                        var val = Array.from(currentSelected).filter(Boolean).join("|");
-                        if (val) url.searchParams.set("filterCol_" + currentCol, val);
+                        var filterBoxText = (searchInp && searchInp.value) ? String(searchInp.value).trim() : "";
+                        if (filterBoxText) {
+                            url.searchParams.set("search", filterBoxText);
+                            url.searchParams.set("searchBy", columnToSearchBy[currentCol] || "all");
+                        }
                     }
                 }
                 url.searchParams.set("page", "1");

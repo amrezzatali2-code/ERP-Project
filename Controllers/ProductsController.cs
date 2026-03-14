@@ -86,9 +86,10 @@ namespace ERP.Controllers
       string? filterCol_company = null,
       string? filterCol_imported = null,
       string? filterCol_isactive = null,
-      // فلاتر باقي الأعمدة
+      // فلاتر باقي الأعمدة (+ _contains للبحث النصي "يحتوي")
       string? filterCol_id = null,
       string? filterCol_name = null,
+      string? filterCol_name_contains = null,
       string? filterCol_barcode = null,
       string? filterCol_generic = null,
       string? filterCol_category = null,
@@ -441,6 +442,7 @@ namespace ERP.Controllers
             }
             if (filterByIds.Count > 0)
                 q = q.Where(p => filterByIds.Contains(p.ProdId));
+            // أولوية فلتر القيم المحددة (تشيك بوكسات لوحة العمود) على "يحتوي" — عند اختيار صنف واحد أو أكثر نطبّق مطابقة تامة
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
                 var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries)
@@ -449,6 +451,11 @@ namespace ERP.Controllers
                     .ToList();
                 if (vals.Count > 0)
                     q = q.Where(p => p.ProdName != null && vals.Contains(p.ProdName));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_name_contains))
+            {
+                var term = filterCol_name_contains.Trim();
+                q = q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, "%" + term + "%"));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_barcode))
             {
@@ -754,6 +761,7 @@ namespace ERP.Controllers
             ViewBag.FilterCol_IsActive = filterCol_isactive;
             ViewBag.FilterCol_Id = filterCol_id;
             ViewBag.FilterCol_Name = filterCol_name;
+            ViewBag.FilterCol_NameContains = filterCol_name_contains;
             ViewBag.FilterCol_Barcode = filterCol_barcode;
             ViewBag.FilterCol_Generic = filterCol_generic;
             ViewBag.FilterCol_Category = filterCol_category;
@@ -1015,10 +1023,11 @@ namespace ERP.Controllers
         [RequirePermission("Products.Create")]
         public async Task<IActionResult> Create()
         {
-            // تحميل قائمة الفئات + مجموعات الأصناف + مجموعات البونص
+            // تحميل قائمة الفئات + مجموعات الأصناف + مجموعات البونص + التصنيف
             await LoadCategoriesDDLAsync(null);
-            await LoadProductGroupsDDLAsync(null);          // جديد: مجموعات الأصناف
-            await LoadBonusGroupsDDLAsync(null);            // جديد: مجموعات البونص
+            await LoadProductGroupsDDLAsync(null);
+            await LoadBonusGroupsDDLAsync(null);
+            await LoadClassificationDDLAsync(null);
 
             ViewBag.ImportedOptions = GetImportedOptions(null);
 
@@ -1051,6 +1060,7 @@ namespace ERP.Controllers
                 await LoadCategoriesDDLAsync(model.CategoryId);
                 await LoadProductGroupsDDLAsync(model.ProductGroupId);
                 await LoadBonusGroupsDDLAsync(model.ProductBonusGroupId);
+                await LoadClassificationDDLAsync(model.ClassificationId);
                 ViewBag.ImportedOptions = GetImportedOptions(model.Imported);
 
                 return View(model);
@@ -1097,6 +1107,7 @@ namespace ERP.Controllers
             await LoadCategoriesDDLAsync(m.CategoryId);
             await LoadProductGroupsDDLAsync(m.ProductGroupId);
             await LoadBonusGroupsDDLAsync(m.ProductBonusGroupId);
+            await LoadClassificationDDLAsync(m.ClassificationId);
             ViewBag.ImportedOptions = GetImportedOptions(m.Imported);
 
             return View(m);
@@ -1121,6 +1132,7 @@ namespace ERP.Controllers
                 await LoadCategoriesDDLAsync(model.CategoryId);
                 await LoadProductGroupsDDLAsync(model.ProductGroupId);
                 await LoadBonusGroupsDDLAsync(model.ProductBonusGroupId);
+                await LoadClassificationDDLAsync(model.ClassificationId);
                 ViewBag.ImportedOptions = GetImportedOptions(model.Imported);
                 return View(model);
             }
@@ -1339,9 +1351,10 @@ namespace ERP.Controllers
             string? filterCol_company = null,
             string? filterCol_imported = null,
             string? filterCol_isactive = null,
-            // فلاتر باقي الأعمدة
+            // فلاتر باقي الأعمدة (+ _contains للبحث "يحتوي")
             string? filterCol_id = null,
             string? filterCol_name = null,
+            string? filterCol_name_contains = null,
             string? filterCol_barcode = null,
             string? filterCol_generic = null,
             string? filterCol_category = null,
@@ -1512,11 +1525,17 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(p => ids.Contains(p.ProdId));
             }
+            // أولوية فلتر القيم المحددة (تشيك بوكسات) على "يحتوي" — مطابقة تامة عند اختيار أسماء من لوحة العمود
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
                 var vals = filterCol_name.Split(sep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
                 if (vals.Count > 0) q = q.Where(p => p.ProdName != null && vals.Contains(p.ProdName));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_name_contains))
+            {
+                var nameContains = filterCol_name_contains.Trim();
+                q = q.Where(p => p.ProdName != null && EF.Functions.Like(p.ProdName, "%" + nameContains + "%"));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_barcode))
             {
@@ -2103,6 +2122,7 @@ namespace ERP.Controllers
             // ===== 7) تحميل بيانات بطاقة الصنف من جدول Products =====
             var product = await _db.Products
                 .Include(p => p.Category)
+                .Include(p => p.Classification)
                 .FirstOrDefaultAsync(p => p.ProdId == finalProdId.Value);
 
             if (product == null)
@@ -2374,6 +2394,18 @@ namespace ERP.Controllers
                 .ToListAsync();
 
             ViewBag.ProductBonusGroups = new SelectList(bonusGroups, "ProductBonusGroupId", "Name", selectedBonusGroupId);
+        }
+
+        // تصنيف الصنف (لخط السير: عادي، ثلاجة، …)
+        private async Task LoadClassificationDDLAsync(int? selectedClassificationId)
+        {
+            var list = await _db.ProductClassifications
+                .AsNoTracking()
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.SortOrder).ThenBy(c => c.Name)
+                .Select(c => new { c.Id, c.Name })
+                .ToListAsync();
+            ViewBag.ClassificationId = new SelectList(list, "Id", "Name", selectedClassificationId);
         }
 
         // قائمة ثابتة لقيم Imported (محلي/مستورد فقط)

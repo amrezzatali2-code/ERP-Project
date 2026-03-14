@@ -86,11 +86,19 @@
             </div>
         </div>
 
+        @* خط السير *@
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label asp-for="RouteId" class="form-label"></label>
+                <select asp-for="RouteId"
+                        asp-items="ViewBag.RouteId"
+                        class="form-select form-select-sm">
+                    <option value="">-- لا خط سير --</option>
+                </select>
+            </div>
+        </div>
 
-
-
-
-        @* نوع الطرف (عميل / مورد / موظف / مستثمر ) / الحساب المحاسبي *@)
+        @* نوع الطرف (عميل / مورد / موظف / مستثمر ) / الحساب المحاسبي *@
 
         <div class="row">
 
@@ -170,11 +178,11 @@
             </div>
         </div>
 
-        @* الحد الائتماني + الحالة + مضاعفة الكوتة *@
+        @* الحد الائتماني + الحالة + مضاعفة الكوتة — تنسيق عددي ثابت (نقطة) لتفادي خطأ "must be a number" *@
         <div class="row">
             <div class="col-md-4 mb-3">
                 <label asp-for="CreditLimit" class="form-label"></label>
-                <input asp-for="CreditLimit" class="form-control" />
+                <input type="number" step="0.01" name="CreditLimit" id="CreditLimit" value="@(Model.CreditLimit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))" class="form-control" />
                 <span asp-validation-for="CreditLimit" class="text-danger"></span>
             </div>
             <div class="col-md-4 mb-3">

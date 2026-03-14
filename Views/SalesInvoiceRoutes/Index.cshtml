@@ -1,0 +1,158 @@
+@using ERP.Infrastructure
+@using ERP.ViewModels
+@model PagedResult<RouteReportRowDto>
+@{
+    ViewData["Title"] = "قائمة سجلات خط السير";
+    var fromDate = ViewBag.FromDate as DateTime?;
+    var toDate = ViewBag.ToDate as DateTime?;
+    var routeId = ViewBag.RouteId as int?;
+    var warehouseId = ViewBag.WarehouseId as int?;
+    var fromSIId = ViewBag.FromSIId as int?;
+    var toSIId = ViewBag.ToSIId as int?;
+    var sort = (string?)ViewBag.Sort ?? "SIDate";
+    var dir = (string?)ViewBag.Dir ?? "desc";
+    int ps = Model?.PageSize ?? 25;
+    int total = Model?.TotalCount ?? (int?)ViewBag.TotalCount ?? 0;
+    int page = Model?.PageNumber ?? 1;
+    int pages = Model?.TotalPages ?? (int?)ViewBag.TotalPages ?? 1;
+    var routes = ViewBag.Routes as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var items = Model?.Items ?? new List<RouteReportRowDto>();
+}
+<div dir="rtl" class="container-fluid">
+    @if (TempData["Ok"] != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show" role="alert">
+            @TempData["Ok"]
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    }
+
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="mb-0">@ViewData["Title"]</h4>
+        <small class="text-muted">إجمالي السجلات: @total</small>
+    </div>
+
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <form method="get" asp-action="Index" asp-controller="SalesInvoiceRoutes">
+            <div class="row g-3 align-items-end">
+                <div class="col-12 col-md-2">
+                    <label class="form-label">من تاريخ</label>
+                    <input type="date" name="fromDate" class="form-control form-control-sm" value="@(fromDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label">إلى تاريخ</label>
+                    <input type="date" name="toDate" class="form-control form-control-sm" value="@(toDate?.ToString("yyyy-MM-dd"))" />
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label">رقم الفاتورة من</label>
+                    <input type="number" name="fromSIId" class="form-control form-control-sm" placeholder="من" value="@fromSIId" min="1" />
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label">رقم الفاتورة إلى</label>
+                    <input type="number" name="toSIId" class="form-control form-control-sm" placeholder="إلى" value="@toSIId" min="1" />
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label">خط السير</label>
+                    <select name="routeId" class="form-select form-select-sm">
+                        <option value="">الكل</option>
+                        @foreach (var r in routes)
+                        {
+                            <option value="@r.Value" selected="@(routeId?.ToString() == r.Value)">@r.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label">المخزن</label>
+                    <select name="warehouseId" class="form-select form-select-sm">
+                        <option value="">الكل</option>
+                        @foreach (var w in warehouses)
+                        {
+                            <option value="@w.Value" selected="@(warehouseId?.ToString() == w.Value)">@w.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-12 col-md-auto">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">عرض</button>
+                    <a class="btn btn-erp btn-erp-secondary btn-erp-sm" asp-action="Index">إلغاء</a>
+                </div>
+            </div>
+            <input type="hidden" name="sort" value="@sort" />
+            <input type="hidden" name="dir" value="@dir" />
+            <input type="hidden" name="pageSize" value="@ps" />
+        </form>
+    </div>
+
+    <div class="erp-table-scroll-container mt-3">
+        <div class="erp-table-wrapper">
+            <table class="table table-striped table-hover table-sm erp-table mb-0">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 10;">
+                    <tr>
+                        <th class="text-center" style="width:70px">رقم القيد</th>
+                        <th class="text-center" style="width:80px">رقم الفاتورة</th>
+                        <th style="width:100px">التاريخ</th>
+                        <th>العميل</th>
+                        <th>خط السير</th>
+                        <th>المخزن</th>
+                        <th class="text-center" style="width:70px">الشنط</th>
+                        <th class="text-center" style="width:70px">البواكي</th>
+                        <th class="text-center" style="width:70px">الكراتين</th>
+                        <th class="text-center" style="width:80px">أصناف الثلاجة</th>
+                        <th class="text-center" style="width:80px">علب الثلاجة</th>
+                        <th>ملاحظات</th>
+                        <th class="no-print" style="width:140px">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!items.Any())
+                    {
+                        <tr>
+                            <td colspan="13" class="text-center text-muted py-4">لا توجد سجلات. غيّر الفلاتر أو أضف من شاشة «إدخال بيانات خط السير».</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var row in items)
+                        {
+                            <tr>
+                                <td class="text-center">@row.Id</td>
+                                <td class="text-center">
+                                    <a asp-controller="SalesInvoices" asp-action="Show" asp-route-id="@row.SIId">@row.SIId</a>
+                                </td>
+                                <td>@row.SIDate.ToString("yyyy-MM-dd")</td>
+                                <td>@row.CustomerName</td>
+                                <td>@row.RouteName</td>
+                                <td>@row.WarehouseName</td>
+                                <td class="text-center">@row.BagsCount</td>
+                                <td class="text-center">@row.PacketsCount</td>
+                                <td class="text-center">@row.CartonsCount</td>
+                                <td class="text-center">@row.FridgeItemsCount</td>
+                                <td class="text-center">@row.FridgeBoxesCount</td>
+                                <td>@(row.Notes ?? "")</td>
+                                <td class="no-print">
+                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm" asp-action="Show" asp-route-id="@row.Id">عرض</a>
+                                    <a class="btn btn-erp btn-erp-secondary btn-erp-sm" asp-action="Entry" asp-route-siId="@row.SIId">تعديل</a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    @if (pages > 1)
+    {
+        <nav class="d-flex justify-content-end align-items-center gap-2 mt-2" dir="rtl">
+            <span class="text-muted small">عرض @(((page - 1) * ps) + 1)–@(Math.Min(total, page * ps)) من @total</span>
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(page <= 1 ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", "SalesInvoiceRoutes", new { fromDate, toDate, fromSIId, toSIId, routeId, warehouseId, sort, dir, page = page - 1, pageSize = ps })">السابق</a>
+                </li>
+                <li class="page-item @(page >= pages ? "disabled" : "")">
+                    <a class="page-link" href="@Url.Action("Index", "SalesInvoiceRoutes", new { fromDate, toDate, fromSIId, toSIId, routeId, warehouseId, sort, dir, page = page + 1, pageSize = ps })">التالي</a>
+                </li>
+            </ul>
+        </nav>
+    }
+</div>
