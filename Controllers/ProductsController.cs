@@ -2320,14 +2320,8 @@ namespace ERP.Controllers
             ViewBag.YearlySummary = Array.Empty<object>();     // ملخص حسب السنوات
             ViewBag.WarehouseSummary = Array.Empty<object>();  // ملخص حسب المخازن
 
-            // ===== 5) تحميل قائمة الأصناف للأوتوكومبليت (مثل حجم التعامل) =====
+            // ===== 5) تحميل قائمة الأصناف للأوتوكومبليت (datalist — نفس نمط فاتورة المبيعات) =====
             await LoadProductsForAutoCompleteAsync();
-            var productsForJson = await _db.Products
-                .AsNoTracking()
-                .OrderBy(p => p.ProdName)
-                .Select(p => new { id = p.ProdId, code = p.ProdId.ToString(), name = p.ProdName ?? "" })
-                .ToListAsync();
-            ViewBag.ProductsJson = System.Text.Json.JsonSerializer.Serialize(productsForJson);
 
             // ===== 6) لو لسه ما اخترناش صنف → رجّع الشاشة من غير بيانات =====
             if (finalProdId == null)

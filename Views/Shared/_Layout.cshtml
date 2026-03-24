@@ -13,6 +13,7 @@
     @* Bootstrap + CSS الرئيسي *@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/erp-ui-feedback.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/css/erp-print.css" asp-append-version="true" />
     @* Flatpickr: انتقاء تاريخ/وقت بنظام 24 ساعة *@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
@@ -1173,7 +1174,7 @@
                         root.classList.add('erp-global-success-toast--hide');
                         setTimeout(function () { try { root.remove(); } catch (e) { } }, 420);
                     }
-                    t = setTimeout(hideToast, 3200);
+                    t = setTimeout(hideToast, 1000);
                     var box = root.querySelector('.erp-global-success-toast__box');
                     if (box) box.addEventListener('click', hideToast);
                 })();
@@ -1231,6 +1232,7 @@
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+    <script src="~/js/erp-ui-feedback.js" asp-append-version="true"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
     <script src="~/js/erp-columns-modal.js" asp-append-version="true"></script>
     @* تهيئة حقول التاريخ والوقت بنظام 24 ساعة (بدلاً من AM/PM) *@
@@ -1312,6 +1314,84 @@
             // =========================
             // (C) تحديث التاب النشط فقط (بدون إغلاق التابات أو تأثر الصفحة الرئيسية)
             // =========================
+            // إعادة تحميل التاب مع الحفاظ على المستند الحالي (رقم فاتورة/مرتجع) لأن src أحياناً
+            // يبقى بدون id بعد التنقل الجزئي داخل الصفحة — فيُفتح «جديد» بدل التحديث.
+            function trySmartReloadTabIframe(iframe) {
+                try {
+                    const win = iframe.contentWindow;
+                    const doc = iframe.contentDocument;
+                    if (!win || !doc) return false;
+
+                    function getInt(elId) {
+                        const el = doc.getElementById(elId);
+                        if (!el) return 0;
+                        const v = parseInt(String(el.value || '0'), 10);
+                        return isNaN(v) ? 0 : v;
+                    }
+
+                    const plower = (win.location.pathname || '').replace(/\\/g, '/').toLowerCase();
+                    const origin = win.location.origin;
+                    const cur = new URL(win.location.href);
+
+                    function withFrameAndTs(urlStr) {
+                        let u;
+                        try {
+                            u = new URL(urlStr, origin);
+                        } catch {
+                            return null;
+                        }
+                        u.searchParams.set('frame', '1');
+                        if (cur.searchParams.get('includeZeroQty') === 'true') {
+                            u.searchParams.set('includeZeroQty', 'true');
+                        }
+                        return setOrReplaceParam(u.toString(), 'ts', Date.now());
+                    }
+
+                    let newSrc = null;
+
+                    if (plower.indexOf('/salesinvoices/show') >= 0) {
+                        let id = getInt('NavCurrentId');
+                        if (id <= 0) id = getInt('InvoiceId');
+                        if (id > 0) {
+                            const u = new URL('/SalesInvoices/Show', origin);
+                            u.searchParams.set('id', String(id));
+                            newSrc = withFrameAndTs(u.toString());
+                        }
+                    } else if (plower.indexOf('/purchaseinvoices/show') >= 0) {
+                        let id = getInt('NavCurrentId');
+                        if (id <= 0) id = getInt('InvoiceId');
+                        if (id > 0) {
+                            const u = new URL('/PurchaseInvoices/Show', origin);
+                            u.searchParams.set('id', String(id));
+                            newSrc = withFrameAndTs(u.toString());
+                        }
+                    } else if (plower.indexOf('/salesreturns/edit') >= 0) {
+                        let id = getInt('SRId');
+                        if (id <= 0) id = getInt('ReturnId');
+                        if (id > 0) {
+                            const u = new URL('/SalesReturns/Edit', origin);
+                            u.searchParams.set('id', String(id));
+                            newSrc = withFrameAndTs(u.toString());
+                        }
+                    } else if (plower.indexOf('/purchasereturns/edit') >= 0) {
+                        const id = getInt('PRetId');
+                        if (id > 0) {
+                            const u = new URL('/PurchaseReturns/Edit', origin);
+                            u.searchParams.set('id', String(id));
+                            newSrc = withFrameAndTs(u.toString());
+                        }
+                    }
+
+                    if (newSrc) {
+                        iframe.setAttribute('src', newSrc);
+                        return true;
+                    }
+                } catch (e) {
+                    console.warn('trySmartReloadTabIframe:', e);
+                }
+                return false;
+            }
+
             function refreshIframe(iframe) {
                 if (!iframe) return;
 
@@ -1328,6 +1408,8 @@
                         } catch (e) { /* نكمل لإعادة التحميل */ }
                     }
                 } catch (e) { /* cross-origin أو خطأ → نعيد التحميل */ }
+
+                if (trySmartReloadTabIframe(iframe)) return;
 
                 // الطريقة المضمونة: إعادة تحميل محتوى التاب النشط فقط (ts يكسر الكاش)
                 iframe.setAttribute('src', setOrReplaceParam(src, 'ts', Date.now()));

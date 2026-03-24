@@ -1434,11 +1434,13 @@ namespace ERP.Controllers
                 // 8) تجهيز DTO للرجوع للواجهة (lines + totals)
                 // =========================
                 var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-                var prodMap = await _context.Products
+                var prodRows = await _context.Products
                     .AsNoTracking()
                     .Where(p => prodIds.Contains(p.ProdId))
-                    .Select(p => new { p.ProdId, p.ProdName })
-                    .ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+                    .Select(p => new { p.ProdId, p.ProdName, p.Location })
+                    .ToListAsync();
+                var prodMap = prodRows.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+                var locMap = prodRows.ToDictionary(x => x.ProdId, x => x.Location ?? "");
 
                 int totalLines = linesNow.Count;
                 int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
@@ -1447,6 +1449,7 @@ namespace ERP.Controllers
                 var linesDto = linesNow.Select(l =>
                 {
                     var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                    var location = locMap.TryGetValue(l.ProdId, out var loc) ? loc : "";
 
                     // متغير: قيمة السطر (بعد الخصم)
                     var lv = l.LineTotalAfterDiscount;
@@ -1456,6 +1459,7 @@ namespace ERP.Controllers
                         lineNo = l.LineNo,
                         prodId = l.ProdId,
                         prodName = name,
+                        location,
 
                         qty = l.Qty,
                         priceRetail = l.UnitSalePrice, // في البيع نعرض سعر التشغيلة
@@ -1688,11 +1692,13 @@ namespace ERP.Controllers
                     .ToListAsync();
 
                 var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-                var prodMap = await _context.Products
+                var prodRowsRm = await _context.Products
                     .AsNoTracking()
                     .Where(p => prodIds.Contains(p.ProdId))
-                    .Select(p => new { p.ProdId, p.ProdName })
-                    .ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+                    .Select(p => new { p.ProdId, p.ProdName, p.Location })
+                    .ToListAsync();
+                var prodMap = prodRowsRm.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+                var locMap = prodRowsRm.ToDictionary(x => x.ProdId, x => x.Location ?? "");
 
                 int totalLines = linesNow.Count;
                 int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
@@ -1707,12 +1713,14 @@ namespace ERP.Controllers
                 var linesDto = linesNow.Select(l =>
                 {
                     var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                    var location = locMap.TryGetValue(l.ProdId, out var loc) ? loc : "";
 
                     return new
                     {
                         lineNo = l.LineNo,
                         prodId = l.ProdId,
                         prodName = name,
+                        location,
                         qty = l.Qty,
                         priceRetail = l.UnitSalePrice,
                         discPct = l.Disc1Percent,
@@ -2591,6 +2599,8 @@ namespace ERP.Controllers
                     .ThenInclude(c => c.Area)                // متغير: المنطقة
                 .Include(s => s.Customer)
                     .ThenInclude(c => c.Account)             // متغير: الحساب (للتعرّف على عميل مستثمر)
+                .Include(s => s.Customer)
+                    .ThenInclude(c => c.Policy)             // متغير: سياسة العميل (للعرض وتحديث التاب عبر frag=body)
                 .Include(s => s.Lines)                       // متغير: سطور الفاتورة
                     .ThenInclude(l => l.Product)             // متغير: الصنف داخل السطر
                 .AsNoTracking()

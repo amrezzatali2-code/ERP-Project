@@ -1308,7 +1308,7 @@
          ERP — منطقة طباعة فاتورة المشتريات (ثابت معتمد)
          ملاحظة: الـ site.css عندك بيطبع فقط .erp-print-area
     ========================================================= -->
-    <div id="piPrintArea" class="erp-print-area print-only">
+    <div id="piPrintArea" class="erp-print-area print-only erp-print-page-portrait">
 
         <!-- ===== هيدر الطباعة (قابل للتخصيص لاحقاً: لوجو/بيانات شركة) ===== -->
         <div class="mb-3">
@@ -1364,11 +1364,16 @@
         // =========================================================
         // رسائل عابرة (Toast) — خارج كارت الإجراءات، مثل طلب الشراء
         // =========================================================
-        function showToast(text, type) {
+        function showToast(text, type, durationMs) {
             if (!text) return;
+            if (typeof ERP !== 'undefined' && typeof ERP.showToast === 'function') {
+                ERP.showToast(text, type, durationMs);
+                return;
+            }
             var container = document.getElementById('piToastContainer');
             if (!container) return;
             type = type || 'muted';
+            var ms = typeof durationMs === 'number' && durationMs >= 0 ? durationMs : 4000;
             var el = document.createElement('div');
             el.className = 'pi-toast text-' + type;
             el.textContent = text;
@@ -1379,7 +1384,7 @@
                 setTimeout(function () {
                     if (el.parentNode) el.parentNode.removeChild(el);
                 }, 250);
-            }, 4000);
+            }, ms);
         }
 
         // =========================================================
@@ -3588,8 +3593,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (btnPost.disabled) return;
 
-                    const ok = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
-                    if (!ok) return;
+                    let okPost = false;
+                    if (typeof ERP !== 'undefined' && ERP.showConfirmModal) {
+                        okPost = await ERP.showConfirmModal({
+                            title: "ترحيل فاتورة مشتريات",
+                            message: "هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.",
+                            confirmText: "ترحيل",
+                            cancelText: "إلغاء"
+                        });
+                    } else {
+                        okPost = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
+                    }
+                    if (!okPost) return;
 
                     // تجهيز الزر (بدون تغيير النص داخل كارت الإجراءات — الرسالة في Toast فقط مثل فاتورة المبيعات)
                     btnPost.disabled = true;
@@ -3699,7 +3714,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
                         btnPost.disabled = true;
 
-                        showToast(okMsg, "success");
+                        showToast(okMsg, "success", 1000);
 
                     } catch (err) {
 
@@ -4322,9 +4337,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-
-
-
+            // زر التحديث في الناف بار: إعادة جلب body نفس الفاتورة (سياسة مورد، أصناف، إلخ)
+            window.__ERP_REFRESH__ = function () {
+                const currentId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10) || 0;
+                const baseUrl = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
+                    || '@Url.Action("Show", "PurchaseInvoices", new { frame = 1 })';
+                if (currentId > 0 && typeof loadInvoiceBody === 'function') {
+                    try {
+                        const u = new URL(baseUrl, window.location.origin);
+                        u.searchParams.set('id', currentId);
+                        const chk = document.getElementById('chkIncludeZeroQty');
+                        if (chk && chk.checked) u.searchParams.set('includeZeroQty', 'true');
+                        loadInvoiceBody(u.toString());
+                    } catch (e) { console.warn('__ERP_REFRESH__ (PurchaseInvoices):', e); }
+                }
+            };
 
             // =========================
             // اعتراض الضغط على الأسهم/بحث الفاتورة على مستوى document (Capture)

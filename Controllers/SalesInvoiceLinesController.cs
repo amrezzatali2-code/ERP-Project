@@ -121,6 +121,9 @@ namespace ERP.Controllers
         // =========================================================
         // فلاتر نطاق الفاتورة + التاريخ (الصلاحية) + فلاتر أعمدة الجدول (نمط Excel)
         // =========================================================
+        /// <summary>
+        /// فلاتر أعمدة القائمة (معاملات filterCol_*) تُضاف كسلسلة <c>Where</c> على نفس الاستعلام — تراكم منطقي AND بين الأعمدة.
+        /// </summary>
         private IQueryable<SalesInvoiceLine> ApplySilListFilters(
             IQueryable<SalesInvoiceLine> q,
             int? fromCode,

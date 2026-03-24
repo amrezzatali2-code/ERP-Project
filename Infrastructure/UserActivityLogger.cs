@@ -10,8 +10,8 @@ namespace ERP.Infrastructure
     /// <summary>
     /// خدمة لتسجيل نشاط المستخدمين في جدول UserActivityLogs.
     /// 
-    /// سياسة التسجيل: نسجل التعديل والمسح فقط (لا إنشاء ولا ترحيل).
-    /// - Edit: تعديل سجل
+    /// سياسة التسجيل: نسجل التعديل والمسح فقط (لا إنشاء ولا ترحيل ولا تسجيل دخول).
+    /// - Edit: تعديل سجل — إن وُجد JSON قبل/بعد ككائن { } يُخزَّن الحقول المتغيرة فقط.
     /// - Delete: حذف سجل
     /// </summary>
     public interface IUserActivityLogger
@@ -82,6 +82,16 @@ namespace ERP.Infrastructure
             // متغيرات: IP و UserAgent
             var ip = ctx?.Connection?.RemoteIpAddress?.ToString();
             var userAgent = ctx?.Request?.Headers["User-Agent"].ToString();
+
+            // =========================================================
+            // (4.5) تعديل: اقتصار قبل/بعد على الحقول التي تغيّرت فقط (JSON كائن)
+            // =========================================================
+            if (actionType == UserActionType.Edit)
+            {
+                var (o, n) = ActivityAuditJsonDiff.ReduceToChangedProperties(oldValues, newValues);
+                oldValues = o;
+                newValues = n;
+            }
 
             // =========================================================
             // (5) إنشاء سجل اللوج وحفظه

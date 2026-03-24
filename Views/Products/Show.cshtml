@@ -1,15 +1,12 @@
 @model ERP.Models.Product?
 
 @using Microsoft.AspNetCore.Mvc.Rendering
-@using System.Text.Json
 
 @{
     ViewData["Title"] = "حركة صنف";
 
-    // اسم الصنف المختار
-    string selectedProdName = ViewBag.SelectedProdName as string ?? "";
-    var productsJson = ViewBag.ProductsJson as string ?? "[]";
-    var selectedProductDisplay = Model != null ? $"{Model.ProdId} — {Model.ProdName}" : "";
+    // نفس فاتورة المبيعات: حقل البحث يعرض اسم الصنف فقط (الكود في hidden)
+    var selectedProductDisplay = Model?.ProdName ?? "";
 
     // الطرف (عميل/مورد)
     string selectedCustomerName = ViewBag.SelectedCustomerName as string ?? "";
@@ -196,6 +193,83 @@
         font-weight: 700 !important;
         letter-spacing: 0.02em;
     }
+
+    /* دروب داون الصنف — نفس نمط حجم التعامل / فاتورة المبيعات */
+    #productMovementDropdownWrap {
+        border: 2px solid #4f46e5 !important;
+        border-radius: 0.55rem !important;
+        padding: 3px !important;
+        box-shadow: none !important;
+    }
+    #productMovementDropdownWrap:focus-within {
+        border-color: #4338ca !important;
+        box-shadow: none !important;
+    }
+    #productMovementDropdownWrap .product-dropdown-onebox {
+        border: 0 !important;
+        background: transparent !important;
+        border-radius: 0.45rem !important;
+    }
+    #productMovementDropdownWrap .product-dropdown-onebox {
+        position: relative;
+    }
+    #productMovementDropdownWrap .product-dropdown-arrow-inside {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #495057;
+        cursor: pointer;
+        user-select: none;
+        font-size: 0.6rem;
+        z-index: 1;
+    }
+    #productMovementDropdownWrap .product-dropdown-onebox .product-dropdown-input {
+        width: 100%;
+        border: none !important;
+        background: transparent !important;
+        padding-left: 2.25rem !important;
+    }
+    #productMovementDropdownWrap .product-dropdown-onebox .product-dropdown-input:focus {
+        box-shadow: none !important;
+        outline: none !important;
+    }
+    #productMovementDropdownList.product-dropdown-list {
+        position: fixed;
+        max-height: 220px;
+        min-height: 40px;
+        overflow-y: auto;
+        z-index: 9999;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+    }
+    #productMovementDropdownList[data-open="false"] {
+        display: none !important;
+    }
+    #productMovementDropdownList[data-open="true"] {
+        display: block !important;
+    }
+    #productMovementDropdownList .product-dropdown-item {
+        cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
+        padding: 0.35rem 0.55rem;
+    }
+    #productMovementDropdownList .product-dropdown-item:hover {
+        background-color: #f8f9fa;
+    }
+    #productMovementDropdownList .product-dropdown-item:last-child {
+        border-bottom: none;
+    }
+    #productMovementDropdownList .product-dropdown-item-active {
+        background-color: #0d6efd !important;
+        color: #fff !important;
+    }
 </style>
 
 <div class="container-fluid product-dashboard" dir="rtl">
@@ -209,26 +283,42 @@
                   method="get"
                   asp-action="Show"
                   asp-controller="Products"
-                  class="row g-3 align-items-end">
+                  class="row g-3 align-items-end"
+                  autocomplete="off">
 
                 <input type="hidden" id="productSearchId" name="prodId" value="@(selectedProdId?.ToString() ?? "")" />
                 <input type="hidden" id="customerSearchId" name="customerId" value="@(selectedCustomerId?.ToString() ?? "")" />
 
                 <div class="col-12 col-lg-4 erp-filter-section">
                     <label class="form-label">بحث بالكود أو الاسم</label>
-                    <div class="position-relative">
-                        <input id="productSearchInput"
-                               type="text"
-                               class="form-control erp-filter-input"
-                               placeholder="اكتب صنفاً آخر أو جزء من الاسم/الكود ثم اختر واضغط عرض"
-                               autocomplete="off"
-                               title="يمكنك تغيير الصنف: اكتب أو اختر صنفاً آخر ثم اضغط عرض"
-                               value="@selectedProductDisplay" />
-                        <div id="productSuggestions"
-                             class="list-group position-absolute w-100 shadow-sm"
-                             style="z-index: 1050; max-height: 200px; overflow-y: auto; display: none;">
+                    <div class="position-relative" id="productMovementDropdownWrap">
+                        <div class="product-dropdown-onebox" id="productMovementDropdownInputGroup">
+                            <span class="product-dropdown-arrow-inside" id="productMovementDropdownArrow" title="افتح القائمة">▼</span>
+                            <input id="productSearchInput"
+                                   type="text"
+                                   class="form-control erp-filter-input product-dropdown-input"
+                                   placeholder="اكتب اسم الصنف"
+                                   autocomplete="off"
+                                   title="بحث مثل فاتورة المبيعات: عدة كلمات، أرقام عربية، تطبيع الألف"
+                                   value="@selectedProductDisplay" />
                         </div>
+                        <div id="productMovementDropdownList"
+                             class="product-dropdown-list"
+                             role="listbox"
+                             data-open="false"></div>
                     </div>
+                    <datalist id="productsMovementList" hidden aria-hidden="true">
+                        @if (ViewBag.ProductsAuto != null)
+                        {
+                            foreach (var p in ViewBag.ProductsAuto)
+                            {
+                                <option value="@p.Name"
+                                        data-id="@p.Id"
+                                        data-code="@p.Id"
+                                        data-generic="@p.GenericName"></option>
+                            }
+                        }
+                    </datalist>
                 </div>
 
                 <div class="col-12 col-lg-2 erp-filter-section">
@@ -683,130 +773,391 @@
 @section Scripts {
     <script>
         (function () {
-            // =========================================================
-            // أوتوكومبليت الأصناف (مثل حجم التعامل)
-            // =========================================================
-            var productsData = @Html.Raw(productsJson);
+            // datalist + قائمة مخصّصة — نفس منطق فاتورة المبيعات (بحث متعدد الكلمات + تطبيع)
+            var prodDataList = document.getElementById('productsMovementList');
             var input = document.getElementById('productSearchInput');
             var hiddenId = document.getElementById('productSearchId');
-            var list = document.getElementById('productSuggestions');
+            var dropdownWrap = document.getElementById('productMovementDropdownWrap');
+            var dropdownList = document.getElementById('productMovementDropdownList');
+            var dropdownArrow = document.getElementById('productMovementDropdownArrow');
             var form = document.getElementById('productMovementForm');
+
+            // حد النتائج كما في فاتورة المبيعات (PRODUCT_LIST_MAX)
+            var PRODUCT_MOVEMENT_MAX = 15;
             var activeIndex = -1;
+            var selectableOpts = [];
+            var isSelectingProduct = false;
+
+            function normalizeDigits(txt) {
+                if (!txt) return '';
+                var map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                    '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                var out = '';
+                for (var i = 0; i < txt.length; i++) {
+                    var c = txt[i];
+                    out += map[c] !== undefined ? map[c] : c;
+                }
+                return out;
+            }
+
+            function normalizeWord(w) {
+                return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+            }
+
+            function normalizeText(txt) {
+                return (txt || '')
+                    .trim()
+                    .toLowerCase()
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map(function (w) { return normalizeWord(w); })
+                    .filter(Boolean)
+                    .join(' ')
+                    .replace(/\s+/g, ' ');
+            }
+
+            function wordMatchesQueryWord(nameWord, queryWord) {
+                var nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                var qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                var nw = nw0.replace(/^[اأإآ]/u, '');
+                var qw = qw0.replace(/^[اأإآ]/u, '');
+                if (!qw) return true;
+                return nw === qw || nw.startsWith(qw);
+            }
+
+            function productNameMatchesSearch(productName, rawSearch) {
+                var raw = (rawSearch || '').trim();
+                if (!raw) return true;
+                var qWords = raw.split(/\s+/).filter(Boolean);
+                var nWords = (productName || '').trim().split(/\s+/).filter(Boolean);
+                if (qWords.length === 0) return true;
+                return qWords.every(function (qw) {
+                    return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                });
+            }
+
+            function productSearchRank(name, rawSearch) {
+                var raw = (rawSearch || '').trim();
+                var nm = (name || '').trim();
+                if (!raw) return 50;
+                if (nm === raw) return 0;
+                if (nm.startsWith(raw)) return 1;
+                var rawWords = raw.split(/\s+/).filter(Boolean);
+                var firstQ = rawWords[0] || '';
+                var nmWords = nm.split(/\s+/).filter(Boolean);
+                if (firstQ && nmWords.length) {
+                    if (nmWords[0].startsWith(firstQ)) return 2;
+                    var nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                    var qw0 = normalizeDigits(firstQ.toLowerCase());
+                    var nw = nw0.replace(/^[اأإآ]/u, '');
+                    var qw = qw0.replace(/^[اأإآ]/u, '');
+                    if (qw && (nw === qw || nw.startsWith(qw))) return 3;
+                }
+                return 4;
+            }
+
+            function getProductDropdownFilterQuery(rawTrim) {
+                var raw = (rawTrim || '').trim();
+                if (!raw || !prodDataList || !prodDataList.options) return raw;
+                var nRaw = normalizeText(raw);
+                var canonical = '';
+                var opts = prodDataList.options;
+                for (var i = 0; i < opts.length; i++) {
+                    var v = (opts[i].value || '').trim();
+                    if (!v) continue;
+                    if (v === raw) { canonical = v; break; }
+                    if (nRaw && normalizeText(v) === nRaw) { canonical = v; break; }
+                }
+                if (!canonical) return raw;
+                var parts = canonical.split(/\s+/).filter(Boolean);
+                return parts[0] || raw;
+            }
+
+            function getFilteredProductOptions(search, max, pinDisplayName) {
+                if (!prodDataList || !prodDataList.options) return [];
+                var limit = max || PRODUCT_MOVEMENT_MAX;
+                var opts = prodDataList.options;
+                var rawTrim = (search || '').trim();
+                if (!rawTrim) {
+                    var out0 = [];
+                    for (var a = 0; a < opts.length && out0.length < limit; a++) out0.push(opts[a]);
+                    return out0;
+                }
+                var qNorm = normalizeText(rawTrim);
+                var words = rawTrim.split(/\s+/).filter(Boolean);
+                var matched = [];
+                for (var i = 0; i < opts.length; i++) {
+                    var opt = opts[i];
+                    var nameVal = (opt.value || '').trim();
+                    var code = (opt.getAttribute('data-code') || '').toString().trim();
+                    var idAttr = (opt.getAttribute('data-id') || '').toString().trim();
+                    var codeOrId = code || idAttr;
+                    var nameOk = qNorm ? productNameMatchesSearch(nameVal, rawTrim) : true;
+                    var idOk = words.length > 0 && words.some(function (w) { return codeOrId.indexOf(w) !== -1; });
+                    var codeRawOk = codeOrId && codeOrId.indexOf(rawTrim) !== -1;
+                    if (nameOk || idOk || codeRawOk) matched.push(opt);
+                }
+                matched.sort(function (a, b) {
+                    var ra = productSearchRank((a.value || '').trim(), rawTrim);
+                    var rb = productSearchRank((b.value || '').trim(), rawTrim);
+                    if (ra !== rb) return ra - rb;
+                    return (a.value || '').localeCompare(b.value || '', 'ar');
+                });
+                var result = matched.slice(0, limit);
+                var pinRaw = (pinDisplayName || '').trim();
+                if (pinRaw) {
+                    var nPin = normalizeText(pinRaw);
+                    var pinOpt = null;
+                    for (var j = 0; j < opts.length; j++) {
+                        var v = (opts[j].value || '').trim();
+                        if (v === pinRaw || (nPin && normalizeText(v) === nPin)) { pinOpt = opts[j]; break; }
+                    }
+                    if (pinOpt && matched.indexOf(pinOpt) >= 0) {
+                        var inResult = result.some(function (o) { return o === pinOpt; });
+                        if (!inResult) {
+                            result = matched.slice(0, limit - 1);
+                            result.push(pinOpt);
+                        }
+                    }
+                }
+                return result;
+            }
+
+            function findProductByName(name) {
+                var raw = (name || '').trim();
+                var search = normalizeText(raw);
+                if (!search) return null;
+                var opts = prodDataList ? prodDataList.options : [];
+                for (var i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value) === search) return opts[i];
+                }
+                for (var k = 0; k < opts.length; k++) {
+                    if ((opts[k].value || '').trim() === raw) return opts[k];
+                }
+                return null;
+            }
+
+            function findProductByCode(code) {
+                var search = (code || '').toString().trim();
+                if (!search) return null;
+                var opts = prodDataList ? prodDataList.options : [];
+                for (var i = 0; i < opts.length; i++) {
+                    var idAttr = (opts[i].getAttribute('data-id') || '').toString();
+                    var codeAttr = (opts[i].getAttribute('data-code') || '').toString();
+                    if (idAttr === search || codeAttr === search) return opts[i];
+                }
+                return null;
+            }
+
+            function fillFromProductOpt(opt) {
+                if (!opt) {
+                    if (hiddenId) hiddenId.value = '';
+                    if (input) input.value = '';
+                    return;
+                }
+                var id = (opt.getAttribute('data-id') || '').toString();
+                var name = (opt.value || '').trim();
+                if (hiddenId) hiddenId.value = id;
+                if (input) input.value = name;
+            }
+
+            function closeProductDropdown() {
+                if (dropdownList) {
+                    dropdownList.setAttribute('data-open', 'false');
+                    dropdownList.innerHTML = '';
+                }
+                activeIndex = -1;
+                selectableOpts = [];
+            }
+
+            function positionProductDropdownList() {
+                if (!dropdownList || !dropdownWrap) return;
+                if (dropdownList.getAttribute('data-open') !== 'true') return;
+                var r = dropdownWrap.getBoundingClientRect();
+                dropdownList.style.width = r.width + 'px';
+                dropdownList.style.top = r.bottom + 'px';
+                dropdownList.style.left = r.left + 'px';
+            }
+
+            function setProductDropdownHighlight(idx) {
+                if (!dropdownList) return;
+                if (idx < 0 || idx >= selectableOpts.length) return;
+                var children = dropdownList.querySelectorAll('.product-dropdown-item');
+                children.forEach(function (el, i) {
+                    el.classList.toggle('product-dropdown-item-active', i === idx);
+                });
+                activeIndex = idx;
+                try { children[idx]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch { }
+            }
+
+            function openProductDropdown() {
+                if (!dropdownList || !dropdownWrap || !input) return;
+                var searchTerm = (input.value || '').trim();
+                var filterQuery = getProductDropdownFilterQuery(searchTerm);
+                var list = getFilteredProductOptions(filterQuery, PRODUCT_MOVEMENT_MAX, searchTerm);
+
+                dropdownList.innerHTML = '';
+                selectableOpts = [];
+
+                var highlightIdx = 0;
+                var currentVal = (input.value || '').trim();
+                if (list.length > 0) {
+                    for (var i = 0; i < list.length; i++) {
+                        if (normalizeText((list[i].value || '').trim()) === normalizeText(currentVal)) {
+                            highlightIdx = i;
+                            break;
+                        }
+                    }
+                }
+
+                if (list.length === 0) {
+                    var empty = document.createElement('div');
+                    empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
+                    empty.textContent = searchTerm ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + PRODUCT_MOVEMENT_MAX + ' كحد أقصى)');
+                    dropdownList.appendChild(empty);
+                    activeIndex = -1;
+                } else {
+                    list.forEach(function (opt, idx) {
+                        var id = (opt.getAttribute('data-id') || '').toString();
+                        var name = (opt.value || '').trim();
+                        var it = document.createElement('div');
+                        it.className = 'product-dropdown-item py-2 px-3' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
+                        it.setAttribute('role', 'option');
+                        it.setAttribute('data-id', id);
+                        it.textContent = name;
+                        it.addEventListener('mouseenter', function () {
+                            activeIndex = idx;
+                            setProductDropdownHighlight(idx);
+                        });
+                        it.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            isSelectingProduct = true;
+                            fillFromProductOpt(opt);
+                            closeProductDropdown();
+                            setTimeout(function () {
+                                try {
+                                    if (input) {
+                                        input.focus();
+                                        input.setSelectionRange(input.value.length, input.value.length);
+                                    }
+                                } catch { }
+                                isSelectingProduct = false;
+                            }, 80);
+                        });
+                        dropdownList.appendChild(it);
+                        selectableOpts.push(opt);
+                    });
+                    activeIndex = highlightIdx;
+                }
+
+                dropdownList.setAttribute('data-open', 'true');
+                positionProductDropdownList();
+            }
 
             if (input) setTimeout(function () { input.focus(); }, 150);
 
-            if (input && hiddenId && list && form) {
+            if (prodDataList && input && hiddenId && dropdownList && dropdownWrap && form) {
+                if (dropdownWrap && !dropdownWrap.dataset.boundProductMovementClick) {
+                    dropdownWrap.dataset.boundProductMovementClick = '1';
+                    dropdownWrap.addEventListener('click', function (ev) {
+                        if (ev.target && ev.target.closest('#productMovementDropdownList')) return;
+                    });
+                }
+
                 input.addEventListener('input', function () {
-                    var term = input.value.trim();
-                    hiddenId.value = "";
+                    if (isSelectingProduct) return;
                     activeIndex = -1;
-
-                    if (term.length < 1) {
-                        list.style.display = 'none';
-                        list.innerHTML = '';
-                        return;
-                    }
-
-                    var termLower = term.toLowerCase();
-                    var results = productsData.filter(function (item) {
-                        var codeMatch = item.code && item.code.indexOf(term) !== -1;
-                        var nameMatch = item.name && item.name.toLowerCase().indexOf(termLower) !== -1;
-                        return codeMatch || nameMatch;
-                    });
-
-                    list.innerHTML = '';
-
-                    if (!results || results.length === 0) {
-                        list.style.display = 'none';
-                        return;
-                    }
-
-                    results.slice(0, 30).forEach(function (item) {
-                        var btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'list-group-item list-group-item-action';
-                        btn.dataset.id = item.id;
-                        btn.textContent = item.code + ' — ' + item.name;
-
-                        btn.addEventListener('click', function () {
-                            hiddenId.value = item.id;
-                            input.value = item.code + ' — ' + item.name;
-                            list.style.display = 'none';
-                        });
-
-                        list.appendChild(btn);
-                    });
-
-                    list.style.display = 'block';
+                    hiddenId.value = '';
+                    openProductDropdown();
                 });
 
+                if (dropdownArrow) {
+                    dropdownArrow.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        input.focus();
+                        openProductDropdown();
+                    });
+                }
+
                 input.addEventListener('keydown', function (e) {
-                    var items = list.querySelectorAll('button');
-                    if (list.style.display !== 'block' || items.length === 0) return;
+                    var isOpen = dropdownList && dropdownList.getAttribute('data-open') === 'true';
+                    var len = selectableOpts.length || 0;
 
                     if (e.key === 'ArrowDown') {
                         e.preventDefault();
-                        activeIndex = (activeIndex + 1) % items.length;
-                        items.forEach(function (el) { el.classList.remove('active'); });
-                        if (activeIndex >= 0 && activeIndex < items.length) {
-                            items[activeIndex].classList.add('active');
-                            items[activeIndex].scrollIntoView({ block: 'nearest' });
-                        }
-                    } else if (e.key === 'ArrowUp') {
-                        e.preventDefault();
-                        activeIndex = (activeIndex - 1 + items.length) % items.length;
-                        items.forEach(function (el) { el.classList.remove('active'); });
-                        if (activeIndex >= 0 && activeIndex < items.length) {
-                            items[activeIndex].classList.add('active');
-                            items[activeIndex].scrollIntoView({ block: 'nearest' });
-                        }
-                    } else if (e.key === 'Enter') {
-                        if (activeIndex >= 0 && activeIndex < items.length) {
-                            e.preventDefault();
-                            items[activeIndex].click();
-                        }
-                    } else if (e.key === 'Escape') {
-                        list.style.display = 'none';
+                        if (!isOpen) openProductDropdown();
+                        if (!len) return;
+                        var next = activeIndex < 0 ? 0 : Math.min(activeIndex + 1, len - 1);
+                        setProductDropdownHighlight(next);
+                        return;
                     }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (isOpen && len > 0) {
+                            var prev = activeIndex < 0 ? 0 : Math.max(activeIndex - 1, 0);
+                            setProductDropdownHighlight(prev);
+                        }
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        if (isOpen && len > 0) {
+                            e.preventDefault();
+                            var sel = activeIndex >= 0 && activeIndex < len ? selectableOpts[activeIndex] : selectableOpts[0];
+                            if (sel) {
+                                isSelectingProduct = true;
+                                fillFromProductOpt(sel);
+                                closeProductDropdown();
+                                setTimeout(function () {
+                                    try {
+                                        if (input) {
+                                            input.focus();
+                                            input.setSelectionRange(input.value.length, input.value.length);
+                                        }
+                                    } catch { }
+                                    isSelectingProduct = false;
+                                }, 80);
+                            }
+                            return;
+                        }
+                        return;
+                    }
+                    if (e.key === 'Escape') closeProductDropdown();
                 });
 
                 document.addEventListener('click', function (e) {
-                    if (!list.contains(e.target) && e.target !== input) {
-                        list.style.display = 'none';
-                    }
+                    if (!dropdownWrap) return;
+                    if (!dropdownWrap.contains(e.target)) closeProductDropdown();
                 });
 
+                if (hiddenId && hiddenId.value) {
+                    var initOpt = findProductByCode(hiddenId.value);
+                    if (initOpt) fillFromProductOpt(initOpt);
+                }
+
                 form.addEventListener('submit', function (e) {
-                    if (!hiddenId.value) {
-                        var txt = input.value.trim();
+                    var txt = (input.value || '').trim();
+                    if (!hiddenId.value && txt.length > 0) {
                         if (/^\d+$/.test(txt)) {
                             hiddenId.value = txt;
-                        } else if (txt.length > 0) {
-                            var exactMatch = productsData.find(function (item) {
-                                return item.name.toLowerCase() === txt.toLowerCase() ||
-                                    item.code === txt ||
-                                    (item.code + ' — ' + item.name) === txt;
-                            });
-                            if (exactMatch) {
-                                hiddenId.value = exactMatch.id.toString();
-                                input.value = exactMatch.code + ' — ' + exactMatch.name;
-                            } else {
-                                var matches = productsData.filter(function (item) {
-                                    var codeMatch = item.code && item.code.indexOf(txt) !== -1;
-                                    var nameMatch = item.name && item.name.toLowerCase().indexOf(txt.toLowerCase()) !== -1;
-                                    return codeMatch || nameMatch;
-                                });
-                                if (matches.length === 1) {
-                                    hiddenId.value = matches[0].id.toString();
-                                    input.value = matches[0].code + ' — ' + matches[0].name;
-                                }
+                        } else {
+                            var exactOpt = findProductByName(txt);
+                            if (!exactOpt && txt.indexOf('—') !== -1) {
+                                var part = txt.split('—')[0].trim();
+                                exactOpt = findProductByCode(part);
+                            }
+                            if (exactOpt) fillFromProductOpt(exactOpt);
+                            else {
+                                var fq = getProductDropdownFilterQuery(txt);
+                                var cand = getFilteredProductOptions(fq, PRODUCT_MOVEMENT_MAX, txt);
+                                if (cand.length === 1) fillFromProductOpt(cand[0]);
                             }
                         }
                     }
 
                     if (!hiddenId.value) {
                         e.preventDefault();
-                        alert('من فضلك اختر صنف من قائمة الاقتراحات أو أدخل كوده الرقمى.');
+                        alert('من فضلك اختر صنفاً من القائمة أو أدخل كوده الرقمى ثم اضغط عرض.');
                         input.focus();
                     }
                 });

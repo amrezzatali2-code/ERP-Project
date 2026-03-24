@@ -1,9 +1,9 @@
 /* =========================================================
    ERP — نظام طباعة موحد
-   - القوائم: استخدم .erp-print-area و .no-print (site.css)
-   - شاشات الفواتير: رأس الصفحة → سطور الفاتورة → الإجماليات
-     صفحة واحدة = ورقة طولية (portrait)
-     نسختان أو ثلاث = ورقة عرضية (landscape)
+   - القوائم: .erp-print-area + site.css — افتراضياً A4 عرضي (landscape)
+   - فاتورة مبيعات: print-mode-1 → portrait؛ print-mode-2/3 → landscape (@page margin ترقيم الصفحات)
+   - فاتورة/طلب مشتريات: .erp-print-page-portrait على #piPrintArea → portrait
+   - نسخ متعددة للفاتورة: أوضاع 2/3 في نفس الصفحة (انظر أسفل)
    ========================================================= */
 
 /* مخفي في الشاشة — منطقة طباعة الفاتورة */
@@ -12,9 +12,48 @@
 }
 
 @media print {
+    /* افتراضي: قوائم وتقارير بعرض الورقة (أعمدة أكثر تظهر بدون قص) */
     @page {
+        size: A4 landscape;
+        margin: 5mm;
+    }
+
+    /* فواتير وطباعة مستندات: طولية (SalesInvoice يضيف body.printing-invoice؛ PI/PR تستخدم .erp-print-page-portrait) */
+    @page erp-invoice-portrait {
         size: A4 portrait;
-        margin: 2mm;
+        margin: 2mm 2mm 12mm 2mm;
+        @bottom-center {
+            content: "صفحة " counter(page) " / " counter(pages);
+            font-size: 8pt;
+            color: #475569;
+            font-family: Cairo, "Segoe UI", sans-serif;
+            font-weight: 600;
+        }
+    }
+
+    @page erp-invoice-landscape {
+        size: A4 landscape;
+        margin: 2mm 2mm 11mm 2mm;
+        @bottom-center {
+            content: "صفحة " counter(page) " / " counter(pages);
+            font-size: 7pt;
+            color: #475569;
+            font-family: Cairo, "Segoe UI", sans-serif;
+            font-weight: 600;
+        }
+    }
+
+    /* لا تربط الطولية بـ #piPrintWrapper في أوضاع أصل/صورة — كان يفسد الحجم والتقسيم */
+    body.printing-invoice #piPrintWrapper.print-mode-1 {
+        page: erp-invoice-portrait;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-2,
+    body.printing-invoice #piPrintWrapper.print-mode-3 {
+        page: erp-invoice-landscape;
+    }
+
+    .erp-print-page-portrait {
+        page: erp-invoice-portrait;
     }
 
     .erp-print-invoice-wrapper.print-only {
@@ -55,6 +94,12 @@
     body.printing-invoice #piPrintWrapper tr { display: table-row !important; }
     body.printing-invoice #piPrintWrapper th,
     body.printing-invoice #piPrintWrapper td { display: table-cell !important; }
+    body.printing-invoice #piPrintWrapper thead {
+        display: table-header-group !important;
+    }
+    body.printing-invoice #piPrintWrapper tfoot {
+        display: table-footer-group !important;
+    }
 
     body.printing-invoice .erp-print-invoice-wrapper,
     body.printing-invoice #piPrintWrapper {
@@ -115,16 +160,56 @@
         overflow-wrap: break-word;
     }
 
+    /* جدول الطباعة الرئيسي: تكرار الهيدر + تذييل رقم الصفحة */
+    .pi-print-master-table {
+        border-collapse: collapse !important;
+        table-layout: auto !important;
+    }
+    .pi-print-thead-banner-cell {
+        vertical-align: top !important;
+    }
+    .pi-print-column-head-row th {
+        font-weight: 600 !important;
+        background: #f1f5f9 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    /* الترقيم عبر @page @bottom-center؛ العنصر الثابت كان يعطي counter(page)=0 في Chrome */
+    body.printing-invoice #piPrintWrapper .pi-print-running-page-footer {
+        display: none !important;
+    }
+    /* الإجماليات خارج الجدول — تظهر مرة واحدة بعد انتهاء كل صفحات السطور */
+    #piPrintTotalsWrap.pi-print-totals-block,
+    .pi-print-totals-block {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-2 .pi-print-totals-block,
+    body.printing-invoice #piPrintWrapper.print-mode-3 .pi-print-totals-block {
+        break-inside: auto;
+        page-break-inside: auto;
+    }
+
     .erp-print-invoice-area thead,
     .erp-print-copy thead,
     #piPrintArea thead {
         display: table-header-group;
+    }
+    .erp-print-invoice-area tfoot,
+    .erp-print-copy tfoot,
+    #piPrintArea tfoot {
+        display: table-footer-group;
     }
 
     .erp-print-invoice-area tr,
     .erp-print-copy tr,
     #piPrintArea tr {
         break-inside: avoid;
+    }
+    /* صفوف سطور الفاتورة: السماح بالتقسيم بين الصفحات حتى يتكرر thead */
+    body.printing-invoice #piPrintWrapper .pi-print-master-tbody tr {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
     }
 
     /* هيدر الطباعة: اسم الشركة فوق مع خط ومساحة للوجو — نفس التنسيق لكل نسخة */
@@ -190,6 +275,30 @@
     .pi-print-copy .pi-print-details-table tr td:nth-child(3) { width: 25%; }
     #piPrintWrapper > * .pi-print-details-table tr td:nth-child(4),
     .pi-print-copy .pi-print-details-table tr td:nth-child(4) { width: 25%; }
+
+    /* شبكة بدل جدول متداخل داخل thead — يحسّن تكرار رأس الجدول بين الصفحات */
+    #piPrintWrapper > * .pi-print-details-grid,
+    .pi-print-copy .pi-print-details-grid {
+        display: grid !important;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.15rem 0.35rem;
+        width: 100% !important;
+    }
+    #piPrintWrapper > * .pi-print-details-grid > *,
+    .pi-print-copy .pi-print-details-grid > * {
+        padding: 0.15rem 0.35rem !important;
+        vertical-align: top !important;
+        border: none !important;
+        min-width: 0;
+    }
+    #piPrintWrapper > * .pi-print-details-grid .pi-print-details-span-row,
+    .pi-print-copy .pi-print-details-grid .pi-print-details-span-row {
+        grid-column: 1 / -1;
+    }
+    #piPrintWrapper > * .pi-print-details-grid .pi-print-details-cell-span2,
+    .pi-print-copy .pi-print-details-grid .pi-print-details-cell-span2 {
+        grid-column: span 2;
+    }
 
     /* الإجماليات كروت — نفس التنسيق لكل نسخة (عبر الأبناء المباشرين للـ wrapper) */
     #piPrintWrapper > * .invoice-totals-card,
@@ -258,6 +367,50 @@
         font-size: 13px !important;
     }
 
+    /* صفحة واحدة طولية: تدفق طبيعي للمحتوى حتى تُطبع الإجماليات أسفل الجدول
+       (fixed + height 100% كان يقصّ المحتوى الزائد عن ارتفاع الشاشة في معاينة الطباعة) */
+    body.printing-invoice #piPrintWrapper.print-mode-1 {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        z-index: auto !important;
+        overflow: visible !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-1 #piPrintArea {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-1 #piPrintTotalsWrap,
+    body.printing-invoice #piPrintWrapper.print-mode-1 .pi-print-totals-block {
+        display: block !important;
+        break-inside: avoid;
+        page-break-inside: avoid;
+        margin-top: 0.4rem !important;
+    }
+
+    /* أصل وصورة: تدفق متعدد الصفحات بدل تثبيت بارتفاع الشاشة */
+    body.printing-invoice #piPrintWrapper.print-mode-2,
+    body.printing-invoice #piPrintWrapper.print-mode-3 {
+        position: static !important;
+        top: auto !important;
+        left: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        max-height: none !important;
+        z-index: auto !important;
+        overflow: visible !important;
+    }
+
     /* أصل وصورة — ورقة واحدة مقسومة نصفين: في كل نصف نفس الفاتورة (عرضية) */
     body.printing-invoice #piPrintWrapper.print-mode-2,
     body.printing-invoice .erp-print-invoice-wrapper.erp-print-mode-2,
@@ -274,11 +427,11 @@
     }
     .erp-print-mode-2 .erp-print-copy,
     .print-mode-2 .pi-print-copy {
-        break-inside: avoid;
+        break-inside: auto;
         min-width: 0 !important;
         max-width: 100% !important;
-        overflow: hidden !important;
-        transform: scale(0.88);
+        overflow: visible !important;
+        transform: scale(0.85);
         transform-origin: top center;
         font-size: 8px !important;
     }
@@ -288,6 +441,17 @@
     .print-mode-2 .pi-print-copy th, .print-mode-2 .pi-print-copy td { padding: 1px 3px !important; border-width: 0.5px !important; }
     .erp-print-mode-2 .erp-print-copy .mb-3, .erp-print-mode-2 .erp-print-copy .small,
     .print-mode-2 .pi-print-copy .mb-3, .print-mode-2 .pi-print-copy .small { font-size: 7px !important; }
+
+    /* جدول سطور الفاتورة فقط (أصل وصورة): سطور أعرض قليلاً — لا يشمل كروت الإجماليات */
+    body.printing-invoice #piPrintWrapper.print-mode-2 .pi-print-copy .pi-print-master-table th,
+    body.printing-invoice #piPrintWrapper.print-mode-2 .pi-print-copy .pi-print-master-table td {
+        padding: 4px 5px !important;
+        line-height: 1.38 !important;
+        vertical-align: middle !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-2 .pi-print-copy .pi-print-master-table {
+        font-size: 8.5px !important;
+    }
 
     /* أصل وصورتين — ورقة واحدة مقسومة ثلاثة: في كل قسم نفس الفاتورة (عرضية) */
     body.printing-invoice #piPrintWrapper.print-mode-3,
@@ -305,11 +469,11 @@
     }
     .erp-print-mode-3 .erp-print-copy,
     .print-mode-3 .pi-print-copy {
-        break-inside: avoid;
+        break-inside: auto;
         min-width: 0 !important;
         max-width: 100% !important;
-        overflow: hidden !important;
-        transform: scale(0.72);
+        overflow: visible !important;
+        transform: scale(0.68);
         transform-origin: top center;
         font-size: 6px !important;
     }
@@ -319,4 +483,40 @@
     .print-mode-3 .pi-print-copy th, .print-mode-3 .pi-print-copy td { padding: 1px 2px !important; border-width: 0.5px !important; }
     .erp-print-mode-3 .erp-print-copy .mb-3, .erp-print-mode-3 .erp-print-copy .small,
     .print-mode-3 .pi-print-copy .mb-3, .print-mode-3 .pi-print-copy .small { font-size: 5px !important; }
+
+    body.printing-invoice #piPrintWrapper.print-mode-3 .pi-print-copy .pi-print-master-table th,
+    body.printing-invoice #piPrintWrapper.print-mode-3 .pi-print-copy .pi-print-master-table td {
+        padding: 3px 4px !important;
+        line-height: 1.34 !important;
+        vertical-align: middle !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-3 .pi-print-copy .pi-print-master-table {
+        font-size: 6.5px !important;
+    }
+
+    /* إجماليات أصغر في أصل/صورة حتى لا تُقصّ وتنتقل للصفحة التالية عند الحاجة */
+    body.printing-invoice #piPrintWrapper.print-mode-2 .invoice-totals-card .invoice-summary-box,
+    body.printing-invoice #piPrintWrapper.print-mode-3 .invoice-totals-card .invoice-summary-box {
+        padding: 0.12rem 0.2rem !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-2 .invoice-totals-card .invoice-summary-label,
+    body.printing-invoice #piPrintWrapper.print-mode-3 .invoice-totals-card .invoice-summary-label {
+        font-size: 0.62rem !important;
+        line-height: 1.15 !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-2 .invoice-totals-card .invoice-summary-value,
+    body.printing-invoice #piPrintWrapper.print-mode-3 .invoice-totals-card .invoice-summary-value {
+        font-size: 0.72rem !important;
+        line-height: 1.15 !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-2 .invoice-totals-card .invoice-summary-row,
+    body.printing-invoice #piPrintWrapper.print-mode-3 .invoice-totals-card .invoice-summary-row {
+        gap: 0.2rem 0.3rem !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-3 .invoice-totals-card .invoice-summary-label {
+        font-size: 0.52rem !important;
+    }
+    body.printing-invoice #piPrintWrapper.print-mode-3 .invoice-totals-card .invoice-summary-value {
+        font-size: 0.6rem !important;
+    }
 }

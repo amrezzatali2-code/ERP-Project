@@ -336,6 +336,7 @@ namespace ERP.Controllers
             IQueryable<SalesReturn> q = context.SalesReturns
                 .AsNoTracking()
                 .Include(x => x.Customer)
+                    .ThenInclude(c => c.Area)
                 .Include(x => x.Warehouse);
 
             // الحقول النصية للبحث كسلسلة نصية
@@ -367,7 +368,11 @@ namespace ERP.Controllers
                     ["NetTotal"] = x => x.NetTotal,                   // الصافى
                     ["Status"] = x => x.Status ?? string.Empty,       // الحالة
                     ["Posted"] = x => x.IsPosted ? 1 : 0,             // الترحيل
-                    ["CreatedAt"] = x => x.CreatedAt                  // تاريخ الإنشاء
+                    ["CreatedAt"] = x => x.CreatedAt,                 // تاريخ الإنشاء
+                    ["Region"] = x => x.Customer != null && x.Customer.Area != null
+                        ? x.Customer.Area.AreaName
+                        : (x.Customer != null ? (x.Customer.RegionName ?? "") : ""),
+                    ["CreatedBy"] = x => x.CreatedBy ?? ""
                 };
 
             // تطبيق إكستنشن البحث + الترتيب الموحد
@@ -403,9 +408,21 @@ namespace ERP.Controllers
             string? filterCol_net = null,
             string? filterCol_status = null,
             string? filterCol_posted = null,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null,
             int page = 1,                  // رقم الصفحة
-            int pageSize = 50)             // حجم الصفحة
+            int pageSize = 10)             // حجم الصفحة (افتراضي 10؛ 0 = الكل)
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psParsed))
+                pageSize = psParsed;
+
+            page = page < 1 ? 1 : page;
+            if (pageSize < 0) pageSize = 10;
+            int[] allowedPageSizes = { 10, 25, 50, 100, 200, 0 };
+            if (!allowedPageSizes.Contains(pageSize))
+                pageSize = 10;
+
             // (1) بناء الاستعلام حسب الفلاتر العامة
             var q = BuildQuery(search, searchBy, sort, dir);
 
@@ -517,8 +534,56 @@ namespace ERP.Controllers
                     q = q.Where(sr => sr.SalesInvoiceId.HasValue && refs.Contains(sr.SalesInvoiceId.Value));
             }
 
-            // (2) إنشاء PagedResult جاهز للفيو
-            var model = await PagedResult<SalesReturn>.CreateAsync(q, page, pageSize);
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = filterCol_region.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(sr =>
+                        vals.Contains(
+                            sr.Customer != null
+                                ? (sr.Customer.Area != null
+                                    ? sr.Customer.Area.AreaName
+                                    : (sr.Customer.RegionName ?? ""))
+                                : ""));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_createdby))
+            {
+                var vals = filterCol_createdby.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(sr => sr.CreatedBy != null && vals.Contains(sr.CreatedBy));
+            }
+
+            ViewBag.TotalCountForCards = await q.CountAsync();
+            ViewBag.TotalNetForCards = await q.SumAsync(sr => (decimal?)sr.NetTotal) ?? 0m;
+
+            // (2) إنشاء PagedResult جاهز للفيو (0 = عرض الكل بحد أقصى للذاكرة)
+            var sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            PagedResult<SalesReturn> model;
+            if (pageSize == 0)
+            {
+                var totalAll = await q.CountAsync();
+                var effectiveTake = totalAll == 0 ? 10 : Math.Min(totalAll, 100_000);
+                var itemsAll = await q.Take(effectiveTake).ToListAsync();
+                model = new PagedResult<SalesReturn>(itemsAll, 1, 0, totalAll)
+                {
+                    SortColumn = sort,
+                    SortDescending = sortDesc,
+                    Search = search,
+                    SearchBy = searchBy
+                };
+            }
+            else
+            {
+                model = await PagedResult<SalesReturn>.CreateAsync(
+                    q, page, pageSize, sort, sortDesc, search, searchBy);
+            }
 
             // (3) إعداد خيارات البحث للبارشال _IndexFilters
             ViewBag.SearchOptions = new List<SelectListItem>
@@ -542,6 +607,8 @@ namespace ERP.Controllers
                 new("الصافي",        "NetTotal")   { Selected = sort == "NetTotal" },
                 new("الحالة",        "Status")     { Selected = sort == "Status" },
                 new("أُنشئ في",      "CreatedAt")  { Selected = sort == "CreatedAt" },
+                new("المنطقة",       "Region")     { Selected = sort == "Region" },
+                new("الكاتب",        "CreatedBy") { Selected = sort == "CreatedBy" },
             };
 
             // (4) تخزين حالة الفلاتر فى ViewBag ليستعملها الفيو
@@ -560,6 +627,8 @@ namespace ERP.Controllers
             ViewBag.FilterCol_net = filterCol_net ?? string.Empty;
             ViewBag.FilterCol_status = filterCol_status ?? string.Empty;
             ViewBag.FilterCol_posted = filterCol_posted ?? string.Empty;
+            ViewBag.FilterCol_region = filterCol_region ?? string.Empty;
+            ViewBag.FilterCol_createdby = filterCol_createdby ?? string.Empty;
 
             // قيم الترقيم (لو احتجناها فى الفيو أو البارشال)
             ViewBag.Page = model.PageNumber;
@@ -776,6 +845,8 @@ namespace ERP.Controllers
             string? filterCol_net = null,
             string? filterCol_status = null,
             string? filterCol_posted = null,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null,
             string? format = "excel")        // excel | csv
         {
             // نفس منطق الفلاتر المستخدم فى Index
@@ -889,6 +960,32 @@ namespace ERP.Controllers
                     q = q.Where(sr => sr.SalesInvoiceId.HasValue && refs.Contains(sr.SalesInvoiceId.Value));
             }
 
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = filterCol_region.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(sr =>
+                        vals.Contains(
+                            sr.Customer != null
+                                ? (sr.Customer.Area != null
+                                    ? sr.Customer.Area.AreaName
+                                    : (sr.Customer.RegionName ?? ""))
+                                : ""));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_createdby))
+            {
+                var vals = filterCol_createdby.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(sr => sr.CreatedBy != null && vals.Contains(sr.CreatedBy));
+            }
+
             // ترتيب افتراضى بالتاريخ ثم الرقم
             q = q.OrderBy(sr => sr.SRDate).ThenBy(sr => sr.SRId);
             var list = await q.ToListAsync();
@@ -898,13 +995,16 @@ namespace ERP.Controllers
             if (format == "csv")
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("ReturnId,Date,Time,Customer,Warehouse,InvoiceId,NetTotal,Status,IsPosted");
+                sb.AppendLine("ReturnId,Date,Time,Customer,Warehouse,Region,CreatedBy,InvoiceId,NetTotal,Status,IsPosted");
 
                 foreach (var x in list)
                 {
                     string timeStr = x.SRTime.ToString(@"hh\:mm");
                     var customerText = x.Customer != null ? x.Customer.CustomerName : x.CustomerId.ToString();
                     var warehouseText = x.Warehouse != null ? x.Warehouse.WarehouseName : x.WarehouseId.ToString();
+                    var regionText = x.Customer != null
+                        ? (x.Customer.Area != null ? x.Customer.Area.AreaName : (x.Customer.RegionName ?? ""))
+                        : "";
 
                     var line = string.Join(",",
                         x.SRId,
@@ -912,6 +1012,8 @@ namespace ERP.Controllers
                         timeStr,
                         customerText.Replace(",", " "),
                         warehouseText.Replace(",", " "),
+                        regionText.Replace(",", " "),
+                        (x.CreatedBy ?? "").Replace(",", " "),
                         x.SalesInvoiceId?.ToString() ?? "",
                         x.NetTotal.ToString("0.00"),
                         (x.Status ?? "").Replace(",", " "),
@@ -938,12 +1040,14 @@ namespace ERP.Controllers
                 ws.Cell(r, 3).Value = "الوقت";
                 ws.Cell(r, 4).Value = "العميل";
                 ws.Cell(r, 5).Value = "المخزن";
-                ws.Cell(r, 6).Value = "رقم الفاتورة";
-                ws.Cell(r, 7).Value = "الصافي";
-                ws.Cell(r, 8).Value = "الحالة";
-                ws.Cell(r, 9).Value = "مرحل؟";
+                ws.Cell(r, 6).Value = "المنطقة";
+                ws.Cell(r, 7).Value = "الكاتب";
+                ws.Cell(r, 8).Value = "رقم الفاتورة";
+                ws.Cell(r, 9).Value = "الصافي";
+                ws.Cell(r, 10).Value = "الحالة";
+                ws.Cell(r, 11).Value = "مرحل؟";
 
-                var headerRange = ws.Range(r, 1, r, 9);
+                var headerRange = ws.Range(r, 1, r, 11);
                 headerRange.Style.Font.Bold = true;
                 headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -955,10 +1059,14 @@ namespace ERP.Controllers
                     ws.Cell(r, 3).Value = DateTime.Today.Add(x.SRTime);
                     ws.Cell(r, 4).Value = x.Customer != null ? x.Customer.CustomerName : x.CustomerId.ToString();
                     ws.Cell(r, 5).Value = x.Warehouse != null ? x.Warehouse.WarehouseName : x.WarehouseId.ToString();
-                    ws.Cell(r, 6).Value = x.SalesInvoiceId;
-                    ws.Cell(r, 7).Value = x.NetTotal;
-                    ws.Cell(r, 8).Value = x.Status ?? "";
-                    ws.Cell(r, 9).Value = x.IsPosted ? "نعم" : "لا";
+                    ws.Cell(r, 6).Value = x.Customer != null
+                        ? (x.Customer.Area != null ? x.Customer.Area.AreaName : (x.Customer.RegionName ?? ""))
+                        : "";
+                    ws.Cell(r, 7).Value = x.CreatedBy ?? "";
+                    ws.Cell(r, 8).Value = x.SalesInvoiceId;
+                    ws.Cell(r, 9).Value = x.NetTotal;
+                    ws.Cell(r, 10).Value = x.Status ?? "";
+                    ws.Cell(r, 11).Value = x.IsPosted ? "نعم" : "لا";
                 }
 
                 ws.Columns().AdjustToContents();
@@ -994,6 +1102,7 @@ namespace ERP.Controllers
             IQueryable<SalesReturn> q = context.SalesReturns
                 .AsNoTracking()
                 .Include(sr => sr.Customer)
+                    .ThenInclude(c => c.Area)
                 .Include(sr => sr.Warehouse);
 
             if (column == "id")
@@ -1100,6 +1209,29 @@ namespace ERP.Controllers
                 if (!string.IsNullOrEmpty(search))
                     values = values.Where(v => v.Contains(search)).ToList();
                 return Json(values);
+            }
+
+            if (column == "region")
+            {
+                var regQuery = q.Select(sr =>
+                    sr.Customer != null
+                        ? (sr.Customer.Area != null ? sr.Customer.Area.AreaName : (sr.Customer.RegionName ?? ""))
+                        : "");
+                if (!string.IsNullOrEmpty(search))
+                    regQuery = regQuery.Where(v => v.Contains(search));
+                var regions = await regQuery.Where(v => v != "")
+                    .Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(regions);
+            }
+
+            if (column == "createdby")
+            {
+                var byQuery = q.Select(sr => sr.CreatedBy ?? "");
+                if (!string.IsNullOrEmpty(search))
+                    byQuery = byQuery.Where(v => v.Contains(search));
+                var authors = await byQuery.Where(v => v != "")
+                    .Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(authors);
             }
 
             return Json(Array.Empty<string>());

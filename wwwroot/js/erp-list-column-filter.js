@@ -124,7 +124,7 @@
                 '<input type="checkbox" class="form-check-input" id="' + selectAllId + '">' +
                 '<label class="form-check-label small" for="' + selectAllId + '">(تحديد الكل)</label>' +
                 '</div>' +
-                '<div class="erp-filter-items" style="max-height:200px;min-height:180px;overflow-y:auto;">' +
+                '<div class="erp-filter-items">' +
                 filtered.map(function (x) {
                     var v = String(x.value);
                     var checked = currentSelected.has(v);
@@ -153,6 +153,7 @@
                     renderList(searchInp ? searchInp.value : '');
                 };
             });
+            adjustPanelPosition();
         }
 
         // تراكمية: لا نمسح فلاتر الأعمدة الأخرى، نحدّث فقط العمود الحالي

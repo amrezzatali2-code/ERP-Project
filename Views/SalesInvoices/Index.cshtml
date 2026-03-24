@@ -639,7 +639,7 @@
 </div>
 
 @section Scripts {
-    <script src="~/js/erp-list-selectable.js"></script>
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         // =========================
         // تمرير الجدول أفقياً بحيث يبدأ من اليمين (RTL)
@@ -755,7 +755,17 @@
                 if (!btn || btn.disabled) return;
                 const siId = btn.getAttribute("data-si-id");
                 if (!siId) return;
-                if (!confirm("ترحيل فاتورة المبيعات رقم " + siId + "؟")) return;
+                if (typeof ERP === "undefined" || !ERP.showConfirmModal) {
+                    if (!confirm("ترحيل فاتورة المبيعات رقم " + siId + "؟")) return;
+                } else {
+                    const ok = await ERP.showConfirmModal({
+                        title: "ترحيل فاتورة مبيعات",
+                        message: "هل تريد ترحيل فاتورة المبيعات رقم " + siId + "؟ بعد الترحيل تُقفَل الفاتورة.",
+                        confirmText: "ترحيل",
+                        cancelText: "إلغاء"
+                    });
+                    if (!ok) return;
+                }
                 btn.disabled = true;
                 try {
                     const resp = await fetch("@Url.Action("PostInvoice", "SalesInvoices")/" + siId, {
@@ -772,14 +782,21 @@
                             if (postedCell) postedCell.textContent = "نعم";
                             btn.remove();
                         }
-                        if (typeof alert === "function") alert(data.message || "تم ترحيل الفاتورة بنجاح.");
+                        if (typeof ERP !== "undefined" && ERP.showToast) {
+                            ERP.showToast(data.message || "تم ترحيل الفاتورة بنجاح.", "success", 1000);
+                        } else if (typeof alert === "function") {
+                            alert(data.message || "تم ترحيل الفاتورة بنجاح.");
+                        }
                     } else {
                         btn.disabled = false;
-                        alert((data && data.message) || "فشل الترحيل.");
+                        const msg = (data && data.message) || "فشل الترحيل.";
+                        if (typeof ERP !== "undefined" && ERP.showToast) ERP.showToast(msg, "danger");
+                        else alert(msg);
                     }
                 } catch (err) {
                     btn.disabled = false;
-                    alert("حدث خطأ أثناء الترحيل.");
+                    if (typeof ERP !== "undefined" && ERP.showToast) ERP.showToast("حدث خطأ أثناء الترحيل.", "danger");
+                    else alert("حدث خطأ أثناء الترحيل.");
                 }
             });
         })();
@@ -791,7 +808,8 @@
             showButtonId: 'btnShowSI',
             idAttribute: 'data-si-id',
             showUrlAttribute: 'data-show-url',
-            tabTitleAttribute: 'data-tab-title'
+            tabTitleAttribute: 'data-tab-title',
+            showTabId: 'si-show-tab'
         });
 
         // =========================

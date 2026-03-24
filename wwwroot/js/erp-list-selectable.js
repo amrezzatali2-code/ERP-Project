@@ -1,6 +1,8 @@
 // erp-list-selectable.js
 // سكربت مشترك: اختيار صف من الجدول + أزرار عرض/حذف في الشريط (نمط الخزينة)
-// الاستخدام: ERP.initListSelection({ rowSelector?, showButtonId, deleteButtonId?, deleteFormId?, movementButtonId?, movementUrlAttribute?, movementTabTitle?, idAttribute?, showUrlAttribute?, tabTitleAttribute?, deleteConfirmMessage? })
+// الاستخدام: ERP.initListSelection({ rowSelector?, showButtonId, showTabId?, deleteButtonId?, deleteFormId?, movementButtonId?, movementUrlAttribute?, movementTabTitle?, movementTabId?, idAttribute?, showUrlAttribute?, tabTitleAttribute?, deleteConfirmMessage? })
+// showTabId: معرف تاب ثابت لزر العرض (مثل si-show-tab) لإعادة استخدام نفس التاب بدل list-show-{id}
+// movementTabId: نفس الفكرة لزر الحركة (اختياري)
 
 (function () {
     'use strict';
@@ -36,6 +38,8 @@
         var idAttribute = options.idAttribute || 'data-row-id';
         var showUrlAttribute = options.showUrlAttribute || 'data-show-url';
         var tabTitleAttribute = options.tabTitleAttribute || 'data-tab-title';
+        var showTabIdFixed = (options.showTabId && String(options.showTabId).trim()) ? String(options.showTabId).trim() : '';
+        var movementTabIdFixed = (options.movementTabId && String(options.movementTabId).trim()) ? String(options.movementTabId).trim() : '';
         var deleteConfirmMessage = options.deleteConfirmMessage;
         var openInTab = typeof options.openInTab === 'function' ? options.openInTab : openInTabDefault;
 
@@ -81,7 +85,7 @@
                 if (!url) return;
                 var id = selectedRow.getAttribute(idAttribute) || '';
                 var title = selectedRow.getAttribute(tabTitleAttribute) || '';
-                var tabId = 'list-show-' + id;
+                var tabId = showTabIdFixed || ('list-show-' + id);
                 openInTab(tabId, url, title);
             });
         }
@@ -93,7 +97,7 @@
                 var url = selectedRow.getAttribute(movementUrlAttribute);
                 if (!url) return;
                 var id = selectedRow.getAttribute(idAttribute) || '';
-                var tabId = 'list-movement-' + id;
+                var tabId = movementTabIdFixed || ('list-movement-' + id);
                 openInTab(tabId, url, movementTabTitle);
             });
         }

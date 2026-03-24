@@ -1398,6 +1398,14 @@
                 }
             });
 
+            // زر التحديث في الناف بار: إعادة تحميل نفس المرتجع من السيرفر (سياسة عميل، حالة، إلخ)
+            window.__ERP_REFRESH__ = function () {
+                var rid = parseInt((document.getElementById('SRId') || document.getElementById('ReturnId'))?.value || '0', 10) || 0;
+                if (rid > 0) {
+                    window.location.reload();
+                }
+            };
+
         });
     </script>
 }

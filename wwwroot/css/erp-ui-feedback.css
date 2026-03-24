@@ -1,0 +1,147 @@
+/* مودال تأكيد مركزي + توست عام (قوائم الفواتير وغيرها) */
+
+/* ---------- Toast ---------- */
+.erp-toast-host {
+    position: fixed;
+    top: 70px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10800;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.35rem;
+    pointer-events: none;
+}
+
+html.in-frame .erp-toast-host {
+    top: 12px;
+}
+
+.erp-toast-host .erp-toast {
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    transition: opacity 0.25s ease;
+    max-width: min(90vw, 520px);
+    text-align: center;
+}
+
+.erp-toast-host .erp-toast.text-success {
+    background: #d1fae5;
+    color: #065f46;
+    border: 1px solid #6ee7b7;
+}
+
+.erp-toast-host .erp-toast.text-warning {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
+
+.erp-toast-host .erp-toast.text-danger {
+    background: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #fca5a5;
+}
+
+.erp-toast-host .erp-toast.text-muted {
+    background: #f1f5f9;
+    color: #334155;
+    border: 1px solid #64748b;
+}
+
+/* ---------- Confirm modal ---------- */
+.erp-confirm-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10750;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(2px);
+    animation: erp-confirm-fade-in 0.15s ease;
+}
+
+@keyframes erp-confirm-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.erp-confirm-dialog {
+    width: 100%;
+    max-width: 440px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.18), 0 0 0 1px rgba(99, 102, 241, 0.12);
+    overflow: hidden;
+    direction: rtl;
+    text-align: right;
+    animation: erp-confirm-pop 0.2s ease;
+}
+
+@keyframes erp-confirm-pop {
+    from {
+        opacity: 0;
+        transform: scale(0.96) translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.erp-confirm-header {
+    padding: 1rem 1.15rem 0.65rem;
+    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.erp-confirm-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.erp-confirm-body {
+    padding: 1.15rem 1.15rem 1rem;
+    font-size: 0.95rem;
+    line-height: 1.55;
+    color: #334155;
+}
+
+.erp-confirm-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-start;
+    padding: 0.75rem 1rem 1rem;
+    border-top: 1px solid #f1f5f9;
+    background: #fafbfc;
+}
+
+.erp-confirm-footer .btn {
+    min-width: 100px;
+    font-weight: 600;
+}
+
+.erp-confirm-ok {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+    border: none !important;
+    color: #fff !important;
+}
+
+.erp-confirm-ok:hover {
+    filter: brightness(1.05);
+    color: #fff !important;
+}
+
+.erp-confirm-cancel {
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+    background: #fff !important;
+}

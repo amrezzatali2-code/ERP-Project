@@ -746,7 +746,17 @@
                 if (!btn || btn.disabled) return;
                 const piId = btn.getAttribute("data-pi-id");
                 if (!piId) return;
-                if (!confirm("ترحيل فاتورة المشتريات رقم " + piId + "؟")) return;
+                if (typeof ERP === "undefined" || !ERP.showConfirmModal) {
+                    if (!confirm("ترحيل فاتورة المشتريات رقم " + piId + "؟")) return;
+                } else {
+                    const ok = await ERP.showConfirmModal({
+                        title: "ترحيل فاتورة مشتريات",
+                        message: "هل تريد ترحيل فاتورة المشتريات رقم " + piId + "؟ بعد الترحيل تُقفَل الفاتورة.",
+                        confirmText: "ترحيل",
+                        cancelText: "إلغاء"
+                    });
+                    if (!ok) return;
+                }
                 btn.disabled = true;
                 try {
                     const resp = await fetch("@Url.Action("PostInvoice", "PurchaseInvoices")/" + piId, {
@@ -770,14 +780,21 @@
                             if (postedbyCell && data.postedBy) postedbyCell.textContent = data.postedBy;
                             btn.remove();
                         }
-                        if (typeof alert === "function") alert(data.message || "تم ترحيل الفاتورة بنجاح.");
+                        if (typeof ERP !== "undefined" && ERP.showToast) {
+                            ERP.showToast(data.message || "تم ترحيل الفاتورة بنجاح.", "success", 1000);
+                        } else if (typeof alert === "function") {
+                            alert(data.message || "تم ترحيل الفاتورة بنجاح.");
+                        }
                     } else {
                         btn.disabled = false;
-                        alert((data && data.message) || "فشل الترحيل.");
+                        const msg = (data && data.message) || "فشل الترحيل.";
+                        if (typeof ERP !== "undefined" && ERP.showToast) ERP.showToast(msg, "danger");
+                        else alert(msg);
                     }
                 } catch (err) {
                     btn.disabled = false;
-                    alert("حدث خطأ أثناء الترحيل.");
+                    if (typeof ERP !== "undefined" && ERP.showToast) ERP.showToast("حدث خطأ أثناء الترحيل.", "danger");
+                    else alert("حدث خطأ أثناء الترحيل.");
                 }
             });
         })();

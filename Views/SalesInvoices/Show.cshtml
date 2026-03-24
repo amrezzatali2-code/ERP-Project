@@ -103,6 +103,65 @@
             color: #6c757d;
         }
 
+        /* قائمة نوع طباعة الفاتورة — نمط ERP */
+        .si-print-dropdown-menu {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 28px rgba(99, 102, 241, 0.22) !important;
+            padding: 0.35rem 0 !important;
+            margin-top: 0.35rem !important;
+            overflow: hidden;
+            min-width: 100%;
+        }
+        .si-print-dropdown-header {
+            font-weight: 600;
+            color: #475569 !important;
+            letter-spacing: 0.02em;
+        }
+        .si-print-dropdown-item {
+            display: flex !important;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.55rem 1rem !important;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #0f172a !important;
+            border-radius: 0 !important;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        .si-print-dropdown-item:hover,
+        .si-print-dropdown-item:focus {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.12) 0%, rgba(14, 165, 233, 0.1) 100%) !important;
+            color: #312e81 !important;
+        }
+        .si-print-opt-icon {
+            font-size: 1.15rem;
+            line-height: 1;
+            flex-shrink: 0;
+            opacity: 0.92;
+        }
+        .si-print-opt-text {
+            flex: 1;
+            text-align: right;
+        }
+        .si-print-dropdown-btn.dropdown-toggle::after {
+            margin-inline-start: 0.35rem;
+        }
+
+        /* ترتيب أعمدة سطور الفاتورة */
+        #PILinesTable .si-lines-sort {
+            white-space: nowrap;
+            font-weight: 600;
+            max-width: 100%;
+        }
+        #PILinesTable .si-lines-sort:focus {
+            box-shadow: none;
+        }
+        #PILinesTable thead .si-lines-sort-ic {
+            min-width: 0.65rem;
+            display: inline-block;
+        }
+
         /* كارت الإجراءات ثابت عند السكرول — العمود الجانبي نفسه يلتصق فلا يتحرك مع السكرول */
         .invoice-page .col-lg-2.order-1.order-lg-2 {
             align-self: flex-start;
@@ -147,10 +206,7 @@
             border-radius: 0;
         }
 
-        /* تمييز الصف المختار عند النقر (مثل طلب الشراء) */
-        #PILinesTbody tr.si-row-selected td {
-            background-color: #eef2ff !important;
-        }
+        /* تمييز الصف المختار: نفس قائمة المبيعات (.erp-list-selectable-row.selected في site.css) */
 
         .invoice-header-card,
         .invoice-details-card,
@@ -511,17 +567,6 @@
             color: #fff !important;
         }
 
-        /* أزرار المسح داخل السطور — خلفية بيضاء وحدود حمراء */
-        .btnRemoveLineFromInvoice {
-            background-color: #fff !important;
-            color: #dc3545 !important;
-            border: 1.5px solid #dc3545 !important;
-        }
-        .btnRemoveLineFromInvoice:hover {
-            background-color: #dc3545 !important;
-            color: #fff !important;
-        }
-
         .badge-status-draft {
             background-color: #6f42c1; /* بنفسجي لمسودة */
         }
@@ -556,13 +601,17 @@
             gap: 0.25rem !important;
         }
 
-        /* هيدر جدول السطور — أرضية رمادي عادي ونص أسود (مثل طلب الشراء) */
+        /* هيدر جدول السطور — مثل قائمة المبيعات (ثابت عند التمرير) */
         .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
             background-color: #e9ecef !important;
             color: #212529 !important;
             font-weight: 600;
             padding: 0.5rem 0.55rem;
             border: 1px solid #dee2e6 !important;
+            box-shadow: 0 1px 0 0 #dee2e6;
         }
 
         .erp-table-wrapper {
@@ -893,6 +942,13 @@
                             </button>
                         </div>
 
+                        <button type="button" id="btnDeleteSelectedInvoiceLine"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
+                                data-lock-posted="1"
+                                title="يُمسح السطر المحدد في الجدول (اضغط على سطر التشغيلة أولاً)">
+                            🗑️ مسح السطر المحدد
+                        </button>
+
                         <div>
                             <button type="button" id="btnOpenProductEdit"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
@@ -914,17 +970,18 @@
                             📊 حجم تعامل
                         </a>
 
-                        <div class="dropdown w-100">
+                        <div class="dropdown w-100 si-print-dropdown">
                             <button type="button" id="btnPrintInvoiceDropdown"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle si-print-dropdown-btn"
                                     data-bs-toggle="dropdown"
                                     aria-expanded="false">
                                 🖨️ طباعة الفاتورة
                             </button>
-                            <ul class="dropdown-menu dropdown-menu-end w-100" aria-labelledby="btnPrintInvoiceDropdown">
-                                <li><a class="dropdown-item" href="#" data-print-mode="1">طباعة صفحة واحدة</a></li>
-                                <li><a class="dropdown-item" href="#" data-print-mode="2">طباعة أصل وصورة</a></li>
-                                <li><a class="dropdown-item" href="#" data-print-mode="3">طباعة أصل وصورتين</a></li>
+                            <ul class="dropdown-menu dropdown-menu-end w-100 si-print-dropdown-menu" aria-labelledby="btnPrintInvoiceDropdown">
+                                <li class="si-print-dropdown-header px-3 py-2 small text-muted border-bottom mb-0">اختر نوع الطباعة</li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-print-mode="1"><span class="si-print-opt-icon" aria-hidden="true">📄</span><span class="si-print-opt-text">طباعة صفحة واحدة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-print-mode="2"><span class="si-print-opt-icon" aria-hidden="true">📑</span><span class="si-print-opt-text">طباعة أصل وصورة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-print-mode="3"><span class="si-print-opt-icon" aria-hidden="true">📚</span><span class="si-print-opt-text">طباعة أصل وصورتين</span></a></li>
                             </ul>
                         </div>
 
@@ -1081,8 +1138,8 @@
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label class="form-label form-label-sm" for="CustomerPolicyText">سياسة العميل</label>
-                                        <input type="text" id="CustomerPolicyText" class="form-control form-control-sm" value="" readonly />
-                                        <input type="hidden" id="CustomerPolicyId" value="" />
+                                        <input type="text" id="CustomerPolicyText" class="form-control form-control-sm" value="@(Model?.Customer?.Policy?.Name ?? "")" readonly />
+                                        <input type="hidden" id="CustomerPolicyId" value="@(Model?.Customer?.PolicyId?.ToString() ?? "")" />
                                     </div>
                                     <div class="col-md-6 col-lg-3">
                                         <label class="form-label form-label-sm">الهاتف</label>
@@ -1317,18 +1374,36 @@
                         @* <div class="card-body p-0"> *@
                         <div class="invoice-lines-container">
                         <div class="erp-table-wrapper mb-0">
-                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                                <thead class="invoice-lines-header">
+                            <table id="PILinesTable" class="table table-sm table-striped table-hover mb-0 erp-table erp-table-sortable">
+                                <thead class="invoice-lines-header table-light">
                                     <tr>
-                                        <th class="text-center">#</th>
-                                        <th>اسم الصنف</th>
-                                        <th class="text-center">التشغيلة</th>
-                                        <th class="text-center">الصلاحية</th>
-                                        <th class="text-center">الكمية</th>
-                                        <th class="text-center">سعر الجمهور</th>
-                                        <th class="text-center">خصم البيع %</th>
-                                        <th class="text-center">قيمة السطر</th>
-                                        <th class="text-center no-print">مسح</th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="0" data-si-kind="num" title="ترتيب حسب رقم السطر"># <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="1" data-si-kind="str" title="ترتيب حسب موقع الصنف">الموقع <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th>
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="2" data-si-kind="str" title="ترتيب أبجدي حسب اسم الصنف">اسم الصنف <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="3" data-si-kind="str" title="ترتيب حسب التشغيلة">التشغيلة <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="4" data-si-kind="date" title="ترتيب حسب الصلاحية">الصلاحية <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="5" data-si-kind="num" title="ترتيب حسب الكمية">الكمية <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="6" data-si-kind="num" title="ترتيب حسب السعر">سعر الجمهور <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="7" data-si-kind="num" title="ترتيب حسب الخصم">خصم البيع % <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
+                                        <th class="text-center">
+                                            <button type="button" class="btn btn-link btn-sm text-dark p-0 si-lines-sort text-decoration-none" data-si-col="8" data-si-kind="num" title="ترتيب حسب قيمة السطر">قيمة السطر <span class="erp-sort-icon si-lines-sort-ic" aria-hidden="true"></span></button>
+                                        </th>
                                     </tr>
                                 </thead>
 
@@ -1364,9 +1439,12 @@
                                             {
                                                 var line = g.First();
                                                 decimal lineValue = line.LineTotalAfterDiscount;
+                                                var locDisp = string.IsNullOrWhiteSpace(line.Product?.Location) ? "—" : line.Product!.Location!;
 
-                                                <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                <tr class="erp-list-selectable-row" data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                     <td class="text-center">@line.LineNo</td>
+
+                                                    <td class="text-center text-muted small">@locDisp</td>
 
                                                     <td>
                                                         <strong>@g.Key.ProdName</strong>
@@ -1386,20 +1464,15 @@
                                                     <td class="text-center">@line.Disc1Percent.ToString("0.##")</td>
 
                                                     <td class="text-center">@lineValue.ToString("0.00")</td>
-
-                                                    <td class="text-center no-print">
-                                                        <button type="button"
-                                                                class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                data-line-no="@line.LineNo" data-lock-posted="1">
-                                                            مسح
-                                                        </button>
-                                                    </td>
                                                 </tr>
                                             }
                                             else
                                             {
-                                                <tr class="table-light pi-group-row" data-prodid="@g.Key.ProdId">
+                                                var grpLocDisp = string.IsNullOrWhiteSpace(g.First().Product?.Location) ? "—" : g.First().Product!.Location!;
+                                                <tr class="table-light pi-group-row erp-list-selectable-row" data-prodid="@g.Key.ProdId">
                                                     <td class="text-center">—</td>
+
+                                                    <td class="text-center text-muted small">@grpLocDisp</td>
 
                                                     <td>
                                                         <strong>@g.Key.ProdName</strong>
@@ -1412,15 +1485,16 @@
                                                     <td class="text-center"></td>
                                                     <td class="text-center"></td>
                                                     <td class="text-center"></td>
-                                                    <td class="text-center"></td>
                                                 </tr>
 
                                                 foreach (var line in g.OrderBy(x => x.LineNo))
                                                 {
                                                     decimal lineValue = line.LineTotalAfterDiscount;
+                                                    var lineLocDisp = string.IsNullOrWhiteSpace(line.Product?.Location) ? "—" : line.Product!.Location!;
 
-                                                    <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                                    <tr class="erp-list-selectable-row" data-line-no="@line.LineNo" data-prodid="@line.ProdId">
                                                         <td class="text-center">@line.LineNo</td>
+                                                        <td class="text-center text-muted small">@lineLocDisp</td>
                                                         <td class="text-muted small">↳</td>
                                                         <td class="text-center">@line.BatchNo</td>
                                                         <td class="text-center">
@@ -1430,13 +1504,6 @@
                                                         <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
                                                         <td class="text-center">@line.Disc1Percent.ToString("0.##")</td>
                                                         <td class="text-center">@lineValue.ToString("0.00")</td>
-                                                        <td class="text-center no-print">
-                                                            <button type="button"
-                                                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                    data-line-no="@line.LineNo">
-                                                                مسح
-                                                            </button>
-                                                        </td>
                                                     </tr>
                                                 }
                                             }
@@ -1500,6 +1567,7 @@
                                     @{
                                         var previousBalance = hideInvestorSensitive ? 0m : (Model?.SIId > 0 ? (Model?.CustomerBalanceAtSave ?? 0m) : (Model?.Customer?.CurrentBalance ?? 0m));
                                         var creditRemaining = hideInvestorSensitive ? 0m : Math.Max(0m, (Model?.Customer?.CreditLimit ?? 0m) - previousBalance - netTotal);
+                                        var grandTotalWithPrevious = hideInvestorSensitive ? totalAfterDiscountAndTax : previousBalance + totalAfterDiscountAndTax;
                                     }
                                     <input type="hidden" id="CustomerPreviousBalanceStored" value="@(hideInvestorSensitive ? "0" : (Model?.CustomerBalanceAtSave ?? 0m).ToString("0.##"))" />
                                     <div class="invoice-summary-item invoice-summary-box">
@@ -1512,14 +1580,14 @@
                                     </div>
                                 </div>
 
-                                @* الصف الثاني: إجمالي الجمهور، الإجمالي بعد الخصم، نسبة الضريبة، الإجمالي بعد الخصم والضريبة — في صف لوحدهم *@
+                                @* الصف الثاني: جمهور، إجمالي الفاتورة (بعد خصم السطور/الهيدر)، ضريبة، الإجمالي = صافي الفاتورة + الحساب السابق (قيمة صافي الفاتورة مخفية للسكربت/الطباعة) *@
                                 <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-totals mt-3">
                                     <div class="invoice-summary-item invoice-summary-box">
                                         <span class="invoice-summary-label">إجمالي سعر الجمهور</span>
                                         <span id="TotalRetailValue" class="invoice-summary-value">@totalRetail.ToString("0.00")</span>
                                     </div>
                                     <div class="invoice-summary-item invoice-summary-box">
-                                        <span class="invoice-summary-label">الإجمالي بعد الخصم</span>
+                                        <span class="invoice-summary-label">إجمالي الفاتورة</span>
                                         <span id="TotalAfterDiscountValue" class="invoice-summary-value">@totalAfterDiscount.ToString("0.00")</span>
                                     </div>
                                     <div class="invoice-summary-item invoice-summary-box">
@@ -1534,8 +1602,9 @@
                                         <span id="TaxAmountDisplay" class="visually-hidden" aria-hidden="true"></span>
                                     </div>
                                     <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main">
-                                        <span class="invoice-summary-label">الإجمالي بعد الخصم والضريبة</span>
-                                        <span id="TotalAfterDiscountAndTaxValue" class="invoice-summary-value invoice-summary-value-main fw-bold">@totalAfterDiscountAndTax.ToString("0.00")</span>
+                                        <span class="invoice-summary-label">الإجمالي</span>
+                                        <span id="GrandTotalWithPreviousValue" class="invoice-summary-value invoice-summary-value-main fw-bold">@grandTotalWithPrevious.ToString("0.00")</span>
+                                        <span id="TotalAfterDiscountAndTaxValue" class="visually-hidden" aria-hidden="true">@totalAfterDiscountAndTax.ToString("0.00")</span>
                                         <span id="NetTotalValue" class="visually-hidden">@netTotal.ToString("0.00")</span>
                                     </div>
                                 </div>
@@ -1568,45 +1637,50 @@
     <div id="piPrintWrapper" class="erp-print-area print-only">
     <div id="piPrintArea" class="pi-print-copy">
 
-        <!-- ===== هيدر طباعة خاص بكل نسخة (الورقة تقطع نصفين — كل نصف له هيدره الكامل) ===== -->
-        <div class="pi-print-header mb-2">
-            <div class="pi-print-company-row d-flex justify-content-between align-items-center">
-                <div class="pi-print-logo-placeholder"></div>
-                <div class="d-flex align-items-center gap-2">
-                    <h2 class="pi-print-company-name mb-0 fw-bold">شركة الهدى</h2>
-                    <span class="pi-print-doc-title">ERP — فاتورة مبيعات</span>
-                </div>
-            </div>
-            <hr class="pi-print-company-underline my-1" />
-            <table class="pi-print-details-table small w-100">
+        @* جدول واحد: thead يتكرر في كل صفحة؛ ترقيم عبر @page @bottom-center في erp-print.css *@
+        <table class="pi-print-master-table table table-bordered table-sm mb-0 w-100">
+            <thead>
                 <tr>
-                    <td>اسم العميل: <strong id="piPrintSupplier"></strong></td>
-                    <td>الكاتب: <strong id="piPrintAuthor"></strong></td>
-                    <td>المخزن: <strong id="piPrintWarehouse"></strong></td>
-                    <td>التاريخ: <strong id="piPrintInvoiceDate"></strong></td>
+                    <td colspan="9" class="p-0 border-0 pi-print-thead-banner-cell">
+                        <div class="pi-print-header mb-2">
+                            <div class="pi-print-company-row d-flex justify-content-between align-items-center">
+                                <div class="pi-print-logo-placeholder"></div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <h2 class="pi-print-company-name mb-0 fw-bold">شركة الهدى</h2>
+                                    <span class="pi-print-doc-title">ERP — فاتورة مبيعات</span>
+                                </div>
+                            </div>
+                            <hr class="pi-print-company-underline my-1" />
+                            <div class="pi-print-details-grid small w-100" role="presentation">
+                                <div>اسم العميل: <strong id="piPrintSupplier"></strong></div>
+                                <div>الكاتب: <strong id="piPrintAuthor"></strong></div>
+                                <div>المخزن: <strong id="piPrintWarehouse"></strong></div>
+                                <div>التاريخ: <strong id="piPrintInvoiceDate"></strong></div>
+                                <div>الهاتف: <strong id="piPrintCustomerPhone"></strong></div>
+                                <div>رقم الفاتورة: <strong id="piPrintInvoiceNo"></strong></div>
+                                <div class="pi-print-details-cell-span2" aria-hidden="true"></div>
+                                <div class="pi-print-details-span-row">العنوان: <strong id="piPrintCustomerAddress"></strong></div>
+                                <div class="pi-print-details-span-row text-muted small" id="piPrintNow"></div>
+                            </div>
+                        </div>
+                        <hr class="my-1 pi-print-hr-after-banner" />
+                    </td>
                 </tr>
-                <tr>
-                    <td>الهاتف: <strong id="piPrintCustomerPhone"></strong></td>
-                    <td>رقم الفاتورة: <strong id="piPrintInvoiceNo"></strong></td>
-                    <td colspan="2"></td>
+                <tr class="pi-print-column-head-row table-light">
+                    <th class="text-center">#</th>
+                    <th class="text-center">الموقع</th>
+                    <th>اسم الصنف</th>
+                    <th class="text-center">التشغيلة</th>
+                    <th class="text-center">الصلاحية</th>
+                    <th class="text-center">الكمية</th>
+                    <th class="text-center">سعر الجمهور</th>
+                    <th class="text-center">خصم البيع %</th>
+                    <th class="text-center">قيمة السطر</th>
                 </tr>
-                <tr>
-                    <td colspan="4">العنوان: <strong id="piPrintCustomerAddress"></strong></td>
-                </tr>
-                <tr>
-                    <td colspan="4" class="text-muted small" id="piPrintNow"></td>
-                </tr>
-            </table>
-        </div>
-        <hr class="my-1" />
-
-        <!-- ===== السطور ===== -->
-        <div id="piPrintLinesWrap"></div>
-
-        @* <hr class="my-3" /> *@
-
-        <!-- ===== الإجماليات ===== -->
-        <div id="piPrintTotalsWrap"></div>
+            </thead>
+            <tbody id="piPrintMasterTbody" class="pi-print-master-tbody"></tbody>
+        </table>
+        <div id="piPrintTotalsWrap" class="pi-print-totals-block mt-2"></div>
 
     </div>
     </div>
@@ -1711,11 +1785,16 @@
             }
 
             // رسائل عابرة (بديل postInvoiceMsg — نفس نظام طلب الشراء)
-            function showToast(text, type) {
+            function showToast(text, type, durationMs) {
                 if (!text) return;
+                if (typeof ERP !== 'undefined' && typeof ERP.showToast === 'function') {
+                    ERP.showToast(text, type, durationMs);
+                    return;
+                }
                 var container = document.getElementById('siToastContainer');
                 if (!container) return;
                 type = type || 'muted';
+                var ms = typeof durationMs === 'number' && durationMs >= 0 ? durationMs : 4000;
                 var el = document.createElement('div');
                 el.className = 'si-toast text-' + type;
                 el.textContent = text;
@@ -1726,7 +1805,7 @@
                     setTimeout(function () {
                         if (el.parentNode) el.parentNode.removeChild(el);
                     }, 250);
-                }, 4000);
+                }, ms);
             }
             document.addEventListener("DOMContentLoaded", applyPostedUiLock);
 
@@ -1788,26 +1867,93 @@
                 // (2) دوال مساعدة للبحث
                 // =========================================================
 
-                // تعليق: توحيد النص (وتجاهل الألف في أول الكلمة)
+                // أرقام عربية → لاتينية للمقارنة (مثلاً «احمد ١» مع «احمد 1»)
+                function normalizeDigits(s) {
+                    if (!s) return '';
+                    const map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                        '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                    let out = '';
+                    for (let i = 0; i < s.length; i++) {
+                        const c = s[i];
+                        out += map[c] !== undefined ? map[c] : c;
+                    }
+                    return out;
+                }
+
+                // تجاهل أشكال الألف في بداية الكلمة فقط (لكل كلمة على حدة)
+                function normalizeWord(w) {
+                    return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+                }
+
+                // تعليق: توحيد النص للتطابق الكامل (كل كلمة بعد تطبيع الألف الأولى)
                 function normalizeText(txt) {
                     return (txt || '')
                         .trim()
                         .toLowerCase()
-                        .replace(/^[اأإآ]/, '')
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map(function (w) { return normalizeWord(w); })
+                        .filter(Boolean)
+                        .join(' ')
                         .replace(/\s+/g, ' ');
+                }
+
+                function wordMatchesQueryWord(nameWord, queryWord) {
+                    const nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                    const qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                    const nw = nw0.replace(/^[اأإآ]/u, '');
+                    const qw = qw0.replace(/^[اأإآ]/u, '');
+                    if (!qw) return true;
+                    return nw === qw || nw.startsWith(qw);
+                }
+
+                function customerNameMatchesSearch(customerName, rawSearch) {
+                    const raw = (rawSearch || '').trim();
+                    if (!raw) return true;
+                    const qWords = raw.split(/\s+/).filter(Boolean);
+                    const nWords = (customerName || '').trim().split(/\s+/).filter(Boolean);
+                    if (qWords.length === 0) return true;
+                    return qWords.every(function (qw) {
+                        return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                    });
+                }
+
+                // ترتيب النتائج: تطابق كامل ← بادئة الاسم ← بادئة أول كلمة حرفياً ← بادئة أول كلمة بعد تطبيع ألف ← باقي المطابقات
+                function customerSearchRank(name, rawSearch) {
+                    const raw = (rawSearch || '').trim();
+                    const nm = (name || '').trim();
+                    if (!raw) return 50;
+                    if (nm === raw) return 0;
+                    if (nm.startsWith(raw)) return 1;
+                    const rawWords = raw.split(/\s+/).filter(Boolean);
+                    const firstQ = rawWords[0] || '';
+                    const nmWords = nm.split(/\s+/).filter(Boolean);
+                    if (firstQ && nmWords.length) {
+                        if (nmWords[0].startsWith(firstQ)) return 2;
+                        const nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                        const qw0 = normalizeDigits(firstQ.toLowerCase());
+                        const nw = nw0.replace(/^[اأإآ]/u, '');
+                        const qw = qw0.replace(/^[اأإآ]/u, '');
+                        if (qw && (nw === qw || nw.startsWith(qw))) return 3;
+                    }
+                    return 4;
                 }
 
                     // ملاحظة: لا نُعيد بناء datalist الآن
                     // لأن البحث سيتم عبر dropdown مخصص بدل suggestions المدمجة من المتصفح.
 
-                // تعليق: بحث بالاسم (تطابق كامل)
+                // تعليق: بحث بالاسم (تطابق كامل بعد تطبيع الكلمات، ثم تطابق حرفي)
                 function findByName(name) {
-                    const search = normalizeText(name);
+                    const raw = (name || '').trim();
+                    const search = normalizeText(raw);
                     if (!search) return null;
 
-                        for (let i = 0; i < allCustomers.length; i++) {
-                            if (normalizeText(allCustomers[i].name) === search) return allCustomers[i];
-                        }
+                    for (let i = 0; i < allCustomers.length; i++) {
+                        if (normalizeText(allCustomers[i].name) === search) return allCustomers[i];
+                    }
+                    for (let i = 0; i < allCustomers.length; i++) {
+                        if ((allCustomers[i].name || '').trim() === raw) return allCustomers[i];
+                    }
                     return null;
                 }
 
@@ -1946,23 +2092,28 @@
 
                 function getFilteredCustomerOptions(search, max) {
                     if (!allCustomers || !allCustomers.length) return [];
-                    const q = normalizeText(search);
                     const limit = max || CUSTOMER_LIST_MAX;
-                    if (!q) return allCustomers.slice(0, limit);
-
-                    const words = q.split(/\s+/).filter(Boolean);
                     const rawTrim = (search || '').trim();
-                    const out = [];
-                    for (let i = 0; i < allCustomers.length && out.length < limit; i++) {
+                    if (!rawTrim) return allCustomers.slice(0, limit);
+
+                    const qNorm = normalizeText(rawTrim);
+                    const words = rawTrim.split(/\s+/).filter(Boolean);
+                    const matched = [];
+                    for (let i = 0; i < allCustomers.length; i++) {
                         const c = allCustomers[i];
-                        const name = normalizeText(c.name);
                         const idStr = (c.id || '').toString().trim();
-                        const nameOk = name && words.length > 0 && words.every(w => name.indexOf(w) !== -1);
-                        const idOk = idStr && words.length > 0 && words.some(w => idStr.indexOf(w) !== -1);
-                        const codeRawOk = idStr && rawTrim && idStr.indexOf(rawTrim) !== -1;
-                        if (nameOk || idOk || codeRawOk) out.push(c);
+                        const nameOk = qNorm ? customerNameMatchesSearch(c.name || '', rawTrim) : true;
+                        const idOk = words.length > 0 && words.some(function (w) { return idStr.indexOf(w) !== -1; });
+                        const codeRawOk = idStr && idStr.indexOf(rawTrim) !== -1;
+                        if (nameOk || idOk || codeRawOk) matched.push(c);
                     }
-                    return out;
+                    matched.sort(function (a, b) {
+                        const ra = customerSearchRank(a.name || '', rawTrim);
+                        const rb = customerSearchRank(b.name || '', rawTrim);
+                        if (ra !== rb) return ra - rb;
+                        return (a.name || '').localeCompare(b.name || '', 'ar');
+                    });
+                    return matched.slice(0, limit);
                 }
 
                 function positionCustomerDropdownList() {
@@ -2224,13 +2375,15 @@
                         const prodWeightedDisc = document.getElementById('ProdWeightedDiscount');   // متغير: الخصم المرجّح
                         const prodAltSelect    = document.getElementById('AlternativeProducts');    // متغير: قائمة البدائل
 
-                        // 3) مصدر بيانات الأصناف (داتاليست مخفي — القائمة تعرض 10 كحد أقصى)
+                        // 3) مصدر بيانات الأصناف (داتاليست مخفي — القائمة تعرض حتى PRODUCT_LIST_MAX)
                         const prodDataList = document.getElementById('productsList');
 
                         // 4) جدول تشغيلات FEFO داخل كارت بيانات الصنف
                         const batchQueueBody = document.getElementById('BatchQueueBody'); // متغير: جسم جدول التشغيلات (tbody)
                         const prodBatchSelect = document.getElementById('ProdBatchSelect'); // متغير: دروب داون اختيار التشغيلة (تجاوز FIFO)
                         let currentProductBatches = []; // متغير: قائمة التشغيلات الحالية (من GetSalesProductInfo) لاستخدامها عند تغيير الاختيار
+                        /** تعبئة اسم الصنف من سطر الجدول تُطلق input؛ نمنع فتح قائمة البحث في هذه الحالة */
+                        let suppressProductDropdownOnce = false;
 
                         // 5) مخزن الفاتورة (لازم يكون موجود في الهيدر)
                          const warehouseInput = document.getElementById('WarehouseId');    // متغير: رقم المخزن الحالي
@@ -2239,16 +2392,75 @@
                         if (!prodDataList) console.warn('⚠️ قائمة الأصناف (productsList) غير موجودة.');
 
                         // =========================================================
-                        // دوال مساعدة (أرقام + توحيد نص)
+                        // دوال مساعدة (أرقام + توحيد نص) — نفس منطق بحث اسم العميل
                         // =========================================================
 
-                        // دالة: توحيد النص (تجاهل الألف + إزالة مسافات مكررة)
+                        function normalizeDigits(txt) {
+                            if (!txt) return '';
+                            const map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                                '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                            let out = '';
+                            for (let i = 0; i < txt.length; i++) {
+                                const c = txt[i];
+                                out += map[c] !== undefined ? map[c] : c;
+                            }
+                            return out;
+                        }
+
+                        function normalizeWord(w) {
+                            return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+                        }
+
                         function normalizeText(txt) {
                             return (txt || '')
                                 .trim()
                                 .toLowerCase()
-                                .replace(/^[اأإآ]/, '')
+                                .split(/\s+/)
+                                .filter(Boolean)
+                                .map(function (w) { return normalizeWord(w); })
+                                .filter(Boolean)
+                                .join(' ')
                                 .replace(/\s+/g, ' ');
+                        }
+
+                        function wordMatchesQueryWord(nameWord, queryWord) {
+                            const nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                            const qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                            const nw = nw0.replace(/^[اأإآ]/u, '');
+                            const qw = qw0.replace(/^[اأإآ]/u, '');
+                            if (!qw) return true;
+                            return nw === qw || nw.startsWith(qw);
+                        }
+
+                        function productNameMatchesSearch(productName, rawSearch) {
+                            const raw = (rawSearch || '').trim();
+                            if (!raw) return true;
+                            const qWords = raw.split(/\s+/).filter(Boolean);
+                            const nWords = (productName || '').trim().split(/\s+/).filter(Boolean);
+                            if (qWords.length === 0) return true;
+                            return qWords.every(function (qw) {
+                                return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                            });
+                        }
+
+                        function productSearchRank(name, rawSearch) {
+                            const raw = (rawSearch || '').trim();
+                            const nm = (name || '').trim();
+                            if (!raw) return 50;
+                            if (nm === raw) return 0;
+                            if (nm.startsWith(raw)) return 1;
+                            const rawWords = raw.split(/\s+/).filter(Boolean);
+                            const firstQ = rawWords[0] || '';
+                            const nmWords = nm.split(/\s+/).filter(Boolean);
+                            if (firstQ && nmWords.length) {
+                                if (nmWords[0].startsWith(firstQ)) return 2;
+                                const nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                                const qw0 = normalizeDigits(firstQ.toLowerCase());
+                                const nw = nw0.replace(/^[اأإآ]/u, '');
+                                const qw = qw0.replace(/^[اأإآ]/u, '');
+                                if (qw && (nw === qw || nw.startsWith(qw))) return 3;
+                            }
+                            return 4;
                         }
 
                         // دالة: تحويل النص لرقم (decimal) بأمان
@@ -2268,21 +2480,17 @@
                         // =========================================================
 
                         function findProductByName(name) {
-                            const search = normalizeText(name);
+                            const raw = (name || '').trim();
+                            const search = normalizeText(raw);
                             if (!search) return null;
 
                             const opts = prodDataList.options;
-
-                            // 1) تطابق تام
                             for (let i = 0; i < opts.length; i++) {
                                 if (normalizeText(opts[i].value) === search) return opts[i];
                             }
-
-                            // 2) يبدأ بـ (StartsWith فقط — لا Contains)
                             for (let i = 0; i < opts.length; i++) {
-                                if (normalizeText(opts[i].value).startsWith(search)) return opts[i];
+                                if ((opts[i].value || '').trim() === raw) return opts[i];
                             }
-
                             return null;
                         }
 
@@ -2297,6 +2505,25 @@
                                 if (idAttr === search || codeAttr === search) return opts[i];
                             }
                             return null;
+                        }
+
+                        // عندما يكون الحقل = اسم صنف كامل مختار، البحث بكل الكلمات يُرجع صنفاً واحداً فقط.
+                        // نوسّع استعلام القائمة لأول كلمة من الاسم المعروف (مثل «ابيمول») مثل سلوك قائمة العملاء بعد الاختيار.
+                        function getProductDropdownFilterQuery(rawTrim) {
+                            const raw = (rawTrim || '').trim();
+                            if (!raw || !prodDataList || !prodDataList.options) return raw;
+                            const nRaw = normalizeText(raw);
+                            let canonical = '';
+                            const opts = prodDataList.options;
+                            for (let i = 0; i < opts.length; i++) {
+                                const v = (opts[i].value || '').trim();
+                                if (!v) continue;
+                                if (v === raw) { canonical = v; break; }
+                                if (nRaw && normalizeText(v) === nRaw) { canonical = v; break; }
+                            }
+                            if (!canonical) return raw;
+                            const parts = canonical.split(/\s+/).filter(Boolean);
+                            return parts[0] || raw;
                         }
 
                         // تطبيع نص للمقارنة: مسافات متعددة → واحدة، trim، lowercase
@@ -2330,22 +2557,58 @@
                             return list;
                         }
 
-                        function refreshVariantsDropdown(selectedOpt) { /* بوكس واحد — قائمة واحدة حتى 10 أصناف */ }
+                        function refreshVariantsDropdown(selectedOpt) { /* بوكس واحد — قائمة واحدة حتى PRODUCT_LIST_MAX */ }
 
-                        // نفس نظام المستخدمين: قائمة منسدلة تعرض 10 أصناف كحد أقصى (لعدم ثقل البرنامج)
-                        const PRODUCT_LIST_MAX = 10;
-                        function getFilteredProductOptions(search, max) {
+                        // نفس فكرة العميل: قائمة محدودة (سرعة) مع إمكانية التنقل بالأسهم بين عدة أصناف ذات صلة
+                        const PRODUCT_LIST_MAX = 15;
+                        function getFilteredProductOptions(search, max, pinDisplayName) {
                             if (!prodDataList || !prodDataList.options) return [];
-                            const q = normalizeText(search);
+                            const limit = max || PRODUCT_LIST_MAX;
                             const opts = prodDataList.options;
-                            const out = [];
-                            for (let i = 0; i < opts.length && out.length < (max || PRODUCT_LIST_MAX); i++) {
-                                const opt = opts[i];
-                                const name = normalizeText(opt.value || '');
-                                const code = (opt.getAttribute('data-code') || opt.getAttribute('data-id') || '').toString().trim();
-                                if (!q || name.includes(q) || (code && code.indexOf(q) !== -1)) out.push(opt);
+                            const rawTrim = (search || '').trim();
+                            if (!rawTrim) {
+                                const out = [];
+                                for (let i = 0; i < opts.length && out.length < limit; i++) out.push(opts[i]);
+                                return out;
                             }
-                            return out;
+                            const qNorm = normalizeText(rawTrim);
+                            const words = rawTrim.split(/\s+/).filter(Boolean);
+                            const matched = [];
+                            for (let i = 0; i < opts.length; i++) {
+                                const opt = opts[i];
+                                const nameVal = (opt.value || '').trim();
+                                const code = (opt.getAttribute('data-code') || '').toString().trim();
+                                const idAttr = (opt.getAttribute('data-id') || '').toString().trim();
+                                const codeOrId = code || idAttr;
+                                const nameOk = qNorm ? productNameMatchesSearch(nameVal, rawTrim) : true;
+                                const idOk = words.length > 0 && words.some(function (w) { return codeOrId.indexOf(w) !== -1; });
+                                const codeRawOk = codeOrId && codeOrId.indexOf(rawTrim) !== -1;
+                                if (nameOk || idOk || codeRawOk) matched.push(opt);
+                            }
+                            matched.sort(function (a, b) {
+                                const ra = productSearchRank((a.value || '').trim(), rawTrim);
+                                const rb = productSearchRank((b.value || '').trim(), rawTrim);
+                                if (ra !== rb) return ra - rb;
+                                return (a.value || '').localeCompare(b.value || '', 'ar');
+                            });
+                            let result = matched.slice(0, limit);
+                            const pinRaw = (pinDisplayName || '').trim();
+                            if (pinRaw) {
+                                const nPin = normalizeText(pinRaw);
+                                let pinOpt = null;
+                                for (let j = 0; j < opts.length; j++) {
+                                    const v = (opts[j].value || '').trim();
+                                    if (v === pinRaw || (nPin && normalizeText(v) === nPin)) { pinOpt = opts[j]; break; }
+                                }
+                                if (pinOpt && matched.indexOf(pinOpt) >= 0) {
+                                    const inResult = result.some(function (o) { return o === pinOpt; });
+                                    if (!inResult) {
+                                        result = matched.slice(0, limit - 1);
+                                        result.push(pinOpt);
+                                    }
+                                }
+                            }
+                            return result;
                         }
                         var productDropdownHighlightedIndex = -1;
                         var productDropdownSelectableItems = [];
@@ -2356,10 +2619,8 @@
                             const inp = document.getElementById('ProdNameInput');
                             if (!panel || !inp) return;
                             var searchTerm = (inp.value || '').trim();
-                            if (searchTerm.indexOf(' ') !== -1) {
-                                searchTerm = searchTerm.split(/\s+/)[0] || searchTerm;
-                            }
-                            const list = getFilteredProductOptions(searchTerm, PRODUCT_LIST_MAX);
+                            var filterQuery = getProductDropdownFilterQuery(searchTerm);
+                            const list = getFilteredProductOptions(filterQuery, PRODUCT_LIST_MAX, searchTerm);
                             panel.innerHTML = '';
                             productDropdownSelectableItems = [];
                             var currentVal = (inp.value || '').trim();
@@ -2372,7 +2633,7 @@
                             if (list.length === 0) {
                                 const empty = document.createElement('div');
                                 empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
-                                empty.textContent = inp.value ? 'لا توجد نتائج' : 'اكتب للبحث ثم انزل بالسهم ▼ واختر (10 كحد أقصى)';
+                                empty.textContent = inp.value ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + PRODUCT_LIST_MAX + ' كحد أقصى)');
                                 panel.appendChild(empty);
                             } else {
                                 list.forEach(function (opt, idx) {
@@ -2768,10 +3029,17 @@
                         }
 
                         // =========================================================
-                        // Events: اسم الصنف — نفس نظام المستخدمين (قائمة حتى 10 أصناف)
+                        // Events: اسم الصنف — نفس نظام المستخدمين (قائمة حتى PRODUCT_LIST_MAX)
                         // =========================================================
                         if (prodNameInput) {
-                            prodNameInput.addEventListener('input', function () { openProductDropdown(); });
+                            prodNameInput.addEventListener('input', function () {
+                                if (suppressProductDropdownOnce) {
+                                    suppressProductDropdownOnce = false;
+                                    closeProductDropdown();
+                                    return;
+                                }
+                                openProductDropdown();
+                            });
                             prodNameInput.addEventListener('blur', function () {
                                 setTimeout(function () {
                                     closeProductDropdown();
@@ -3212,10 +3480,11 @@
 
                     // ===============================
                     // رسم جدول السطور (هجين)
-                    // - لو الصنف غير مكرر: سطر واحد + بيانات + زر مسح
-                    // - لو الصنف مكرر (تشغيلات): سطر عنوان للصنف + سطور تشغيلات (بيانات + مسح لكل تشغيلة)
+                    // - مسح السطر من كارت الإجراءات (زر «مسح السطر المحدد») بعد تحديد صف في الجدول
                     // ===============================
                     function renderGroupedLines(lines) {
+
+                        if (typeof window.__siLinesSortReset === 'function') window.__siLinesSortReset();
 
                         // متغير: tbody الخاص بجدول السطور
                         const tbody = document.getElementById('PILinesTbody');
@@ -3263,7 +3532,7 @@
                             const isMultiBatch = sortedLines.length > 1; // متغير: هل الصنف له أكثر من تشغيلة؟
 
                             // =========================================================
-                            // الحالة (1): الصنف غير مكرر => سطر واحد فقط (اسم + بيانات + مسح)
+                            // الحالة (1): الصنف غير مكرر => سطر واحد فقط
                             // =========================================================
                             if (!isMultiBatch) {
 
@@ -3287,13 +3556,17 @@
                                     ? Number(line.lineValue)
                                     : (qty * priceRetail * (1 - (discPct / 100))); // متغير: قيمة السطر
 
+                                const locRaw = (line.location != null) ? String(line.location).trim() : '';
+                                const locCell = locRaw ? escapeHtml(locRaw) : '—';
+
                                 const tr = document.createElement('tr');
+                                tr.className = 'erp-list-selectable-row';
                                 tr.setAttribute('data-line-no', lineNo);
                                 tr.setAttribute('data-prodid', g.prodId);
 
                                 tr.innerHTML = `
                                     <td class="text-center">${lineNo}</td>
-
+                                    <td class="text-center text-muted small">${locCell}</td>
                                     <td>
                                         <strong>${escapeHtml(g.prodName)}</strong>
                                         <span class="text-muted small"> | كود: ${g.prodId}</span>
@@ -3306,14 +3579,6 @@
                                     <td class="text-center">${fmt2(discPct)}</td>
 
                                     <td class="text-center">${fmt2(lineValue)}</td>
-
-                                    <td class="text-center">
-                                        <button type="button"
-                                                class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                data-line-no="${lineNo}">
-                                            مسح
-                                        </button>
-                                    </td>
                                 `;
 
                                 tbody.appendChild(tr);
@@ -3324,14 +3589,17 @@
                             // الحالة (2): الصنف مكرر => سطر عنوان للصنف + سطور تشغيلات تحته
                             // =========================================================
 
-                            // (أ) سطر عنوان الصنف فقط (بدون بيانات وبدون زر مسح)
+                            // (أ) سطر عنوان الصنف فقط
+                            const grpLocRaw = (sortedLines[0].location != null) ? String(sortedLines[0].location).trim() : '';
+                            const grpLocCell = grpLocRaw ? escapeHtml(grpLocRaw) : '—';
+
                             const grpRow = document.createElement('tr');
-                            grpRow.className = 'table-light pi-group-row';
+                            grpRow.className = 'table-light pi-group-row erp-list-selectable-row';
                             grpRow.setAttribute('data-prodid', g.prodId);
 
                             grpRow.innerHTML = `
                                 <td class="text-center">—</td>
-
+                                <td class="text-center text-muted small">${grpLocCell}</td>
                                 <td>
                                     <strong>${escapeHtml(g.prodName)}</strong>
                                     <span class="text-muted small"> | كود: ${g.prodId}</span>
@@ -3343,12 +3611,11 @@
                                 <td class="text-center"></td>
                                 <td class="text-center"></td>
                                 <td class="text-center"></td>
-                                <td class="text-center"></td>
                             `;
 
                             tbody.appendChild(grpRow);
 
-                            // (ب) سطور التشغيلات (كل تشغيلة = سطر بيانات + زر مسح)
+                            // (ب) سطور التشغيلات
                             sortedLines.forEach(line => {
 
                                 const lineNo = line.lineNo ?? ''; // متغير: رقم السطر
@@ -3369,13 +3636,17 @@
                                     ? Number(line.lineValue)
                                     : (qty * priceRetail * (1 - (discPct / 100))); // متغير: قيمة السطر
 
+                                const dLocRaw = (line.location != null) ? String(line.location).trim() : '';
+                                const dLocCell = dLocRaw ? escapeHtml(dLocRaw) : '—';
+
                                 const tr = document.createElement('tr');
+                                tr.className = 'erp-list-selectable-row';
                                 tr.setAttribute('data-line-no', lineNo);
                                 tr.setAttribute('data-prodid', g.prodId);
 
                                 tr.innerHTML = `
                                     <td class="text-center">${lineNo}</td>
-
+                                    <td class="text-center text-muted small">${dLocCell}</td>
                                     <td class="text-muted small">↳</td>
 
                                     <td class="text-center">${escapeHtml(batchNo)}</td>
@@ -3385,25 +3656,257 @@
                                     <td class="text-center">${fmt2(discPct)}</td>
 
                                     <td class="text-center">${fmt2(lineValue)}</td>
-
-                                    <td class="text-center">
-                                        <button type="button"
-                                                class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                data-line-no="${lineNo}">
-                                            مسح
-                                        </button>
-                                    </td>
                                 `;
 
                                 tbody.appendChild(tr);
-
-                                // ✅ نخلي الدالة Global عشان أي جزء في الصفحة يقدر ينادي عليها
-                                window.renderGroupedLines = renderGroupedLines;
                             });
                         });
                     }
 
+                    window.renderGroupedLines = renderGroupedLines;
 
+                    // ===============================
+                    // ترتيب جدول السطور (عميلي): كتل = سطر واحد أو (سطر مجموعة + سطور ↳)
+                    // ===============================
+                    (function siLinesTableSortInit() {
+                        var activeCol = null;
+                        var activeDir = 1;
+
+                        function parseSiLineNum(txt) {
+                            if (txt == null || txt === '') return 0;
+                            var s = String(txt).trim().replace(/\s/g, '').replace(',', '.');
+                            var n = parseFloat(s);
+                            return isNaN(n) ? 0 : n;
+                        }
+
+                        function parseSiLineDate(txt) {
+                            var s = (txt || '').trim();
+                            var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+                            if (!m) return 0;
+                            return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime();
+                        }
+
+                        function pilGetRowBlocks(tbody) {
+                            if (!tbody) return [];
+                            var rows = Array.prototype.slice.call(tbody.querySelectorAll(':scope > tr'));
+                            var blocks = [];
+                            var i = 0;
+                            while (i < rows.length) {
+                                var tr = rows[i];
+                                if (!tr.cells || !tr.cells.length) { i++; continue; }
+                                if (tr.cells.length === 1 && tr.cells[0].colSpan > 1) return [];
+                                if (tr.classList.contains('pi-group-row')) {
+                                    var block = [tr];
+                                    i++;
+                                    while (i < rows.length) {
+                                        var r = rows[i];
+                                        if (r.classList.contains('pi-group-row')) break;
+                                        if (r.cells.length >= 9 && r.cells[2] && r.cells[2].textContent.trim() === '↳') {
+                                            block.push(r);
+                                            i++;
+                                        } else break;
+                                    }
+                                    blocks.push(block);
+                                } else {
+                                    blocks.push([tr]);
+                                    i++;
+                                }
+                            }
+                            return blocks;
+                        }
+
+                        function blockSortKey(block, col) {
+                            var first = block[0];
+                            var isGroup = first.classList.contains('pi-group-row');
+                            var details = isGroup ? block.slice(1) : block;
+                            var firstDetail = details[0];
+                            var r;
+                            if (col === 0) {
+                                var nos = block.map(function (row) {
+                                    var v = parseInt(row.getAttribute('data-line-no'), 10);
+                                    return isNaN(v) ? null : v;
+                                }).filter(function (n) { return n != null && n > 0; });
+                                return nos.length ? Math.min.apply(null, nos) : 0;
+                            }
+                            if (col === 1) {
+                                r = firstDetail || first;
+                                return ((r.cells[1] && r.cells[1].textContent) || '').replace(/\s+/g, ' ').trim();
+                            }
+                            if (col === 2) {
+                                var cell = first.cells[2];
+                                var st = cell && cell.querySelector('strong');
+                                return ((st && st.textContent) || (cell && cell.textContent) || '').replace(/\s+/g, ' ').trim();
+                            }
+                            if (col === 3) {
+                                r = firstDetail || first;
+                                return ((r.cells[3] && r.cells[3].textContent) || '').trim();
+                            }
+                            if (col === 4) {
+                                r = firstDetail || first;
+                                return parseSiLineDate(r.cells[4] && r.cells[4].textContent);
+                            }
+                            if (col === 5) {
+                                if (isGroup && details.length) {
+                                    return details.reduce(function (s, row) {
+                                        return s + parseSiLineNum(row.cells[5] && row.cells[5].textContent);
+                                    }, 0);
+                                }
+                                return parseSiLineNum(first.cells[5] && first.cells[5].textContent);
+                            }
+                            if (col === 6 || col === 7) {
+                                r = firstDetail || first;
+                                return parseSiLineNum(r.cells[col] && r.cells[col].textContent);
+                            }
+                            if (col === 8) {
+                                if (isGroup && details.length) {
+                                    return details.reduce(function (s, row) {
+                                        return s + parseSiLineNum(row.cells[8] && row.cells[8].textContent);
+                                    }, 0);
+                                }
+                                return parseSiLineNum(first.cells[8] && first.cells[8].textContent);
+                            }
+                            return 0;
+                        }
+
+                        function resetSiLinesSortUi() {
+                            activeCol = null;
+                            activeDir = 1;
+                            document.querySelectorAll('#PILinesTable .si-lines-sort-ic').forEach(function (sp) { sp.textContent = ''; });
+                        }
+
+                        function setSiLinesSortIcons(col, dir) {
+                            document.querySelectorAll('#PILinesTable .si-lines-sort-ic').forEach(function (sp) { sp.textContent = ''; });
+                            var ic = document.querySelector('#PILinesTable .si-lines-sort[data-si-col="' + col + '"] .si-lines-sort-ic');
+                            if (ic) ic.textContent = dir > 0 ? '▲' : '▼';
+                        }
+
+                        function sortPilinesTable(col, kind, dir) {
+                            var tbody = document.getElementById('PILinesTbody');
+                            if (!tbody) return;
+                            var blocks = pilGetRowBlocks(tbody);
+                            if (blocks.length <= 1) return;
+
+                            blocks.sort(function (a, b) {
+                                var ka = blockSortKey(a, col);
+                                var kb = blockSortKey(b, col);
+                                var c = 0;
+                                if (kind === 'str') {
+                                    c = String(ka).localeCompare(String(kb), 'ar', { sensitivity: 'base' });
+                                } else {
+                                    c = (Number(ka) || 0) - (Number(kb) || 0);
+                                }
+                                if (c !== 0) return dir * c;
+                                var na = blockSortKey(a, 0);
+                                var nb = blockSortKey(b, 0);
+                                return (Number(na) || 0) - (Number(nb) || 0);
+                            });
+
+                            blocks.forEach(function (block) {
+                                block.forEach(function (tr) { tbody.appendChild(tr); });
+                            });
+                        }
+
+                        window.__siLinesSortReset = resetSiLinesSortUi;
+
+                        document.addEventListener('click', function (e) {
+                            var btn = e.target && e.target.closest && e.target.closest('.si-lines-sort');
+                            if (!btn) return;
+                            var table = document.getElementById('PILinesTable');
+                            if (!table || !table.contains(btn)) return;
+                            e.preventDefault();
+                            var col = parseInt(btn.getAttribute('data-si-col'), 10);
+                            var kind = btn.getAttribute('data-si-kind') || 'str';
+                            if (isNaN(col)) return;
+                            if (activeCol === col) activeDir = -activeDir;
+                            else { activeCol = col; activeDir = 1; }
+                            sortPilinesTable(col, kind, activeDir);
+                            setSiLinesSortIcons(activeCol, activeDir);
+                        });
+                    })();
+
+                    // ===============================
+                    // مسح سطر واحد (AJAX) — زر «مسح السطر المحدد» في كارت الإجراءات
+                    // ===============================
+                    window.removeInvoiceLineAjax = async function (lineNo, triggerEl) {
+                        const siId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10);
+                        if (!siId || siId <= 0) { alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.'); return; }
+                        if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
+                        let okDelete = false;
+                        if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                            okDelete = await ERP.showConfirmModal({
+                                title: 'مسح سطر من الفاتورة',
+                                message: `هل تريد مسح السطر رقم (${lineNo})؟`,
+                                confirmText: 'مسح',
+                                cancelText: 'إلغاء'
+                            });
+                        } else {
+                            okDelete = confirm(`هل تريد مسح السطر رقم (${lineNo})؟`);
+                        }
+                        if (!okDelete) return;
+                        if (triggerEl) triggerEl.disabled = true;
+                        const antiToken = (window.getAntiForgeryToken ? window.getAntiForgeryToken() : '');
+                        const controller = new AbortController();
+                        const timeoutId = setTimeout(() => controller.abort(), 30000);
+                        try {
+                            const res = await fetch('@Url.Action("RemoveLineJson", "SalesInvoices")', {
+                                method: 'POST',
+                                credentials: 'same-origin',
+                                signal: controller.signal,
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    ...(antiToken ? { 'RequestVerificationToken': antiToken } : {})
+                                },
+                                body: JSON.stringify({ SIId: siId, LineNo: lineNo })
+                            });
+                            let data = null;
+                            const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                            if (contentType.includes('application/json')) {
+                                data = await res.json().catch(() => null);
+                            } else {
+                                const txt = await res.text().catch(() => '');
+                                data = { ok: false, message: txt ? 'فشل مسح السطر (رد غير متوقع من السيرفر).' : 'فشل مسح السطر.' };
+                            }
+                            if (!res.ok || !data || data.ok !== true) {
+                                const msg = (data && data.message) ? data.message : 'فشل مسح السطر.';
+                                alert(msg);
+                                return;
+                            }
+                            const lines = Array.isArray(data.lines) ? data.lines : [];
+                            window.__piLinesCache = lines;
+                            const fnRender = window.renderGroupedLines;
+                            if (typeof fnRender === 'function') {
+                                fnRender(lines);
+                            } else if (typeof loadInvoiceBody === 'function') {
+                                await loadInvoiceBody(setOrReplaceParam(
+                                    document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url') || '@Url.Action("Show", "SalesInvoices", new { frame = 1 })',
+                                    'id', siId
+                                ));
+                            }
+                            if (data.totals) {
+                                const fnTotals = window.updateSummaryBadges;
+                                if (typeof fnTotals === 'function') fnTotals(data.totals);
+                            }
+                            const okMsg = (data && data.message && String(data.message).trim()) ? String(data.message).trim() : 'تم مسح الصنف بنجاح';
+                            if (typeof showToast === 'function') {
+                                showToast(okMsg, 'success', 4500);
+                            }
+                            const prodInput = document.getElementById('ProdNameInput');
+                            if (prodInput) { prodInput.focus(); prodInput.select && prodInput.select(); }
+                        } catch (e) {
+                            console.error(e);
+                            if (e && e.name === 'AbortError') {
+                                alert('التنفيذ أخذ وقت طويل. حاول مرة أخرى.');
+                            } else {
+                                alert('حدث خطأ أثناء مسح السطر.');
+                            }
+                        } finally {
+                            clearTimeout(timeoutId);
+                            if (triggerEl && document.contains(triggerEl)) {
+                                triggerEl.disabled = false;
+                            }
+                        }
+                    };
 
                     // ===============================
                     // Helper: تنسيق تاريخ yyyy-MM-dd
@@ -3500,12 +4003,26 @@
                         const creditLimitEl = document.getElementById('CustomerCredit');
                         const prevBalanceEl = document.getElementById('CustomerPreviousBalanceValue');
                         const creditRemainingEl = document.getElementById('CreditRemainingValue');
+                        let balanceToUseForGrand = 0;
                         if (creditLimitEl && prevBalanceEl && creditRemainingEl) {
                             const creditLimit = parseDecimalSafe(creditLimitEl.value);
-                            const balanceToUse = (invoiceId > 0 && prevStoredEl) ? parseDecimalSafe(prevStoredEl.value) : parseDecimalSafe(custBalanceEl?.value || '0');
-                            prevBalanceEl.textContent = fmt2(balanceToUse);
-                            const remaining = Math.max(0, creditLimit - balanceToUse - parseDecimalSafe(netTotal));
+                            balanceToUseForGrand = (invoiceId > 0 && prevStoredEl) ? parseDecimalSafe(prevStoredEl.value) : parseDecimalSafe(custBalanceEl?.value || '0');
+                            prevBalanceEl.textContent = fmt2(balanceToUseForGrand);
+                            const remaining = Math.max(0, creditLimit - balanceToUseForGrand - parseDecimalSafe(netTotal));
                             creditRemainingEl.textContent = fmt2(remaining);
+                        } else if (prevBalanceEl) {
+                            balanceToUseForGrand = (invoiceId > 0 && prevStoredEl) ? parseDecimalSafe(prevStoredEl.value) : parseDecimalSafe(custBalanceEl?.value || '0');
+                            if (prevBalanceEl.textContent.trim() !== '—') {
+                                prevBalanceEl.textContent = fmt2(balanceToUseForGrand);
+                            }
+                        }
+                        const grandEl = document.getElementById('GrandTotalWithPreviousValue');
+                        if (grandEl) {
+                            const prevTxt = (prevBalanceEl && prevBalanceEl.textContent) ? prevBalanceEl.textContent.trim() : '';
+                            const hidePrev = prevTxt === '' || prevTxt === '—';
+                            const invNet = parseDecimalSafe(totalAfterDiscountAndTax);
+                            const g = hidePrev ? invNet : (parseDecimalSafe(balanceToUseForGrand) + invNet);
+                            grandEl.textContent = fmt2(g);
                         }
                     }
                     window.updateSummaryBadges = updateSummaryBadges;
@@ -4023,18 +4540,18 @@
                     // النقر على سطر في جدول السطور → تعبئة انبوت الأصناف (مثل طلب الشراء)
                     // =========================================================
                     document.addEventListener('click', function (e) {
-                        const row = e.target.closest('#PILinesTbody tr[data-prodid]');
+                        const row = e.target.closest('#PILinesTbody tr.erp-list-selectable-row[data-prodid]');
                         if (!row) return;
-                        if (e.target.closest('.btnRemoveLineFromInvoice') || e.target.closest('button') || e.target.closest('a')) return;
+                        if (e.target.closest('a')) return;
 
                         const prodId = (row.getAttribute('data-prodid') || '').trim();
                         if (!prodId) return;
 
                         const tbody = document.getElementById('PILinesTbody');
                         if (tbody) {
-                            tbody.querySelectorAll('tr.si-row-selected').forEach(r => r.classList.remove('si-row-selected'));
+                            tbody.querySelectorAll('tr.erp-list-selectable-row').forEach(r => r.classList.remove('selected'));
                         }
-                        row.classList.add('si-row-selected');
+                        row.classList.add('selected');
 
                         function setVal(el, value) {
                             if (!el) return;
@@ -4056,7 +4573,7 @@
                         setVal(ProdCodeEl, prodId);
 
                         let prodName = '';
-                        const nameCell = row.querySelector('td:nth-child(2)');
+                        const nameCell = row.querySelector('td:nth-child(3)');
                         if (nameCell) {
                             const strong = nameCell.querySelector('strong');
                             prodName = strong ? (strong.innerText || '').trim() : (nameCell.innerText || '').trim();
@@ -4064,10 +4581,11 @@
                         if (!prodName || prodName === '↳') {
                             const prev = row.previousElementSibling;
                             if (prev && prev.classList.contains('pi-group-row')) {
-                                const prevName = prev.querySelector('td:nth-child(2) strong');
+                                const prevName = prev.querySelector('td:nth-child(3) strong');
                                 if (prevName) prodName = (prevName.innerText || '').trim();
                             }
                         }
+                        suppressProductDropdownOnce = true;
                         setVal(ProdNameEl, prodName);
 
                         const isGroupRow = row.classList.contains('pi-group-row');
@@ -4080,12 +4598,12 @@
                             return;
                         }
 
-                        // الأعمدة: 0 #, 1 اسم, 2 تشغيلة, 3 صلاحية, 4 كمية, 5 سعر, 6 خصم, 7 قيمة, 8 مسح
-                        const batchText = (row.cells[2]?.innerText || '').trim();
-                        const expRaw = (row.cells[3]?.innerText || '').trim();
-                        const qtyText = (row.cells[4]?.innerText || '').trim();
-                        const priceText = (row.cells[5]?.innerText || '').trim();
-                        const discText = (row.cells[6]?.innerText || '').trim();
+                        // الأعمدة: 0 #, 1 موقع, 2 اسم/↳, 3 تشغيلة, 4 صلاحية, 5 كمية, 6 سعر, 7 خصم, 8 قيمة
+                        const batchText = (row.cells[3]?.innerText || '').trim();
+                        const expRaw = (row.cells[4]?.innerText || '').trim();
+                        const qtyText = (row.cells[5]?.innerText || '').trim();
+                        const priceText = (row.cells[6]?.innerText || '').trim();
+                        const discText = (row.cells[7]?.innerText || '').trim();
 
                         let expMMYYYY = expRaw;
                         if (expRaw && expRaw.includes('-')) {
@@ -4186,6 +4704,30 @@
                                 }
 
                                 openTabFromFrame(buildMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
+                            });
+                        }
+
+                        const btnDeleteSelectedLine = document.getElementById('btnDeleteSelectedInvoiceLine');
+                        if (btnDeleteSelectedLine && !btnDeleteSelectedLine.dataset.boundDelInvLine) {
+                            btnDeleteSelectedLine.dataset.boundDelInvLine = '1';
+                            btnDeleteSelectedLine.addEventListener('click', async function (e) {
+                                e.preventDefault();
+                                const tbody = document.getElementById('PILinesTbody');
+                                const selected = tbody ? tbody.querySelector('tr.erp-list-selectable-row.selected') : null;
+                                if (!selected) {
+                                    alert('من فضلك اضغط على سطر التشغيلة في الجدول أولاً لتحديده ثم اضغط مسح السطر المحدد.');
+                                    return;
+                                }
+                                const lineNo = parseInt(selected.getAttribute('data-line-no') || '0', 10);
+                                if (!lineNo || lineNo <= 0) {
+                                    alert('سطر المجموعة لا يُمسح من هنا — اختر سطر تشغيلة محدداً (يظهر فيه رقم السطر والكمية).');
+                                    return;
+                                }
+                                if (typeof window.removeInvoiceLineAjax !== 'function') {
+                                    alert('تعذّر مسح السطر.');
+                                    return;
+                                }
+                                await window.removeInvoiceLineAjax(lineNo, btnDeleteSelectedLine);
                             });
                         }
 
@@ -4457,6 +4999,15 @@
                                         const remaining = Math.max(0, parseDecimalSafe(creditLimitEl.value) - parseDecimalSafe(val) - parseDecimalSafe(netEl.textContent || '0'));
                                         creditRemEl.textContent = (typeof fmt2 === 'function' ? fmt2(remaining) : remaining.toFixed(2));
                                     }
+                                    const grandUpd = document.getElementById('GrandTotalWithPreviousValue');
+                                    const invNetH = document.getElementById('TotalAfterDiscountAndTaxValue');
+                                    if (grandUpd && invNetH && prevValueEl && typeof fmt2 === 'function') {
+                                        const pt = (prevValueEl.textContent || '').trim();
+                                        const hideP = pt === '—';
+                                        const invNet = parseDecimalSafe(invNetH.textContent || '0');
+                                        const g = hideP ? invNet : (parseDecimalSafe(val) + invNet);
+                                        grandUpd.textContent = fmt2(g);
+                                    }
                                 }
 
                                 // ✅ بعد الحفظ: تمرير حتى كارت بيانات الصنف أعلى الشاشة ثم فوكس على الصنف (مثل طلب الشراء)
@@ -4656,8 +5207,9 @@
                 const taxAmountEl = document.getElementById('TaxAmountValue');
                 const totalAndTaxEl = document.getElementById('TotalAfterDiscountAndTaxValue');
                 const netEl = document.getElementById('NetTotalValue');
+                const grandEl = document.getElementById('GrandTotalWithPreviousValue');
+                const prevBalanceEl = document.getElementById('CustomerPreviousBalanceValue');
                 const creditRemEl = document.getElementById('CreditRemainingValue');
-                const custBalanceEl = document.getElementById('CustomerCurrentBalance');
                 const creditLimitEl = document.getElementById('CustomerCredit');
 
                 const totalAfterDiscount = parseDecimalSafe(totalAfterEl?.textContent || 0);
@@ -4668,11 +5220,21 @@
                 if (taxAmountEl) taxAmountEl.textContent = fmt2(taxAmount);
                 if (totalAndTaxEl) totalAndTaxEl.textContent = fmt2(totalAfterDiscountAndTax);
                 if (netEl) netEl.textContent = fmt2(totalAfterDiscountAndTax);
-                if (creditRemEl && creditLimitEl) {
+                if (grandEl) {
+                    const prevTxt = (prevBalanceEl && prevBalanceEl.textContent) ? prevBalanceEl.textContent.trim() : '';
+                    const hidePrev = prevTxt === '' || prevTxt === '—';
                     const invoiceId = parseInt(document.getElementById('InvoiceId')?.value || '0', 10);
                     const prevStoredEl = document.getElementById('CustomerPreviousBalanceStored');
                     const custBalanceEl = document.getElementById('CustomerCurrentBalance');
                     const balanceToUse = (invoiceId > 0 && prevStoredEl) ? parseDecimalSafe(prevStoredEl.value) : parseDecimalSafe(custBalanceEl?.value || '0');
+                    const g = hidePrev ? totalAfterDiscountAndTax : (balanceToUse + totalAfterDiscountAndTax);
+                    grandEl.textContent = fmt2(g);
+                }
+                if (creditRemEl && creditLimitEl) {
+                    const invoiceId = parseInt(document.getElementById('InvoiceId')?.value || '0', 10);
+                    const prevStoredEl = document.getElementById('CustomerPreviousBalanceStored');
+                    const custBalanceEl2 = document.getElementById('CustomerCurrentBalance');
+                    const balanceToUse = (invoiceId > 0 && prevStoredEl) ? parseDecimalSafe(prevStoredEl.value) : parseDecimalSafe(custBalanceEl2?.value || '0');
                     const remaining = Math.max(0, parseDecimalSafe(creditLimitEl.value) - balanceToUse - totalAfterDiscountAndTax);
                     creditRemEl.textContent = fmt2(remaining);
                 }
@@ -4854,8 +5416,18 @@
 
                                 if (btnPost.disabled) return;
 
-                                const ok = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
-                                if (!ok) return;
+                                let okPost = false;
+                                if (typeof ERP !== 'undefined' && ERP.showConfirmModal) {
+                                    okPost = await ERP.showConfirmModal({
+                                        title: "ترحيل فاتورة مبيعات",
+                                        message: "هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.",
+                                        confirmText: "ترحيل",
+                                        cancelText: "إلغاء"
+                                    });
+                                } else {
+                                    okPost = confirm("هل تريد ترحيل هذه الفاتورة؟ بعد الترحيل سيتم قفلها.");
+                                }
+                                if (!okPost) return;
 
                                 // تجهيز الزر
                                 btnPost.disabled = true;
@@ -4884,7 +5456,6 @@
                                     if (!saveRes.ok || !saveData?.success) {
                                         const errMsg = (saveData && saveData.message) ? saveData.message : 'تعذر حفظ التعديلات قبل الترحيل.';
                                         showToast(errMsg, "danger");
-                                        alert(errMsg);
                                         btnPost.disabled = false; btnPost.innerHTML = oldHtml;
                                         return;
                                     }
@@ -4955,7 +5526,7 @@
                                     btnPost.innerHTML = "✅ تم ترحيل الفاتورة";
                                     btnPost.disabled = true;
 
-                                    showToast(okMsg, "success");
+                                    showToast(okMsg, "success", 1000);
 
                                 } catch (err) {
 
@@ -5070,9 +5641,24 @@
                                 if (busy) return;
                                 if (btnOpen.disabled) return;
 
-                                // تأكيد
-                                const ok = confirm("هل تريد فتح هذه الفاتورة للتعديل؟ سيتم السماح بالتعديل حتى تقوم بترحيلها مرة أخرى.");
-                                if (!ok) return;
+                                const invoiceId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
+                                if (invoiceId <= 0) {
+                                    showToast("⚠️ لا يمكن فتح فاتورة قبل حفظها.", "warning");
+                                    return;
+                                }
+
+                                let okOpen = false;
+                                if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                                    okOpen = await ERP.showConfirmModal({
+                                        title: 'فتح الفاتورة للتعديل',
+                                        message: 'هل تريد فتح هذه الفاتورة للتعديل؟ سيتم السماح بالتعديل حتى تقوم بترحيلها مرة أخرى.',
+                                        confirmText: 'فتح',
+                                        cancelText: 'إلغاء'
+                                    });
+                                } else {
+                                    okOpen = confirm('هل تريد فتح هذه الفاتورة للتعديل؟ سيتم السماح بالتعديل حتى تقوم بترحيلها مرة أخرى.');
+                                }
+                                if (!okOpen) return;
 
                                 busy = true;
                                 btnOpen.disabled = true;
@@ -5080,22 +5666,7 @@
                                 const oldHtml = btnOpen.innerHTML;
                                 btnOpen.innerHTML = "⏳ جاري الفتح...";
 
-                                showToast("جاري فتح الفاتورة للتعديل...", "muted");
-
                                 try {
-
-
-                           // ✅ (1) اقرأ رقم الفاتورة "وقت الضغط" (ده أهم سطر)
-                             const invoiceId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
-
-                        if (invoiceId <= 0) {
-                            showToast("⚠️ لا يمكن فتح فاتورة قبل حفظها.", "warning");
-                            btnOpen.disabled = true;
-                            btnOpen.innerHTML = oldHtml;
-                            busy = false;
-                            return;
-                        }
-
 
                                     const res = await fetch(`/SalesInvoices/OpenInvoice?id=${invoiceId}`, {
                                         method: "POST",
@@ -5485,6 +6056,7 @@
                             if (!host) return;
 
                             url = setOrReplaceParam(url, 'frag', 'body');
+                            url = setOrReplaceParam(url, 'ts', Date.now());
 
                             if (host.dataset.loading === "1") return;
                             host.dataset.loading = "1";
@@ -5587,111 +6159,6 @@
                             // حماية: لو target مش Element (نادرًا) نخرج
                             if (!(t instanceof Element)) return;
 
-                                    // =========================
-                        // (0) زر مسح سطر من الفاتورة
-                        // =========================
-                        const removeBtn = t.closest('.btnRemoveLineFromInvoice');
-                        if (removeBtn) {
-
-                            ev.preventDefault();
-                            ev.stopPropagation();
-                            ev.stopImmediatePropagation();
-
-                            // متغير: رقم السطر داخل الفاتورة
-                            const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
-
-                            // متغير: رقم الفاتورة الحالية (موجود في hidden input داخل الـ body)
-                            const siId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10);
-
-                            if (!siId || siId <= 0) { alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.'); return; }
-                            if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
-
-                            // تأكيد بسيط
-                            if (!confirm(`هل تريد مسح السطر رقم (${lineNo})؟`)) return;
-
-                            // منع الضغط المتكرر أثناء التنفيذ
-                            removeBtn.disabled = true;
-
-                            // ✅ متغير: توكن AntiForgery (من الدالة المثبتة عندك في Show)
-                            const antiToken = (window.getAntiForgeryToken ? window.getAntiForgeryToken() : '');
-
-                            // متغير: تايم آوت علشان ما يفضلش معلق
-                            const controller = new AbortController();
-                            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 ثانية
-
-                            try {
-                                // ✅ استدعاء الأكشن الصحيح: RemoveLineJson
-                                const res = await fetch('@Url.Action("RemoveLineJson", "SalesInvoices")', {
-                                    method: 'POST',
-                                    credentials: 'same-origin',
-                                    signal: controller.signal,
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-Requested-With': 'XMLHttpRequest',
-                                        ...(antiToken ? { 'RequestVerificationToken': antiToken } : {})
-                                    },
-                                    // ✅ لازم نفس أسماء الـ DTO
-                                    body: JSON.stringify({ SIId: siId, LineNo: lineNo })
-                                });
-
-                                // متغير: نحاول نفهم الرد سواء JSON أو نص
-                                let data = null;
-                                const contentType = (res.headers.get('content-type') || '').toLowerCase();
-
-                                if (contentType.includes('application/json')) {
-                                    data = await res.json().catch(() => null);
-                                } else {
-                                    const txt = await res.text().catch(() => '');
-                                    data = { ok: false, message: txt ? 'فشل مسح السطر (رد غير متوقع من السيرفر).' : 'فشل مسح السطر.' };
-                                }
-
-                                if (!res.ok || !data || data.ok !== true) {
-                                    const msg = (data && data.message) ? data.message : 'فشل مسح السطر.';
-                                    alert(msg);
-                                    return;
-                                }
-
-                                // ✅ بعد المسح: تحديث الجدول والإجماليات من الردّ (دون إعادة تحميل الـ body)
-                                const lines = Array.isArray(data.lines) ? data.lines : [];
-                                window.__piLinesCache = lines;
-                                const fnRender = window.renderGroupedLines;
-                                if (typeof fnRender === 'function') {
-                                    fnRender(lines);
-                                } else {
-                                    await loadInvoiceBody(setOrReplaceParam(
-                                        document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url') || '@Url.Action("Show", "SalesInvoices", new { frame = 1 })',
-                                        'id', siId
-                                    ));
-                                }
-                                if (data.totals) {
-                                    const fnTotals = window.updateSummaryBadges;
-                                    if (typeof fnTotals === 'function') fnTotals(data.totals);
-                                }
-
-                                const prodInput = document.getElementById('ProdNameInput');
-                                if (prodInput) { prodInput.focus(); prodInput.select && prodInput.select(); }
-
-                            } catch (e) {
-                                console.error(e);
-
-                                if (e && e.name === 'AbortError') {
-                                    alert('التنفيذ أخذ وقت طويل. حاول مرة أخرى.');
-                                } else {
-                                    alert('حدث خطأ أثناء مسح السطر.');
-                                }
-                            } finally {
-                                clearTimeout(timeoutId);
-
-                                if (document.contains(removeBtn)) {
-                                    removeBtn.disabled = false;
-                                }
-                            }
-
-                            return; // مهم: منع استمرار التعامل كأنه زر أسهم
-                        }
-
-
-
 
 
 
@@ -5768,7 +6235,6 @@
                 }
 
                 let printing = false;
-                let landscapeStyleEl = null;
                 let printWrapperParent = null;
                 let printWrapperNext = null;
 
@@ -5798,21 +6264,23 @@
                     const createdBy = (el("InvoiceCreatedByDisplay") && el("InvoiceCreatedByDisplay").value) ? el("InvoiceCreatedByDisplay").value.trim() : "";
                     if (el("piPrintAuthor")) el("piPrintAuthor").textContent = createdBy || "—";
 
-                    const linesWrap = el("piPrintLinesWrap");
-                    if (!linesWrap) return false;
-                    linesWrap.innerHTML = "";
-                    const tbody = document.getElementById("PILinesTbody");
-                    if (!tbody) {
-                        linesWrap.innerHTML = `<div class="text-muted small">لا توجد سطور للطباعة.</div>`;
+                    const destTbody = el("piPrintMasterTbody");
+                    if (!destTbody) return false;
+                    destTbody.innerHTML = "";
+                    const srcTbody = document.getElementById("PILinesTbody");
+                    if (!srcTbody) {
+                        destTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
                     } else {
-                        const table = tbody.closest("table");
-                        if (!table) {
-                            linesWrap.innerHTML = `<div class="text-muted small">تعذر العثور على جدول السطور.</div>`;
+                        const rows = srcTbody.querySelectorAll("tr");
+                        if (!rows.length) {
+                            destTbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
                         } else {
-                            const clone = table.cloneNode(true);
-                            clone.querySelectorAll("button, a, .no-print").forEach(x => x.remove());
-                            clone.querySelectorAll("th.no-print, td.no-print").forEach(x => x.remove());
-                            linesWrap.appendChild(clone);
+                            rows.forEach(function (tr) {
+                                const c = tr.cloneNode(true);
+                                c.querySelectorAll("button, a, .no-print").forEach(x => x.remove());
+                                c.querySelectorAll("th.no-print, td.no-print").forEach(x => x.remove());
+                                destTbody.appendChild(c);
+                            });
                         }
                     }
 
@@ -5827,6 +6295,7 @@
                     const tax = (el("TaxAmountValue")?.textContent || "").trim() || "0";
                     const totalAfterDiscountAndTax = el("TotalAfterDiscountAndTaxValue")?.textContent?.trim() || "0";
                     const netTotal = el("NetTotalValue")?.textContent?.trim() || "0";
+                    const grandWithPrev = el("GrandTotalWithPreviousValue")?.textContent?.trim() || totalAfterDiscountAndTax;
                     const prevBalance = el("CustomerPreviousBalanceValue")?.textContent?.trim() || "0";
                     const creditRemaining = el("CreditRemainingValue")?.textContent?.trim() || "0";
                     totalsWrap.innerHTML = `
@@ -5841,10 +6310,10 @@
         </div>
         <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-totals mt-2">
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي سعر الجمهور</span><span class="invoice-summary-value">${totalRetail}</span></div>
-            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">الإجمالي بعد الخصم</span><span class="invoice-summary-value">${totalAfterDiscount}</span></div>
+            <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الفاتورة</span><span class="invoice-summary-value">${totalAfterDiscount}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">نسبة الضريبة %</span><span class="invoice-summary-value">${taxPct}</span></div>
             <div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">قيمة الضريبة</span><span class="invoice-summary-value">${tax}</span></div>
-            <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main"><span class="invoice-summary-label">الإجمالي بعد الخصم والضريبة</span><span class="invoice-summary-value invoice-summary-value-main fw-bold">${totalAfterDiscountAndTax}</span></div>
+            <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main"><span class="invoice-summary-label">الإجمالي</span><span class="invoice-summary-value invoice-summary-value-main fw-bold">${grandWithPrev}</span></div>
         </div>
     </div>
 </div>`;
@@ -5888,18 +6357,8 @@
                             wrapper.appendChild(clone);
                         }
                         wrapper.classList.add("print-mode-" + mode);
-                        // نسختان أو ثلاث: ورقة عرضية
-                        landscapeStyleEl = document.createElement("style");
-                        landscapeStyleEl.id = "si-print-landscape";
-                        landscapeStyleEl.textContent = "@@media print { @@page { size: A4 landscape; margin: 2mm; } }";
-                        document.head.appendChild(landscapeStyleEl);
                     } else {
                         wrapper.classList.add("print-mode-1");
-                        // صفحة واحدة: ورقة طولية (الافتراضي في الـ CSS؛ نحقن صراحة للتأكيد)
-                        landscapeStyleEl = document.createElement("style");
-                        landscapeStyleEl.id = "si-print-landscape";
-                        landscapeStyleEl.textContent = "@@media print { @@page { size: A4 portrait; margin: 2mm; } }";
-                        document.head.appendChild(landscapeStyleEl);
                     }
 
                     // نقل منطقة الطباعة إلى body حتى تظهر (بدون ذلك الأب display:none يخفيها)
@@ -5926,13 +6385,9 @@
                 window.addEventListener("afterprint", function () {
                     document.body.classList.remove("printing-invoice");
                     printing = false;
-                    if (landscapeStyleEl && landscapeStyleEl.parentNode) {
-                        landscapeStyleEl.remove();
-                        landscapeStyleEl = null;
-                    }
                     const wrapper = document.getElementById("piPrintWrapper");
                     if (wrapper) {
-                        wrapper.classList.remove("print-mode-2", "print-mode-3");
+                        wrapper.classList.remove("print-mode-1", "print-mode-2", "print-mode-3");
                         wrapper.querySelectorAll(".pi-print-copy:not(#piPrintArea)").forEach(c => c.remove());
                         // إرجاع منطقة الطباعة لمكانها الأصلي إن كانت نُقلت
                         if (printWrapperParent) {

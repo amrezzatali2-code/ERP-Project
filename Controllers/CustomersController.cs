@@ -6,6 +6,7 @@ using ERP.Infrastructure;                         // PagedResult + UserActivityL
 using ERP.Models;                                 // Customer, UserActionType
 using ERP.Security;                               // PermissionCodes
 using ERP.Services;                               // IPermissionService
+using ERP.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -1117,16 +1118,18 @@ namespace ERP.Controllers
             // =========================================================
             var custQuery = _context.Customers.AsNoTracking();
             custQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(custQuery);
-            var customersList = await custQuery
+            var customersVolume = await custQuery
                 .OrderBy(c => c.CustomerName)
-                .Select(c => new SelectListItem
+                .Select(c => new CustomerVolumeDropdownItem
                 {
-                    Value = c.CustomerId.ToString(),   // متغير: كود العميل
-                    Text = c.CustomerName              // متغير: اسم العميل
+                    Id = c.CustomerId,
+                    Name = c.CustomerName ?? "",
+                    Phone = c.Phone1 ?? "",
+                    IsActive = c.IsActive
                 })
                 .ToListAsync();
 
-            ViewBag.CustomersList = customersList;
+            ViewBag.CustomersVolumeDropdown = customersVolume;
 
             // =========================================================
             // 2) حفظ فترة التاريخ فى ViewBag لعرضها فى الفيو
@@ -1731,10 +1734,24 @@ namespace ERP.Controllers
             {
                 existing.CustomerName,
                 existing.Phone1,
+                existing.Phone2,
+                existing.Whatsapp,
                 existing.Address,
                 existing.PartyCategory,
+                existing.AccountId,
                 existing.CreditLimit,
-                existing.IsActive
+                existing.IsActive,
+                existing.Notes,
+                existing.GovernorateId,
+                existing.DistrictId,
+                existing.AreaId,
+                existing.RouteId,
+                existing.PolicyId,
+                existing.UserId,
+                existing.OrderContactName,
+                existing.OrderContactPhone,
+                existing.IsQuotaMultiplierEnabled,
+                existing.QuotaMultiplier
             });
 
             try
@@ -1773,10 +1790,24 @@ namespace ERP.Controllers
                 {
                     existing.CustomerName,
                     existing.Phone1,
+                    existing.Phone2,
+                    existing.Whatsapp,
                     existing.Address,
                     existing.PartyCategory,
+                    existing.AccountId,
                     existing.CreditLimit,
-                    existing.IsActive
+                    existing.IsActive,
+                    existing.Notes,
+                    existing.GovernorateId,
+                    existing.DistrictId,
+                    existing.AreaId,
+                    existing.RouteId,
+                    existing.PolicyId,
+                    existing.UserId,
+                    existing.OrderContactName,
+                    existing.OrderContactPhone,
+                    existing.IsQuotaMultiplierEnabled,
+                    existing.QuotaMultiplier
                 });
                 await _activityLogger.LogAsync(
                     UserActionType.Edit,

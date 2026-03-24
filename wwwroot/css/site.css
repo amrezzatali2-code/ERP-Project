@@ -652,6 +652,13 @@ main.erp-list-page-layout {
     border-inline-start: 1px solid #c7d2fe;
 }
 
+/* قائمة أصناف المبيعات وغيرها: بدون خط عمودي بجانب «عرض» */
+.erp-list-filter-bar .erp-list-toolbar-selected-actions--plain {
+    padding-inline-start: 0;
+    margin-inline-start: 0;
+    border-inline-start: none;
+}
+
 .erp-list-toolbar-action > i {
     font-size: 1.1rem;
     line-height: 1;
@@ -1021,11 +1028,11 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
     border-radius: 12px;
     box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
     padding: 0;
-    max-height: 75vh;
+    max-height: min(88vh, 640px);
     font-size: 0.8rem;
-    width: 300px;
-    min-width: 300px;
-    max-width: 300px;
+    width: min(340px, 92vw);
+    min-width: 260px;
+    max-width: 380px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1059,9 +1066,11 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
     padding: 0.75rem;
 }
 .erp-column-filter-body .erp-filter-section {
-    flex: 1;
-    overflow-y: auto;
+    flex: 1 1 auto;
     min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 .erp-column-filter-panel #erpColumnFilterSearch,
 .erp-column-filter-panel #erpNumericExpr,
@@ -1136,8 +1145,22 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
 }
 .erp-column-filter-list .form-check-input {
     margin-left: 0.25rem;
-    transform: scale(0.95);
-    accent-color: #64748b;
+    width: 1.05em;
+    height: 1.05em;
+    border: 2px solid #475569;
+    border-radius: 0.25rem;
+    transform: none;
+    accent-color: #475569;
+    background-color: #fff;
+    box-shadow: none;
+}
+.erp-column-filter-list .form-check-input:focus {
+    border-color: #334155;
+    box-shadow: 0 0 0 2px rgba(71, 85, 105, 0.35);
+}
+.erp-column-filter-list .form-check-input:checked {
+    border-color: #475569;
+    background-color: #64748b;
 }
 .erp-column-filter-list .form-check-label {
     white-space: normal;
@@ -1147,12 +1170,26 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
     font-size: 0.85rem;
     color: #334155;
 }
+.erp-column-filter-list {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    margin-top: 0.15rem;
+}
 .erp-column-filter-list .erp-filter-items {
     margin-top: 0.35rem;
-    padding: 0.25rem 0;
-    max-height: 200px;
+    padding: 0.25rem 0.15rem 0.25rem 0;
+    flex: 1 1 auto;
+    min-height: 120px;
+    max-height: none;
     overflow-y: auto;
-    border-radius: 4px;
+    overflow-x: hidden;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+    background: #fff;
+    -webkit-overflow-scrolling: touch;
 }
 .erp-column-filter-actions {
     display: flex;
@@ -1297,6 +1334,17 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
         padding: 0;
     }
 
+    /* قوائم عريضة: خط أصغر قليلاً إن لزم (مع landscape في erp-print.css) */
+    body:not(.printing-invoice) .erp-print-area table.erp-table {
+        font-size: 8pt !important;
+    }
+    body:not(.printing-invoice) .erp-print-area .erp-table th,
+    body:not(.printing-invoice) .erp-print-area .erp-table td {
+        padding: 2px 4px !important;
+        white-space: normal;
+        word-break: break-word;
+    }
+
 
     /* تظهر فقط في الطباعة */
     .print-only {
@@ -1351,6 +1399,16 @@ button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
         body.printing-invoice #piPrintWrapper tr { display: table-row !important; }
         body.printing-invoice #piPrintWrapper th,
         body.printing-invoice #piPrintWrapper td { display: table-cell !important; }
+
+        body.printing-invoice #piPrintWrapper .pi-print-details-grid {
+            display: grid !important;
+        }
+
+        body.printing-invoice #piPrintWrapper strong,
+        body.printing-invoice #piPrintWrapper span,
+        body.printing-invoice #piPrintWrapper em {
+            display: inline !important;
+        }
 
         body.printing-invoice .erp-table-wrapper {
             max-height: none !important;

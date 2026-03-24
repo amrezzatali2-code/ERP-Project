@@ -1344,6 +1344,13 @@
             searchInputPR?.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); doSearchPR(); }
             });
+
+            window.__ERP_REFRESH__ = function () {
+                var pid = parseInt((document.getElementById('PRetId')?.value || '0'), 10) || 0;
+                if (pid > 0) {
+                    window.location.reload();
+                }
+            };
         });
     </script>
 }

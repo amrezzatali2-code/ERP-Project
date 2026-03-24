@@ -1,10 +1,10 @@
-﻿using System.Linq;
+using System.Linq;
 using System.Security.Claims;                        // الـ Claims الخاصة بالمستخدم
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using ERP.Data;                                     // AppDbContext
-using ERP.Models;                                   // User, UserActivityLog, UserActionType
+using ERP.Models;                                   // User
 using ERP.ViewModels;                               // LoginViewModel
 using Microsoft.AspNetCore.Authentication;          // SignInAsync / SignOutAsync
 using Microsoft.AspNetCore.Authentication.Cookies;  // CookieAuthenticationDefaults
@@ -111,24 +111,9 @@ namespace ERP.Controllers
                 return View("Index", model);
             }
 
-            // تحديث آخر وقت دخول
+            // تحديث آخر وقت دخول (سجل النشاط لا يسجّل الدخول — فقط تعديل/حذف)
             user.LastLoginAt = DateTime.UtcNow;
-
-            // إنشاء سجل نشاط (Login)
-            var log = new UserActivityLog
-            {
-                UserId = user.UserId,                       // تعليق: رقم المستخدم الذي قام بالدخول
-                ActionType = UserActionType.Login,          // تعليق: نوع العملية = Login
-                EntityName = "User",                        // تعليق: الكيان هو User
-                EntityId = user.UserId,
-                Description = $"تسجيل دخول المستخدم {user.UserName}",
-                ActionTime = DateTime.UtcNow,
-                IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-                UserAgent = Request.Headers["User-Agent"].ToString()
-            };
-
-            _db.UserActivityLogs.Add(log);
-            await _db.SaveChangesAsync();                   // تعليق: حفظ LastLoginAt + سجل النشاط
+            await _db.SaveChangesAsync();
 
             // تجهيز الـ Claims الخاصة بالمستخدم
             var claims = new[]
@@ -188,40 +173,7 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Logout()
         {
-            // محاولة قراءة رقم المستخدم الحالي من الـ Claims
-            int? userId = null;
-            if (User.Identity?.IsAuthenticated == true)
-            {
-                var idClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (int.TryParse(idClaim, out var parsedId))
-                {
-                    userId = parsedId;
-                }
-            }
-
-            // تسجيل حدث الخروج فى سجل النشاط
-            if (userId.HasValue)
-            {
-                var log = new UserActivityLog
-                {
-                    UserId = userId.Value,
-                    ActionType = UserActionType.Logout,
-                    EntityName = "User",
-                    EntityId = userId.Value,
-                    Description = $"تسجيل خروج المستخدم رقم {userId.Value}",
-                    ActionTime = DateTime.UtcNow,
-                    IpAddress = HttpContext.Connection.RemoteIpAddress?.ToString(),
-                    UserAgent = Request.Headers["User-Agent"].ToString()
-                };
-
-                _db.UserActivityLogs.Add(log);
-                await _db.SaveChangesAsync();
-            }
-
-            // عمل SignOut من الكوكيز
             await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-
-            // الرجوع لشاشة الدخول
             return RedirectToAction("Index", "Login");
         }
 

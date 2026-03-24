@@ -155,7 +155,34 @@
     var n2 = System.Globalization.CultureInfo.InvariantCulture;
 }
 
-<div dir="rtl" class="container-fluid">
+<div dir="rtl" class="container-fluid erp-sil-index">
+
+    <style>
+        /* كروت إجماليات أصناف المبيعات — حدود خفيفة موحّدة، أرقام بلون يتماشى مع الإطار (رفيع) */
+        .erp-sil-index .erp-sil-summary-stat {
+            border: 1px solid #d4dcfa !important;
+            border-radius: 10px !important;
+            box-shadow: 0 1px 2px rgba(99, 102, 241, 0.06) !important;
+            background: #fff !important;
+            overflow: hidden;
+        }
+        .erp-sil-index .erp-sil-summary-stat .card-body { text-align: right; }
+        .erp-sil-index .erp-sil-summary-stat .erp-sil-summary-label {
+            color: #64748b !important;
+            font-size: 0.8rem;
+            margin-bottom: 0.35rem !important;
+        }
+        .erp-sil-index .erp-sil-summary-stat .erp-sil-summary-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            line-height: 1.2;
+            color: #4f46e5;
+            letter-spacing: -0.02em;
+        }
+        .erp-sil-index .erp-sil-summary-stat.erp-sil-summary-stat--net .erp-sil-summary-value {
+            color: #15803d;
+        }
+    </style>
 
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0 fs-6 text-secondary">@ViewData["Title"]</h5>
@@ -277,7 +304,7 @@
                 </div>
             </div>
 
-            @* --- القسم الثالث: أزرار التحكم (مثل قائمة فواتير المبيعات) --- *@
+            @* --- القسم الثالث: أزرار التحكم — نفس هيكل قائمة فواتير المبيعات: صف أوامر + صف تصدير --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
@@ -285,13 +312,14 @@
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalSILines">اختيار الأعمدة</button>
                         <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
-                        <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السطر المحدد">
+                        <span class="erp-list-toolbar-selected-actions erp-list-toolbar-selected-actions--plain d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السطر المحدد">
                             <button type="button" id="btnShowSILine" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض الفاتورة">عرض</button>
-                            <button type="button" id="btnMovementSILine" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
                         </span>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
-                        <form method="get" asp-action="Export" asp-controller="SalesInvoiceLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
+                        <div class="d-inline-flex flex-wrap gap-2 align-items-center" dir="rtl">
+                        <button type="button" id="btnMovementSILine" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
+                        <form method="get" asp-action="Export" asp-controller="SalesInvoiceLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form" dir="rtl">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
                             <input type="hidden" name="sort" value="@sort" />
@@ -326,6 +354,7 @@
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -336,50 +365,50 @@
     @* ===== كروت الإجماليات (تتأثر بالفلترة) — حدود بنمط قائمة الفواتير ===== *@
     <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mb-3" dir="rtl">
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sil-summary-stat">
                 <div class="card-body py-3 px-3">
-                    <div class="small text-muted mb-1">إجمالي العدد</div>
-                    <div class="h4 mb-0 text-primary fw-bold">@totalCountForCards.ToString("N0", n2)</div>
+                    <div class="erp-sil-summary-label">إجمالي العدد</div>
+                    <div class="erp-sil-summary-value">@totalCountForCards.ToString("N0", n2)</div>
                 </div>
             </div>
         </div>
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sil-summary-stat">
                 <div class="card-body py-3 px-3">
-                    <div class="small text-muted mb-1">إجمالي الكمية</div>
-                    <div class="h4 mb-0 fw-bold">@totalQtyForCards.ToString("N0", n2)</div>
+                    <div class="erp-sil-summary-label">إجمالي الكمية</div>
+                    <div class="erp-sil-summary-value">@totalQtyForCards.ToString("N0", n2)</div>
                 </div>
             </div>
         </div>
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sil-summary-stat">
                 <div class="card-body py-3 px-3">
-                    <div class="small text-muted mb-1">إجمالي قيمة الخصم</div>
-                    <div class="h4 mb-0 fw-bold">@totalDiscForCards.ToString("N2", n2)</div>
+                    <div class="erp-sil-summary-label">إجمالي قيمة الخصم</div>
+                    <div class="erp-sil-summary-value">@totalDiscForCards.ToString("N2", n2)</div>
                 </div>
             </div>
         </div>
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sil-summary-stat">
                 <div class="card-body py-3 px-3">
-                    <div class="small text-muted mb-1">إجمالي بعد الخصم</div>
-                    <div class="h4 mb-0 fw-bold">@totalAfterDiscForCards.ToString("N2", n2)</div>
+                    <div class="erp-sil-summary-label">إجمالي بعد الخصم</div>
+                    <div class="erp-sil-summary-value">@totalAfterDiscForCards.ToString("N2", n2)</div>
                 </div>
             </div>
         </div>
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sil-summary-stat erp-sil-summary-stat--net">
                 <div class="card-body py-3 px-3">
-                    <div class="small text-muted mb-1">الصافي بعد الضريبة</div>
-                    <div class="h4 mb-0 text-success fw-bold">@totalNetForCards.ToString("N2", n2)</div>
+                    <div class="erp-sil-summary-label">الصافي بعد الضريبة</div>
+                    <div class="erp-sil-summary-value">@totalNetForCards.ToString("N2", n2)</div>
                 </div>
             </div>
         </div>
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sil-summary-stat">
                 <div class="card-body py-3 px-3">
-                    <div class="small text-muted mb-1">الفئات (الجاليات)</div>
-                    <div class="h4 mb-0 fw-bold">@categoriesCountForCards.ToString("N0", n2)</div>
+                    <div class="erp-sil-summary-label">الفئات (الجالونات)</div>
+                    <div class="erp-sil-summary-value">@categoriesCountForCards.ToString("N0", n2)</div>
                 </div>
             </div>
         </div>
@@ -742,9 +771,11 @@
             movementButtonId: 'btnMovementSILine',
             movementUrlAttribute: 'data-movement-url',
             movementTabTitle: 'حركة الصنف',
+            movementTabId: 'product-movement-tab',
             idAttribute: 'data-row-id',
             showUrlAttribute: 'data-show-url',
-            tabTitleAttribute: 'data-tab-title'
+            tabTitleAttribute: 'data-tab-title',
+            showTabId: 'si-show-tab'
         });
 
         // =========================
