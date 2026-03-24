@@ -229,8 +229,9 @@
             const districtSelect = document.getElementById('DistrictId');
             const areaSelect = document.getElementById('AreaId');
 
-            // ——— ربط نوع الطرف بالحساب المحاسبي الافتراضي ———
+            // ——— ربط نوع الطرف ↔ الحساب المحاسبي (اتجاهين) ———
             if (partySelect && accountSelect) {
+                // عند تغيير نوع الطرف → تحديث الحساب الافتراضي
                 partySelect.addEventListener('change', function () {
                     const partyCategory = this.value;
                     if (!partyCategory) {
@@ -247,6 +248,19 @@
                             accountSelect.value = accountId ? accountId.toString() : "";
                         })
                         .catch(err => console.error('Error loading default account:', err));
+                });
+
+                // عند تغيير الحساب المحاسبي → تحديث نوع الطرف إن وُجد تطابق
+                accountSelect.addEventListener('change', function () {
+                    const accountId = this.value;
+                    if (!accountId) return;
+                    fetch('@Url.Action("GetPartyCategoryForAccount", "Customers")?accountId=' + encodeURIComponent(accountId))
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => {
+                            if (data && data.success && data.partyCategory)
+                                partySelect.value = data.partyCategory;
+                        })
+                        .catch(err => console.error('خطأ في جلب نوع الطرف للحساب:', err));
                 });
             }
 

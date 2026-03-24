@@ -1,0 +1,21 @@
+@model ERP.Models.PurchasingOrder
+@{
+    ViewData["Title"] = "تفاصيل طلب الشراء";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">@ViewData["Title"]</h4>
+    <dl class="row">
+        <dt class="col-sm-3">كود</dt><dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">العميل</dt><dd class="col-sm-9">@Model.Customer?.CustomerName</dd>
+        <dt class="col-sm-3">رقم الطلب</dt><dd class="col-sm-9">@Model.OrderNumber</dd>
+        <dt class="col-sm-3">تاريخ الطلب</dt><dd class="col-sm-9">@Model.OrderDate.ToString("yyyy-MM-dd")</dd>
+        <dt class="col-sm-3">الحالة</dt><dd class="col-sm-9">@Model.Status</dd>
+        <dt class="col-sm-3">إرسال واتساب</dt><dd class="col-sm-9">@(Model.SentAt.HasValue ? Model.SentAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</dd>
+        <dt class="col-sm-3">التأكيد</dt><dd class="col-sm-9">@(Model.ConfirmedAt.HasValue ? Model.ConfirmedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</dd>
+        <dt class="col-sm-3">طلب ERP</dt><dd class="col-sm-9">@Model.ErpPurchaseRequestId</dd>
+        <dt class="col-sm-3">ملاحظات التعديل</dt><dd class="col-sm-9">@Model.AmendmentNotes</dd>
+        <dt class="col-sm-3">تاريخ الإنشاء</dt><dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+    </dl>
+    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">العودة للقائمة</a>
+</div>

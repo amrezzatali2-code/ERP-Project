@@ -1,4 +1,4 @@
-﻿@model ERP.Models.User
+@model ERP.Models.User
 
 @{
     ViewData["Title"] = "تعديل مستخدم";
@@ -22,10 +22,10 @@
 
      
 
-        @* تغيير كلمة المرور (لو الحقل فاضي → لا نغيّر الباسورد فى الكنترولر) *@
+        @* تغيير كلمة المرور (لو الحقل فاضي → لا نغيّر الباسورد فى الكنترولر) — بدون تحقق مطلوب في التعديل *@
         <div class="mb-3">
-            <label class="form-label">تغيير كلمة المرور (اتركها فارغة لو لا تريد التغيير)</label>
-            <input asp-for="PasswordHash" class="form-control" type="password" value="" />
+            <label class="form-label" for="PasswordHash">تغيير كلمة المرور (اتركها فارغة لو لا تريد التغيير)</label>
+            <input name="PasswordHash" id="PasswordHash" class="form-control" type="password" value="" placeholder="اتركها فارغة لو لا تريد التغيير" autocomplete="new-password" />
             <span asp-validation-for="PasswordHash" class="text-danger"></span>
         </div>
 

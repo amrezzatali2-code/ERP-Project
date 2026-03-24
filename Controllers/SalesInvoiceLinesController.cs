@@ -22,8 +22,21 @@ namespace ERP.Controllers
     [RequirePermission("SalesInvoiceLines.Index")]
     public class SalesInvoiceLinesController : Controller
     {
+        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
         private readonly AppDbContext _context;            // متغير: كائن الاتصال بقاعدة البيانات
         private readonly DocumentTotalsService _docTotals; // متغير: خدمة إجماليات المستندات (لإعادة تجميع هيدر فاتورة البيع بعد الحذف)
+
+        private static int? TryParseNullableInt(string? s) =>
+            int.TryParse((s ?? "").Trim(), out var v) ? v : null;
+
+        private static List<string> SplitFilterVals(string? s) =>
+            string.IsNullOrWhiteSpace(s)
+                ? new List<string>()
+                : s!.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => x.Length > 0)
+                    .ToList();
 
         public SalesInvoiceLinesController(AppDbContext context,
                                            DocumentTotalsService docTotals)
@@ -82,10 +95,11 @@ namespace ERP.Controllers
             // قائمة أسماء الأعمدة المعروفة (بالإنجليزية والعربية)
             var columnNames = new[]
             {
-                "siid", "line", "lineno", "prodid", "prodname", "customername",
+                "siid", "line", "lineno", "prodid", "prodname", "customername", "region", "createdby",
                 "qty", "price", "unit", "total", "net", "disc1", "disc2", "disc3", "discval",
                 "batch", "expiry", "رقم الفاتورة", "رقم السطر", "كود الصنف", "اسم الصنف",
-                "اسم العميل", "الكمية", "سعر الجمهور", "التشغيلة", "الصلاحية"
+                "اسم العميل", "المنطقة", "الكاتب", "الكمية", "سعر الجمهور", "التشغيلة", "الصلاحية",
+                "الخصم", "قيمة الخصم"
             };
 
             // إذا كان search مطابق تماماً لأي اسم عمود، نرجعه null
@@ -105,6 +119,206 @@ namespace ERP.Controllers
         }
 
         // =========================================================
+        // فلاتر نطاق الفاتورة + التاريخ (الصلاحية) + فلاتر أعمدة الجدول (نمط Excel)
+        // =========================================================
+        private IQueryable<SalesInvoiceLine> ApplySilListFilters(
+            IQueryable<SalesInvoiceLine> q,
+            int? fromCode,
+            int? toCode,
+            bool useDateRange,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? filterCol_siid,
+            string? filterCol_lineno,
+            string? filterCol_prodid,
+            string? filterCol_prodname,
+            string? filterCol_customername,
+            string? filterCol_qty,
+            string? filterCol_price,
+            string? filterCol_disc1,
+            string? filterCol_disc2,
+            string? filterCol_disc3,
+            string? filterCol_discval,
+            string? filterCol_total,
+            string? filterCol_net,
+            string? filterCol_batch,
+            string? filterCol_expiry,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null)
+        {
+            if (fromCode.HasValue)
+                q = q.Where(x => x.SIId >= fromCode.Value);
+            if (toCode.HasValue)
+                q = q.Where(x => x.SIId <= toCode.Value);
+
+            if (useDateRange && fromDate.HasValue)
+                q = q.Where(x => x.Expiry.HasValue && x.Expiry.Value >= fromDate.Value);
+            if (useDateRange && toDate.HasValue)
+                q = q.Where(x => x.Expiry.HasValue && x.Expiry.Value <= toDate.Value);
+
+            var inv = CultureInfo.InvariantCulture;
+
+            if (!string.IsNullOrWhiteSpace(filterCol_siid))
+            {
+                var ids = SplitFilterVals(filterCol_siid)
+                    .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ids.Count > 0)
+                    q = q.Where(x => ids.Contains(x.SIId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            {
+                var lines = SplitFilterVals(filterCol_lineno)
+                    .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (lines.Count > 0)
+                    q = q.Where(x => lines.Contains(x.LineNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prodid))
+            {
+                var pids = SplitFilterVals(filterCol_prodid)
+                    .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (pids.Count > 0)
+                    q = q.Where(x => pids.Contains(x.ProdId));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prodname))
+            {
+                var vals = SplitFilterVals(filterCol_prodname);
+                if (vals.Count > 0)
+                    q = q.Where(x => x.Product != null && vals.Contains(x.Product.ProdName ?? ""));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_customername))
+            {
+                var vals = SplitFilterVals(filterCol_customername);
+                if (vals.Count > 0)
+                    q = q.Where(x =>
+                        x.SalesInvoice != null &&
+                        x.SalesInvoice.Customer != null &&
+                        vals.Contains(x.SalesInvoice.Customer.CustomerName ?? ""));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            {
+                var qtys = SplitFilterVals(filterCol_qty)
+                    .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (qtys.Count > 0)
+                    q = q.Where(x => qtys.Contains(x.Qty));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_price))
+            {
+                var prices = SplitFilterVals(filterCol_price)
+                    .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (prices.Count > 0)
+                    q = q.Where(x => prices.Contains(x.PriceRetail));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_disc1))
+            {
+                var ds = SplitFilterVals(filterCol_disc1)
+                    .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ds.Count > 0)
+                    q = q.Where(x => ds.Contains(x.Disc1Percent));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_disc2))
+            {
+                var ds = SplitFilterVals(filterCol_disc2)
+                    .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ds.Count > 0)
+                    q = q.Where(x => ds.Contains(x.Disc2Percent));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_disc3))
+            {
+                var ds = SplitFilterVals(filterCol_disc3)
+                    .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ds.Count > 0)
+                    q = q.Where(x => ds.Contains(x.Disc3Percent));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_discval))
+            {
+                var ds = SplitFilterVals(filterCol_discval)
+                    .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ds.Count > 0)
+                    q = q.Where(x => ds.Contains(x.DiscountValue));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_total))
+            {
+                var ds = SplitFilterVals(filterCol_total)
+                    .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ds.Count > 0)
+                    q = q.Where(x => ds.Contains(x.LineTotalAfterDiscount));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            {
+                var ds = SplitFilterVals(filterCol_net)
+                    .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
+                    .Where(v => v.HasValue).Select(v => v!.Value).ToList();
+                if (ds.Count > 0)
+                    q = q.Where(x => ds.Contains(x.LineNetTotal));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_batch))
+            {
+                var vals = SplitFilterVals(filterCol_batch);
+                if (vals.Count > 0)
+                    q = q.Where(x => x.BatchNo != null && vals.Contains(x.BatchNo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_expiry))
+            {
+                var vals = SplitFilterVals(filterCol_expiry);
+                if (vals.Count > 0)
+                    q = q.Where(x =>
+                        x.Expiry.HasValue &&
+                        vals.Contains(x.Expiry.Value.ToString("yyyy-MM", inv)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = SplitFilterVals(filterCol_region);
+                if (vals.Count > 0)
+                    q = q.Where(x =>
+                        vals.Contains(
+                            x.SalesInvoice != null && x.SalesInvoice.Customer != null
+                                ? (!string.IsNullOrWhiteSpace(x.SalesInvoice.Customer.RegionName)
+                                    ? x.SalesInvoice.Customer.RegionName!
+                                    : (x.SalesInvoice.Customer.Area != null && x.SalesInvoice.Customer.Area.AreaName != null
+                                        ? x.SalesInvoice.Customer.Area.AreaName
+                                        : ""))
+                                : ""));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_createdby))
+            {
+                var vals = SplitFilterVals(filterCol_createdby);
+                if (vals.Count > 0)
+                    q = q.Where(x =>
+                        x.SalesInvoice != null &&
+                        x.SalesInvoice.CreatedBy != null &&
+                        vals.Contains(x.SalesInvoice.CreatedBy));
+            }
+
+            return q;
+        }
+
+        // =========================================================
         // دالة خاصة: بناء الاستعلام مع البحث + الترتيب (نستخدمها فى Index و Export)
         // =========================================================
         // المتغير siId: فلتر اختياري برقم الفاتورة
@@ -117,19 +331,49 @@ namespace ERP.Controllers
             string? search,
             string? searchBy,
             string? sort,
-            string? dir)
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_siid = null,
+            string? filterCol_lineno = null,
+            string? filterCol_prodid = null,
+            string? filterCol_prodname = null,
+            string? filterCol_customername = null,
+            string? filterCol_qty = null,
+            string? filterCol_price = null,
+            string? filterCol_disc1 = null,
+            string? filterCol_disc2 = null,
+            string? filterCol_disc3 = null,
+            string? filterCol_discval = null,
+            string? filterCol_total = null,
+            string? filterCol_net = null,
+            string? filterCol_batch = null,
+            string? filterCol_expiry = null,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null)
         {
             // (1) الاستعلام الأساسي مع تضمين العلاقات (Product و SalesInvoice.Customer)
             IQueryable<SalesInvoiceLine> q =
                 _context.SalesInvoiceLines
                     .Include(x => x.Product)
                     .Include(x => x.SalesInvoice)
-                        .ThenInclude(si => si.Customer)
+                        .ThenInclude(si => si!.Customer)
+                            .ThenInclude(c => c!.Area)
                     .AsNoTracking();
 
             // (2) فلترة اختيارية برقم الفاتورة
             if (siId.HasValue)
                 q = q.Where(x => x.SIId == siId.Value);
+
+            q = ApplySilListFilters(
+                q, fromCode, toCode, useDateRange, fromDate, toDate,
+                filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
+                filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
+                filterCol_total, filterCol_net, filterCol_batch, filterCol_expiry,
+                filterCol_region, filterCol_createdby);
 
             // (3) خرائط الحقول للبحث (Strings + Ints) والفرز
 
@@ -165,6 +409,15 @@ namespace ERP.Controllers
                     ["ProdName"] = x => x.Product != null ? (x.Product.ProdName ?? "") : "",  // اسم الصنف
                     ["CustomerName"] = x => x.SalesInvoice != null && x.SalesInvoice.Customer != null 
                         ? (x.SalesInvoice.Customer.CustomerName ?? "") : "",  // اسم العميل
+                    ["Region"] = x =>
+                        x.SalesInvoice != null && x.SalesInvoice.Customer != null
+                            ? (!string.IsNullOrWhiteSpace(x.SalesInvoice.Customer.RegionName)
+                                ? x.SalesInvoice.Customer.RegionName!
+                                : (x.SalesInvoice.Customer.Area != null
+                                    ? x.SalesInvoice.Customer.Area.AreaName ?? ""
+                                    : ""))
+                            : "",
+                    ["CreatedBy"] = x => x.SalesInvoice != null ? (x.SalesInvoice.CreatedBy ?? "") : "",
                     ["Qty"] = x => x.Qty,                       // الكمية
                     ["Price"] = x => x.PriceRetail,               // سعر الجمهور
                     ["Unit"] = x => x.UnitSalePrice,             // سعر الوحدة بعد الخصم
@@ -195,49 +448,153 @@ namespace ERP.Controllers
         }
 
         // =========================================================
-        // Index — عرض عام + إمكانية التصفية برقم الفاتورة (SIId)
-        // مع بحث/ترتيب/تقسيم باستخدام ApplySearchSort + PagedResult
+        // Index — عرض عام + بحث/فلتر أعمدة/ترقيم (نمط قائمة فواتير المبيعات)
         // =========================================================
         public async Task<IActionResult> Index(
-            int? siId,                   // فلتر اختياري برقم الفاتورة (int?)
-            string? search,              // نص البحث
-            string? searchBy = "all",    // all | id | prod | batch | line
-            string? sort = "LineNo",     // LineNo | SIId | ProdId | Qty | ...
-            string? dir = "asc",         // asc | desc
+            int? siId,
+            string? search,
+            string? searchBy = "all",
+            string? sort = "LineNo",
+            string? dir = "asc",
             int page = 1,
-            int pageSize = 50)
+            int pageSize = 10,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? dateField = "Expiry",
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_siid = null,
+            string? filterCol_lineno = null,
+            string? filterCol_prodid = null,
+            string? filterCol_prodname = null,
+            string? filterCol_customername = null,
+            string? filterCol_qty = null,
+            string? filterCol_price = null,
+            string? filterCol_disc1 = null,
+            string? filterCol_disc2 = null,
+            string? filterCol_disc3 = null,
+            string? filterCol_discval = null,
+            string? filterCol_total = null,
+            string? filterCol_net = null,
+            string? filterCol_batch = null,
+            string? filterCol_expiry = null,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null)
         {
-            // تنظيف search من أسماء الأعمدة المعروفة
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
+            int? codeFromQ = Request.Query.ContainsKey("codeFrom")
+                ? TryParseNullableInt(Request.Query["codeFrom"].ToString())
+                : null;
+            int? codeToQ = Request.Query.ContainsKey("codeTo")
+                ? TryParseNullableInt(Request.Query["codeTo"].ToString())
+                : null;
+            var finalFromCode = fromCode ?? codeFromQ;
+            var finalToCode = toCode ?? codeToQ;
+
+            ViewBag.FromCode = finalFromCode;
+            ViewBag.ToCode = finalToCode;
+            ViewBag.DateField = dateField;
+
             var cleanedSearch = CleanSearchFromColumnNames(search);
 
-            // تجهيز الاستعلام باستخدام الدالة الموحدة (باستخدام search الأصلي للبحث)
-            var q = BuildQuery(siId, search, searchBy, sort, dir);
+            var q = BuildQuery(
+                siId, search, searchBy, sort, dir,
+                useDateRange, fromDate, toDate, finalFromCode, finalToCode,
+                filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
+                filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
+                filterCol_total, filterCol_net, filterCol_batch, filterCol_expiry,
+                filterCol_region, filterCol_createdby);
 
-            // =========================================================
-            // حساب الإجماليات من نفس الاستعلام (بعد الفلاتر)
-            // ✅ مهم: لازم قبل الـ PagedResult علشان ما تتحسبش على الصفحة بس
-            // =========================================================
             int totalQty = await q.SumAsync(line => (int?)line.Qty) ?? 0;
             decimal totalDiscountValue = await q.SumAsync(line => (decimal?)line.DiscountValue) ?? 0m;
             decimal totalAfterDiscount = await q.SumAsync(line => (decimal?)line.LineTotalAfterDiscount) ?? 0m;
             decimal totalNet = await q.SumAsync(line => (decimal?)line.LineNetTotal) ?? 0m;
+            int categoriesCount = await q.Where(l => l.Product != null && l.Product.CategoryId != null)
+                .Select(l => l.Product!.CategoryId).Distinct().CountAsync();
 
-            // تطبيع اتجاه الترتيب وتحويله إلى bool
             var dirNorm = (dir?.ToLower() == "asc") ? "asc" : "desc";
             bool descending = dirNorm == "desc";
+            var sortNorm = (sort ?? "LineNo").Trim();
 
-            // تعريف متغير model قبل if statement
+            int EffectiveSize(int totalCount) =>
+                pageSize == 0 ? (totalCount == 0 ? 10 : Math.Min(totalCount, 100_000)) : pageSize;
+
+            void BagColumnFilters()
+            {
+                ViewBag.FilterCol_Siid = filterCol_siid;
+                ViewBag.FilterCol_Lineno = filterCol_lineno;
+                ViewBag.FilterCol_Prodid = filterCol_prodid;
+                ViewBag.FilterCol_Prodname = filterCol_prodname;
+                ViewBag.FilterCol_Customername = filterCol_customername;
+                ViewBag.FilterCol_Qty = filterCol_qty;
+                ViewBag.FilterCol_Price = filterCol_price;
+                ViewBag.FilterCol_Disc1 = filterCol_disc1;
+                ViewBag.FilterCol_Disc2 = filterCol_disc2;
+                ViewBag.FilterCol_Disc3 = filterCol_disc3;
+                ViewBag.FilterCol_Discval = filterCol_discval;
+                ViewBag.FilterCol_Total = filterCol_total;
+                ViewBag.FilterCol_Net = filterCol_net;
+                ViewBag.FilterCol_Batch = filterCol_batch;
+                ViewBag.FilterCol_Expiry = filterCol_expiry;
+                ViewBag.FilterCol_Region = filterCol_region;
+                ViewBag.FilterCol_Createdby = filterCol_createdby;
+            }
+
+            void BagSearchSortLists(string sortForList)
+            {
+                ViewBag.SearchOptions = new List<SelectListItem>
+                {
+                    new("الكل", "all") { Selected = (ViewBag.SearchBy as string) == "all" },
+                    new("رقم الفاتورة", "id") { Selected = (ViewBag.SearchBy as string) == "id" },
+                    new("رقم السطر", "line") { Selected = (ViewBag.SearchBy as string) == "line" },
+                    new("كود الصنف", "prod") { Selected = (ViewBag.SearchBy as string) == "prod" },
+                    new("اسم الصنف", "prodname") { Selected = (ViewBag.SearchBy as string) == "prodname" },
+                    new("اسم العميل", "customername") { Selected = (ViewBag.SearchBy as string) == "customername" },
+                    new("الكمية", "qty") { Selected = (ViewBag.SearchBy as string) == "qty" },
+                    new("التشغيلة", "batch") { Selected = (ViewBag.SearchBy as string) == "batch" },
+                    new("الملاحظات", "notes") { Selected = (ViewBag.SearchBy as string) == "notes" },
+                };
+                ViewBag.SortOptions = new List<SelectListItem>
+                {
+                    new("رقم السطر", "LineNo") { Selected = sortForList == "LineNo" },
+                    new("رقم الفاتورة", "SIId") { Selected = sortForList == "SIId" },
+                    new("كود الصنف", "ProdId") { Selected = sortForList == "ProdId" },
+                    new("اسم الصنف", "ProdName") { Selected = sortForList == "ProdName" },
+                    new("اسم العميل", "CustomerName") { Selected = sortForList == "CustomerName" },
+                    new("المنطقة", "Region") { Selected = sortForList == "Region" },
+                    new("الكاتب", "CreatedBy") { Selected = sortForList == "CreatedBy" },
+                    new("الكمية", "Qty") { Selected = sortForList == "Qty" },
+                    new("سعر الجمهور", "Price") { Selected = sortForList == "Price" },
+                    new("سعر الوحدة", "Unit") { Selected = sortForList == "Unit" },
+                    new("الخصم", "Disc1") { Selected = sortForList == "Disc1" },
+                    new("خصم 2%", "Disc2") { Selected = sortForList == "Disc2" },
+                    new("خصم 3%", "Disc3") { Selected = sortForList == "Disc3" },
+                    new("قيمة الخصم", "DiscVal") { Selected = sortForList == "DiscVal" },
+                    new("إجمالي السطر", "Total") { Selected = sortForList == "Total" },
+                    new("الصافي", "Net") { Selected = sortForList == "Net" },
+                    new("التشغيلة", "Batch") { Selected = sortForList == "Batch" },
+                    new("الصلاحية", "Expiry") { Selected = sortForList == "Expiry" },
+                };
+            }
+
             PagedResult<SalesInvoiceLine> model;
 
-            // (5) تطبيق ترتيب مخصص للحقول التي تحتوي على navigation properties
-            // لأن EF Core لا يستطيع ترجمة OrderBy على navigation properties مباشرة
-            var sortNorm = (sort ?? "LineNo").Trim();
             if (string.Equals(sortNorm, "ProdName", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(sortNorm, "CustomerName", StringComparison.OrdinalIgnoreCase))
+                string.Equals(sortNorm, "CustomerName", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(sortNorm, "Region", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(sortNorm, "CreatedBy", StringComparison.OrdinalIgnoreCase))
             {
-                // تحميل البيانات أولاً ثم الترتيب في الذاكرة
                 var allItems = await q.ToListAsync();
-                
+
                 if (string.Equals(sortNorm, "ProdName", StringComparison.OrdinalIgnoreCase))
                 {
                     allItems = descending
@@ -250,24 +607,43 @@ namespace ERP.Controllers
                         ? allItems.OrderByDescending(x => x.SalesInvoice?.Customer?.CustomerName ?? "").ToList()
                         : allItems.OrderBy(x => x.SalesInvoice?.Customer?.CustomerName ?? "").ToList();
                 }
+                else if (string.Equals(sortNorm, "Region", StringComparison.OrdinalIgnoreCase))
+                {
+                    string RegionKey(SalesInvoiceLine x)
+                    {
+                        var c = x.SalesInvoice?.Customer;
+                        if (c == null) return "";
+                        if (!string.IsNullOrWhiteSpace(c.RegionName)) return c.RegionName!;
+                        return c.Area?.AreaName ?? "";
+                    }
 
-                // تطبيق Pagination يدوياً
+                    allItems = descending
+                        ? allItems.OrderByDescending(x => RegionKey(x)).ToList()
+                        : allItems.OrderBy(x => RegionKey(x)).ToList();
+                }
+                else
+                {
+                    allItems = descending
+                        ? allItems.OrderByDescending(x => x.SalesInvoice?.CreatedBy ?? "").ToList()
+                        : allItems.OrderBy(x => x.SalesInvoice?.CreatedBy ?? "").ToList();
+                }
+
                 var totalCount = allItems.Count;
-                var pagedItems = allItems
-                    .Skip((page - 1) * pageSize)
-                    .Take(pageSize)
-                    .ToList();
+                var eff = EffectiveSize(totalCount);
+                if (pageSize == 0) page = 1;
+                var pagedItems = allItems.Skip((page - 1) * eff).Take(eff).ToList();
 
-                // إنشاء PagedResult
                 model = new PagedResult<SalesInvoiceLine>(pagedItems, page, pageSize, totalCount)
                 {
                     Search = cleanedSearch ?? "",
                     SearchBy = searchBy ?? "all",
                     SortColumn = sortNorm,
-                    SortDescending = descending
+                    SortDescending = descending,
+                    UseDateRange = useDateRange,
+                    FromDate = fromDate,
+                    ToDate = toDate
                 };
 
-                // تمرير حالة الفلاتر للواجهة
                 ViewBag.Search = cleanedSearch ?? "";
                 ViewBag.SearchBy = searchBy ?? "all";
                 ViewBag.Sort = sortNorm;
@@ -276,118 +652,223 @@ namespace ERP.Controllers
                 ViewBag.PageSize = pageSize;
                 ViewBag.TotalCount = totalCount;
                 ViewBag.SIId = siId;
-
-                // إجماليات الأعمدة (بعد الفلاتر)
                 ViewBag.TotalQty = allItems.Sum(line => line.Qty);
                 ViewBag.TotalDiscountValue = allItems.Sum(line => line.DiscountValue);
                 ViewBag.TotalAfterDiscount = allItems.Sum(line => line.LineTotalAfterDiscount);
                 ViewBag.TotalNet = allItems.Sum(line => line.LineNetTotal);
-
-                // (7) خيارات البحث (القائمة المنسدلة في البارشال _IndexFilters)
-                ViewBag.SearchOptions = new List<SelectListItem>
-                {
-                    new("الكل",          "all")  { Selected = (ViewBag.SearchBy == "all")  },
-                    new("رقم الفاتورة",  "id")   { Selected = (ViewBag.SearchBy == "id")   },
-                    new("رقم الفاتورة",  "si")   { Selected = (ViewBag.SearchBy == "si")   },
-                    new("رقم السطر",     "line") { Selected = (ViewBag.SearchBy == "line") },
-                    new("كود الصنف",     "prod") { Selected = (ViewBag.SearchBy == "prod") },
-                    new("اسم الصنف",     "prodname") { Selected = (ViewBag.SearchBy == "prodname") },
-                    new("اسم العميل",    "customername") { Selected = (ViewBag.SearchBy == "customername") },
-                    new("الكمية",        "qty")   { Selected = (ViewBag.SearchBy == "qty") },
-                    new("التشغيلة",      "batch"){ Selected = (ViewBag.SearchBy == "batch")},
-                    new("الملاحظات",     "notes") { Selected = (ViewBag.SearchBy == "notes") },
-                };
-
-                // (8) خيارات الترتيب
-                ViewBag.SortOptions = new List<SelectListItem>
-                {
-                    new("رقم السطر",     "LineNo") { Selected = (ViewBag.Sort == "LineNo") },
-                    new("رقم الفاتورة",  "SIId")   { Selected = (ViewBag.Sort == "SIId")   },
-                    new("كود الصنف",     "ProdId") { Selected = (ViewBag.Sort == "ProdId") },
-                    new("اسم الصنف",     "ProdName") { Selected = (ViewBag.Sort == "ProdName") },
-                    new("اسم العميل",    "CustomerName") { Selected = (ViewBag.Sort == "CustomerName") },
-                    new("الكمية",        "Qty")    { Selected = (ViewBag.Sort == "Qty")    },
-                    new("سعر الجمهور",   "Price")  { Selected = (ViewBag.Sort == "Price")  },
-                    new("سعر الوحدة",    "Unit")   { Selected = (ViewBag.Sort == "Unit")   },
-                    new("خصم 1%",        "Disc1")  { Selected = (ViewBag.Sort == "Disc1")  },
-                    new("خصم 2%",        "Disc2")  { Selected = (ViewBag.Sort == "Disc2")  },
-                    new("خصم 3%",        "Disc3")  { Selected = (ViewBag.Sort == "Disc3")  },
-                    new("قيمة الخصم",    "DiscVal") { Selected = (ViewBag.Sort == "DiscVal") },
-                    new("إجمالي السطر",  "Total")  { Selected = (ViewBag.Sort == "Total")  },
-                    new("الصافي",        "Net")    { Selected = (ViewBag.Sort == "Net")    },
-                    new("التشغيلة",      "Batch")  { Selected = (ViewBag.Sort == "Batch")  },
-                    new("الصلاحية",      "Expiry") { Selected = (ViewBag.Sort == "Expiry") },
-                };
-
+                ViewBag.CategoriesCount = allItems.Where(l => l.Product?.CategoryId != null)
+                    .Select(l => l.Product!.CategoryId!.Value).Distinct().Count();
+                BagColumnFilters();
+                BagSearchSortLists(sortNorm);
                 return View(model);
             }
 
-            // (5) إنشاء نتيجة مقسّمة صفحات بالنظام الموحد (للحقول العادية)
-            model = await PagedResult<SalesInvoiceLine>.CreateAsync(
-                q,
-                page,
-                pageSize,
-                search,
-                descending,
-                sort,
-                searchBy
-            );
+            var totalCount2 = await q.CountAsync();
+            var eff2 = EffectiveSize(totalCount2);
+            if (pageSize == 0) page = 1;
+            var items = await q.Skip((page - 1) * eff2).Take(eff2).ToListAsync();
 
-            // (6) تمرير حالة الفلاتر للواجهة
+            model = new PagedResult<SalesInvoiceLine>(items, page, pageSize, totalCount2)
+            {
+                Search = cleanedSearch ?? "",
+                SearchBy = searchBy ?? "all",
+                SortColumn = sort ?? "LineNo",
+                SortDescending = descending,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
+
             ViewBag.Search = cleanedSearch ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "LineNo";
             ViewBag.Dir = dirNorm;
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
-            ViewBag.TotalCount = model.TotalCount;
-
-            // نمرّر رقم الفاتورة المُرشَّح (لو موجود) لعرضه في الفيو أو للروابط
+            ViewBag.TotalCount = totalCount2;
             ViewBag.SIId = siId;
-
-            // إجماليات الأعمدة (بعد الفلاتر)
             ViewBag.TotalQty = totalQty;
             ViewBag.TotalDiscountValue = totalDiscountValue;
             ViewBag.TotalAfterDiscount = totalAfterDiscount;
             ViewBag.TotalNet = totalNet;
-
-            // (7) خيارات البحث (القائمة المنسدلة في البارشال _IndexFilters)
-            ViewBag.SearchOptions = new List<SelectListItem>
-            {
-                new("الكل",          "all")  { Selected = (ViewBag.SearchBy == "all")  },
-                new("رقم الفاتورة",  "id")   { Selected = (ViewBag.SearchBy == "id")   },
-                new("رقم الفاتورة",  "si")   { Selected = (ViewBag.SearchBy == "si")   },
-                new("رقم السطر",     "line") { Selected = (ViewBag.SearchBy == "line") },
-                new("كود الصنف",     "prod") { Selected = (ViewBag.SearchBy == "prod") },
-                new("اسم الصنف",     "prodname") { Selected = (ViewBag.SearchBy == "prodname") },
-                new("اسم العميل",    "customername") { Selected = (ViewBag.SearchBy == "customername") },
-                new("الكمية",        "qty")   { Selected = (ViewBag.SearchBy == "qty") },
-                new("التشغيلة",      "batch"){ Selected = (ViewBag.SearchBy == "batch")},
-                new("الملاحظات",     "notes") { Selected = (ViewBag.SearchBy == "notes") },
-            };
-
-            // (8) خيارات الترتيب
-            ViewBag.SortOptions = new List<SelectListItem>
-            {
-                new("رقم السطر",     "LineNo") { Selected = (ViewBag.Sort == "LineNo") },
-                new("رقم الفاتورة",  "SIId")   { Selected = (ViewBag.Sort == "SIId")   },
-                new("كود الصنف",     "ProdId") { Selected = (ViewBag.Sort == "ProdId") },
-                new("اسم الصنف",     "ProdName") { Selected = (ViewBag.Sort == "ProdName") },
-                new("اسم العميل",    "CustomerName") { Selected = (ViewBag.Sort == "CustomerName") },
-                new("الكمية",        "Qty")    { Selected = (ViewBag.Sort == "Qty")    },
-                new("سعر الجمهور",   "Price")  { Selected = (ViewBag.Sort == "Price")  },
-                new("سعر الوحدة",    "Unit")   { Selected = (ViewBag.Sort == "Unit")   },
-                new("خصم 1%",        "Disc1")  { Selected = (ViewBag.Sort == "Disc1")  },
-                new("خصم 2%",        "Disc2")  { Selected = (ViewBag.Sort == "Disc2")  },
-                new("خصم 3%",        "Disc3")  { Selected = (ViewBag.Sort == "Disc3")  },
-                new("قيمة الخصم",    "DiscVal") { Selected = (ViewBag.Sort == "DiscVal") },
-                new("إجمالي السطر",  "Total")  { Selected = (ViewBag.Sort == "Total")  },
-                new("الصافي",        "Net")    { Selected = (ViewBag.Sort == "Net")    },
-                new("التشغيلة",      "Batch")  { Selected = (ViewBag.Sort == "Batch")  },
-                new("الصلاحية",      "Expiry") { Selected = (ViewBag.Sort == "Expiry") },
-            };
-
+            ViewBag.CategoriesCount = categoriesCount;
+            BagColumnFilters();
+            BagSearchSortLists(sort ?? "LineNo");
             return View(model);
+        }
+
+        // =========================================================
+        // GetColumnValues — قيم مميزة لعمود (فلترة الجدول بنمط Excel)
+        // =========================================================
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            if (string.IsNullOrWhiteSpace(column))
+                return Json(Array.Empty<string>());
+
+            column = column.Trim().ToLowerInvariant();
+            search = (search ?? "").Trim();
+
+            var q = _context.SalesInvoiceLines.AsNoTracking()
+                .Include(x => x.Product)
+                .Include(x => x.SalesInvoice)
+                    .ThenInclude(si => si!.Customer)
+                        .ThenInclude(c => c!.Area);
+
+            if (column == "siid")
+            {
+                var idsQuery = q.Select(x => x.SIId.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    idsQuery = idsQuery.Where(v => v.Contains(search));
+                var list = await idsQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "lineno")
+            {
+                var nq = q.Select(x => x.LineNo.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    nq = nq.Where(v => v.Contains(search));
+                return Json(await nq.Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "prodid")
+            {
+                var nq = q.Select(x => x.ProdId.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    nq = nq.Where(v => v.Contains(search));
+                return Json(await nq.Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "prodname")
+            {
+                var tq = q.Select(x => x.Product != null ? (x.Product.ProdName ?? "") : "");
+                if (!string.IsNullOrEmpty(search))
+                    tq = tq.Where(v => v.Contains(search));
+                return Json(await tq.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "customername")
+            {
+                var tq = q.Select(x =>
+                    x.SalesInvoice != null && x.SalesInvoice.Customer != null
+                        ? (x.SalesInvoice.Customer.CustomerName ?? "")
+                        : "");
+                if (!string.IsNullOrEmpty(search))
+                    tq = tq.Where(v => v.Contains(search));
+                return Json(await tq.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "region")
+            {
+                var tq = q.Select(x =>
+                    x.SalesInvoice != null && x.SalesInvoice.Customer != null
+                        ? (!string.IsNullOrWhiteSpace(x.SalesInvoice.Customer.RegionName)
+                            ? x.SalesInvoice.Customer.RegionName!
+                            : (x.SalesInvoice.Customer.Area != null && x.SalesInvoice.Customer.Area.AreaName != null
+                                ? x.SalesInvoice.Customer.Area.AreaName
+                                : ""))
+                        : "");
+                if (!string.IsNullOrEmpty(search))
+                    tq = tq.Where(v => v.Contains(search));
+                return Json(await tq.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "createdby")
+            {
+                var tq = q.Select(x => x.SalesInvoice != null ? (x.SalesInvoice.CreatedBy ?? "") : "");
+                if (!string.IsNullOrEmpty(search))
+                    tq = tq.Where(v => v.Contains(search));
+                return Json(await tq.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "qty")
+            {
+                var nq = q.Select(x => x.Qty.ToString());
+                if (!string.IsNullOrEmpty(search))
+                    nq = nq.Where(v => v.Contains(search));
+                return Json(await nq.Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "price")
+            {
+                var raw = await q.Select(x => x.PriceRetail).Distinct().Take(400).ToListAsync();
+                var list = raw.Select(x => x.ToString("0.00", CultureInfo.InvariantCulture)).Distinct().OrderBy(v => v).ToList();
+                if (!string.IsNullOrEmpty(search))
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else if (list.Count > 200)
+                    list = list.Take(200).ToList();
+                return Json(list);
+            }
+
+            if (column == "disc1" || column == "disc2" || column == "disc3")
+            {
+                List<decimal> raw = column == "disc1"
+                    ? await q.Select(x => x.Disc1Percent).Distinct().Take(400).ToListAsync()
+                    : column == "disc2"
+                        ? await q.Select(x => x.Disc2Percent).Distinct().Take(400).ToListAsync()
+                        : await q.Select(x => x.Disc3Percent).Distinct().Take(400).ToListAsync();
+                var list = raw.Select(x => x.ToString("0.##", CultureInfo.InvariantCulture)).Distinct().OrderBy(v => v).ToList();
+                if (!string.IsNullOrEmpty(search))
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else if (list.Count > 200)
+                    list = list.Take(200).ToList();
+                return Json(list);
+            }
+
+            if (column == "discval")
+            {
+                var raw = await q.Select(x => x.DiscountValue).Distinct().Take(400).ToListAsync();
+                var list = raw.Select(x => x.ToString("0.00", CultureInfo.InvariantCulture)).Distinct().OrderBy(v => v).ToList();
+                if (!string.IsNullOrEmpty(search))
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else if (list.Count > 200)
+                    list = list.Take(200).ToList();
+                return Json(list);
+            }
+
+            if (column == "total")
+            {
+                var raw = await q.Select(x => x.LineTotalAfterDiscount).Distinct().Take(400).ToListAsync();
+                var list = raw.Select(x => x.ToString("0.00", CultureInfo.InvariantCulture)).Distinct().OrderBy(v => v).ToList();
+                if (!string.IsNullOrEmpty(search))
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else if (list.Count > 200)
+                    list = list.Take(200).ToList();
+                return Json(list);
+            }
+
+            if (column == "net")
+            {
+                var raw = await q.Select(x => x.LineNetTotal).Distinct().Take(400).ToListAsync();
+                var list = raw.Select(x => x.ToString("0.00", CultureInfo.InvariantCulture)).Distinct().OrderBy(v => v).ToList();
+                if (!string.IsNullOrEmpty(search))
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else if (list.Count > 200)
+                    list = list.Take(200).ToList();
+                return Json(list);
+            }
+
+            if (column == "batch")
+            {
+                var tq = q.Select(x => x.BatchNo ?? "");
+                if (!string.IsNullOrEmpty(search))
+                    tq = tq.Where(v => v.Contains(search));
+                return Json(await tq.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync());
+            }
+
+            if (column == "expiry")
+            {
+                var raw = await q.Where(x => x.Expiry.HasValue).Select(x => x.Expiry!.Value).Distinct().Take(400).ToListAsync();
+                var list = raw.Select(d => d.ToString("yyyy-MM", CultureInfo.InvariantCulture)).Distinct().OrderBy(v => v).ToList();
+                if (!string.IsNullOrEmpty(search))
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else if (list.Count > 200)
+                    list = list.Take(200).ToList();
+                return Json(list);
+            }
+
+            return Json(Array.Empty<string>());
         }
 
         // =========================================================
@@ -534,13 +1015,49 @@ namespace ERP.Controllers
             string? searchBy = "all",
             string? sort = "LineNo",
             string? dir = "asc",
-            int page = 1,          // مش هنستخدمهم فى التصدير، بس بنحافظ على الـ Signature لو اتنادى بيهم
+            int page = 1,
             int pageSize = 50,
-            string format = "excel")   // excel | csv
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_siid = null,
+            string? filterCol_lineno = null,
+            string? filterCol_prodid = null,
+            string? filterCol_prodname = null,
+            string? filterCol_customername = null,
+            string? filterCol_qty = null,
+            string? filterCol_price = null,
+            string? filterCol_disc1 = null,
+            string? filterCol_disc2 = null,
+            string? filterCol_disc3 = null,
+            string? filterCol_discval = null,
+            string? filterCol_total = null,
+            string? filterCol_net = null,
+            string? filterCol_batch = null,
+            string? filterCol_expiry = null,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null,
+            string format = "excel")
         {
-            var q = BuildQuery(siId, search, searchBy, sort, dir);
+            int? codeFromQ = Request.Query.ContainsKey("codeFrom")
+                ? TryParseNullableInt(Request.Query["codeFrom"].ToString())
+                : null;
+            int? codeToQ = Request.Query.ContainsKey("codeTo")
+                ? TryParseNullableInt(Request.Query["codeTo"].ToString())
+                : null;
+            var finalFromCode = fromCode ?? codeFromQ;
+            var finalToCode = toCode ?? codeToQ;
 
-            // نرتّب نفس ترتيب الشاشة (LineNo ثم SIId مثلاً)
+            var q = BuildQuery(
+                siId, search, searchBy, sort, dir,
+                useDateRange, fromDate, toDate, finalFromCode, finalToCode,
+                filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
+                filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
+                filterCol_total, filterCol_net, filterCol_batch, filterCol_expiry,
+                filterCol_region, filterCol_createdby);
+
             var list = await q
                 .OrderBy(l => l.SIId)
                 .ThenBy(l => l.LineNo)

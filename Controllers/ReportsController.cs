@@ -26,13 +26,15 @@ namespace ERP.Controllers
         private readonly StockAnalysisService _stockAnalysisService;
         private readonly ILedgerPostingService _ledgerPostingService;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
-        public ReportsController(AppDbContext context, StockAnalysisService stockAnalysisService, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
+        public ReportsController(AppDbContext context, StockAnalysisService stockAnalysisService, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger, IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _stockAnalysisService = stockAnalysisService;
             _ledgerPostingService = ledgerPostingService;
             _activityLogger = activityLogger;
+            _accountVisibilityService = accountVisibilityService;
         }
 
         /// <summary>
@@ -572,17 +574,28 @@ namespace ERP.Controllers
                 return View();
             }
 
-            // عند اختيار مخزن: نضمّن أصنافاً لها أي حركة (تحويل أو شراء أو غيره) في هذا المخزن حتى تظهر الأصناف المحوّلة (أصناف نشطة فقط)
+            // عند اختيار مخزن: نقتصر على أصناف لها رصيد فعلي > 0 في هذا المخزن، أو (عند عرض الصفر) أصناف معيّن لها هذا المخزن فقط — حتى لا يظهر صنف نُقل بالكامل لمخزن آخر
             if (warehouseId.HasValue && warehouseId.Value > 0)
             {
-                var inWarehouseIds = await _context.StockLedger
+                var whId = warehouseId.Value;
+                var balanceInWarehouse = await _context.StockLedger
                     .AsNoTracking()
-                    .Where(sl => sl.WarehouseId == warehouseId.Value)
-                    .Select(sl => sl.ProdId)
-                    .Distinct()
+                    .Where(sl => sl.WarehouseId == whId && productIds.Contains(sl.ProdId))
+                    .GroupBy(sl => sl.ProdId)
+                    .Select(g => new { ProdId = g.Key, Balance = g.Sum(sl => sl.QtyIn - sl.QtyOut) })
                     .ToListAsync();
-                var activeProductIds = await _context.Products.Where(p => p.IsActive).Select(p => p.ProdId).ToListAsync();
-                productIds = productIds.Union(inWarehouseIds.Intersect(activeProductIds)).Distinct().ToList();
+                var withPositiveBalance = balanceInWarehouse.Where(b => b.Balance > 0).Select(b => b.ProdId).ToList();
+                var inWarehouseIds = new List<int>(withPositiveBalance);
+                if (includeZeroQty)
+                {
+                    var assignedToWarehouseIds = await _context.Products
+                        .AsNoTracking()
+                        .Where(p => p.WarehouseId == whId && p.IsActive)
+                        .Select(p => p.ProdId)
+                        .ToListAsync();
+                    inWarehouseIds = inWarehouseIds.Union(assignedToWarehouseIds).Distinct().ToList();
+                }
+                productIds = productIds.Intersect(inWarehouseIds).ToList();
             }
 
             // =========================================================
@@ -621,12 +634,12 @@ namespace ERP.Controllers
                 .Select(g => new { ProdId = g.Key, TotalQty = g.Sum(sl => sl.QtyIn - sl.QtyOut) })
                 .ToDictionaryAsync(x => x.ProdId, x => Math.Max(0, x.TotalQty));
 
-            // 6.3) تحميل StockLedger للخصم المرجح والتكلفة (Purchase مع RemainingQty > 0)
+            // 6.3) تحميل StockLedger للخصم المرجح والتكلفة (شراء، رصيد أول، تحويل دخول، تحويل إلى مخزن الصنف — مع RemainingQty > 0)
             var stockLedgerCostQuery = _context.StockLedger
                 .AsNoTracking()
                 .Where(x =>
                     productIds.Contains(x.ProdId) &&
-                    x.SourceType == "Purchase" &&
+                    (x.SourceType == "Purchase" || x.SourceType == "Opening" || x.SourceType == "TransferIn" || x.SourceType == "SyncToProductWarehouse") &&
                     (x.RemainingQty ?? 0) > 0);
             if (warehouseId.HasValue && warehouseId.Value > 0)
                 stockLedgerCostQuery = stockLedgerCostQuery.Where(x => x.WarehouseId == warehouseId.Value);
@@ -646,7 +659,7 @@ namespace ERP.Controllers
                 .AsNoTracking()
                 .Where(x =>
                     productIds.Contains(x.ProdId) &&
-                    x.SourceType == "Purchase" &&
+                    (x.SourceType == "Purchase" || x.SourceType == "Opening" || x.SourceType == "TransferIn" || x.SourceType == "SyncToProductWarehouse") &&
                     (x.RemainingQty ?? 0) > 0);
             if (warehouseId.HasValue && warehouseId.Value > 0)
                 batchLedgerQuery = batchLedgerQuery.Where(x => x.WarehouseId == warehouseId.Value);
@@ -916,6 +929,12 @@ namespace ERP.Controllers
             decimal totalCostSum = reportData.Sum(r => r.TotalCost);
 
             int totalCount = reportData.Count; // إجمالي عدد الأصناف (قبل Pagination)
+            // متوسط الخصم المرجح (موزون بالكمية)، متوسط سعر الجمهور، متوسط تكلفة العلبة — للكروت
+            decimal weightedAvgDiscount = totalQty > 0
+                ? reportData.Sum(r => r.WeightedDiscount * r.CurrentQty) / totalQty
+                : 0m;
+            decimal averagePriceRetail = totalCount > 0 ? totalPriceRetail / totalCount : 0m;
+            decimal averageUnitCost = totalCount > 0 ? totalUnitCost / totalCount : 0m;
 
             // =========================================================
             // 9) Pagination (اختياري: 200, 500, 1000, 5000, أو الكل)
@@ -950,6 +969,9 @@ namespace ERP.Controllers
             ViewBag.TotalSalesQty = totalSalesQty;
             ViewBag.TotalUnitCost = totalUnitCost;
             ViewBag.TotalCost = totalCostSum;
+            ViewBag.WeightedAvgDiscount = weightedAvgDiscount;
+            ViewBag.AveragePriceRetail = averagePriceRetail;
+            ViewBag.AverageUnitCost = averageUnitCost;
 
             return View();
         }
@@ -1821,10 +1843,16 @@ namespace ERP.Controllers
             ViewBag.Governorates = governorates;
 
             // =========================================================
-            // 1.1) تحميل قائمة العملاء للأوتوكومبليت (datalist)
+            // 1.1) تحميل قائمة العملاء للأوتوكومبليت (datalist) — نفس منطق فاتورة المبيعات
             // =========================================================
-            var customersAuto = await _context.Customers
-                .AsNoTracking()
+            var (hiddenAccountIdsAuto, restrictedAuto) = await _accountVisibilityService.GetVisibilityStateForCurrentUserAsync();
+            var hiddenListAuto = hiddenAccountIdsAuto.ToList();
+            IQueryable<Customer> customersAutoQuery = _context.Customers.AsNoTracking();
+            if (hiddenListAuto.Count > 0)
+                customersAutoQuery = restrictedAuto
+                    ? customersAutoQuery.Where(c => c.AccountId != null && !hiddenListAuto.Contains(c.AccountId.Value))
+                    : customersAutoQuery.Where(c => c.AccountId == null || !hiddenListAuto.Contains(c.AccountId.Value));
+            var customersAuto = await customersAutoQuery
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
                 {
@@ -1872,6 +1900,7 @@ namespace ERP.Controllers
                 ViewBag.TotalSales = 0m;
                 ViewBag.TotalPurchases = 0m;
                 ViewBag.TotalReturns = 0m;
+                ViewBag.TotalCustomersUnfiltered = 0;
                 ViewBag.Page = 1;
                 ViewBag.PageSize = pageSize;
                 ViewBag.TotalPages = 1;
@@ -1888,11 +1917,10 @@ namespace ERP.Controllers
             }
 
             // =========================================================
-            // 4) بناء الاستعلام الأساسي للعملاء (عند طلب التقرير)
+            // 4) بناء الاستعلام الأساسي للعملاء (عند طلب التقرير) — نفس منطق فاتورة المبيعات
             // =========================================================
-            var customersQuery = _context.Customers
-                .AsNoTracking()
-                .AsQueryable();
+            var customersQuery = _context.Customers.AsNoTracking().AsQueryable();
+            customersQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customersQuery);
 
             // فلتر البحث (اسم العميل أو الكود)
             if (!string.IsNullOrWhiteSpace(search))
@@ -1928,9 +1956,12 @@ namespace ERP.Controllers
             {
                 ViewBag.ReportData = new List<CustomerBalanceReportDto>();
                 ViewBag.TotalBalance = 0m;
+                ViewBag.TotalDebit = 0m;
+                ViewBag.TotalCredit = 0m;
                 ViewBag.TotalSales = 0m;
                 ViewBag.TotalPurchases = 0m;
                 ViewBag.TotalReturns = 0m;
+                ViewBag.TotalCustomersUnfiltered = 0;
                 ViewBag.Page = 1;
                 ViewBag.PageSize = pageSize;
                 ViewBag.TotalPages = 1;
@@ -1942,7 +1973,7 @@ namespace ERP.Controllers
             // 6) تحميل البيانات بشكل مجمع (Bulk Loading) - تحسين الأداء
             // =========================================================
 
-            // 6.1) تحميل جميع Customers دفعة واحدة
+            // 6.1) تحميل جميع Customers دفعة واحدة (مع كود الإكسل للمقارنة)
             var customersDict = await customersQuery
                 .Select(c => new
                 {
@@ -1950,7 +1981,8 @@ namespace ERP.Controllers
                     c.CustomerName,
                     c.PartyCategory,
                     c.Phone1,
-                    c.CreditLimit
+                    c.CreditLimit,
+                    c.ExternalCode
                 })
                 .ToDictionaryAsync(c => c.CustomerId);
 
@@ -2118,12 +2150,13 @@ namespace ERP.Controllers
                 decimal totalSales = salesTotals.TryGetValue(customerId, out var sales) ? sales : 0m;
                 decimal totalPurchases = purchasesTotals.TryGetValue(customerId, out var purchases) ? purchases : 0m;
                 decimal totalReturns = returnsTotals.TryGetValue(customerId, out var ret) ? ret : 0m;
-                decimal availableCredit = creditLimit - currentBalance;
+                decimal availableCredit = creditLimit == 0 ? 0m : (creditLimit - currentBalance);
 
                 reportData.Add(new CustomerBalanceReportDto
                 {
                     CustomerId = customerId,
                     CustomerCode = customerId.ToString(),
+                    ExternalCode = customer.ExternalCode,
                     CustomerName = customer.CustomerName ?? "",
                     PartyCategory = customer.PartyCategory ?? "",
                     Phone1 = customer.Phone1 ?? "",
@@ -2135,6 +2168,9 @@ namespace ERP.Controllers
                     AvailableCredit = availableCredit
                 });
             }
+
+            // عدد العملاء قبل فلاتر الأعمدة فقط (ليطابق "عرض 1-200 من X" عندما لا يوجد فلتر أعمدة)
+            int totalBaseCount = reportData.Count;
 
             // =========================================================
             // 6.5) فلاتر أعمدة بنمط Excel (في الذاكرة)
@@ -2255,10 +2291,20 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.Phone1 ?? "").ToList()
                         : reportData.OrderBy(r => r.Phone1 ?? "").ToList();
                     break;
-                case "balance":
+                case "debit":
+                    // عمود المدين: الترتيب حسب قيمة المدين المعروضة (الرصيد إن كان موجباً، وإلا صفر)
+                    decimal DebitDisplayValue(CustomerBalanceReportDto r) => r.CurrentBalance > 0 ? r.CurrentBalance : 0m;
                     reportData = isDesc
-                        ? reportData.OrderByDescending(r => r.CurrentBalance).ToList()
-                        : reportData.OrderBy(r => r.CurrentBalance).ToList();
+                        ? reportData.OrderByDescending(r => DebitDisplayValue(r)).ToList()
+                        : reportData.OrderBy(r => DebitDisplayValue(r)).ToList();
+                    break;
+                case "balance":
+                case "credit":
+                    // عمود الدائن: الترتيب حسب قيمة الدائن المعروضة (صفر إن الرصيد مدين، |الرصيد| إن كان دائن)
+                    decimal CreditDisplayValue(CustomerBalanceReportDto r) => r.CurrentBalance < 0 ? Math.Abs(r.CurrentBalance) : 0m;
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => CreditDisplayValue(r)).ToList()
+                        : reportData.OrderBy(r => CreditDisplayValue(r)).ToList();
                     break;
                 case "creditlimit":
                     reportData = isDesc
@@ -2335,6 +2381,7 @@ namespace ERP.Controllers
             ViewBag.TotalBalance = totalBalance;
             ViewBag.TotalDebit = totalDebitSum;
             ViewBag.TotalCredit = totalCreditSum;
+            ViewBag.TotalCustomersUnfiltered = totalBaseCount; // إجمالي قبل فلاتر الأعمدة فقط (يطابق الترقيم عند عدم الفلترة)
             ViewBag.TotalSales = totalSalesSum;
             ViewBag.TotalPurchases = totalPurchasesSum;
             ViewBag.TotalReturns = totalReturnsSum;
@@ -2365,7 +2412,13 @@ namespace ERP.Controllers
             string column,
             string? searchTerm = null)
         {
+            var (hiddenAccountIdsCol, restrictedCol) = await _accountVisibilityService.GetVisibilityStateForCurrentUserAsync();
+            var hiddenListCol = hiddenAccountIdsCol.ToList();
             var q = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
+            if (hiddenListCol.Count > 0)
+                q = restrictedCol
+                    ? q.Where(c => c.AccountId != null && !hiddenListCol.Contains(c.AccountId.Value))
+                    : q.Where(c => c.AccountId == null || !hiddenListCol.Contains(c.AccountId.Value));
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var s = search.Trim();
@@ -2424,10 +2477,9 @@ namespace ERP.Controllers
                 includeZeroBalance = false;
             }
 
-            // بناء الاستعلام (نفس منطق CustomerBalances)
-            var customersQuery = _context.Customers
-                .AsNoTracking()
-                .AsQueryable();
+            // بناء الاستعلام (نفس منطق CustomerBalances وفتورة المبيعات)
+            var customersQuery = _context.Customers.AsNoTracking().AsQueryable();
+            customersQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customersQuery);
 
             if (!string.IsNullOrWhiteSpace(search))
             {
@@ -2464,7 +2516,8 @@ namespace ERP.Controllers
                     c.CustomerName,
                     c.PartyCategory,
                     c.Phone1,
-                    c.CreditLimit
+                    c.CreditLimit,
+                    c.ExternalCode
                 })
                 .ToDictionaryAsync(c => c.CustomerId);
 
@@ -2614,12 +2667,13 @@ namespace ERP.Controllers
                 decimal totalSales = salesTotals.TryGetValue(customerId, out var sales) ? sales : 0m;
                 decimal totalPurchases = purchasesTotals.TryGetValue(customerId, out var purchases) ? purchases : 0m;
                 decimal totalReturns = returnsTotals.TryGetValue(customerId, out var ret) ? ret : 0m;
-                decimal availableCredit = creditLimit - currentBalance;
+                decimal availableCredit = creditLimit == 0 ? 0m : (creditLimit - currentBalance);
 
                 reportData.Add(new CustomerBalanceReportDto
                 {
                     CustomerId = customerId,
                     CustomerCode = customerId.ToString(),
+                    ExternalCode = customer.ExternalCode,
                     CustomerName = customer.CustomerName ?? "",
                     PartyCategory = customer.PartyCategory ?? "",
                     Phone1 = customer.Phone1 ?? "",
@@ -2748,10 +2802,18 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.Phone1 ?? "").ToList()
                         : reportData.OrderBy(r => r.Phone1 ?? "").ToList();
                     break;
-                case "balance":
+                case "debit":
+                    decimal DebitDisplayValueExport(CustomerBalanceReportDto r) => r.CurrentBalance > 0 ? r.CurrentBalance : 0m;
                     reportData = isDesc
-                        ? reportData.OrderByDescending(r => r.CurrentBalance).ToList()
-                        : reportData.OrderBy(r => r.CurrentBalance).ToList();
+                        ? reportData.OrderByDescending(r => DebitDisplayValueExport(r)).ToList()
+                        : reportData.OrderBy(r => DebitDisplayValueExport(r)).ToList();
+                    break;
+                case "balance":
+                case "credit":
+                    decimal CreditDisplayValueExport(CustomerBalanceReportDto r) => r.CurrentBalance < 0 ? Math.Abs(r.CurrentBalance) : 0m;
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => CreditDisplayValueExport(r)).ToList()
+                        : reportData.OrderBy(r => CreditDisplayValueExport(r)).ToList();
                     break;
                 case "creditlimit":
                     reportData = isDesc
@@ -2793,18 +2855,19 @@ namespace ERP.Controllers
 
             // عناوين الأعمدة
             worksheet.Cell(row, 1).Value = "الكود";
-            worksheet.Cell(row, 2).Value = "اسم العميل";
-            worksheet.Cell(row, 3).Value = "فئة العميل";
-            worksheet.Cell(row, 4).Value = "الهاتف";
-            worksheet.Cell(row, 5).Value = "مدين";
-            worksheet.Cell(row, 6).Value = "دائن";
-            worksheet.Cell(row, 7).Value = "الحد الائتماني";
-            worksheet.Cell(row, 8).Value = "المبيعات";
-            worksheet.Cell(row, 9).Value = "المشتريات";
-            worksheet.Cell(row, 10).Value = "المرتجعات";
-            worksheet.Cell(row, 11).Value = "الائتمان المتاح";
+            worksheet.Cell(row, 2).Value = "كود الاكسل";
+            worksheet.Cell(row, 3).Value = "اسم العميل";
+            worksheet.Cell(row, 4).Value = "فئة العميل";
+            worksheet.Cell(row, 5).Value = "الهاتف";
+            worksheet.Cell(row, 6).Value = "مدين";
+            worksheet.Cell(row, 7).Value = "دائن";
+            worksheet.Cell(row, 8).Value = "الحد الائتماني";
+            worksheet.Cell(row, 9).Value = "المبيعات";
+            worksheet.Cell(row, 10).Value = "المشتريات";
+            worksheet.Cell(row, 11).Value = "المرتجعات";
+            worksheet.Cell(row, 12).Value = "الائتمان المتاح";
 
-            worksheet.Range(row, 1, row, 11).Style.Font.Bold = true;
+            worksheet.Range(row, 1, row, 12).Style.Font.Bold = true;
 
             // البيانات
             row = 2;
@@ -2813,16 +2876,17 @@ namespace ERP.Controllers
                 decimal debitVal = item.CurrentBalance > 0 ? item.CurrentBalance : 0m;
                 decimal creditVal = item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance) : 0m;
                 worksheet.Cell(row, 1).Value = item.CustomerCode;
-                worksheet.Cell(row, 2).Value = item.CustomerName;
-                worksheet.Cell(row, 3).Value = item.PartyCategory;
-                worksheet.Cell(row, 4).Value = item.Phone1;
-                worksheet.Cell(row, 5).Value = debitVal;
-                worksheet.Cell(row, 6).Value = creditVal;
-                worksheet.Cell(row, 7).Value = item.CreditLimit;
-                worksheet.Cell(row, 8).Value = item.TotalSales;
-                worksheet.Cell(row, 9).Value = item.TotalPurchases;
-                worksheet.Cell(row, 10).Value = item.TotalReturns;
-                worksheet.Cell(row, 11).Value = item.AvailableCredit;
+                worksheet.Cell(row, 2).Value = item.ExternalCode ?? "";
+                worksheet.Cell(row, 3).Value = item.CustomerName;
+                worksheet.Cell(row, 4).Value = item.PartyCategory;
+                worksheet.Cell(row, 5).Value = item.Phone1;
+                worksheet.Cell(row, 6).Value = debitVal;
+                worksheet.Cell(row, 7).Value = creditVal;
+                worksheet.Cell(row, 8).Value = item.CreditLimit;
+                worksheet.Cell(row, 9).Value = item.TotalSales;
+                worksheet.Cell(row, 10).Value = item.TotalPurchases;
+                worksheet.Cell(row, 11).Value = item.TotalReturns;
+                worksheet.Cell(row, 12).Value = item.AvailableCredit;
                 row++;
             }
 
@@ -2926,6 +2990,30 @@ namespace ERP.Controllers
                 productIds = productIds.Intersect(purchasedIds).ToList();
             }
 
+            // عند اختيار مخزن: نقتصر على أصناف لها رصيد > 0 أو (عرض الصفر) معيّنة لهذا المخزن (نفس منطق ProductBalances)
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                var whIdExp = warehouseId.Value;
+                var balanceInWarehouseExp = await _context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.WarehouseId == whIdExp && productIds.Contains(sl.ProdId))
+                    .GroupBy(sl => sl.ProdId)
+                    .Select(g => new { ProdId = g.Key, Balance = g.Sum(sl => sl.QtyIn - sl.QtyOut) })
+                    .ToListAsync();
+                var withPositiveBalanceExp = balanceInWarehouseExp.Where(b => b.Balance > 0).Select(b => b.ProdId).ToList();
+                var inWarehouseIdsExp = new List<int>(withPositiveBalanceExp);
+                if (includeZeroQty)
+                {
+                    var assignedToWarehouseIdsExp = await _context.Products
+                        .AsNoTracking()
+                        .Where(p => p.WarehouseId == whIdExp && p.IsActive)
+                        .Select(p => p.ProdId)
+                        .ToListAsync();
+                    inWarehouseIdsExp = inWarehouseIdsExp.Union(assignedToWarehouseIdsExp).Distinct().ToList();
+                }
+                productIds = productIds.Intersect(inWarehouseIdsExp).ToList();
+            }
+
             if (productIds.Count == 0)
             {
                 return BadRequest("لا توجد بيانات للتصدير");
@@ -2962,7 +3050,7 @@ namespace ERP.Controllers
                 .AsNoTracking()
                 .Where(x =>
                     productIds.Contains(x.ProdId) &&
-                    x.SourceType == "Purchase" &&
+                    (x.SourceType == "Purchase" || x.SourceType == "Opening" || x.SourceType == "TransferIn" || x.SourceType == "SyncToProductWarehouse") &&
                     (x.RemainingQty ?? 0) > 0);
             if (warehouseId.HasValue && warehouseId.Value > 0)
                 stockLedgerCostQueryExp = stockLedgerCostQueryExp.Where(x => x.WarehouseId == warehouseId.Value);
@@ -2978,7 +3066,7 @@ namespace ERP.Controllers
                 .ToDictionaryAsync(x => x.ProdId);
 
             var batchLedgerQueryExp = _context.StockLedger.AsNoTracking()
-                .Where(x => productIds.Contains(x.ProdId) && x.SourceType == "Purchase" && (x.RemainingQty ?? 0) > 0);
+                .Where(x => productIds.Contains(x.ProdId) && (x.SourceType == "Purchase" || x.SourceType == "Opening" || x.SourceType == "TransferIn" || x.SourceType == "SyncToProductWarehouse") && (x.RemainingQty ?? 0) > 0);
             if (warehouseId.HasValue && warehouseId.Value > 0)
                 batchLedgerQueryExp = batchLedgerQueryExp.Where(x => x.WarehouseId == warehouseId.Value);
             var batchRowsRawExp = await batchLedgerQueryExp
@@ -3354,6 +3442,66 @@ namespace ERP.Controllers
             if (wantExport) loadReport = true;
 
             // =========================================================
+            // 3.1) حساب ربح الميزانية مرة واحدة (لا يعتمد على قائمة الأصناف) — لضمان ظهور تكلفة المخزون حتى مع فلتر تاريخ يفرغ القائمة
+            // =========================================================
+            decimal customersDebitSum = 0m;
+            decimal customersCreditSum = 0m;
+            decimal treasuryBalance = 0m;
+            decimal inventoryCostTotal = 0m;
+
+            var activeCustomerIdsForBs = await _context.Customers
+                .AsNoTracking()
+                .Where(c => c.IsActive == true)
+                .Select(c => c.CustomerId)
+                .ToListAsync();
+            var customerLedgerQueryBs = _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId.HasValue && activeCustomerIdsForBs.Contains(e.CustomerId.Value));
+            if (toDate.HasValue)
+                customerLedgerQueryBs = customerLedgerQueryBs.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+            var customerBalancesFromLedgerBs = await customerLedgerQueryBs
+                .GroupBy(e => e.CustomerId!.Value)
+                .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
+                .ToListAsync();
+            foreach (var c in customerBalancesFromLedgerBs)
+            {
+                if (c.Balance > 0) customersDebitSum += c.Balance;
+                else if (c.Balance < 0) customersCreditSum += Math.Abs(c.Balance);
+            }
+
+            var cashAccountIdsBs = await _context.Accounts
+                .AsNoTracking()
+                .Where(a => a.AccountType == AccountType.Asset &&
+                    (a.AccountName.Contains("خزينة") || a.AccountName.Contains("بنك") ||
+                     a.AccountName.Contains("صندوق") || a.AccountCode.StartsWith("1101") || a.AccountCode.StartsWith("1102")))
+                .Select(a => a.AccountId)
+                .ToListAsync();
+            if (cashAccountIdsBs.Any())
+            {
+                var treasuryQueryBs = _context.LedgerEntries
+                    .AsNoTracking()
+                    .Where(e => cashAccountIdsBs.Contains(e.AccountId) && e.PostVersion > 0);
+                if (toDate.HasValue)
+                    treasuryQueryBs = treasuryQueryBs.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
+                treasuryBalance = await treasuryQueryBs.SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
+            }
+
+            // تكلفة البضاعة في المخزن — من StockLedger (نفس منطق أرصدة الأصناف): جملتين منفصلتين لضمان ترجمة EF صحيحة
+            var invBaseQuery = _context.StockLedger.AsNoTracking()
+                .Where(sl => sl.QtyIn > 0 || (sl.RemainingQty ?? 0) > 0);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                invBaseQuery = invBaseQuery.Where(sl => sl.WarehouseId == warehouseId.Value);
+            decimal invFromTotalCost = await invBaseQuery
+                .Where(sl => sl.TotalCost != null && sl.TotalCost.Value != 0)
+                .SumAsync(sl => sl.TotalCost!.Value);
+            decimal invFromQtyUnit = await invBaseQuery
+                .Where(sl => sl.TotalCost == null || sl.TotalCost.Value == 0)
+                .SumAsync(sl => (decimal)(sl.RemainingQty ?? (sl.QtyIn > 0 && sl.QtyOut == 0 ? sl.QtyIn : 0)) * sl.UnitCost);
+            inventoryCostTotal = invFromTotalCost + invFromQtyUnit;
+
+            decimal balanceSheetProfit = customersDebitSum + treasuryBalance + inventoryCostTotal - customersCreditSum;
+
+            // =========================================================
             // 4) بناء الاستعلام الأساسي للأصناف
             // =========================================================
             var productsQuery = _context.Products
@@ -3382,6 +3530,14 @@ namespace ERP.Controllers
             if (productIds.Count == 0)
             {
                 ViewBag.ReportData = new List<ProductProfitReportDto>();
+                ViewBag.BalanceSheetData = new
+                {
+                    CustomersDebitSum = customersDebitSum,
+                    CustomersCreditSum = customersCreditSum,
+                    TreasuryBalance = treasuryBalance,
+                    InventoryCostTotal = inventoryCostTotal,
+                    BalanceSheetProfit = balanceSheetProfit
+                };
                 return View();
             }
 
@@ -3549,78 +3705,7 @@ namespace ERP.Controllers
                 .Select(g => new { ProdId = g.Key, TransferProfit = g.Sum(x => x.LineProfit) })
                 .ToDictionaryAsync(x => x.ProdId, x => x.TransferProfit);
 
-            // =========================================================
-            // 6) حساب ربح الميزانية (طريقة جديدة):
-            // الربح = مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن - مجموع العملاء الدائنين
-            // =========================================================
-            decimal customersDebitSum = 0m;   // مجموع العملاء المدينين (رصيد مدين)
-            decimal customersCreditSum = 0m;   // مجموع العملاء الدائنين (رصيد دائن)
-            decimal treasuryBalance = 0m;     // رصيد الخزنة
-            decimal inventoryCostTotal = 0m;  // تكلفة البضاعة في المخزن
-
-            // 6.1) مجموع العملاء المدينين والدائنين من LedgerEntries (مصدر الحقيقة - يتوافق مع حذف القيود)
-            var activeCustomerIds = await _context.Customers
-                .AsNoTracking()
-                .Where(c => c.IsActive == true)
-                .Select(c => c.CustomerId)
-                .ToListAsync();
-
-            var customerLedgerQuery = _context.LedgerEntries
-                .AsNoTracking()
-                .Where(e => e.CustomerId.HasValue && activeCustomerIds.Contains(e.CustomerId.Value));
-            if (toDate.HasValue)
-                customerLedgerQuery = customerLedgerQuery.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
-            var customerBalancesFromLedger = await customerLedgerQuery
-                .GroupBy(e => e.CustomerId!.Value)
-                .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
-                .ToListAsync();
-
-            foreach (var c in customerBalancesFromLedger)
-            {
-                if (c.Balance > 0)
-                    customersDebitSum += c.Balance;
-                else if (c.Balance < 0)
-                    customersCreditSum += Math.Abs(c.Balance);
-            }
-
-            // 6.2) رصيد الخزنة (حسابات الخزينة والبنوك)
-            var cashAccountIds = await _context.Accounts
-                .AsNoTracking()
-                .Where(a => a.AccountType == AccountType.Asset &&
-                    (a.AccountName.Contains("خزينة") || a.AccountName.Contains("بنك") ||
-                     a.AccountName.Contains("صندوق") || a.AccountCode.StartsWith("1101") ||
-                     a.AccountCode.StartsWith("1102")))
-                .Select(a => a.AccountId)
-                .ToListAsync();
-
-            if (cashAccountIds.Any())
-            {
-                // رصيد الخزنة = الرصيد التراكمي حتى نهاية الفترة (مثل العملاء والمخزون)
-                // وليس التغير في الفترة - ليتوافق ربح الميزانية مع صافي الأصول
-                var treasuryQuery = _context.LedgerEntries
-                    .AsNoTracking()
-                    .Where(e => cashAccountIds.Contains(e.AccountId) && e.PostVersion > 0);
-
-                if (toDate.HasValue)
-                    treasuryQuery = treasuryQuery.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
-                // لا نستخدم fromDate - نأخذ كل القيود حتى toDate للحصول على الرصيد التراكمي
-
-                treasuryBalance = await treasuryQuery
-                    .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
-            }
-
-            // 6.3) تكلفة البضاعة في المخزن — من StockLedger: كل الحركات ذات رصيد متبقٍ (شراء، تسوية جرد، مرتجعات، تحويل وارد)
-            // = مجموع (RemainingQty × UnitCost) لجميع السطور التي لها RemainingQty > 0
-            var inventoryCostStockLedger = _context.StockLedger.AsNoTracking()
-                .Where(sl => (sl.RemainingQty ?? 0) > 0);
-
-            if (warehouseId.HasValue && warehouseId.Value > 0)
-                inventoryCostStockLedger = inventoryCostStockLedger.Where(sl => sl.WarehouseId == warehouseId.Value);
-
-            inventoryCostTotal = await inventoryCostStockLedger
-                .SumAsync(sl => (decimal)(sl.RemainingQty ?? 0) * sl.UnitCost);
-
-            decimal balanceSheetProfit = customersDebitSum + treasuryBalance + inventoryCostTotal - customersCreditSum;
+            // (ربح الميزانية وتكلفة المخزون مُحسوبة مسبقاً في 3.1 — نستخدم نفس القيم)
 
             // =========================================================
             // 7) بناء reportData
@@ -5118,7 +5203,7 @@ namespace ERP.Controllers
             vm.Districts = allDist.Select(d => new SelectListItem(d.DistrictName, d.DistrictId.ToString(), selDist.Contains(d.DistrictId))).ToList();
             var areaFilterGov = !selGov.Any();
             var areaFilterDist = !selDist.Any();
-            var allAreas = await _context.Areas.AsNoTracking().Where(a => (areaFilterGov || selGov.Contains(a.GovernorateId)) && (areaFilterDist || selDist.Contains(a.DistrictId))).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync();
+            var allAreas = await _context.Areas.AsNoTracking().Where(a => (areaFilterGov || selGov.Contains(a.GovernorateId)) && (areaFilterDist || (a.DistrictId.HasValue && selDist.Contains(a.DistrictId.Value)))).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync();
             vm.Areas = allAreas.Select(a => new SelectListItem(a.AreaName, a.AreaId.ToString(), selArea.Contains(a.AreaId))).ToList();
             vm.PartyTypes = new List<SelectListItem>
             {
@@ -5319,7 +5404,7 @@ namespace ERP.Controllers
                 .Select(g => new SelectListItem(g.GovernorateName, g.GovernorateId.ToString(), selGov.Contains(g.GovernorateId))).ToList();
             vm.Districts = (await _context.Districts.AsNoTracking().Where(d => !selGov.Any() || selGov.Contains(d.GovernorateId)).OrderBy(d => d.DistrictName).Select(d => new { d.DistrictId, d.DistrictName }).ToListAsync())
                 .Select(d => new SelectListItem(d.DistrictName, d.DistrictId.ToString(), selDist.Contains(d.DistrictId))).ToList();
-            vm.Areas = (await _context.Areas.AsNoTracking().Where(a => (!selGov.Any() || selGov.Contains(a.GovernorateId)) && (!selDist.Any() || selDist.Contains(a.DistrictId))).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync())
+            vm.Areas = (await _context.Areas.AsNoTracking().Where(a => (!selGov.Any() || selGov.Contains(a.GovernorateId)) && (!selDist.Any() || (a.DistrictId.HasValue && selDist.Contains(a.DistrictId.Value)))).OrderBy(a => a.AreaName).Select(a => new { a.AreaId, a.AreaName }).ToListAsync())
                 .Select(a => new SelectListItem(a.AreaName, a.AreaId.ToString(), selArea.Contains(a.AreaId))).ToList();
             vm.PartyTypes = new List<SelectListItem>
             {

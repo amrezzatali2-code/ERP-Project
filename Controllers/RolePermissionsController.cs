@@ -601,6 +601,7 @@ namespace ERP.Controllers
         // ========= EDIT =========
 
         // GET: RolePermissions/Edit/1   => 1 هنا = RoleId
+        [RequirePermission("RolePermissions.Edit")]
         public async Task<IActionResult> Edit(int id)
         {
             // 🟣 1) جلب الدور
@@ -608,7 +609,7 @@ namespace ERP.Controllers
             if (role == null)
                 return NotFound();
 
-            // 🟣 2) جلب كل الصلاحيات (بدون "لوحة التحكم" — لوحات التحكم = مبيعاتي الشخصية، لوحة المدير، لوحة الإدارة الكاملة فقط)
+            // 🟣 2) جلب كل الصلاحيات (بدون كود قديم Dashboard.Dashboard.View إن وُجد)
             var permissions = await _context.Permissions
                 .Where(p => p.Code == null || p.Code != "Dashboard.Dashboard.View")
                 .OrderBy(p => p.Module)
@@ -623,10 +624,31 @@ namespace ERP.Controllers
 
             var currentIds = new HashSet<int>(currentIdsList);
 
+            // 🟣 3.5) الحسابات المسموح رؤيتها لهذا الدور (نفس منطق المستخدم — قائمة بيضاء)
+            var roleAccounts = await _context.Accounts
+                .AsNoTracking()
+                .Where(a => a.IsActive)
+                .OrderBy(a => a.AccountCode)
+                .Select(a => new AccountListItem
+                {
+                    AccountId = a.AccountId,
+                    AccountCode = a.AccountCode,
+                    AccountName = a.AccountName
+                })
+                .ToListAsync();
+
+            var allowedRoleAccountIdsList = await _context.RoleAccountVisibilityOverrides
+                .AsNoTracking()
+                .Where(x => x.RoleId == id && x.IsAllowed)
+                .Select(x => x.AccountId)
+                .ToListAsync();
+
             // 🟣 4) تجهيز البيانات للفيو عن طريق ViewBag
             ViewBag.RoleName = role.Name;          // اسم الدور
             ViewBag.Permissions = permissions;     // كل الصلاحيات
             ViewBag.SelectedPermissionIds = currentIds;  // الصلاحيات الحالية للدور
+            ViewBag.RoleAccounts = roleAccounts;
+            ViewBag.AllowedRoleAccountIds = new HashSet<int>(allowedRoleAccountIdsList);
 
             // 🟣 5) موديل بسيط يحتوى على RoleId فقط
             var model = new RolePermission
@@ -649,7 +671,8 @@ namespace ERP.Controllers
         // POST: RolePermissions/Edit  (حفظ التعديلات)
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(int roleId, int[]? selectedPermissionIds)
+        [RequirePermission("RolePermissions.Edit")]
+        public async Task<IActionResult> Edit(int roleId, int[]? selectedPermissionIds, List<int>? RoleAccountIds, string? SelectedRoleAccountIds = null)
         {
             // التحقق من وجود الدور قبل أي تعديل
             var role = await _context.Roles.FindAsync(roleId);
@@ -711,10 +734,14 @@ namespace ERP.Controllers
             if (toAdd.Count > 0)
                 await _context.RolePermissions.AddRangeAsync(toAdd);
 
+            // 🟣 3.6) الحسابات المسموح رؤيتها لهذا الدور (استبدال القائمة)
+            var selectedAccounts = RoleAccountVisibilityPersistence.ParseSelectedAccountIds(Request, RoleAccountIds, SelectedRoleAccountIds);
+            await RoleAccountVisibilityPersistence.ReplaceForRoleAsync(_context, roleId, selectedAccounts);
+
             // 🟣 4) حفظ التغييرات
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = "تم تحديث صلاحيات الدور بنجاح.";
+            TempData["Success"] = "تم تحديث صلاحيات الدور والحسابات المسموح رؤيتها بنجاح.";
             return RedirectToAction(nameof(Index));
         }
 

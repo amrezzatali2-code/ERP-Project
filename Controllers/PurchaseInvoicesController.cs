@@ -43,6 +43,7 @@ namespace ERP.Controllers
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IFullReturnService _fullReturnService;
         private readonly IPermissionService _permissionService;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public PurchaseInvoicesController(AppDbContext context,
@@ -50,7 +51,8 @@ namespace ERP.Controllers
                                           IUserActivityLogger activityLogger,
                                           ILedgerPostingService ledgerPosting,
                                           IFullReturnService fullReturnService,
-                                          IPermissionService permissionService)
+                                          IPermissionService permissionService,
+                                          IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _docTotals = docTotals;
@@ -58,6 +60,7 @@ namespace ERP.Controllers
             _ledgerPostingService = ledgerPosting;
             _fullReturnService = fullReturnService;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
+            _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
         }
 
 
@@ -468,10 +471,10 @@ namespace ERP.Controllers
             
             
 
-            // 1) تحميل كل العملاء/الموردين من جدول Customers
-            var customers = await _context.Customers
-                .AsNoTracking()
-                .Where(c => c.IsActive == true)
+            // 1) تحميل كل العملاء/الموردين (مصدر واحد: خدمة ظهور الحسابات)
+            var customerQueryPi = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
+            customerQueryPi = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customerQueryPi);
+            var customers = await customerQueryPi
                 .Include(c => c.Governorate)
                 .Include(c => c.District)
                 .Include(c => c.Area)
@@ -494,6 +497,31 @@ namespace ERP.Controllers
                     Credit = c.CreditLimit                           // حد الائتمان
                 })
                 .ToListAsync();
+
+            // لو فاتورة قديمة وموردها (مثلاً مستثمر) غير ظاهر في القائمة بعد الفلتر، نضيفه حتى يظهر اسمه في الحقل
+            if (selectedCustomerId.HasValue && !customers.Any(c => c.Id == selectedCustomerId.Value))
+            {
+                var extra = await _context.Customers
+                    .AsNoTracking()
+                    .Where(c => c.CustomerId == selectedCustomerId.Value)
+                    .Include(c => c.Governorate)
+                    .Include(c => c.District)
+                    .Include(c => c.Area)
+                    .Select(c => new
+                    {
+                        Id = c.CustomerId,
+                        Name = c.CustomerName ?? "",
+                        Phone = c.Phone1 ?? string.Empty,
+                        Address = c.Address ?? string.Empty,
+                        Gov = c.Governorate != null ? c.Governorate.GovernorateName : string.Empty,
+                        District = c.District != null ? c.District.DistrictName : string.Empty,
+                        Area = c.Area != null ? c.Area.AreaName : string.Empty,
+                        Credit = c.CreditLimit
+                    })
+                    .FirstOrDefaultAsync();
+                if (extra != null)
+                    customers.Insert(0, extra);
+            }
 
             // متغير: إرسال قائمة الموردين للـ View لاستخدامها فى الـ datalist
             ViewBag.Customers = customers;

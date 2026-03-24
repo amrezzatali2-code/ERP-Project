@@ -64,7 +64,8 @@ namespace ERP.Controllers
                 ["Expiry"] = x => x.Expiry ?? DateTime.MaxValue,
                 ["QtyIn"] = x => x.QtyIn,
                 ["QtyOut"] = x => x.QtyOut,
-                ["UnitCost"] = x => x.UnitCost
+                ["UnitCost"] = x => x.UnitCost,
+                ["TotalCost"] = x => x.TotalCost
             };
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
@@ -372,7 +373,8 @@ namespace ERP.Controllers
         new("الصلاحية",      "Expiry")    { Selected = so.Equals("Expiry",    StringComparison.OrdinalIgnoreCase) },
         new("كمية داخلة",    "QtyIn")     { Selected = so.Equals("QtyIn",     StringComparison.OrdinalIgnoreCase) },
         new("كمية خارجة",    "QtyOut")    { Selected = so.Equals("QtyOut",    StringComparison.OrdinalIgnoreCase) },
-        new("تكلفة الوحدة",  "UnitCost")  { Selected = so.Equals("UnitCost",  StringComparison.OrdinalIgnoreCase) }
+        new("تكلفة الوحدة",  "UnitCost")  { Selected = so.Equals("UnitCost",  StringComparison.OrdinalIgnoreCase) },
+        new("إجمالي التكلفة", "TotalCost") { Selected = so.Equals("TotalCost", StringComparison.OrdinalIgnoreCase) }
     };
 
             ViewBag.Search = s;
@@ -453,6 +455,8 @@ namespace ERP.Controllers
                 "priceretail" => (await q.Where(x => x.PriceRetailBatch.HasValue).Select(x => x.PriceRetailBatch!.Value).Distinct().OrderBy(v => v).Take(200).ToListAsync())
                     .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.00"))).ToList(),
                 "purchasediscount" => (await q.Where(x => x.PurchaseDiscount.HasValue).Select(x => x.PurchaseDiscount!.Value).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                    .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.00"))).ToList(),
+                "totalcost" => (await q.Where(x => x.TotalCost.HasValue).Select(x => x.TotalCost!.Value).Distinct().OrderBy(v => v).Take(200).ToListAsync())
                     .Select(v => (v.ToString(System.Globalization.CultureInfo.InvariantCulture), v.ToString("0.00"))).ToList(),
                 _ => new List<(string Value, string Display)>()
             };
@@ -677,9 +681,12 @@ namespace ERP.Controllers
                     Csv("كود الصنف"),
                     Csv("التشغيلة"),
                     Csv("تاريخ الصلاحية"),
+                    Csv("سعر الجمهور"),
+                    Csv("خصم الشراء"),
                     Csv("كمية داخلة"),
                     Csv("كمية خارجة"),
                     Csv("تكلفة/وحدة"),
+                    Csv("إجمالي التكلفة"),
                     Csv("المتبقي (للدخول)"),
                     Csv("نوع المصدر"),
                     Csv("رقم المصدر"),
@@ -689,6 +696,7 @@ namespace ERP.Controllers
                 // البيانات
                 foreach (var x in rows)
                 {
+                    var totalCostVal = x.TotalCost ?? (x.QtyIn * x.UnitCost);
                     sb.AppendLine(string.Join(",",
                         Csv(x.EntryId.ToString()),
                         Csv(x.TranDate.ToString("yyyy-MM-dd HH:mm:ss")),
@@ -696,9 +704,12 @@ namespace ERP.Controllers
                         Csv(x.ProdId.ToString()),
                         Csv(x.BatchNo),
                         Csv(x.Expiry?.ToString("yyyy-MM-dd")),
+                        Csv(x.PriceRetailBatch?.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                        Csv(x.PurchaseDiscount?.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                         Csv(x.QtyIn.ToString()),
                         Csv(x.QtyOut.ToString()),
                         Csv(x.UnitCost.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                        Csv(totalCostVal.ToString(System.Globalization.CultureInfo.InvariantCulture)),
                         Csv(x.RemainingQty?.ToString()),
                         Csv(x.SourceType),
                         Csv(x.SourceId.ToString()),
@@ -727,16 +738,19 @@ namespace ERP.Controllers
             ws.Cell(r, 4).Value = "كود الصنف";
             ws.Cell(r, 5).Value = "التشغيلة";
             ws.Cell(r, 6).Value = "تاريخ الصلاحية";
-            ws.Cell(r, 7).Value = "كمية داخلة";
-            ws.Cell(r, 8).Value = "كمية خارجة";
-            ws.Cell(r, 9).Value = "تكلفة/وحدة";
-            ws.Cell(r, 10).Value = "المتبقي (للدخول)";
-            ws.Cell(r, 11).Value = "نوع المصدر";
-            ws.Cell(r, 12).Value = "رقم المصدر";
-            ws.Cell(r, 13).Value = "سطر المصدر";
+            ws.Cell(r, 7).Value = "سعر الجمهور";
+            ws.Cell(r, 8).Value = "خصم الشراء";
+            ws.Cell(r, 9).Value = "كمية داخلة";
+            ws.Cell(r, 10).Value = "كمية خارجة";
+            ws.Cell(r, 11).Value = "تكلفة/وحدة";
+            ws.Cell(r, 12).Value = "إجمالي التكلفة";
+            ws.Cell(r, 13).Value = "المتبقي (للدخول)";
+            ws.Cell(r, 14).Value = "نوع المصدر";
+            ws.Cell(r, 15).Value = "رقم المصدر";
+            ws.Cell(r, 16).Value = "سطر المصدر";
 
             // تنسيق العناوين
-            var headerRange = ws.Range(r, 1, r, 13);
+            var headerRange = ws.Range(r, 1, r, 16);
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -744,28 +758,32 @@ namespace ERP.Controllers
             foreach (var x in rows)
             {
                 r++;
-
+                var totalCostVal = x.TotalCost ?? (x.QtyIn * x.UnitCost);
                 ws.Cell(r, 1).Value = x.EntryId;
                 ws.Cell(r, 2).Value = x.TranDate;
                 ws.Cell(r, 3).Value = x.WarehouseId;
                 ws.Cell(r, 4).Value = x.ProdId;
                 ws.Cell(r, 5).Value = x.BatchNo ?? "";
                 ws.Cell(r, 6).Value = x.Expiry;
-                ws.Cell(r, 7).Value = x.QtyIn;
-                ws.Cell(r, 8).Value = x.QtyOut;
-                ws.Cell(r, 9).Value = x.UnitCost;
-                ws.Cell(r, 10).Value = x.RemainingQty ?? 0;
-                ws.Cell(r, 11).Value = x.SourceType;
-                ws.Cell(r, 12).Value = x.SourceId;
-                ws.Cell(r, 13).Value = x.SourceLine;
+                ws.Cell(r, 7).Value = x.PriceRetailBatch.HasValue ? (double?)(double)x.PriceRetailBatch.Value : null;
+                ws.Cell(r, 8).Value = x.PurchaseDiscount.HasValue ? (double?)(double)x.PurchaseDiscount.Value : null;
+                ws.Cell(r, 9).Value = x.QtyIn;
+                ws.Cell(r, 10).Value = x.QtyOut;
+                ws.Cell(r, 11).Value = (double)x.UnitCost;
+                ws.Cell(r, 12).Value = (double)totalCostVal;
+                ws.Cell(r, 13).Value = x.RemainingQty ?? 0;
+                ws.Cell(r, 14).Value = x.SourceType;
+                ws.Cell(r, 15).Value = x.SourceId;
+                ws.Cell(r, 16).Value = x.SourceLine;
             }
 
             // ضبط عرض الأعمدة + تنسيق الأرقام
             ws.Columns().AdjustToContents();
-            ws.Column(7).Style.NumberFormat.Format = "0";
-            ws.Column(8).Style.NumberFormat.Format = "0";
-            ws.Column(9).Style.NumberFormat.Format = "0.0000";
+            ws.Column(9).Style.NumberFormat.Format = "0";
             ws.Column(10).Style.NumberFormat.Format = "0";
+            ws.Column(11).Style.NumberFormat.Format = "0.0000";
+            ws.Column(12).Style.NumberFormat.Format = "0.00";
+            ws.Column(13).Style.NumberFormat.Format = "0";
 
             using var stream = new MemoryStream();     // متغير: الذاكرة المؤقتة
             workbook.SaveAs(stream);

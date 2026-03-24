@@ -5,6 +5,9 @@
     string roleName = ViewBag.RoleName as string ?? "";
     var permissions = ViewBag.Permissions as List<ERP.Models.Permission> ?? new List<ERP.Models.Permission>();
     var selectedIds = ViewBag.SelectedPermissionIds as HashSet<int> ?? new HashSet<int>();
+    var roleAccounts = ViewBag.RoleAccounts as List<ERP.Models.AccountListItem> ?? new List<ERP.Models.AccountListItem>();
+    var allowedRoleAccountIds = ViewBag.AllowedRoleAccountIds as HashSet<int> ?? new HashSet<int>();
+    const string accModuleTitle = "الحسابات المسموح رؤيتها لكل مستخدم";
     var moduleOrder = new[] { "لوحات التحكم", "الإعدادات", "المستخدمون والصلاحيات", "المناطق الجغرافية", "العملاء", "إدارة المخازن", "المبيعات", "المشتريات", "الحسابات", "التقارير", "أخرى" };
     var grouped = permissions
         .GroupBy(p => string.IsNullOrWhiteSpace(p.Module) ? "أخرى" : (p.Module ?? "أخرى"))
@@ -22,9 +25,10 @@
         <a asp-action="Index" class="btn btn-primary">صلاحيات الأدوار</a>
     </div>
 
-    <form asp-action="Edit" method="post" class="card">
+    <form id="rolePermEditForm" asp-action="Edit" method="post" class="card">
         @Html.AntiForgeryToken()
         <input type="hidden" name="roleId" value="@Model.RoleId" />
+        <input type="hidden" name="SelectedRoleAccountIds" id="SelectedRoleAccountIds" value="" />
 
         <div class="card-body">
             @* بحث في الصلاحيات (مثل أدوار المستخدمين) *@
@@ -98,12 +102,91 @@
                                     </td>
                                 </tr>
                             }
+                            @if (string.Equals(moduleName, "الحسابات", StringComparison.Ordinal))
+                            {
+                                var allAccSel = roleAccounts.Count > 0 && roleAccounts.All(a => allowedRoleAccountIds.Contains(a.AccountId));
+                                <tr class="perm-module-row" data-module="@accModuleTitle" style="background: linear-gradient(90deg, #e8eaf6 0%, #c5cae9 100%); font-size: 1.05em;">
+                                    <td class="text-center align-middle" style="width: 42px;">
+                                        <input type="checkbox" class="form-check-input perm-module-cb" data-module="@accModuleTitle"
+                                               @(allAccSel ? "checked" : "") title="تحديد كل الحسابات / إلغاء الكل" />
+                                    </td>
+                                    <td class="text-center align-middle" style="width: 42px;">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary perm-module-toggle" aria-label="فتح/إغلاق" title="فتح/إغلاق الحسابات">
+                                            <span class="perm-toggle-icon">−</span>
+                                        </button>
+                                    </td>
+                                    <td class="align-middle" colspan="2"><strong>@accModuleTitle</strong> <span class="text-muted small fw-normal">(لهذا الدور)</span></td>
+                                    <td class="small text-muted">ظهور في القوائم والفواتير</td>
+                                    <td class="text-center align-middle">
+                                        <span class="perm-module-status @(allAccSel ? "text-success" : "text-danger")">@(allAccSel ? "✔" : "✖")</span>
+                                    </td>
+                                </tr>
+                                var aidx = 0;
+                                @foreach (var a in roleAccounts)
+                                {
+                                    var accOn = allowedRoleAccountIds.Contains(a.AccountId);
+                                    var accSearch = $"{accModuleTitle} {a.AccountCode} {a.AccountName}".ToLower();
+                                    <tr class="perm-data-row perm-module-content" data-search="@accSearch" data-module="@accModuleTitle">
+                                        <td class="text-center align-middle">
+                                            <input type="checkbox" name="RoleAccountIds[@aidx]" value="@a.AccountId" class="form-check-input role-account-visibility-cb" @(accOn ? "checked" : "") />
+                                        </td>
+                                        <td></td>
+                                        <td><span class="text-muted small">↳</span> @a.AccountName</td>
+                                        <td class="small">@accModuleTitle</td>
+                                        <td class="small text-muted">@a.AccountCode</td>
+                                        <td class="text-center align-middle">
+                                            <span class="perm-row-status @(accOn ? "text-success" : "text-danger")">@(accOn ? "✔" : "✖")</span>
+                                        </td>
+                                    </tr>
+                                    aidx++;
+                                }
+                            }
+                        }
+                        @if (!byModule.Any(g => string.Equals(g.Key, "الحسابات", StringComparison.Ordinal)))
+                        {
+                            var allAccSel2 = roleAccounts.Count > 0 && roleAccounts.All(a => allowedRoleAccountIds.Contains(a.AccountId));
+                            <tr class="perm-module-row" data-module="@accModuleTitle" style="background: linear-gradient(90deg, #e8eaf6 0%, #c5cae9 100%); font-size: 1.05em;">
+                                <td class="text-center align-middle" style="width: 42px;">
+                                    <input type="checkbox" class="form-check-input perm-module-cb" data-module="@accModuleTitle"
+                                           @(allAccSel2 ? "checked" : "") title="تحديد كل الحسابات / إلغاء الكل" />
+                                </td>
+                                <td class="text-center align-middle" style="width: 42px;">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary perm-module-toggle" aria-label="فتح/إغلاق" title="فتح/إغلاق الحسابات">
+                                        <span class="perm-toggle-icon">−</span>
+                                    </button>
+                                </td>
+                                <td class="align-middle" colspan="2"><strong>@accModuleTitle</strong> <span class="text-muted small fw-normal">(لهذا الدور)</span></td>
+                                <td class="small text-muted">ظهور في القوائم والفواتير</td>
+                                <td class="text-center align-middle">
+                                    <span class="perm-module-status @(allAccSel2 ? "text-success" : "text-danger")">@(allAccSel2 ? "✔" : "✖")</span>
+                                </td>
+                            </tr>
+                            var aidx2 = 0;
+                            @foreach (var a in roleAccounts)
+                            {
+                                var accOn2 = allowedRoleAccountIds.Contains(a.AccountId);
+                                var accSearch2 = $"{accModuleTitle} {a.AccountCode} {a.AccountName}".ToLower();
+                                <tr class="perm-data-row perm-module-content" data-search="@accSearch2" data-module="@accModuleTitle">
+                                    <td class="text-center align-middle">
+                                        <input type="checkbox" name="RoleAccountIds[@aidx2]" value="@a.AccountId" class="form-check-input role-account-visibility-cb" @(accOn2 ? "checked" : "") />
+                                    </td>
+                                    <td></td>
+                                    <td><span class="text-muted small">↳</span> @a.AccountName</td>
+                                    <td class="small">@accModuleTitle</td>
+                                    <td class="small text-muted">@a.AccountCode</td>
+                                    <td class="text-center align-middle">
+                                        <span class="perm-row-status @(accOn2 ? "text-success" : "text-danger")">@(accOn2 ? "✔" : "✖")</span>
+                                    </td>
+                                </tr>
+                                aidx2++;
+                            }
                         }
                     </tbody>
                 </table>
             </div>
             <p class="form-text mt-2 mb-0">
                 <strong>تشيك بوكس الموديول:</strong> عند تحديده يختار كل صلاحيات هذا الموديول، وعند إلغائه يزيل التحديد عن الكل (مثل أدوار المستخدمين). ✔ = الكل مُختار، ✖ = غير كامل.
+                يظهر قسم <strong>@accModuleTitle</strong> بعد موديول «الحسابات» (أو في آخر الجدول): نفس الفكرة — تحديد الحسابات التي يحق لحامل الدور رؤيتها فقط؛ فارغ = لا تقييد من هذا الدور.
             </p>
         </div>
 
@@ -134,9 +217,11 @@
                 }
                 moduleRows.forEach(function (modRow) {
                     const moduleName = (modRow.getAttribute('data-module') || '').toLowerCase();
+                    const modKey = (modRow.getAttribute('data-module') || '').trim();
                     const nextRows = [];
                     let el = modRow.nextElementSibling;
                     while (el && el.classList.contains('perm-data-row')) {
+                        if ((el.getAttribute('data-module') || '').trim() !== modKey) break;
                         nextRows.push(el);
                         el = el.nextElementSibling;
                     }
@@ -165,11 +250,17 @@
                 permSearch.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); applySearch(); } });
             }
 
+            function rowIsAllowed(dataRow) {
+                if (!dataRow) return false;
+                var p = dataRow.querySelector('.perm-checkbox');
+                var r = dataRow.querySelector('.role-account-visibility-cb');
+                return (p && p.checked) || (r && r.checked);
+            }
             function updateDataRowStatus(dataRow) {
                 if (!dataRow) return;
-                var cb = dataRow.querySelector('.perm-checkbox');
                 var span = dataRow.querySelector('.perm-row-status');
-                if (span && cb) { span.textContent = cb.checked ? '✔' : '✖'; span.className = 'perm-row-status ' + (cb.checked ? 'text-success' : 'text-danger'); }
+                var on = rowIsAllowed(dataRow);
+                if (span) { span.textContent = on ? '✔' : '✖'; span.className = 'perm-row-status ' + (on ? 'text-success' : 'text-danger'); }
             }
             function updateModuleRowStatus(modRow) {
                 if (!modRow) return;
@@ -179,10 +270,7 @@
                     contentRows.push(el);
                     el = el.nextElementSibling;
                 }
-                var allChecked = contentRows.length > 0 && contentRows.every(function (r) {
-                    var cb = r.querySelector('.perm-checkbox');
-                    return cb && cb.checked;
-                });
+                var allChecked = contentRows.length > 0 && contentRows.every(rowIsAllowed);
                 var modCb = modRow.querySelector('.perm-module-cb');
                 var span = modRow.querySelector('.perm-module-status');
                 if (modCb) modCb.checked = allChecked;
@@ -197,11 +285,11 @@
                     var moduleName = (this.getAttribute('data-module') || '').trim();
                     var checked = this.checked;
                     var el = modRow ? modRow.nextElementSibling : null;
-                    while (el && el.classList.contains('perm-data-row')) {
-                        if ((el.getAttribute('data-module') || '') === moduleName) {
-                            var cb = el.querySelector('.perm-checkbox');
-                            if (cb) cb.checked = checked;
-                        }
+                    while (el && el.classList.contains('perm-data-row') && (el.getAttribute('data-module') || '').trim() === moduleName) {
+                        var cb = el.querySelector('.perm-checkbox');
+                        var ac = el.querySelector('.role-account-visibility-cb');
+                        if (cb) cb.checked = checked;
+                        if (ac) ac.checked = checked;
                         el = el.nextElementSibling;
                     }
                     updateModuleRowStatus(modRow);
@@ -209,7 +297,7 @@
             });
 
             // عند تغيير أي صلاحية فردية نحدّث علامة الصف + تشيك بوكس الموديول
-            tbody.querySelectorAll('.perm-checkbox').forEach(function (cb) {
+            function bindPermRowCheckbox(cb) {
                 cb.addEventListener('change', function () {
                     var tr = this.closest('tr.perm-data-row');
                     if (!tr) return;
@@ -218,7 +306,9 @@
                     while (prev && !prev.classList.contains('perm-module-row')) prev = prev.previousElementSibling;
                     updateModuleRowStatus(prev);
                 });
-            });
+            }
+            tbody.querySelectorAll('.perm-checkbox').forEach(bindPermRowCheckbox);
+            tbody.querySelectorAll('.role-account-visibility-cb').forEach(bindPermRowCheckbox);
 
             if (chkAll && tbody) {
                 chkAll.addEventListener('change', function () {
@@ -226,7 +316,9 @@
                     tbody.querySelectorAll('.perm-data-row').forEach(function (tr) {
                         if (tr.style.display !== 'none') {
                             var cb = tr.querySelector('.perm-checkbox');
+                            var ac = tr.querySelector('.role-account-visibility-cb');
                             if (cb) cb.checked = checked;
+                            if (ac) ac.checked = checked;
                             updateDataRowStatus(tr);
                         }
                     });
@@ -239,10 +331,10 @@
                 btn.addEventListener('click', function () {
                     var row = btn.closest('tr.perm-module-row');
                     if (!row) return;
-                    var moduleName = row.getAttribute('data-module') || '';
+                    var modKey = (row.getAttribute('data-module') || '').trim();
                     var contentRows = [];
                     var el = row.nextElementSibling;
-                    while (el && el.classList.contains('perm-data-row')) {
+                    while (el && el.classList.contains('perm-data-row') && (el.getAttribute('data-module') || '').trim() === modKey) {
                         contentRows.push(el);
                         el = el.nextElementSibling;
                     }
@@ -254,6 +346,16 @@
                     if (icon) icon.textContent = isHidden ? '−' : '+';
                 });
             });
+
+            var rolePermForm = document.getElementById('rolePermEditForm');
+            var hiddenRoleAcc = document.getElementById('SelectedRoleAccountIds');
+            if (rolePermForm && hiddenRoleAcc) {
+                rolePermForm.addEventListener('submit', function () {
+                    var ids = [];
+                    rolePermForm.querySelectorAll('.role-account-visibility-cb:checked').forEach(function (c) { if (c.value) ids.push(c.value); });
+                    hiddenRoleAcc.value = ids.join(',');
+                });
+            }
         })();
     </script>
 }

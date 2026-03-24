@@ -1,0 +1,46 @@
+@{
+    ViewData["Title"] = "الحسابات المسموح رؤيتها لكل مستخدم";
+    var users = ViewBag.Users as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-3">@ViewData["Title"]</h2>
+    <p class="text-muted mb-3">
+        اختر مستخدمًا ثم عدّل الحسابات التي يحق له رؤيتها فقط. إذا لم تُحدد له أي حسابات، فلن يُطبّق تقييد (يرى كل الحسابات).
+    </p>
+
+    <div class="card border border-primary rounded-3 overflow-hidden">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>رقم المستخدم</th>
+                            <th>الاسم المعروض</th>
+                            <th>اسم الدخول</th>
+                            <th class="text-end">إجراء</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var u in users)
+                        {
+                            <tr>
+                                <td>@u.UserId</td>
+                                <td>@(u.DisplayName ?? "-")</td>
+                                <td>@u.UserName</td>
+                                <td class="text-end">
+                                    <a asp-action="Edit" asp-route-userId="@u.UserId" class="btn btn-sm btn-erp btn-erp-success">الحسابات المسموح رؤيتها</a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @if (!users.Any())
+    {
+        <p class="text-muted mt-2">لا يوجد مستخدمون.</p>
+    }
+</div>

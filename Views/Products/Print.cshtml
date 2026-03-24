@@ -1,0 +1,90 @@
+@model ERP.Infrastructure.PagedResult<ERP.Models.Product>
+@{
+    ViewData["Title"] = "قائمة الأصناف — طباعة";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var n = System.Globalization.CultureInfo.InvariantCulture;
+}
+<style>
+    @@media print {
+        body * { visibility: hidden; }
+        .products-print-area, .products-print-area * { visibility: visible; }
+        .products-print-area { position: absolute; left: 0; top: 0; width: 100%; }
+        .products-print-area table thead { display: table-header-group; }
+        .products-print-area table tr { page-break-inside: avoid; }
+    }
+</style>
+<div dir="rtl" class="container-fluid p-3 products-print-area">
+    <h5 class="mb-3">قائمة الأصناف — طباعة (@Model.TotalCount صنف)</h5>
+    <div class="table-responsive" style="overflow-x: visible;">
+        <table class="table table-bordered table-sm" style="font-size: 0.8rem;">
+            <thead class="table-light">
+                <tr>
+                    <th>كود الصنف</th>
+                    <th>اسم الصنف</th>
+                    <th>الباركود</th>
+                    <th>الاسم العلمي</th>
+                    <th>الفئة</th>
+                    <th>التصنيف</th>
+                    <th>مجموعة الصنف</th>
+                    <th>مجموعة البونص</th>
+                    <th>الشركة</th>
+                    <th>الموقع</th>
+                    <th>المخزن</th>
+                    <th class="text-end">سعر الجمهور</th>
+                    <th>محلي/مستورد</th>
+                    <th>الحالة</th>
+                    <th>تاريخ الإنشاء</th>
+                    <th>آخر تعديل</th>
+                    <th>آخر تغيير سعر</th>
+                    <th>له كوتة؟</th>
+                    <th>كمية الكوتة</th>
+                    <th>الوصف المختصر</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Items.Any())
+                {
+                    <tr>
+                        <td colspan="20" class="text-center text-muted py-3">لا توجد بيانات.</td>
+                    </tr>
+                }
+                else
+                {
+                    foreach (var p in Model.Items)
+                    {
+                        var desc = p.Description ?? "";
+                        var descShort = desc.Length > 80 ? desc.Substring(0, 80) + "…" : desc;
+                        var groupName = p.ProductGroup?.Name ?? "";
+                        var bonusName = p.ProductBonusGroup?.Name ?? "";
+                        <tr>
+                            <td>@p.ProdId</td>
+                            <td>@p.ProdName</td>
+                            <td>@p.Barcode</td>
+                            <td>@p.GenericName</td>
+                            <td>@p.CategoryId</td>
+                            <td>@(p.Classification?.Name)</td>
+                            <td>@groupName</td>
+                            <td>@bonusName</td>
+                            <td>@p.Company</td>
+                            <td>@p.Location</td>
+                            <td>@(p.Warehouse?.WarehouseName)</td>
+                            <td class="text-end">@p.PriceRetail.ToString("N2", n)</td>
+                            <td>@p.Imported</td>
+                            <td>@((p.IsActive) ? "نشط" : "موقوف")</td>
+                            <td>@p.CreatedAt.ToString("yyyy/MM/dd HH:mm")</td>
+                            <td>@p.UpdatedAt.ToString("yyyy/MM/dd HH:mm")</td>
+                            <td>@(p.LastPriceChangeDate.HasValue ? p.LastPriceChangeDate.Value.ToString("yyyy/MM/dd") : "")</td>
+                            <td>@(p.HasQuota ? "نعم" : "لا")</td>
+                            <td>@(p.HasQuota && p.QuotaQuantity.HasValue ? p.QuotaQuantity.Value.ToString(n) : "-")</td>
+                            <td>@descShort</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+<script>
+    window.onload = function () { window.print(); };
+    window.onafterprint = function () { window.close(); };
+</script>

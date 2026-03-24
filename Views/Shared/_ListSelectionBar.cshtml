@@ -1,0 +1,31 @@
+@* شريط اختيار صف + أزرار عرض/حذف (نمط الخزينة) — قابل لإعادة الاستخدام في أي قائمة
+   لتطبيقه على قائمة جديدة:
+   1) أضف في أعلى الصفحة (قبل المحتوى): ViewBag.ListSelectionPrompt = "اختر X من الجدول أدناه ثم:"; ViewBag.ListSelectionShowButtonId = "btnShowX"; ViewBag.ListSelectionDeleteButtonId = "btnDeleteOneX";
+   2) أدرج هذا البارثيال فوق الجدول: @await Html.PartialAsync("_ListSelectionBar")
+   3) أضف نموذج حذف مخفي (إن وُجد حذف) مع data-action-base
+   4) للصفوف: class="erp-list-selectable-row" + data-show-url و data-tab-title و data-row-id (أو data-xx-id)
+   5) في السكربت: <script src="~/js/erp-list-selectable.js"></script> ثم ERP.initListSelection({ showButtonId, deleteButtonId?, deleteFormId?, idAttribute?, deleteConfirmMessage? });
+*@
+@{
+    var prompt = ViewBag.ListSelectionPrompt as string ?? "اختر عنصراً من الجدول أدناه ثم:";
+    var showButtonId = ViewBag.ListSelectionShowButtonId as string ?? "btnShowSelected";
+    var showButtonText = ViewBag.ListSelectionShowButtonText as string ?? "عرض";
+    var deleteButtonId = ViewBag.ListSelectionDeleteButtonId as string;
+    var deleteButtonText = ViewBag.ListSelectionDeleteButtonText as string ?? "حذف";
+}
+<div class="card mb-3 d-print-none erp-list-selection-bar" style="border: 1px solid #6366f1; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25);">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <span class="text-muted small">@prompt</span>
+            <button type="button" id="@showButtonId" class="btn btn-erp btn-erp-primary btn-sm" disabled title="@showButtonText">
+                <i class="bi bi-eye"></i> @showButtonText
+            </button>
+            @if (!string.IsNullOrEmpty(deleteButtonId))
+            {
+                <button type="button" id="@deleteButtonId" class="btn btn-erp btn-erp-danger btn-sm" disabled title="@deleteButtonText">
+                    <i class="bi bi-trash"></i> @deleteButtonText
+                </button>
+            }
+        </div>
+    </div>
+</div>

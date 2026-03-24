@@ -209,6 +209,10 @@
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalLedger">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalLedger">اختيار الأعمدة</button>
                         <button type="button" id="btnPrintLedger" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <form method="post" asp-action="DeleteCustomerOpeningEntries" asp-controller="LedgerEntries" class="d-inline" onsubmit="return confirm('هل تريد حذف كل قيود الرصيد الافتتاحي للعملاء فقط؟ يمكنك بعدها إعادة استيراد الأرصدة من شاشة الاستيراد.');">
+                            @Html.AntiForgeryToken()
+                            <button type="submit" class="btn btn-danger btn-erp-sm">حذف قيود الرصيد الافتتاحي للعملاء</button>
+                        </form>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
                         <form method="get" asp-action="Export" asp-controller="LedgerEntries" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
@@ -256,9 +260,10 @@
                     <th data-col="source">@filterableCol("source", "SourceType", "نوع المستند")</th>
                     <th data-col="postVersion">@filterableCol("postVersion", "PostVersion", "مرحلة")</th>
                     <th data-col="sourceId">@filterableCol("sourceId", "SourceId", "معرّف المصدر")</th>
-                    <th data-col="accId">@filterableCol("accId", "AccountId", "رقم الحساب")</th>
+                    <th data-col="accId">@filterableCol("accId", "AccountId", "كود/رقم الحساب")</th>
                     <th data-col="accName">@filterableCol("accName", "AccountName", "اسم الحساب")</th>
                     <th data-col="customer">@filterableCol("customer", "CustomerName", "العميل / الطرف")</th>
+                    <th data-col="externalCode" style="width:90px;">كود الإكسل</th>
                     <th data-col="debit">@filterableCol("debit", "Debit", "مدين")</th>
                     <th data-col="credit">@filterableCol("credit", "Credit", "دائن")</th>
                     <th data-col="desc">@filterableCol("desc", "Description", "البيان")</th>
@@ -268,7 +273,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">
+                        <td colspan="12" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -286,9 +291,10 @@
                             <td data-col="source">@e.SourceType</td>
                             <td data-col="postVersion">@(e.PostVersion > 0 ? e.PostVersion.ToString() : "")</td>
                             <td data-col="sourceId">@e.SourceId</td>
-                            <td data-col="accId">@e.AccountId</td>
+                            <td data-col="accId">@(e.Account != null ? e.Account.AccountCode + " (" + e.AccountId + ")" : e.AccountId.ToString())</td>
                             <td data-col="accName">@e.Account?.AccountName</td>
                             <td data-col="customer">@e.Customer?.CustomerName</td>
+                            <td data-col="externalCode"><small class="text-muted">@(e.Customer?.ExternalCode ?? "—")</small></td>
                             <td data-col="debit">@e.Debit.ToString("0.00")</td>
                             <td data-col="credit">@e.Credit.ToString("0.00")</td>
                             <td data-col="desc">@descShort</td>
@@ -317,6 +323,9 @@
 
                     @* العميل / الطرف *@
                     <td data-col="customer" class="text-muted">صافي: @netBalance.ToString("0.00")</td>
+
+                    @* كود الإكسل *@
+                    <td data-col="externalCode"></td>
 
                     @* ✅ المدين تحت عمود المدين *@
                     <td data-col="debit">@totalDebit.ToString("0.00")</td>
@@ -526,7 +535,7 @@
 </div>
 
 @* ===== Modal اختيار الأعمدة ===== *@
-<div class="modal fade no-print"
+<div class="modal fade no-print erp-columns-modal"
      id="columnsModalLedger"
      tabindex="-1"
      aria-labelledby="columnsModalLedgerLabel"
@@ -543,7 +552,7 @@
                         aria-label="إغلاق"></button>
             </div>
             <div class="modal-body">
-                <div id="columnsListLedger"></div>
+                <div id="columnsListLedger" class="erp-columns-modal-list"></div>
             </div>
             <div class="modal-footer">
                 <button type="button"

@@ -1,0 +1,123 @@
+---
+description: نظام صلاحيات «الحسابات المسموح رؤيتها للمستخدم» — مصدر واحد، قواعد ثابتة، توسيع عبر القيود لعميل/مورد فقط
+alwaysApply: true
+---
+
+# صلاحيات ظهور الحسابات للمستخدم (User Account Visibility)
+
+يحدد **أي حسابات** يراها المستخدم في القوائم والفواتير والتقارير والمستندات المرتبطة بأطراف (`Customer`).  
+أي تعديل على شاشات العملاء/الموردين/الإذون/القيود يجب أن **يمر عبر نفس المنطق** الموثّق هنا.
+
+## المصدر الوحيد في الكود
+
+| مكوّن | مسار |
+|--------|------|
+| التنفيذ | `Services/UserAccountVisibilityService.cs` |
+| الواجهة | `Services/IUserAccountVisibilityService.cs` |
+| الإعداد الرئيسي للدور | `RolePermissionsController` (تعديل الدور) + `Views/RolePermissions/Edit.cshtml` — قسم **«الحسابات المسموح رؤيتها لكل مستخدم (لهذا الدور)»** |
+| جدول الأدوار | `RoleAccountVisibilityOverrides` (`RoleId` + `AccountId`, `IsAllowed = true`) — **اتحاد** الحسابات من **كل** أدوار المستخدم |
+| توافق قديم (مستخدم) | `UserAccountVisibilityOverrides` — يُجمَع مع اتحاد الأدوار؛ الكنترولر القديم يوجّه إلى `RolePermissions` |
+
+## افتراضي عند إنشاء مستخدم جديد
+
+في `UsersController` بعد حفظ المستخدم يُستدعى منطق يضيف:
+
+- صلاحيات إضافية: `Home.Index` و `Dashboard.Sales` (جدول `UserExtraPermissions`).
+- إن وُجد في الدليل حساب بكود **`1103`**: سجل في `UserAccountVisibilityOverrides` على المستخدم (توافق مع منطق قديم؛ الإعداد الموصى به للأدوار الجديدة هو ضبط `RoleAccountVisibilityOverrides` من **صلاحيات الأدوار**).
+
+**ممنوع** في شاشات جديدة: نسخ `Where(c => !hidden.Contains(c.AccountId))` يدوياً بدون الخدمة أو بدون مطابقة `BuildQuery` أدناه.
+
+## أولوية القرار (للمستخدم الحالي)
+
+1. إن وُجدت **سجلات مسموح** على المستخدم **أو** على **أي** من أدواره (`UserAccountVisibilityOverrides` أو `RoleAccountVisibilityOverrides` مع `IsAllowed`) → تُجمَع البذور ثم التوسيع → **قائمة المسموح فقط** (لها أولوية حتى مع صلاحية `UserAccountVisibility.SeeAll`).
+2. إن **لم** توجد قائمة مسموح ووُجدت صلاحية **`UserAccountVisibility.SeeAll`** → **لا تقييد** (كل الحسابات).
+3. إن **لم** يُختر أي حساب ولا SeeAll → **لا تقييد** (عدم الاختيار على مستوى المستخدم وعلى كل الأدوار = عدم تطبيق القيد من هذه المصادر).
+
+## الوضع المقيد (`restrictedOnly` = true)
+
+- **`GetHiddenAccountIdsForUserAsync`** يوسّع المسموح بـ: (1) أبناء الشجرة (2) بادئة كود `كود-` (3) **آباء الشجرة فقط** عندما الحساب الفرعي من نوع أصل/التزام/حقوق ملكية — **بدون** صعود من **مصروف أو إيراد** (مثلاً اختيار 5202 لا يضيف 5200) (4) **أقران Equity**: أي حساب حقوق ملكية مسموح يضيف كل حسابات `Equity` لها نفس `ParentAccountId` (3101 مع 3102/3103 إن وُجدت تحت نفس الأب).
+- في **`ApplyCustomerVisibilityFilterAsync`** (مقيد): مستثمر بـ `AccountId == null` يُسمح عبر قيود على حساب مسموح فقط؛ إن وُجد `AccountId` لا يُستخدم القيد (لا تسرّب 3101 عند السماح بـ 1103 فقط).
+
+- في **الوضع المقيد**، فلترة جدول العملاء تستخدم **`AccountId IN (المسموح الموسَّع)`** وليس `NOT IN` على كل المخفي — لتفادي حدود معاملات SQL مع قوائم مخفية ضخمة.
+
+### ظهور طرف في قائمة العملاء (`ApplyCustomerVisibilityFilterAsync`)
+
+يُعرض السجل إذا **أحد** الشرطين:
+
+| الشرط | الوصف |
+|--------|--------|
+| **أ** | `Customer.AccountId` ليس من الحسابات المخفية (أي **ضمن المسموح**). |
+| **ب** | `PartyCategory` ∈ { **`Customer`**, **`Supplier`** } **و** يوجد قيد في **`LedgerEntries`** لنفس `CustomerId` على حساب **مسموح** (ليس في `hidden`). |
+
+### فئات لا تُوسَّع عبر القيود
+
+| `PartyCategory` | السلوك عند التقييد |
+|-------------------|---------------------|
+| **Investor** | **حساب رئيسي فقط** — لا `LedgerEntries`. يمنع ظهور مستثمر (مثلاً **3101**) لمن مسموح له بـ **1103** فقط بسبب قيود جانبية على 1103. |
+| **Employee** (إن وُجد) | **حساب رئيسي فقط** — لا توسيع (مثال تاريخي: موظف **5201** لا يظهر لمن ليس له صلاحية 5201 بسبب قيود على حسابات أخرى). |
+| غير مذكور أعلاه | يعتمد على **أ** فقط (`AccountId`). |
+
+## الوضع غير المقيد لكن مع `hidden` غير فارغ
+
+نادر (لا قائمة مسموح صريحة لكن `hidden` مُحتسب) — المنطق الحالي:  
+`AccountId == null` أو الحساب **ليس** في `hidden`. **بدون** فرع `LedgerEntries` في هذا الفرع.
+
+## قوائم المستندات (`BuildQuery`)
+
+عند فلترة إذن/إشعار/قيد مرتبط بعميل وبنفس فكرة «طرف ظاهر»:
+
+- **نفس منطق الفرع ب**: `LedgerEntries.Any(...)` يجب أن يكون مسبوقاً بـ  
+  **`PartyCategory == "Customer" || PartyCategory == "Supplier"`** فقط.
+
+**الملفات المرجعية (يجب أن تبقى متطابقة مع الخدمة):**
+
+- `CashReceiptsController.cs`
+- `CashPaymentsController.cs`
+- `CreditNotesController.cs`
+- `DebitNotesController.cs`
+- `LedgerEntriesController.cs`
+
+عند إضافة كنترولر جديد بنفس النمط: انسخ **نفس** هيكل الشرط (لا تضف `Investor` لفرع القيود).
+
+## الخزينة — أذون استلام نقدية تخص المستثمرين (حساب **3101**)
+
+عندما **لا** يكون حساب المستثمرين (**كود الحساب `3101`** — رأس المال) ضمن الحسابات **المسموح** رؤيتها للمستخدم، يكون حساب **3101** ضمن قائمة **`GetHiddenAccountIdsForCurrentUserAsync`** (أو المكافئ لمستخدم محدّد).
+
+- في شاشة **الخزينة** (`TreasuryController`): قائمة **أذون الاستلام** تُفلتر بحيث **لا تظهر** الإذون التي **حسابها المقابل** (`CounterAccountId`) من الحسابات المخفية — ومنها أذون الاستلام المرتبطة بمسار المستثمرين عندما يكون المقابل **3101** (أو أي حساب مخفي بنفس المنطق).
+- قائمة **إذون استلام نقدية** (`CashReceiptsController`) تستخدم **نفس مصدر المخفي** مع فلترة العملاء عبر `ApplyCustomerVisibilityFilterAsync`، ويُستبعد ظهور إذون تتضمن حساب **3101** في المسارات التي تربط الإذن بحساب المستثمرين عند عدم السماح برؤية ذلك الحساب (ثابت `InvestorAccountCode = "3101"` في الكنترولر حيث يُطبَّق الشرط).
+
+**الخلاصة:** من **ليس** له رؤية **3101** في إعداد «الحسابات المسموح رؤيتها» لا يرى في الخزينة/القوائم أذون الاستلام التي تعتمد ذلك الحساب كحساب مقابل مخفي عنه.
+
+## فاتورة المبيعات — إخفاء **الحساب السابق** والحد الائتماني
+
+عندما يكون **حساب العميل** في الفاتورة (`Customer.AccountId`) **مخفياً** عن المستخدم (موجود في `hiddenAccountIds` الناتجة عن إعداد المسموح/المخفي):
+
+- يُمرَّر `ViewBag.HideInvestorSensitiveData = true` من `SalesInvoicesController` (عند عرض فاتورة — `Show`).
+- في `Views/SalesInvoices/Show.cshtml` يُخفى أو يُعرض كـ «—» / صفر حسب السياق:
+  - **الحساب السابق للعميل** (والقيم المخزنة المرتبطة به في الواجهة)،
+  - **حد الائتمان**،
+  - **المبلغ المتبقى** من الائتمان.
+
+الغرض: عدم كشف أرقام رصيد/ائتمان لطرف مرتبط بحساب **لا يحق** للمستخدم رؤيته (ومنها حالات **المستثمر** المرتبط بـ **3101** عندما الحساب غير مسموح).
+
+## استدعاءات موحّدة للشاشات
+
+- جداول وقوائم منسدلة لأطراف من نوع عميل/مورد في الفواتير والتقارير:  
+  **`await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(query)`** على `IQueryable<Customer>` (بعد `AsNoTracking()` والفلاتر الأخرى).
+- لقراءة الحالة مرة واحدة: **`GetVisibilityStateForCurrentUserAsync()`** → `(hiddenAccountIds, restrictedOnly)`.
+
+## تدقيق قبل الدمج
+
+- [ ] شاشة تعرض عملاء/موردين؟ → `ApplyCustomerVisibilityFilterAsync`.
+- [ ] أضفت `LedgerEntries.Any`؟ → `PartyCategory` = **Customer | Supplier** فقط.
+- [ ] غيّرت `UserAccountVisibilityService`؟ → حدّث **هذه القاعدة** وملخصات XML في `IUserAccountVisibilityService` / الخدمة.
+- [ ] تعديل **الخزينة** أو **أذون الاستلام**؟ → احترم استبعاد `CounterAccountId` المخفي (`TreasuryController`) ومنطق **3101** في `CashReceiptsController` إن وُجد.
+- [ ] تعديل **عرض فاتورة مبيعات**؟ → عند إخفاء حساب العميل احتفظ بسلوك `HideInvestorSensitiveData` (الحساب السابق / الائتمان).
+
+## مراجع إضافية
+
+- `Controllers/CustomersController.cs` — فهرس العملاء، حجم التعامل، أعمدة، تصدير.
+- `Controllers/SalesInvoicesController`, `PurchaseInvoicesController`, `PurchaseRequestsController` — أطراف المستندات.
+- `Controllers/TreasuryController.cs` — الخزينة وأذون الاستلام المعروضة هناك (فلترة `CounterAccountId` مقابل المخفي).
+- `Controllers/CashReceiptsController.cs` — قائمة إذون الاستلام، ثابت `InvestorAccountCode`، `BuildQuery` + `ApplyCustomerVisibilityFilterAsync` للعملاء.
+- `Controllers/ReportsController`, `CustomerLedgerController` — تقارير ودفتر.

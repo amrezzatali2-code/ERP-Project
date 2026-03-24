@@ -1,6 +1,9 @@
 @model IEnumerable<ERP.ViewModels.RolePermissionEditItem>
 @{
     var list = Model?.ToList() ?? new List<ERP.ViewModels.RolePermissionEditItem>();
+    const string accModuleTitle = "الحسابات المسموح رؤيتها لكل مستخدم";
+    var roleAccounts = ViewBag.RoleAccounts as List<ERP.Models.AccountListItem> ?? new List<ERP.Models.AccountListItem>();
+    var allowedRoleAccIds = ViewBag.AllowedRoleAccountIds as HashSet<int> ?? new HashSet<int>();
     var moduleOrder = new[] { "لوحات التحكم", "الإعدادات", "المستخدمون والصلاحيات", "المناطق الجغرافية", "العملاء", "إدارة المخازن", "المبيعات", "المشتريات", "الحسابات", "التقارير", "أخرى" };
     var grouped = list
         .GroupBy(p => string.IsNullOrWhiteSpace(p.Module) ? "أخرى" : (p.Module ?? "أخرى"))
@@ -30,6 +33,7 @@ else
             {
                 <option value="@m">@m</option>
             }
+            <option value="@accModuleTitle">@accModuleTitle</option>
         </datalist>
     </div>
     <div class="table-responsive" style="max-height: 550px; overflow-y: auto;">
@@ -82,6 +86,40 @@ else
                             </td>
                         </tr>
                     }
+                }
+                @{
+                    var accModId = "mod-acc-visibility";
+                    var allAccAllowed = roleAccounts.Count > 0 && roleAccounts.All(a => allowedRoleAccIds.Contains(a.AccountId));
+                }
+                <tr class="perm-module-row perm-collapsed" data-module="@accModuleTitle" data-search="@accModuleTitle" id="@accModId">
+                    <td class="text-center align-middle">
+                        <input type="checkbox" class="form-check-input perm-module-cb" data-module="@accModuleTitle"
+                               @(allAccAllowed ? "checked" : "") title="تحديد كل الحسابات / إلغاء الكل" />
+                    </td>
+                    <td class="text-center align-middle">
+                        <button type="button" class="btn btn-sm btn-outline-secondary p-0 perm-expand" style="width:24px;height:24px;font-size:14px;line-height:1;" title="فتح/إغلاق" aria-expanded="false">+</button>
+                    </td>
+                    <td class="fw-semibold align-middle">@accModuleTitle <span class="text-muted small fw-normal">(لهذا الدور)</span></td>
+                    <td class="small text-muted align-middle">ظهور في القوائم والفواتير</td>
+                    <td class="text-center align-middle">
+                        <span class="perm-module-status @(allAccAllowed ? "text-success" : "text-danger")">@(allAccAllowed ? "✔" : "✖")</span>
+                    </td>
+                </tr>
+                @foreach (var a in roleAccounts)
+                {
+                    var accChecked = allowedRoleAccIds.Contains(a.AccountId);
+                    <tr class="perm-child-row" data-module="@accModuleTitle" data-parent="@accModId" data-search="@($"{accModuleTitle} {a.AccountCode} {a.AccountName}")" style="display:none;">
+                        <td class="text-center align-middle">
+                            <input type="checkbox" name="RoleAccountIds" value="@a.AccountId" class="form-check-input perm-cb role-account-visibility-cb"
+                                   @(accChecked ? "checked" : "") />
+                        </td>
+                        <td class="text-center align-middle"></td>
+                        <td class="ps-4 align-middle"><span class="text-muted small">↳</span> @a.AccountName</td>
+                        <td class="text-start align-middle small text-muted">@a.AccountCode</td>
+                        <td class="text-center align-middle">
+                            <span class="perm-status @(accChecked ? "text-success" : "text-danger")">@(accChecked ? "✔" : "✖")</span>
+                        </td>
+                    </tr>
                 }
             </tbody>
         </table>

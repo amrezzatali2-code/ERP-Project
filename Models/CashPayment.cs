@@ -39,7 +39,7 @@ namespace ERP.Models
         // - التحقق يتم على الـ IDs
         // - ومنع التحقق على الـ Navigation Properties
 
-        [Display(Name = "حساب الصندوق / البنك")]
+        [Display(Name = "الخزينة / الصندوق")]
         [Range(1, int.MaxValue, ErrorMessage = "حساب الصندوق / البنك مطلوب.")] // ✅ يمنع 0
         public int CashAccountId { get; set; }      // متغير: حساب النقدية (الصندوق/البنك) الذي نصرف منه
 

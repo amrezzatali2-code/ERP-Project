@@ -28,28 +28,46 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly ILedgerPostingService _ledgerPostingService;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IPermissionService _permissionService;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
-        public DebitNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
+        private const string InvestorAccountCode = "3101";
+
+        public DebitNotesController(
+            AppDbContext context,
+            ILedgerPostingService ledgerPostingService,
+            IUserActivityLogger activityLogger,
+            IPermissionService permissionService,
+            IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
             _activityLogger = activityLogger;
+            _permissionService = permissionService;
+            _accountVisibilityService = accountVisibilityService;
         }
+
+        private static Task<bool> CanViewInvestorsAsync() => Task.FromResult(true); // إظهار/إخفاء 3101 يعتمد على «الحسابات المسموح رؤيتها» فقط
 
         // =========================================================
         // دالة مساعدة: تحميل القوائم المنسدلة (الطرف + الحسابات)
         // =========================================================
-        private void PopulateLookups(int? customerId = null, int? accountId = null, int? offsetAccountId = null)
+        private void PopulateLookups(
+            int? customerId = null,
+            int? accountId = null,
+            int? offsetAccountId = null,
+            bool canViewInvestors = true)
         {
             ViewData["CustomerId"] = new SelectList(
                 _context.Customers.AsNoTracking().Where(c => c.IsActive == true).OrderBy(c => c.CustomerName),
                 "CustomerId", "CustomerName", customerId);
-            ViewData["AccountId"] = new SelectList(
-                _context.Accounts.AsNoTracking().OrderBy(a => a.AccountName),
-                "AccountId", "AccountName", accountId);
-            ViewData["OffsetAccountId"] = new SelectList(
-                _context.Accounts.AsNoTracking().OrderBy(a => a.AccountName),
-                "AccountId", "AccountName", offsetAccountId);
+
+            var accountsQ = _context.Accounts.AsNoTracking().OrderBy(a => a.AccountName).AsQueryable();
+            if (!canViewInvestors)
+                accountsQ = accountsQ.Where(a => a.AccountCode != InvestorAccountCode);
+
+            ViewData["AccountId"] = new SelectList(accountsQ, "AccountId", "AccountName", accountId);
+            ViewData["OffsetAccountId"] = new SelectList(accountsQ, "AccountId", "AccountName", offsetAccountId);
         }
 
         // =========================================================
@@ -65,7 +83,10 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            bool canViewInvestors,
+            List<int> hiddenCustomerAccountIds,
+            bool restrictedToAllowedOnly)
         {
             // (1) الاستعلام الأساسي من جدول إشعارات الخصم مع تحميل العميل والحسابات
             IQueryable<DebitNote> q = _context.DebitNotes
@@ -73,6 +94,22 @@ namespace ERP.Controllers
                 .Include(d => d.Customer)
                 .Include(d => d.Account)
                 .Include(d => d.OffsetAccount);
+
+            if (!canViewInvestors)
+                q = q.Where(d => d.Account != null && d.Account.AccountCode != InvestorAccountCode
+                                 && (d.OffsetAccount == null || d.OffsetAccount.AccountCode != InvestorAccountCode));
+
+            // إخفاء أي إشعار مرتبط بعميل غير ظاهر (حساب رئيسي أو قيود بحساب مسموح)
+            if (hiddenCustomerAccountIds != null && hiddenCustomerAccountIds.Count > 0)
+            {
+                q = restrictedToAllowedOnly
+                    ? q.Where(d => (d.Customer != null && d.Customer.AccountId != null && !hiddenCustomerAccountIds.Contains(d.Customer.AccountId.Value))
+                        || (d.Customer != null && (d.Customer.PartyCategory == "Customer" || d.Customer.PartyCategory == "Supplier")
+                            && d.CustomerId != null && _context.LedgerEntries.Any(e => e.CustomerId == d.CustomerId && !hiddenCustomerAccountIds.Contains(e.AccountId))))
+                    : q.Where(d => d.Customer == null || d.Customer.AccountId == null || !hiddenCustomerAccountIds.Contains(d.Customer.AccountId.Value)
+                        || (d.Customer != null && (d.Customer.PartyCategory == "Customer" || d.Customer.PartyCategory == "Supplier")
+                            && d.CustomerId != null && _context.LedgerEntries.Any(e => e.CustomerId == d.CustomerId && !hiddenCustomerAccountIds.Contains(e.AccountId))));
+            }
 
             // (2) فلتر كود من/إلى (نعتمد هنا على DebitNoteId كرقم الإشعار)
             if (fromCode.HasValue)
@@ -340,6 +377,10 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 50)
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -349,7 +390,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
 
             q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_account, filterCol_offset, filterCol_amount, filterCol_posted, filterCol_reason, filterCol_desc);
 
@@ -405,6 +449,16 @@ namespace ERP.Controllers
             if (debitNote == null)
                 return NotFound();
 
+            if (!await CanViewInvestorsAsync() &&
+                debitNote.Account != null &&
+                debitNote.Account.AccountCode == InvestorAccountCode)
+                return NotFound();
+
+            if (!await CanViewInvestorsAsync() &&
+                debitNote.OffsetAccount != null &&
+                debitNote.OffsetAccount.AccountCode == InvestorAccountCode)
+                return NotFound();
+
             return View(debitNote); // Views/DebitNotes/Show.cshtml (نعمله لاحقاً لو حابب)
         }
 
@@ -434,6 +488,10 @@ namespace ERP.Controllers
             string? filterCol_desc = null,
             string format = "excel")
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -443,7 +501,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
             q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_account, filterCol_offset, filterCol_amount, filterCol_posted, filterCol_reason, filterCol_desc);
 
             var list = await q.ToListAsync();
@@ -637,7 +698,8 @@ namespace ERP.Controllers
                     ViewBag.LockCustomer = true;
                 }
             }
-            PopulateLookups(model.CustomerId, model.AccountId > 0 ? model.AccountId : null, null);
+            var canViewInvestors = await CanViewInvestorsAsync();
+            PopulateLookups(model.CustomerId, model.AccountId > 0 ? model.AccountId : null, null, canViewInvestors);
             return View(model);
         }
 
@@ -691,7 +753,8 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Edit), new { id = debitNote.DebitNoteId });
             }
 
-            PopulateLookups(debitNote.CustomerId, debitNote.AccountId, debitNote.OffsetAccountId);
+            var canViewInvestors = await CanViewInvestorsAsync();
+            PopulateLookups(debitNote.CustomerId, debitNote.AccountId, debitNote.OffsetAccountId, canViewInvestors);
             return View(debitNote);
         }
 
@@ -720,7 +783,8 @@ namespace ERP.Controllers
             if (debitNote == null)
                 return NotFound();
 
-            PopulateLookups(debitNote.CustomerId, debitNote.AccountId, debitNote.OffsetAccountId);
+            var canViewInvestors = await CanViewInvestorsAsync();
+            PopulateLookups(debitNote.CustomerId, debitNote.AccountId, debitNote.OffsetAccountId, canViewInvestors);
             return View(debitNote);
         }
 
@@ -750,7 +814,8 @@ namespace ERP.Controllers
 
             if (!ModelState.IsValid)
             {
-                PopulateLookups(input.CustomerId, input.AccountId, null);
+                var canViewInvestors = await CanViewInvestorsAsync();
+                PopulateLookups(input.CustomerId, input.AccountId, null, canViewInvestors);
                 return View(input);
             }
 

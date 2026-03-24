@@ -23,8 +23,11 @@
     int pages = Model.TotalPages;
 
     // نطاق العرض السفلي
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
+
+    // إجمالي الصافي (مع الفلترة) للكروت
+    decimal totalNet = ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m;
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -46,6 +49,8 @@
     string? filterCol_net = ViewBag.FilterCol_Net as string;
     string? filterCol_status = ViewBag.FilterCol_Status as string;
     string? filterCol_posted = ViewBag.FilterCol_Posted as string;
+    string? filterCol_region = ViewBag.FilterCol_Region as string;
+    string? filterCol_createdby = ViewBag.FilterCol_CreatedBy as string;
 
     // دالة توليد لينكات الترقيم مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
@@ -69,7 +74,9 @@
         filterCol_warehouse,
         filterCol_net,
         filterCol_status,
-        filterCol_posted
+        filterCol_posted,
+        filterCol_region,
+        filterCol_createdby
     })!;
 
     // دالة إنشاء لينك الترتيب في رأس الجدول + أيقونة السهم (احتياطيًا)
@@ -99,7 +106,9 @@
             filterCol_warehouse,
             filterCol_net,
             filterCol_status,
-            filterCol_posted
+            filterCol_posted,
+            filterCol_region,
+            filterCol_createdby
         }) ?? "#";
 
         string icon = "⇅";
@@ -119,6 +128,8 @@
         : colKey == "net" ? filterCol_net
         : colKey == "status" ? filterCol_status
         : colKey == "posted" ? filterCol_posted
+        : colKey == "region" ? filterCol_region
+        : colKey == "createdby" ? filterCol_createdby
         : null;
 
     // عمود قابل للفلترة بنمط Excel
@@ -146,6 +157,11 @@
 }
 
 <div dir="rtl" class="container-fluid">
+
+    @* العنوان — خارج إطار الجدول، حجم أصغر *@
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h5 class="mb-0 fs-6 text-secondary">@ViewData["Title"]</h5>
+    </div>
 
     @* ===== شريط الفلاتر الموحد (بنفس طريقة قائمة الأصناف) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2">
@@ -186,6 +202,8 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_net))      { <input type="hidden" name="filterCol_net"      value="@filterCol_net" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_status))   { <input type="hidden" name="filterCol_status"   value="@filterCol_status" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_posted))   { <input type="hidden" name="filterCol_posted"   value="@filterCol_posted" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_region))    { <input type="hidden" name="filterCol_region"    value="@filterCol_region" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
                 </form>
             </div>
 
@@ -208,6 +226,12 @@
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalSI">اختيار الأعمدة</button>
                         <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        @* إجراءات الفاتورة المحددة في الجدول (دمج مع شريط الفلاتر — بدون كارت منفصل) *@
+                        <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات الفاتورة المحددة">
+                            <button type="button" id="btnShowSI" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض الفاتورة">عرض</button>
+                        </span>
+                    </div>
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
                         <div class="dropdown d-inline">
                             <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
@@ -234,6 +258,8 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_net))      { <input type="hidden" name="filterCol_net"      value="@filterCol_net" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_status))   { <input type="hidden" name="filterCol_status"   value="@filterCol_status" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_posted))   { <input type="hidden" name="filterCol_posted"   value="@filterCol_posted" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_region))    { <input type="hidden" name="filterCol_region"    value="@filterCol_region" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
@@ -241,6 +267,7 @@
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
                     </div>
+                </div>
                     <form id="bulkDeleteForm" asp-action="BulkDelete" asp-controller="SalesInvoices" method="post" class="d-none">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="selectedIds" id="selectedIdsInput" />
@@ -254,11 +281,36 @@
         </div>
     </div>
 
-    @* ===== جدول فواتير المبيعات داخل حاوية تمرير ===== *@
-    <div class="erp-table-scroll-container mt-3 ps-0 pe-0">
-        <div id="siTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+    @* ===== كروت إجمالي العدد وإجمالي الصافي — بجانب بعض على اليمين، مسافة متساوية فوق وتحت ===== *@
+    @{
+        var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    }
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي العدد</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي الصافي</div>
+                    <div class="h4 mb-0 text-success fw-bold">@totalNet.ToString("N2", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ===== جدول فواتير المبيعات — العنوان للطباعة خارج إطار الجدول ===== *@
+    <div class="erp-print-area">
+        <h5 class="mb-2 print-only fs-6 text-secondary">@ViewData["Title"]</h5>
+        <div class="erp-list-table-frame erp-table-scroll-container erp-list-table-after-summary ps-0 pe-0">
+        <div id="siTableScrollWrapper" class="erp-table-wrapper" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="siTable" class="table table-striped table-hover erp-table erp-table-sortable">
-            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #dee2e6 !important; font-weight: 600;">
+            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; font-weight: 600;">
                 <tr>
                     @* اختيار الصف *@
                     <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
@@ -269,19 +321,20 @@
                     <th data-col="date">@filterableCol("date", "date", "تاريخ الفاتورة")</th>
                     <th data-col="time">@filterableCol("time", "time", "الوقت")</th>
                     <th data-col="customer">@filterableCol("customer", "customer", "العميل")</th>
+                    <th data-col="region">@filterableCol("region", "region", "المنطقة")</th>
                     <th data-col="warehouse">@filterableCol("warehouse", "warehouse", "المخزن")</th>
                     <th data-col="net">@filterableCol("net", "net", "الصافي")</th>
+                    <th data-col="createdby">@filterableCol("createdby", "createdby", "الكاتب")</th>
                     <th data-col="status">@filterableCol("status", "status", "الحالة")</th>
                     <th data-col="posted">@filterableCol("posted", "posted", "مرحل؟")</th>
                     <th class="text-center no-print" data-col="post" data-col-fixed="true" style="width:80px;">ترحيل</th>
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:140px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">
+                        <td colspan="12" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -290,7 +343,15 @@
                 {
                     foreach (var si in Model.Items)
                     {
-                        <tr data-si-id="@si.SIId">
+                        var showUrl = Url.Action("Show", "SalesInvoices", new { id = si.SIId }) + "?frame=1";
+                        var regionDisplay = si.Customer == null
+                            ? ""
+                            : (!string.IsNullOrWhiteSpace(si.Customer.RegionName)
+                                ? si.Customer.RegionName
+                                : (si.Customer.Area != null && si.Customer.Area.AreaName != null
+                                    ? si.Customer.Area.AreaName
+                                    : ""));
+                        <tr class="erp-list-selectable-row" data-si-id="@si.SIId" data-show-url="@showUrl" data-tab-title="فاتورة مبيعات">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select"
@@ -301,8 +362,10 @@
                             <td data-col="date">@si.SIDate.ToString("yyyy-MM-dd")</td>
                             <td data-col="time">@si.SITime</td>
                             <td data-col="customer">@(si.Customer?.CustomerName ?? si.CustomerId.ToString())</td>
+                            <td data-col="region">@regionDisplay</td>
                             <td data-col="warehouse">@(si.Warehouse?.WarehouseName ?? si.WarehouseId.ToString())</td>
                             <td data-col="net">@si.NetTotal.ToString("0.00")</td>
+                            <td data-col="createdby">@(si.CreatedBy ?? "")</td>
                             <td data-col="status">@si.Status</td>
                             <td data-col="posted">@(si.IsPosted ? "نعم" : "لا")</td>
                             <td class="text-center no-print" data-col="post">
@@ -312,29 +375,6 @@
                                         ترحيل
                                     </button>
                                 }
-                            </td>
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <div class="d-flex flex-wrap align-items-center gap-1">
-                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
-                                       href="/SalesInvoices/Show?id=@si.SIId&frame=1"
-                                       data-tab-id="si-show-tab"
-                                       data-tab-title="فاتورة مبيعات"
-                                       data-url="/SalesInvoices/Show?id=@si.SIId&frame=1">
-                                        عرض
-                                    </a>
-                                    <form asp-action="Delete"
-                                          asp-controller="SalesInvoices"
-                                          asp-route-id="@si.SIId"
-                                          method="post"
-                                          class="d-inline"
-                                          onsubmit="return confirm('تأكيد حذف فاتورة المبيعات رقم @si.SIId ؟');">
-                                        @Html.AntiForgeryToken()
-                                        <input type="hidden" name="from" value="list" />
-                                        <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                            حذف
-                                        </button>
-                                    </form>
-                                </div>
                             </td>
                         </tr>
                     }
@@ -347,15 +387,17 @@
                     <td data-col="date"></td>
                     <td data-col="time"></td>
                     <td data-col="customer"></td>
+                    <td data-col="region"></td>
                     <td data-col="warehouse"></td>
                     <td data-col="net">@((ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m).ToString("0.00"))</td>
+                    <td data-col="createdby"></td>
                     <td data-col="status"></td>
                     <td data-col="posted"></td>
                     <td class="text-center no-print" data-col="post"></td>
-                    <td class="text-nowrap no-print" data-col="actions"></td>
                 </tr>
             </tfoot>
         </table>
+        </div>
         </div>
     </div>
 
@@ -401,23 +443,21 @@
             <input type="hidden" name="filterCol_net" value="@filterCol_net" />
             <input type="hidden" name="filterCol_status" value="@filterCol_status" />
             <input type="hidden" name="filterCol_posted" value="@filterCol_posted" />
+            <input type="hidden" name="filterCol_region" value="@filterCol_region" />
+            <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" />
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
-    </div>
-
-    <div>
-        <small class="text-muted d-none d-md-inline">
-            إجمالي الفواتير: @total
-        </small>
     </div>
 
     @* ===== الترقيم (Pagination) بنفس شكل المحافظات ===== *@
@@ -483,6 +523,8 @@
                     <input type="hidden" name="filterCol_net" value="@filterCol_net" />
                     <input type="hidden" name="filterCol_status" value="@filterCol_status" />
                     <input type="hidden" name="filterCol_posted" value="@filterCol_posted" />
+                    <input type="hidden" name="filterCol_region" value="@filterCol_region" />
+                    <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" />
 
                     <div class="mb-3">
                         <div class="form-check d-flex align-items-center">
@@ -532,7 +574,7 @@
 </div>
 
 @* ===== Modal اختيار الأعمدة ===== *@
-<div class="modal fade no-print"
+<div class="modal fade no-print erp-columns-modal"
      id="columnsModalSI"
      tabindex="-1"
      aria-labelledby="columnsModalSILabel"
@@ -549,7 +591,7 @@
                         aria-label="إغلاق"></button>
             </div>
             <div class="modal-body">
-                <div id="columnsListSI"></div>
+                <div id="columnsListSI" class="erp-columns-modal-list"></div>
             </div>
             <div class="modal-footer">
                 <button type="button"
@@ -575,14 +617,9 @@
     </div>
     <div class="erp-column-filter-body">
         <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
-            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
             <div class="d-flex flex-column gap-1">
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">
-                    ▲ ترتيب تصاعدي (من الصغير للكبير)
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">
-                    ▼ ترتيب تنازلي (من الكبير للصغير)
-                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc"><span class="erp-sort-arrow">▲</span> ترتيب تصاعدي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc"><span class="erp-sort-arrow">▼</span> ترتيب تنازلي</button>
             </div>
         </div>
         <div class="erp-filter-section">
@@ -602,6 +639,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js"></script>
     <script>
         // =========================
         // تمرير الجدول أفقياً بحيث يبدأ من اليمين (RTL)
@@ -615,6 +653,42 @@
                 });
             }
             scrollToRtlStart("siTableScrollWrapper");
+        })();
+
+        // =========================
+        // مقابض توسعة الأعمدة (سحب لتعديل عرض العمود — ما عدا الثابتة)
+        // =========================
+        (function () {
+            var table = document.getElementById("siTable");
+            var wrapper = document.getElementById("siTableScrollWrapper");
+            if (!table || !wrapper) return;
+            var ths = table.querySelectorAll("thead th");
+            ths.forEach(function (th) {
+                if (th.hasAttribute("data-col-fixed")) return;
+                th.style.position = "relative";
+                var handle = document.createElement("div");
+                handle.className = "erp-col-resize-handle";
+                th.appendChild(handle);
+                var startX, startWidth;
+                handle.addEventListener("mousedown", function (e) {
+                    e.preventDefault();
+                    startX = e.pageX;
+                    startWidth = th.offsetWidth;
+                    function onMouseMove(eMove) {
+                        var diffX = eMove.pageX - startX;
+                        var newWidth = startWidth + diffX;
+                        if (newWidth < 50) newWidth = 50;
+                        th.style.minWidth = newWidth + "px";
+                        th.style.width = newWidth + "px";
+                    }
+                    function onMouseUp() {
+                        document.removeEventListener("mousemove", onMouseMove);
+                        document.removeEventListener("mouseup", onMouseUp);
+                    }
+                    document.addEventListener("mousemove", onMouseMove);
+                    document.addEventListener("mouseup", onMouseUp);
+                });
+            });
         })();
 
         // =========================
@@ -711,6 +785,16 @@
         })();
 
         // =========================
+        // اختيار صف + زر عرض (سكربت مشترك — نمط الخزينة)
+        // =========================
+        ERP.initListSelection({
+            showButtonId: 'btnShowSI',
+            idAttribute: 'data-si-id',
+            showUrlAttribute: 'data-show-url',
+            tabTitleAttribute: 'data-tab-title'
+        });
+
+        // =========================
         // اختيار الأعمدة + حفظها في localStorage
         // =========================
         (function () {
@@ -753,11 +837,11 @@
                 columns.forEach(col => {
                     const id = "col_" + col.key;
                     const wrapper = document.createElement("div");
-                    wrapper.className = "form-check mb-1";
+                    wrapper.className = "form-check";
 
                     const cb = document.createElement("input");
                     cb.type = "checkbox";
-                    cb.className = "form-check-input ms-2";
+                    cb.className = "form-check-input";
                     cb.id = id;
                     cb.checked = !hidden.includes(col.key);
                     cb.dataset.colKey = col.key;
@@ -891,10 +975,16 @@
                 var url = "@Url.Action("GetColumnValues", "SalesInvoices")" + "?column=" + encodeURIComponent(currentCol);
                 var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
                 if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                    allItems = items.map(function (v) { return { value: v, display: v }; });
+                fetch(url).then(function (r) {
+                    if (!r.ok) return [];
+                    return r.json().catch(function () { return []; });
+                }).then(function (items) {
+                    allItems = Array.isArray(items) ? items.map(function (v) { return { value: v, display: v }; }) : [];
                     renderList(searchInp ? searchInp.value : "");
-                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
+                }).catch(function () {
+                    allItems = [];
+                    renderList(searchInp ? searchInp.value : "");
+                });
             }
 
             function renderList(search) {

@@ -31,13 +31,26 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;   // متغير: السياق الأساسي للتعامل مع الـ DB
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل المحاسبي
         private readonly IUserActivityLogger _activityLogger; // متغير: تسجيل نشاط المستخدمين
+        private readonly IPermissionService _permissionService;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
-        public CashPaymentsController(AppDbContext context, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
+        private const string InvestorAccountCode = "3101";
+
+        public CashPaymentsController(
+            AppDbContext context,
+            ILedgerPostingService ledgerPostingService,
+            IUserActivityLogger activityLogger,
+            IPermissionService permissionService,
+            IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
             _activityLogger = activityLogger;
+            _permissionService = permissionService;
+            _accountVisibilityService = accountVisibilityService;
         }
+
+        private static Task<bool> CanViewInvestorsAsync() => Task.FromResult(true); // إظهار/إخفاء 3101 يعتمد على «الحسابات المسموح رؤيتها» فقط
 
         // =========================================================
         // دالة مساعدة: تجهيز القوائم المنسدلة (الطرف + الحسابات)
@@ -47,10 +60,11 @@ namespace ERP.Controllers
                                                   int? cashAccountId = null,
                                                   int? counterAccountId = null)
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var customerQueryCp = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
+            customerQueryCp = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customerQueryCp);
             // قائمة العملاء / الأطراف مع AccountId في data attribute
-            var customers = await _context.Customers
-                .AsNoTracking()
-                .Where(c => c.IsActive == true)
+            var customers = await customerQueryCp
                 .Include(c => c.Account)
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
@@ -71,27 +85,46 @@ namespace ERP.Controllers
             ViewData["CustomerId"] = new SelectList(customerItems, "Value", "Text", customerId?.ToString());
             ViewData["CustomersWithAccounts"] = customers.ToDictionary(c => c.CustomerId, c => c.AccountId);
 
-            // حسابات نشطة للصندوق / البنك
-            var cashAccounts = await _context.Accounts
-                    .AsNoTracking()
-                    .Where(a => a.IsActive)
-                    .OrderBy(a => a.AccountName)
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var cashAccounts = await TreasuryCashAccounts.QueryTreasuryCashBoxes(_context.Accounts.AsNoTracking())
+                .Where(a => !hiddenAccountIds.Contains(a.AccountId))
+                .OrderBy(a => a.AccountCode == "1101" ? 0 : 1)
+                .ThenBy(a => a.AccountCode != null && a.AccountCode.StartsWith("1101") ? 0 : 1)
+                .ThenBy(a => a.AccountCode)
+                .ThenBy(a => a.AccountName)
+                .Select(a => new { a.AccountId, a.AccountName })
+                .ToListAsync();
+
+            if (cashAccountId.HasValue && cashAccountId.Value > 0 && cashAccounts.All(a => a.AccountId != cashAccountId.Value))
+            {
+                var extra = await _context.Accounts.AsNoTracking()
+                    .Where(a => a.AccountId == cashAccountId.Value)
                     .Select(a => new { a.AccountId, a.AccountName })
-                    .ToListAsync();
-            
+                    .FirstOrDefaultAsync();
+                if (extra != null)
+                    cashAccounts = cashAccounts.Append(extra).ToList();
+            }
+
+            int? selectedCash = cashAccountId;
+            if ((selectedCash == null || selectedCash <= 0) && cashAccounts.Count > 0)
+                selectedCash = cashAccounts[0].AccountId;
+            else if (selectedCash.HasValue && selectedCash > 0 && cashAccounts.All(a => a.AccountId != selectedCash.Value) && cashAccounts.Count > 0)
+                selectedCash = cashAccounts[0].AccountId;
+
             var cashAccountItems = cashAccounts.Select(a => new SelectListItem
             {
                 Value = a.AccountId.ToString(),
                 Text = a.AccountName ?? "",
-                Selected = cashAccountId.HasValue && cashAccountId.Value == a.AccountId
+                Selected = selectedCash == a.AccountId
             }).ToList();
-            
-            ViewData["CashAccountId"] = new SelectList(cashAccountItems, "Value", "Text", cashAccountId);
+
+            ViewData["CashAccountId"] = new SelectList(cashAccountItems, "Value", "Text", selectedCash?.ToString());
+            ViewData["TreasuryCashBoxesEmpty"] = cashAccounts.Count == 0;
 
             // حسابات نشطة للطرف المقابل
             var counterAccounts = await _context.Accounts
                     .AsNoTracking()
-                    .Where(a => a.IsActive)
+                    .Where(a => a.IsActive && (canViewInvestors || a.AccountCode != InvestorAccountCode))
                     .OrderBy(a => a.AccountName)
                     .Select(a => new { a.AccountId, a.AccountName })
                     .ToListAsync();
@@ -104,45 +137,6 @@ namespace ERP.Controllers
             }).ToList();
             
             ViewData["CounterAccountId"] = new SelectList(counterAccountItems, "Value", "Text", counterAccountId);
-        }
-
-        // دالة بديلة بدون async (للاستخدام في Post بدون await)
-        private void PopulateDropdowns(int? customerId = null,
-                                       int? cashAccountId = null,
-                                       int? counterAccountId = null)
-        {
-            // قائمة العملاء / الأطراف
-            ViewData["CustomerId"] = new SelectList(
-                _context.Customers
-                        .AsNoTracking()
-                        .Where(c => c.IsActive == true)
-                        .OrderBy(c => c.CustomerName),
-                "CustomerId",
-                "CustomerName",
-                customerId
-            );
-
-            // حسابات نشطة للصندوق / البنك
-            ViewData["CashAccountId"] = new SelectList(
-                _context.Accounts
-                        .AsNoTracking()
-                        .Where(a => a.IsActive)
-                        .OrderBy(a => a.AccountName),
-                "AccountId",
-                "AccountName",
-                cashAccountId
-            );
-
-            // حسابات نشطة للطرف المقابل
-            ViewData["CounterAccountId"] = new SelectList(
-                _context.Accounts
-                        .AsNoTracking()
-                        .Where(a => a.IsActive)
-                        .OrderBy(a => a.AccountName),
-                "AccountId",
-                "AccountName",
-                counterAccountId
-            );
         }
 
         // =========================================================
@@ -162,6 +156,23 @@ namespace ERP.Controllers
                 return Json(new { success = false, message = "العميل غير موجود أو غير مربوط بحساب محاسبي." });
             }
 
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            if (hiddenAccountIds.Contains(customer.AccountId.Value))
+            {
+                return Json(new { success = false, message = "غير مسموح: هذا الحساب/الطرف مخفي عن المستخدم." });
+            }
+
+            if (!await CanViewInvestorsAsync())
+            {
+                var investorAccountId = await _context.Accounts.AsNoTracking()
+                    .Where(a => a.AccountCode == InvestorAccountCode)
+                    .Select(a => a.AccountId)
+                    .FirstOrDefaultAsync();
+
+                if (investorAccountId > 0 && customer.AccountId.Value == investorAccountId)
+                    return Json(new { success = false, message = "غير مسموح: حساب المستثمرين غير متاح لهذا المستخدم." });
+            }
+
             return Json(new { success = true, accountId = customer.AccountId.Value });
         }
 
@@ -178,7 +189,10 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            bool canViewInvestors,
+            List<int> hiddenCustomerAccountIds,
+            bool restrictedToAllowedOnly)
         {
             // (1) الاستعلام الأساسي من جدول إذون الدفع مع ربط العميل والحسابات (بدون تتبّع لتحسين الأداء)
             IQueryable<CashPayment> q = _context.CashPayments
@@ -186,6 +200,23 @@ namespace ERP.Controllers
                 .Include(p => p.Customer)
                 .Include(p => p.CashAccount)
                 .Include(p => p.CounterAccount);
+
+            if (!canViewInvestors)
+                q = q.Where(p =>
+                    (p.CashAccount != null && p.CashAccount.AccountCode != InvestorAccountCode) &&
+                    (p.CounterAccount != null && p.CounterAccount.AccountCode != InvestorAccountCode));
+
+            // إخفاء أي إذن مرتبط بعميل غير ظاهر (حساب رئيسي أو قيود بحساب مسموح)
+            if (hiddenCustomerAccountIds != null && hiddenCustomerAccountIds.Count > 0)
+            {
+                q = restrictedToAllowedOnly
+                    ? q.Where(p => (p.Customer != null && p.Customer.AccountId != null && !hiddenCustomerAccountIds.Contains(p.Customer.AccountId.Value))
+                        || (p.Customer != null && (p.Customer.PartyCategory == "Customer" || p.Customer.PartyCategory == "Supplier")
+                            && p.CustomerId != null && _context.LedgerEntries.Any(e => e.CustomerId == p.CustomerId && !hiddenCustomerAccountIds.Contains(e.AccountId))))
+                    : q.Where(p => p.Customer == null || p.Customer.AccountId == null || !hiddenCustomerAccountIds.Contains(p.Customer.AccountId.Value)
+                        || (p.Customer != null && (p.Customer.PartyCategory == "Customer" || p.Customer.PartyCategory == "Supplier")
+                            && p.CustomerId != null && _context.LedgerEntries.Any(e => e.CustomerId == p.CustomerId && !hiddenCustomerAccountIds.Contains(e.AccountId))));
+            }
 
             // (2) فلتر كود من/إلى (نعتمد هنا على CashPaymentId كرقم الإذن)
             if (fromCode.HasValue)
@@ -351,10 +382,16 @@ namespace ERP.Controllers
         {
             var searchTerm = (search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
-            var q = _context.CashPayments.AsNoTracking()
+            var canViewInvestors = await CanViewInvestorsAsync();
+            IQueryable<CashPayment> q = _context.CashPayments.AsNoTracking()
                 .Include(p => p.Customer)
                 .Include(p => p.CashAccount)
                 .Include(p => p.CounterAccount);
+
+            if (!canViewInvestors)
+                q = q.Where(p =>
+                    (p.CashAccount != null && p.CashAccount.AccountCode != InvestorAccountCode) &&
+                    (p.CounterAccount != null && p.CounterAccount.AccountCode != InvestorAccountCode));
 
             if (columnLower == "id")
             {
@@ -443,6 +480,10 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 50)
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -452,7 +493,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
 
             q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc);
 
@@ -504,6 +548,11 @@ namespace ERP.Controllers
             if (payment == null)
                 return NotFound();
 
+            if (!await CanViewInvestorsAsync() &&
+                ((payment.CashAccount != null && payment.CashAccount.AccountCode == InvestorAccountCode) ||
+                 (payment.CounterAccount != null && payment.CounterAccount.AccountCode == InvestorAccountCode)))
+                return NotFound();
+
             return View(payment);   // Views/CashPayments/Details.cshtml (الفورم العادي)
         }
 
@@ -519,6 +568,11 @@ namespace ERP.Controllers
                 .FirstOrDefaultAsync(p => p.CashPaymentId == id);
 
             if (payment == null)
+                return NotFound();
+
+            if (!await CanViewInvestorsAsync() &&
+                ((payment.CashAccount != null && payment.CashAccount.AccountCode == InvestorAccountCode) ||
+                 (payment.CounterAccount != null && payment.CounterAccount.AccountCode == InvestorAccountCode)))
                 return NotFound();
 
             return View(payment);
@@ -548,24 +602,25 @@ namespace ERP.Controllers
             }
             else
             {
-                // ✅ جلب حساب الخزينة الافتراضي (كود 1101) أو أول حساب خزينة/صندوق
-                var defaultCashAccount = await _context.Accounts
-                    .AsNoTracking()
-                    .Where(a => a.IsActive && 
-                               (a.AccountCode == "1101" || 
-                                a.AccountName.Contains("خزينة") || 
-                                a.AccountName.Contains("صندوق")))
-                    .OrderBy(a => a.AccountCode == "1101" ? 0 : 1) // أولوية لكود 1101
-                    .ThenBy(a => a.AccountName)
-                    .Select(a => new { a.AccountId })
-                    .FirstOrDefaultAsync();
+                var hiddenIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+                var defaultId = await TreasuryCashAccounts.GetDefaultTreasuryCashBoxAccountIdAsync(_context);
+                if (defaultId.HasValue && hiddenIds.Contains(defaultId.Value))
+                {
+                    defaultId = await TreasuryCashAccounts.QueryTreasuryCashBoxes(_context.Accounts.AsNoTracking())
+                        .Where(a => !hiddenIds.Contains(a.AccountId))
+                        .OrderBy(a => a.AccountCode == "1101" ? 0 : 1)
+                        .ThenBy(a => a.AccountCode)
+                        .ThenBy(a => a.AccountName)
+                        .Select(a => (int?)a.AccountId)
+                        .FirstOrDefaultAsync();
+                }
 
                 model = new CashPayment
                 {
                     PaymentDate = DateTime.Now.Date,
                     IsPosted = false,
                     Status = "غير مرحلة",
-                    CashAccountId = defaultCashAccount?.AccountId ?? 0 // ✅ تعيين حساب الصندوق الافتراضي
+                    CashAccountId = defaultId ?? 0
                 };
             }
 
@@ -615,6 +670,15 @@ namespace ERP.Controllers
                 var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == payment.CustomerId.Value);
                 if (cust != null && !cust.IsActive)
                     ModelState.AddModelError(nameof(CashPayment.CustomerId), "لا يمكن التعامل مع عميل غير نشط. يرجى تفعيل العميل أولاً.");
+            }
+
+            if (payment.CashAccountId <= 0)
+                ModelState.AddModelError(nameof(CashPayment.CashAccountId), "يجب اختيار الخزينة / الصندوق.");
+            else
+            {
+                var hiddenCash = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+                if (!await TreasuryCashAccounts.IsAllowedTreasuryCashBoxForUserAsync(_context, payment.CashAccountId, hiddenCash))
+                    ModelState.AddModelError(nameof(CashPayment.CashAccountId), "يجب اختيار خزينة/صندوق صالح من القائمة.");
             }
             
             if (!ModelState.IsValid)
@@ -797,6 +861,15 @@ namespace ERP.Controllers
             // ✅ تجاهل خطأ التحقق لـ PaymentNumber
             ModelState.Remove(nameof(CashPayment.PaymentNumber));
 
+            if (payment.CashAccountId <= 0)
+                ModelState.AddModelError(nameof(CashPayment.CashAccountId), "يجب اختيار الخزينة / الصندوق.");
+            else
+            {
+                var hiddenPayEdit = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+                if (!await TreasuryCashAccounts.IsAllowedTreasuryCashBoxForUserAsync(_context, payment.CashAccountId, hiddenPayEdit))
+                    ModelState.AddModelError(nameof(CashPayment.CashAccountId), "يجب اختيار خزينة/صندوق صالح من القائمة.");
+            }
+
             if (!ModelState.IsValid)
             {
                 await PopulateDropdownsAsync(payment.CustomerId, payment.CashAccountId, payment.CounterAccountId);
@@ -968,6 +1041,10 @@ namespace ERP.Controllers
             string? filterCol_desc = null,
             string format = "excel")
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -977,7 +1054,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
 
             q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc);
 

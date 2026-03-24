@@ -1,0 +1,20 @@
+@model ERP.Models.VendorFaxLine
+@{
+    ViewData["Title"] = "تفاصيل سطر الفاكس";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">@ViewData["Title"]</h4>
+    <dl class="row">
+        <dt class="col-sm-3">كود</dt><dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">رأس الفاكس</dt><dd class="col-sm-9">@Model.VendorFaxUploadId</dd>
+        <dt class="col-sm-3">رقم السطر</dt><dd class="col-sm-9">@Model.LineNo</dd>
+        <dt class="col-sm-3">اسم الصنف من العميل</dt><dd class="col-sm-9">@Model.ProductNameFromVendor</dd>
+        <dt class="col-sm-3">كود العميل</dt><dd class="col-sm-9">@Model.VendorProductCode</dd>
+        <dt class="col-sm-3">السعر</dt><dd class="col-sm-9">@Model.Price.ToString("N2")</dd>
+        <dt class="col-sm-3">الخصم %</dt><dd class="col-sm-9">@Model.DiscountPct</dd>
+        <dt class="col-sm-3">الصنف المطابق</dt><dd class="col-sm-9">@Model.MatchedProduct?.ProdName</dd>
+        <dt class="col-sm-3">تاريخ الإنشاء</dt><dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+    </dl>
+    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">العودة للقائمة</a>
+</div>

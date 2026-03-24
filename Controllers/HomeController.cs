@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using ERP.Filters;
 using ERP.Models;
 using ERP.Security;
@@ -19,10 +19,11 @@ namespace ERP.Controllers
         [RequirePermission("Home.Index")]
         public IActionResult Index()
         {
-            return RedirectToAction("Index", "Dashboard");
+            return RedirectToAction("Sales", "Dashboard");
         }
 
-        [RequirePermission("Home.Privacy")]
+        /// <summary>صفحة سياسة الخصوصية — بدون صلاحية منفصلة (غير مستخدمة في القوائم).</summary>
+        [AllowAnonymous]
         public IActionResult Privacy()
         {
             return View();

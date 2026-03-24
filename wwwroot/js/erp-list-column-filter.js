@@ -92,7 +92,16 @@
             fetch(url)
                 .then(function (r) { return r.json(); })
                 .then(function (items) {
-                    allItems = items || [];
+                    var raw = Array.isArray(items) ? items : [];
+                    allItems = raw.map(function (v) {
+                        if (v != null && typeof v === 'object' && ('value' in v || 'display' in v)) {
+                            return {
+                                value: v.value != null ? v.value : v.display,
+                                display: v.display != null ? v.display : v.value
+                            };
+                        }
+                        return { value: v, display: v };
+                    });
                     renderList(searchInp ? searchInp.value : '');
                 })
                 .catch(function () {
@@ -212,7 +221,16 @@
                     var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : '';
                     if (searchVal) url += '&search=' + encodeURIComponent(searchVal);
                     fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                        allItems = items || [];
+                        var raw = Array.isArray(items) ? items : [];
+                        allItems = raw.map(function (v) {
+                            if (v != null && typeof v === 'object' && ('value' in v || 'display' in v)) {
+                                return {
+                                    value: v.value != null ? v.value : v.display,
+                                    display: v.display != null ? v.display : v.value
+                                };
+                            }
+                            return { value: v, display: v };
+                        });
                         renderList(searchInp ? searchInp.value : '');
                     });
                 }, 400);

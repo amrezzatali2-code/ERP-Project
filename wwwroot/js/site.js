@@ -159,7 +159,7 @@ if (window.__ERP_TABS_INITED__) {
                     var tabTitle = (link.getAttribute('data-tab-title') || link.textContent || '').trim();
 
                     var url = '';
-                    // ✅ حجم تعامل عميل: نضمن فتح Customers/Show وليس فاتورة مشتريات — نبني الرابط من data-base-url + معرّف العميل من الصفحة
+                    // ✅ حجم تعامل عميل: فتح Customers/Show في تاب جديد بمعرّف فريد (لا نستبدل تاب طلب الشراء/الفاتورة)
                     if (tabId === 'customer-engagement') {
                         var volBase = (link.getAttribute('data-base-url') || '').trim();
                         if (volBase) {
@@ -169,6 +169,8 @@ if (window.__ERP_TABS_INITED__) {
                             if (cid > 0) {
                                 var joiner = volBase.indexOf('?') >= 0 ? '&' : '?';
                                 url = normalizeUrl(volBase + joiner + 'id=' + cid);
+                                tabId = 'customer-volume-' + cid;
+                                tabTitle = (tabTitle || 'حجم تعامل').trim();
                             }
                         }
                     }
@@ -188,7 +190,7 @@ if (window.__ERP_TABS_INITED__) {
                     // ✅ لو في iframe: نرسل للوالد لفتح/تحديث التاب المناسب
                     try {
                         if (window.top && window.top !== window) {
-                            // لو الرابط يحدد tabId (مثل si-show-tab): نفتح/نحدّث ذلك التاب وليس التاب الحالي
+                            // لو tabId محدد (بما فيه حجم التعامل بعد تحويله لـ customer-volume-xxx): فتح/تحديث تاب. وإلا: تحديث التاب الحالي
                             if (tabId) {
                                 window.top.postMessage({
                                     type: 'erp-open-tab',
@@ -304,6 +306,8 @@ if (window.__ERP_TABS_INITED__) {
             url = normalizeUrl(url);
             // تاب حركة الصنف: عنوان ثابت "حركة الصنف" فقط
             if (tabId === 'product-movement-tab') title = 'حركة الصنف';
+            // تاب تعديل الصنف: عنوان ثابت "تعديل الصنف" (يفتح مرة واحدة ويُحدَّث حسب الصنف)
+            if (tabId === 'product-edit-tab') title = 'تعديل الصنف';
 
             if (!tabId) {
                 console.warn("⚠ openTab تم استدعاؤه بـ tabId فارغ → تم إلغاء فتح التاب لمنع التكرار");

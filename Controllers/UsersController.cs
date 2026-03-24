@@ -438,6 +438,9 @@ namespace ERP.Controllers
             _context.Users.Add(model);
             await _context.SaveChangesAsync();
 
+            await ApplyNewUserDefaultsAsync(model.UserId);
+            await _context.SaveChangesAsync();
+
             await _activityLogger.LogAsync(UserActionType.Create, "User", model.UserId, $"إنشاء مستخدم: {model.UserName}");
 
             TempData["Success"] = "تم إضافة المستخدم بنجاح.";
@@ -496,6 +499,10 @@ namespace ERP.Controllers
             // التأكد من تطابق المعرّف في الرابط مع الموديل
             if (id != model.UserId)
                 return BadRequest();                  // متغير: طلب غير متطابق
+
+            // عند التعديل: كلمة المرور اختيارية (فارغة = لا تغيير)، نزيل خطأ الـ Required إن وُجد
+            if (string.IsNullOrWhiteSpace(model.PasswordHash))
+                ModelState.Remove("PasswordHash");
 
             // ======================================================
             // 1) تجهيز اسم الدخول + الاسم الظاهر
@@ -858,6 +865,57 @@ namespace ERP.Controllers
             }
 
             return RedirectToAction(nameof(Index));
+        }
+
+        /// <summary>
+        /// افتراضيات لكل مستخدم جديد: صلاحيات إضافية (الصفحة الرئيسية + مبيعاتي الشخصية)
+        /// وقيد «الحسابات المسموح رؤيتها» على حساب العملاء 1103 إن وُجد في الدليل.
+        /// </summary>
+        private async Task ApplyNewUserDefaultsAsync(int userId)
+        {
+            if (userId <= 0) return;
+
+            string[] extraPermissionCodes = { "Home.Index", "Dashboard.Sales" };
+            foreach (var code in extraPermissionCodes)
+            {
+                var perm = await _context.Permissions.AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.IsActive && p.Code == code);
+                if (perm == null) continue;
+
+                var exists = await _context.UserExtraPermissions
+                    .AnyAsync(x => x.UserId == userId && x.PermissionId == perm.PermissionId);
+                if (!exists)
+                {
+                    _context.UserExtraPermissions.Add(new UserExtraPermissions
+                    {
+                        UserId = userId,
+                        PermissionId = perm.PermissionId,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
+
+            const string defaultCustomerAccountCode = "1103";
+            var accountId = await _context.Accounts.AsNoTracking()
+                .Where(a => a.AccountCode == defaultCustomerAccountCode)
+                .Select(a => a.AccountId)
+                .FirstOrDefaultAsync();
+
+            if (accountId > 0)
+            {
+                var hasOverride = await _context.UserAccountVisibilityOverrides
+                    .AnyAsync(x => x.UserId == userId && x.AccountId == accountId);
+                if (!hasOverride)
+                {
+                    _context.UserAccountVisibilityOverrides.Add(new UserAccountVisibilityOverride
+                    {
+                        UserId = userId,
+                        AccountId = accountId,
+                        IsAllowed = true,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+            }
         }
     }
 }

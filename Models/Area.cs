@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -17,7 +17,7 @@ namespace ERP.Models
         public string AreaName { get; set; } = "";         // اسم المنطقة/القرية (إلزامي)
 
         public int GovernorateId { get; set; }             // FK → Governorates.GovernorateId (المحافظة)
-        public int DistrictId { get; set; }                // FK → Districts.DistrictId (الحي/المركز)
+        public int? DistrictId { get; set; }                // FK → Districts.DistrictId (الحي/المركز — اختياري: «لا يوجد حي/مركز»)
 
         public bool IsActive { get; set; } = true;         // الحالة (نشط/موقوف)
         public string? Notes { get; set; }                 // ملاحظات اختيارية

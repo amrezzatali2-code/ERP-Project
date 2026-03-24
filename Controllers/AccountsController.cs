@@ -12,6 +12,7 @@ using ERP.Filters;                                   // RequirePermission
 using ERP.Infrastructure;                             // PagedResult + UserActivityLogger
 using ERP.Models;                                    // Account, UserActionType
 using ERP.Security;                                  // PermissionCodes
+using ERP.Services;                                 // IPermissionService
 
 namespace ERP.Controllers
 {
@@ -19,14 +20,20 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IPermissionService _permissionService;
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        public AccountsController(AppDbContext context, IUserActivityLogger activityLogger)
+        private const string InvestorAccountCode = "3101"; // حساب المستثمرين (رأس المال)
+
+        public AccountsController(AppDbContext context, IUserActivityLogger activityLogger, IPermissionService permissionService)
         {
             _context = context;
             _activityLogger = activityLogger;
+            _permissionService = permissionService;
         }
+
+        private static Task<bool> CanViewInvestorsAsync() => Task.FromResult(true); // إظهار/إخفاء 3101 يعتمد على «الحسابات المسموح رؤيتها» فقط
 
         /// <summary>تطبيق فلاتر الأعمدة (بنمط Excel) على استعلام الحسابات.</summary>
         private static IQueryable<Account> ApplyColumnFilters(
@@ -127,23 +134,27 @@ namespace ERP.Controllers
         {
             var searchTerm = (search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var canViewInvestors = await CanViewInvestorsAsync();
+            IQueryable<Account> accountsQ = _context.Accounts.AsNoTracking();
+            if (!canViewInvestors)
+                accountsQ = accountsQ.Where(a => a.AccountCode != InvestorAccountCode);
 
             if (columnLower == "id")
             {
-                var ids = await _context.Accounts.AsNoTracking()
+                var ids = await accountsQ
                     .Select(a => a.AccountId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "code")
             {
-                var q = _context.Accounts.AsNoTracking().Select(a => a.AccountCode);
+                var q = accountsQ.Select(a => a.AccountCode);
                 if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(list.Select(v => new { value = v, display = v }));
             }
             if (columnLower == "name")
             {
-                var q = _context.Accounts.AsNoTracking().Select(a => a.AccountName);
+                var q = accountsQ.Select(a => a.AccountName);
                 if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(list.Select(v => new { value = v, display = v }));
@@ -151,13 +162,13 @@ namespace ERP.Controllers
             if (columnLower == "type")
             {
                 // جلب القيم كـ enum ثم تحويلها لنص في الذاكرة (تفادي فشل ترجمة ToString في EF)
-                var list = await _context.Accounts.AsNoTracking()
+                var list = await accountsQ
                     .Select(a => a.AccountType).Distinct().OrderBy(x => x).Take(100).ToListAsync();
                 return Json(list.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "level")
             {
-                var ids = await _context.Accounts.AsNoTracking()
+                var ids = await accountsQ
                     .Select(a => a.Level).Distinct().OrderBy(x => x).Take(50).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
@@ -173,19 +184,19 @@ namespace ERP.Controllers
             }
             if (columnLower == "created")
             {
-                var dates = await _context.Accounts.AsNoTracking()
+                var dates = await accountsQ
                     .Select(a => a.CreatedAt.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
                 return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
             }
             if (columnLower == "updated")
             {
-                var dates = await _context.Accounts.AsNoTracking()
+                var dates = await accountsQ
                     .Where(a => a.UpdatedAt.HasValue).Select(a => a.UpdatedAt!.Value.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
                 return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
             }
             if (columnLower == "notes")
             {
-                var q = _context.Accounts.AsNoTracking().Where(a => a.Notes != null && a.Notes != "").Select(a => a.Notes!);
+                var q = accountsQ.Where(a => a.Notes != null && a.Notes != "").Select(a => a.Notes!);
                 if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.Distinct().OrderBy(x => x).Take(300).ToListAsync();
                 return Json(list.Select(v => new { value = v, display = v.Length > 60 ? v.Substring(0, 60) + "…" : v }));
@@ -268,6 +279,10 @@ namespace ERP.Controllers
             int pageSize = 50)
         {
             IQueryable<Account> q = _context.Accounts.AsNoTracking();
+
+            // منع ظهور حسابات المستثمرين لغير المسموح لهم
+            if (!await CanViewInvestorsAsync())
+                q = q.Where(a => a.AccountCode != InvestorAccountCode);
 
             // تنظيف قيم البحث والترتيب
             var s = (search ?? string.Empty).Trim();                 // نص البحث
@@ -591,6 +606,8 @@ namespace ERP.Controllers
             var account = await _context.Accounts.FindAsync(id);
             if (account == null)
                 return NotFound();
+            if (account.AccountCode == InvestorAccountCode && !await CanViewInvestorsAsync())
+                return NotFound();
 
             FillAccountDropdowns(account);
             return View(account);
@@ -606,6 +623,8 @@ namespace ERP.Controllers
         public async Task<IActionResult> Edit(int id, Account account)
         {
             if (id != account.AccountId)
+                return NotFound();
+            if (account.AccountCode == InvestorAccountCode && !await CanViewInvestorsAsync())
                 return NotFound();
 
             if (!ModelState.IsValid)
@@ -671,6 +690,8 @@ namespace ERP.Controllers
             var account = await _context.Accounts.FindAsync(id);
             if (account == null)
                 return NotFound();
+            if (account.AccountCode == InvestorAccountCode && !await CanViewInvestorsAsync())
+                return NotFound();
 
             var oldValues = System.Text.Json.JsonSerializer.Serialize(new { account.AccountCode, account.AccountName });
             _context.Accounts.Remove(account);
@@ -705,6 +726,15 @@ namespace ERP.Controllers
                 .Where(a => ids.Contains(a.AccountId))
                 .ToListAsync();
 
+            if (!await CanViewInvestorsAsync())
+                accounts = accounts.Where(a => a.AccountCode != InvestorAccountCode).ToList();
+
+            if (accounts.Count == 0)
+            {
+                TempData["ErrorMessage"] = "لا توجد حسابات مسموح حذفها (قد تكون حسابات المستثمرين محجوبة).";
+                return RedirectToAction(nameof(Index));
+            }
+
             _context.Accounts.RemoveRange(accounts);
             await _context.SaveChangesAsync();
 
@@ -721,6 +751,15 @@ namespace ERP.Controllers
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _context.Accounts.ToListAsync();
+            if (!await CanViewInvestorsAsync())
+                all = all.Where(a => a.AccountCode != InvestorAccountCode).ToList();
+
+            if (all.Count == 0)
+            {
+                TempData["ErrorMessage"] = "لا توجد حسابات مسموح حذفها (قد تكون حسابات المستثمرين محجوبة).";
+                return RedirectToAction(nameof(Index));
+            }
+
             _context.Accounts.RemoveRange(all);
             await _context.SaveChangesAsync();
 
@@ -756,6 +795,10 @@ namespace ERP.Controllers
             string? filterCol_notes = null)
         {
             IQueryable<Account> q = _context.Accounts.AsNoTracking();
+
+            // منع ظهور حسابات المستثمرين لغير المسموح لهم
+            if (!await CanViewInvestorsAsync())
+                q = q.Where(a => a.AccountCode != InvestorAccountCode);
 
             var s = (search ?? string.Empty).Trim();
             var sb = (searchBy ?? "all").Trim().ToLowerInvariant();

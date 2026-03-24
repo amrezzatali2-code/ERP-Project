@@ -1,0 +1,42 @@
+@{
+    ViewData["Title"] = "تحديث نوع الطرف والحساب من إكسل";
+}
+
+<div class="container mt-4" dir="rtl">
+    <h4 class="mb-3">تحديث نوع الطرف والحساب من ملفي إكسل</h4>
+
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+
+    <p class="text-muted mb-4">
+        ارفع ملف <strong>الموظفين.xlsx</strong> وملف <strong>المستثمرين.xlsx</strong>. يجب أن يحتوي كل ملف على عمود <strong>كود</strong> (رقم العميل) أو عمود <strong>اسم</strong> / <strong>الاسم</strong>. سيتم تعيين نوع الطرف والحساب المحاسبي لكل عميل يظهر في الملف.
+    </p>
+
+    <form asp-action="UpdatePartyFromExcel" method="post" enctype="multipart/form-data" class="border rounded p-4 bg-light">
+        @Html.AntiForgeryToken()
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">ملف الموظفين (الموظفين.xlsx)</label>
+                <input type="file" name="employeesFile" class="form-control" accept=".xlsx,.xls" />
+                <small class="text-muted">سيُحدَّث نوع الطرف إلى «موظف» والحساب إلى حساب الموظفين (5201).</small>
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">ملف المستثمرين (المستثمرين.xlsx)</label>
+                <input type="file" name="investorsFile" class="form-control" accept=".xlsx,.xls" />
+                <small class="text-muted">سيُحدَّث نوع الطرف إلى «مستثمر» والحساب إلى حساب المستثمرين (3101).</small>
+            </div>
+        </div>
+
+        <div class="mt-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary">تحديث</button>
+            <a asp-action="Index" class="btn btn-secondary">العودة إلى قائمة العملاء</a>
+        </div>
+    </form>
+</div>

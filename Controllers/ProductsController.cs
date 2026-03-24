@@ -7,7 +7,7 @@ using ERP.Filters;                      // RequirePermission
 using ERP.Infrastructure;               // PagedResult + UserActivityLogger
 using ERP.Models;                       // Product, Category, UserActionType...
 using ERP.Security;                     // PermissionCodes
-using ERP.Services;                     // StockAnalysisService, IPermissionService
+using ERP.Services;                     // StockAnalysisService, IPermissionService, ILedgerPostingService
 using ERP.ViewModels;                   // ViewModels الخاصة بحركة الصنف
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -33,13 +33,20 @@ namespace ERP.Controllers
         private readonly StockAnalysisService _stockAnalysisService;
         private readonly IUserActivityLogger _activityLogger;
         private readonly IPermissionService _permissionService;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
-        public ProductsController(AppDbContext db, StockAnalysisService stockAnalysisService, IUserActivityLogger activityLogger, IPermissionService permissionService)
+        public ProductsController(
+            AppDbContext db,
+            StockAnalysisService stockAnalysisService,
+            IUserActivityLogger activityLogger,
+            IPermissionService permissionService,
+            IUserAccountVisibilityService accountVisibilityService)
         {
             _db = db;
             _stockAnalysisService = stockAnalysisService;
             _activityLogger = activityLogger;
             _permissionService = permissionService;
+            _accountVisibilityService = accountVisibilityService;
         }
 
 
@@ -84,6 +91,8 @@ namespace ERP.Controllers
       string? filterCol_productGroup = null,
       string? filterCol_bonusGroup = null,
       string? filterCol_company = null,
+      string? filterCol_location = null,
+      string? filterCol_warehouse = null,
       string? filterCol_imported = null,
       string? filterCol_isactive = null,
       // فلاتر باقي الأعمدة (+ _contains للبحث النصي "يحتوي")
@@ -93,6 +102,7 @@ namespace ERP.Controllers
       string? filterCol_barcode = null,
       string? filterCol_generic = null,
       string? filterCol_category = null,
+      string? filterCol_classification = null,
       string? filterCol_price = null,
       string? filterCol_created = null,
       string? filterCol_modified = null,
@@ -105,9 +115,16 @@ namespace ERP.Controllers
       string? filterCol_priceExpr = null,   // مثل: <100 أو >50 أو 50:200
 
       int page = 1,                      // متغير: رقم الصفحة الحالية
-      int pageSize = 50                  // متغير: عدد السطور في الصفحة
+      int pageSize = 10,                 // متغير: عدد السطور في الصفحة (الافتراضي 10، 0 = الكل)
+      bool print = false                 // عند true: طباعة كل النتائج المفلترة في صفحة واحدة (كل الأعمدة)
   )
         {
+            // قراءة حجم الصفحة من الـ Query: نأخذ آخر قيمة لضمان تطابق القائمة المنسدلة مع الرقم المعروض (تجنب تكرار pageSize من فورم آخر)
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (print) { pageSize = 0; page = 1; } // وضع الطباعة: كل الأصناف المفلترة، صفحة واحدة
+
             // =========================================================
             // (1) الاستعلام الأساسي (بدون تتبّع لتحسين الأداء)
             //      + تحميل مجموعة الصنف ومجموعة البونص لعرض أسمائهما في الجدول
@@ -115,6 +132,8 @@ namespace ERP.Controllers
             IQueryable<Product> q = _db.Products
                 .Include(p => p.ProductGroup)        // متغير: تحميل مجموعة الصنف
                 .Include(p => p.ProductBonusGroup)   // متغير: تحميل مجموعة البونص
+                .Include(p => p.Classification)      // متغير: تحميل التصنيف (عادي، ثلاجة، …)
+                .Include(p => p.Warehouse)           // متغير: تحميل المخزن للعرض في القائمة
                 .AsNoTracking();
 
             // =========================================================
@@ -126,9 +145,11 @@ namespace ERP.Controllers
             var so = (sort ?? "name").Trim().ToLowerInvariant();            // متغير: عمود الترتيب
             var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase); // متغير: هل الترتيب تنازلي؟
 
-            // ضبط page/pageSize
-            page = page <= 0 ? 1 : page;                     // متغير: حماية رقم الصفحة
-            pageSize = pageSize <= 0 ? 50 : pageSize;         // متغير: حماية حجم الصفحة
+            // ضبط page/pageSize (0 = عرض الكل، والقيم المسموحة: 10، 25، 50، 100، 200)
+            page = page <= 0 ? 1 : page;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
             // توحيد searchMode
             if (sm == "startswith") sm = "starts";            // متغير: قبول startswith
@@ -336,7 +357,7 @@ namespace ERP.Controllers
             }
 
             // =========================================================
-            // (5) ✅ فلاتر متراكبة (Layered Filters)
+            // (5) ✅ فلاتر متراكبة (Layered Filters) — تُطبَّق بنظام AND (كل الفلاتر معاً)
             // =========================================================
             
             // فلتر حسب مجموعة الصنف (ProductGroup)
@@ -367,7 +388,7 @@ namespace ERP.Controllers
             }
 
             // =========================================================
-            // (5b) فلاتر أعمدة بنمط Excel (قيم متعددة مفصولة بـ |)
+            // (5b) فلاتر أعمدة بنمط Excel (قيم متعددة مفصولة بـ |) — تُضاف أيضاً بنظام AND
             // =========================================================
             var sep = new[] { '|' };
             if (!string.IsNullOrWhiteSpace(filterCol_productGroup))
@@ -398,6 +419,25 @@ namespace ERP.Controllers
                     .ToList();
                 if (vals.Count > 0)
                     q = q.Where(p => p.Company != null && vals.Contains(p.Company));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_location))
+            {
+                var vals = filterCol_location.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Location != null && vals.Contains(p.Location));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x) && int.TryParse(x, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                    .Select(x => int.Parse(x, CultureInfo.InvariantCulture))
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.WarehouseId != null && ids.Contains(p.WarehouseId.Value));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_imported))
             {
@@ -484,6 +524,16 @@ namespace ERP.Controllers
                     .ToList();
                 if (ids.Count > 0)
                     q = q.Where(p => p.CategoryId != null && ids.Contains(p.CategoryId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_classification))
+            {
+                var ids = filterCol_classification.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.ClassificationId != null && ids.Contains(p.ClassificationId.Value));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_price))
             {
@@ -695,9 +745,11 @@ namespace ERP.Controllers
                 "name" => desc ? q.OrderByDescending(p => p.ProdName) : q.OrderBy(p => p.ProdName),
                 "price" => desc ? q.OrderByDescending(p => p.PriceRetail) : q.OrderBy(p => p.PriceRetail),
                 "category" => desc ? q.OrderByDescending(p => p.ProductGroup!.Name) : q.OrderBy(p => p.ProductGroup!.Name),
+                "classification" => desc ? q.OrderByDescending(p => p.Classification != null ? (p.Classification.Name ?? "") : "") : q.OrderBy(p => p.Classification != null ? (p.Classification.Name ?? "") : ""),
                 "productgroup" => desc ? q.OrderByDescending(p => p.ProductGroup != null ? (p.ProductGroup.Name ?? "") : "") : q.OrderBy(p => p.ProductGroup != null ? (p.ProductGroup.Name ?? "") : ""),
                 "bonusgroup" => desc ? q.OrderByDescending(p => p.ProductBonusGroup != null ? (p.ProductBonusGroup.Name ?? "") : "") : q.OrderBy(p => p.ProductBonusGroup != null ? (p.ProductBonusGroup.Name ?? "") : ""),
                 "comp" => desc ? q.OrderByDescending(p => p.Company) : q.OrderBy(p => p.Company),
+                "location" => desc ? q.OrderByDescending(p => p.Location) : q.OrderBy(p => p.Location),
                 "created" => desc ? q.OrderByDescending(p => p.CreatedAt) : q.OrderBy(p => p.CreatedAt),
                 "updated" or "modified" => desc ? q.OrderByDescending(p => p.UpdatedAt) : q.OrderBy(p => p.UpdatedAt),
                 "imported" => desc ? q.OrderByDescending(p => p.Imported) : q.OrderBy(p => p.Imported),
@@ -710,17 +762,24 @@ namespace ERP.Controllers
             };
 
             // =========================================================
-            // (7) الترقيم (Paging)
+            // (7) الترقيم (Paging) — دعم pageSize=0 لعرض «الكل»
             // =========================================================
             int total = await q.CountAsync(); // متغير: إجمالي النتائج بعد الفلاتر
 
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = total == 0 ? 10 : Math.Min(total, 100_000); // حد أقصى للذاكرة
+                page = 1;
+            }
+
             var items = await q
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
                 .ToListAsync();
 
             // =========================================================
-            // (8) تجهيز PagedResult + تثبيت حالة البحث/الترتيب/التاريخ
+            // (8) تجهيز PagedResult + تثبيت حالة البحث/الترتيب/التاريخ (نمرّر pageSize الأصلي لظهور «الكل» في الواجهة)
             // =========================================================
             var model = new PagedResult<Product>(items, page, pageSize, total)
             {
@@ -736,6 +795,9 @@ namespace ERP.Controllers
             // =========================================================
             // (9) ViewBag: تثبيت قيم الواجهة
             // =========================================================
+            ViewBag.PageSize = pageSize; // لضمان تطابق القائمة المنسدلة «حجم الصفحة» مع الرقم المعروض
+            // إجمالي الأصناف بدون أي فلتر (للعرض في كارت الإجمالي)
+            ViewBag.TotalProductsUnfiltered = await _db.Products.CountAsync();
             ViewBag.SearchMode = sm;
             ViewBag.NumField = nf;
             ViewBag.FromNum = fromNum;
@@ -757,6 +819,8 @@ namespace ERP.Controllers
             ViewBag.FilterCol_ProductGroup = filterCol_productGroup;
             ViewBag.FilterCol_BonusGroup = filterCol_bonusGroup;
             ViewBag.FilterCol_Company = filterCol_company;
+            ViewBag.FilterCol_Location = filterCol_location;
+            ViewBag.FilterCol_Warehouse = filterCol_warehouse;
             ViewBag.FilterCol_Imported = filterCol_imported;
             ViewBag.FilterCol_IsActive = filterCol_isactive;
             ViewBag.FilterCol_Id = filterCol_id;
@@ -765,6 +829,7 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Barcode = filterCol_barcode;
             ViewBag.FilterCol_Generic = filterCol_generic;
             ViewBag.FilterCol_Category = filterCol_category;
+            ViewBag.FilterCol_Classification = filterCol_classification;
             ViewBag.FilterCol_Price = filterCol_price;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Modified = filterCol_modified;
@@ -830,6 +895,11 @@ namespace ERP.Controllers
             ViewBag.CanDelete = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Delete"));
             ViewBag.CanExport = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Export"));
 
+            if (print)
+            {
+                ViewBag.Print = true;
+                return View("Index", model); // نفس شكل جدول القائمة مع كل البيانات المفلترة
+            }
             return View(model);
         }
 
@@ -843,6 +913,7 @@ namespace ERP.Controllers
             var q = _db.Products
                 .Include(p => p.ProductGroup)
                 .Include(p => p.ProductBonusGroup)
+                .Include(p => p.Warehouse)
                 .AsNoTracking();
 
             List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
@@ -876,6 +947,14 @@ namespace ERP.Controllers
                     .ToListAsync())
                     .Select(v => (v.ToString(), v.ToString()))
                     .ToList(),
+                "classification" => (await _db.ProductClassifications
+                    .AsNoTracking()
+                    .Where(c => c.IsActive)
+                    .OrderBy(c => c.Name)
+                    .Select(c => new { c.Id, c.Name })
+                    .ToListAsync())
+                    .Select(c => (c.Id.ToString(), c.Name ?? c.Id.ToString()))
+                    .ToList(),
                 "productgroup" => (await q
                     .Where(p => p.ProductGroup != null)
                     .Select(p => new { p.ProductGroup!.ProductGroupId, p.ProductGroup.Name })
@@ -895,7 +974,18 @@ namespace ERP.Controllers
                 "company" => string.IsNullOrEmpty(searchTerm)
                     ? (await q.Where(p => !string.IsNullOrWhiteSpace(p.Company)).Select(p => p.Company!).Distinct().OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c, c)).ToList()
                     : (await q.Where(p => p.Company != null && EF.Functions.Like(p.Company, "%" + searchTerm + "%")).Select(p => p.Company!).Distinct().OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c!, c)).ToList(),
-                
+                "location" => string.IsNullOrEmpty(searchTerm)
+                    ? (await q.Where(p => !string.IsNullOrWhiteSpace(p.Location)).Select(p => p.Location!).Distinct().OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c, c)).ToList()
+                    : (await q.Where(p => p.Location != null && EF.Functions.Like(p.Location, "%" + searchTerm + "%")).Select(p => p.Location!).Distinct().OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c!, c)).ToList(),
+                "warehouse" => (await q
+                    .Where(p => p.Warehouse != null)
+                    .Select(p => new { p.Warehouse!.WarehouseId, p.Warehouse.WarehouseName })
+                    .Distinct()
+                    .OrderBy(x => x.WarehouseName)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(x => (x.WarehouseId.ToString(), x.WarehouseName ?? "")).ToList(),
+
                 // أعمدة رقمية (السعر)
                 "price" => (await q
                     .Where(p => p.PriceRetail > 0)
@@ -1004,7 +1094,7 @@ namespace ERP.Controllers
         {
             if (id <= 0) return NotFound();
 
-            var product = await _db.Products.FindAsync(id);
+            var product = await _db.Products.Include(p => p.Warehouse).FirstOrDefaultAsync(p => p.ProdId == id);
             if (product == null) return NotFound();
 
             return View(product);
@@ -1023,11 +1113,13 @@ namespace ERP.Controllers
         [RequirePermission("Products.Create")]
         public async Task<IActionResult> Create()
         {
-            // تحميل قائمة الفئات + مجموعات الأصناف + مجموعات البونص + التصنيف
+            // تحميل قائمة الفئات + مجموعات الأصناف + مجموعات البونص + التصنيف + المخازن
             await LoadCategoriesDDLAsync(null);
             await LoadProductGroupsDDLAsync(null);
             await LoadBonusGroupsDDLAsync(null);
             await LoadClassificationDDLAsync(null);
+            ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
+                .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
 
             ViewBag.ImportedOptions = GetImportedOptions(null);
 
@@ -1056,13 +1148,13 @@ namespace ERP.Controllers
         {
             if (!ModelState.IsValid)
             {
-                // إعادة تحميل القوائم لو حصل خطأ تحقق
                 await LoadCategoriesDDLAsync(model.CategoryId);
                 await LoadProductGroupsDDLAsync(model.ProductGroupId);
                 await LoadBonusGroupsDDLAsync(model.ProductBonusGroupId);
                 await LoadClassificationDDLAsync(model.ClassificationId);
+                ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
+                    .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
                 ViewBag.ImportedOptions = GetImportedOptions(model.Imported);
-
                 return View(model);
             }
 
@@ -1108,6 +1200,8 @@ namespace ERP.Controllers
             await LoadProductGroupsDDLAsync(m.ProductGroupId);
             await LoadBonusGroupsDDLAsync(m.ProductBonusGroupId);
             await LoadClassificationDDLAsync(m.ClassificationId);
+            ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
+                .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
             ViewBag.ImportedOptions = GetImportedOptions(m.Imported);
 
             return View(m);
@@ -1133,6 +1227,8 @@ namespace ERP.Controllers
                 await LoadProductGroupsDDLAsync(model.ProductGroupId);
                 await LoadBonusGroupsDDLAsync(model.ProductBonusGroupId);
                 await LoadClassificationDDLAsync(model.ClassificationId);
+                ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
+                    .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
                 ViewBag.ImportedOptions = GetImportedOptions(model.Imported);
                 return View(model);
             }
@@ -1164,6 +1260,76 @@ namespace ERP.Controllers
             }
 
             _db.Products.Update(model);
+
+            // عند وجود مخزن معيّن للصنف: نقل أي رصيد في مخازن أخرى إلى هذا المخزن (حتى يظهر الصنف في المخزن الصحيح ويُزال من الاكسسوار مثلاً)
+            int stockMoved = 0;
+            if (model.WarehouseId.HasValue)
+            {
+                int targetWh = model.WarehouseId.Value;
+                var tranDate = DateTime.UtcNow;
+                const string sourceType = "SyncToProductWarehouse";
+                const int sourceId = 0;
+                // تضمين صفوف لها رصيد إما من RemainingQty أو من (QtyIn - QtyOut) للقيود القديمة التي RemainingQty فيها null
+                var sourceRows = await _db.StockLedger
+                    .Where(sl => sl.ProdId == model.ProdId && sl.WarehouseId != targetWh && sl.QtyIn > 0 &&
+                        ((sl.RemainingQty ?? 0) > 0 || (sl.RemainingQty == null && sl.QtyIn > sl.QtyOut)))
+                    .OrderBy(sl => sl.TranDate)
+                    .ToListAsync();
+                int lineNo = 0;
+                foreach (var row in sourceRows)
+                {
+                    int take = (row.RemainingQty ?? 0) > 0 ? (row.RemainingQty ?? 0) : Math.Max(0, row.QtyIn - row.QtyOut);
+                    if (take <= 0) continue;
+                    _db.StockLedger.Add(new StockLedger
+                    {
+                        TranDate = tranDate,
+                        WarehouseId = row.WarehouseId,
+                        ProdId = row.ProdId,
+                        BatchNo = row.BatchNo,
+                        BatchId = row.BatchId,
+                        Expiry = row.Expiry,
+                        QtyIn = 0,
+                        QtyOut = take,
+                        UnitCost = row.UnitCost,
+                        RemainingQty = null,
+                        SourceType = sourceType,
+                        SourceId = sourceId,
+                        SourceLine = lineNo,
+                        CounterWarehouseId = targetWh,
+                        Note = "تحويل رصيد إلى المخزن المعيّن للصنف (تعديل صنف)",
+                        CreatedAt = tranDate
+                    });
+                    row.RemainingQty = 0;
+                    _db.StockLedger.Update(row);
+                    var lineTotalCost = (decimal)take * row.UnitCost;
+                    var lineTotalCostNullable = row.TotalCost.HasValue && row.TotalCost.Value != 0 ? (decimal?)lineTotalCost : null;
+                    _db.StockLedger.Add(new StockLedger
+                    {
+                        TranDate = tranDate,
+                        WarehouseId = targetWh,
+                        ProdId = row.ProdId,
+                        BatchNo = row.BatchNo,
+                        BatchId = row.BatchId,
+                        Expiry = row.Expiry,
+                        QtyIn = take,
+                        QtyOut = 0,
+                        UnitCost = row.UnitCost,
+                        TotalCost = lineTotalCostNullable,
+                        PurchaseDiscount = row.PurchaseDiscount,
+                        PriceRetailBatch = row.PriceRetailBatch,
+                        RemainingQty = take,
+                        SourceType = sourceType,
+                        SourceId = sourceId,
+                        SourceLine = lineNo,
+                        CounterWarehouseId = row.WarehouseId,
+                        Note = "تحويل رصيد إلى المخزن المعيّن للصنف (تعديل صنف)",
+                        CreatedAt = tranDate
+                    });
+                    stockMoved += take;
+                    lineNo++;
+                }
+            }
+
             await _db.SaveChangesAsync();
 
             var newValues = System.Text.Json.JsonSerializer.Serialize(new
@@ -1181,8 +1347,11 @@ namespace ERP.Controllers
                 oldValues,
                 newValues);
 
-            TempData["Msg"] = "تم تعديل الصنف بنجاح.";
-            return RedirectToAction(nameof(Index));
+            if (stockMoved > 0)
+                TempData["Msg"] = "تم تعديل الصنف بنجاح. تم نقل " + stockMoved + " وحدة إلى المخزن الجديد.";
+            else
+                TempData["Msg"] = "تم تعديل الصنف بنجاح.";
+            return RedirectToAction(nameof(Edit), new { id = model.ProdId });
         }
 
 
@@ -1349,6 +1518,8 @@ namespace ERP.Controllers
             string? filterCol_productGroup = null,
             string? filterCol_bonusGroup = null,
             string? filterCol_company = null,
+            string? filterCol_location = null,
+            string? filterCol_warehouse = null,
             string? filterCol_imported = null,
             string? filterCol_isactive = null,
             // فلاتر باقي الأعمدة (+ _contains للبحث "يحتوي")
@@ -1358,6 +1529,7 @@ namespace ERP.Controllers
             string? filterCol_barcode = null,
             string? filterCol_generic = null,
             string? filterCol_category = null,
+            string? filterCol_classification = null,
             string? filterCol_price = null,
             string? filterCol_created = null,
             string? filterCol_modified = null,
@@ -1374,6 +1546,8 @@ namespace ERP.Controllers
             IQueryable<Product> q = _db.Products
                 .Include(p => p.ProductGroup)
                 .Include(p => p.ProductBonusGroup)
+                .Include(p => p.Classification)
+                .Include(p => p.Warehouse)
                 .AsNoTracking();
 
             // ========= البحث =========
@@ -1496,6 +1670,23 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     q = q.Where(p => p.Company != null && vals.Contains(p.Company));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_location))
+            {
+                var vals = filterCol_location.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(p => p.Location != null && vals.Contains(p.Location));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            {
+                var ids = filterCol_warehouse.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim())
+                    .Where(x => !string.IsNullOrEmpty(x) && int.TryParse(x, NumberStyles.Integer, CultureInfo.InvariantCulture, out _))
+                    .Select(x => int.Parse(x, CultureInfo.InvariantCulture))
+                    .ToList();
+                if (ids.Count > 0)
+                    q = q.Where(p => p.WarehouseId != null && ids.Contains(p.WarehouseId.Value));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_imported))
             {
                 var vals = filterCol_imported.Split(sep, StringSplitOptions.RemoveEmptyEntries)
@@ -1555,6 +1746,13 @@ namespace ERP.Controllers
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(p => p.CategoryId != null && ids.Contains(p.CategoryId.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_classification))
+            {
+                var ids = filterCol_classification.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (ids.Count > 0) q = q.Where(p => p.ClassificationId != null && ids.Contains(p.ClassificationId.Value));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_price))
             {
@@ -1729,9 +1927,17 @@ namespace ERP.Controllers
                     (desc ? q.OrderByDescending(p => p.CategoryId)
                           : q.OrderBy(p => p.CategoryId)),
 
+                "classification" =>
+                    (desc ? q.OrderByDescending(p => p.Classification != null ? (p.Classification.Name ?? "") : "")
+                          : q.OrderBy(p => p.Classification != null ? (p.Classification.Name ?? "") : "")),
+
                 "comp" or "company" =>
                     (desc ? q.OrderByDescending(p => p.Company)
                           : q.OrderBy(p => p.Company)),
+
+                "location" =>
+                    (desc ? q.OrderByDescending(p => p.Location)
+                          : q.OrderBy(p => p.Location)),
 
                 "price" =>
                     (desc ? q.OrderByDescending(p => p.PriceRetail)
@@ -1772,7 +1978,10 @@ namespace ERP.Controllers
                     Csv("الباركود"),
                     Csv("الاسم العلمي"),
                     Csv("كود الفئة"),
+                    Csv("التصنيف"),
                     Csv("الشركة"),
+                    Csv("الموقع"),
+                    Csv("المخزن"),
                     Csv("محلي/مستورد"),
                     Csv("فعال؟"),
                     Csv("سعر الجمهور"),
@@ -1792,6 +2001,8 @@ namespace ERP.Controllers
                         Csv(p.GenericName),
                         Csv(p.CategoryId.ToString()),
                         Csv(p.Company),
+                        Csv(p.Location),
+                        Csv(p.Warehouse?.WarehouseName),
                         Csv(p.Imported?.ToString()),
                         Csv(p.IsActive ? "نشط" : "موقوف"),
                         Csv(p.PriceRetail.ToString(CultureInfo.InvariantCulture)),
@@ -1822,17 +2033,20 @@ namespace ERP.Controllers
             ws.Cell(r, 3).Value = "الباركود";
             ws.Cell(r, 4).Value = "الاسم العلمي";
             ws.Cell(r, 5).Value = "كود الفئة";
-            ws.Cell(r, 6).Value = "الشركة";
-            ws.Cell(r, 7).Value = "محلي/مستورد";
-            ws.Cell(r, 8).Value = "فعال؟";
-            ws.Cell(r, 9).Value = "سعر الجمهور";
-            ws.Cell(r, 10).Value = "تاريخ الإنشاء";
-            ws.Cell(r, 11).Value = "آخر تعديل";
-            ws.Cell(r, 12).Value = "آخر تغيير سعر";
-            ws.Cell(r, 13).Value = "الوصف";
+            ws.Cell(r, 6).Value = "التصنيف";
+            ws.Cell(r, 7).Value = "الشركة";
+            ws.Cell(r, 8).Value = "الموقع";
+            ws.Cell(r, 9).Value = "المخزن";
+            ws.Cell(r, 10).Value = "محلي/مستورد";
+            ws.Cell(r, 11).Value = "فعال؟";
+            ws.Cell(r, 12).Value = "سعر الجمهور";
+            ws.Cell(r, 13).Value = "تاريخ الإنشاء";
+            ws.Cell(r, 14).Value = "آخر تعديل";
+            ws.Cell(r, 15).Value = "آخر تغيير سعر";
+            ws.Cell(r, 16).Value = "الوصف";
 
             // تنسيق صف العناوين
-            var headerRange = ws.Range(r, 1, r, 13);
+            var headerRange = ws.Range(r, 1, r, 16);
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -1846,21 +2060,24 @@ namespace ERP.Controllers
                 ws.Cell(r, 3).Value = p.Barcode ?? "";
                 ws.Cell(r, 4).Value = p.GenericName ?? "";
                 ws.Cell(r, 5).Value = p.CategoryId;
-                ws.Cell(r, 6).Value = p.Company ?? "";
-                ws.Cell(r, 7).Value = p.Imported?.ToString() ?? "";
-                ws.Cell(r, 8).Value = p.IsActive ? "نشط" : "موقوف";
-                ws.Cell(r, 9).Value = p.PriceRetail;
-                ws.Cell(r, 10).Value = p.CreatedAt;
-                ws.Cell(r, 11).Value = p.UpdatedAt;
-                ws.Cell(r, 12).Value = p.LastPriceChangeDate;
-                ws.Cell(r, 13).Value = p.Description ?? "";
+                ws.Cell(r, 6).Value = p.Classification?.Name ?? "";
+                ws.Cell(r, 7).Value = p.Company ?? "";
+                ws.Cell(r, 8).Value = p.Location ?? "";
+                ws.Cell(r, 9).Value = p.Warehouse?.WarehouseName ?? "";
+                ws.Cell(r, 10).Value = p.Imported?.ToString() ?? "";
+                ws.Cell(r, 11).Value = p.IsActive ? "نشط" : "موقوف";
+                ws.Cell(r, 12).Value = p.PriceRetail;
+                ws.Cell(r, 13).Value = p.CreatedAt;
+                ws.Cell(r, 14).Value = p.UpdatedAt;
+                ws.Cell(r, 15).Value = p.LastPriceChangeDate;
+                ws.Cell(r, 16).Value = p.Description ?? "";
             }
 
             // ضبط عرض الأعمدة تلقائيًا
             ws.Columns().AdjustToContents();
 
             // تنسيق سعر الجمهور
-            ws.Column(9).Style.NumberFormat.Format = "0.00";
+            ws.Column(12).Style.NumberFormat.Format = "0.00";
 
             using var stream = new MemoryStream();     // متغير: ذاكرة مؤقتة
             workbook.SaveAs(stream);
@@ -1988,9 +2205,9 @@ namespace ERP.Controllers
             term = term.Trim();
 
             // هنا نفترض أن كل العملاء والموردين فى جدول Customers
-            var results = await _db.Customers
-                .AsNoTracking()
-                .Where(c => c.CustomerName.Contains(term))
+            var searchQuery = _db.Customers.AsNoTracking().Where(c => c.CustomerName.Contains(term));
+            searchQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(searchQuery);
+            var results = await searchQuery
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
                 {
@@ -2434,12 +2651,16 @@ namespace ERP.Controllers
         // =====================
         [HttpGet]
         [RequirePermission("Products.Import")]
-        public IActionResult Import()
+        public async Task<IActionResult> Import()
         {
-            // ممكن نستخدم TempData لرسائل النجاح/الخطأ بين الريدايركتات
             ViewBag.Success = TempData["Success"];
             ViewBag.Error = TempData["Error"];
-
+            var governorates = await _db.Governorates.OrderBy(g => g.GovernorateName).Select(g => new { g.GovernorateId, g.GovernorateName }).ToListAsync();
+            var districts = await _db.Districts.OrderBy(d => d.DistrictName).Select(d => new { d.DistrictId, d.DistrictName, d.GovernorateId }).ToListAsync();
+            ViewBag.Governorates = governorates.Select(g => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = g.GovernorateId.ToString(), Text = g.GovernorateName }).ToList();
+            ViewBag.Districts = districts.Select(d => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = d.DistrictId.ToString(), Text = d.DistrictName }).ToList();
+            var warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName).Select(w => new { w.WarehouseId, w.WarehouseName }).ToListAsync();
+            ViewBag.Warehouses = warehouses.Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToList();
             return View();
         }
 
@@ -2450,7 +2671,7 @@ namespace ERP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequirePermission("Products.Import")]
-        public async Task<IActionResult> Import(IFormFile excelFile)   // متغيّر: ملف الإكسل المرفوع من الفيو
+        public async Task<IActionResult> Import(IFormFile excelFile, string? importType = null)   // importType: Medicine | Accessory (لتعيين الفئة)
         {
             // ===== 1) التأكد من اختيار ملف =====
             if (excelFile == null || excelFile.Length == 0)
@@ -2461,6 +2682,21 @@ namespace ERP.Controllers
 
             try
             {
+                // ملفات كبيرة (أكثر من 24 ألف صنف): نزيد مهلة أوامر قاعدة البيانات لتجنّب انقطاع الطلب
+                try { _db.Database.SetCommandTimeout(300); } catch { /* 300 ثانية = 5 دقائق */ }
+
+                // ===== مسح القديم كله ثم استيراد الجديد: الجداول المرتبطة ثم الأصناف =====
+                var allStock = await _db.StockLedger.ToListAsync();
+                if (allStock.Count > 0) _db.StockLedger.RemoveRange(allStock);
+                var allPriceHist = await _db.ProductPriceHistories.ToListAsync();
+                if (allPriceHist.Count > 0) _db.ProductPriceHistories.RemoveRange(allPriceHist);
+                var allDiscountOverrides = await _db.ProductDiscountOverrides.ToListAsync();
+                if (allDiscountOverrides.Count > 0) _db.ProductDiscountOverrides.RemoveRange(allDiscountOverrides);
+                var allProds = await _db.Products.ToListAsync();
+                if (allProds.Count > 0) _db.Products.RemoveRange(allProds);
+                if (allStock.Count > 0 || allPriceHist.Count > 0 || allDiscountOverrides.Count > 0 || allProds.Count > 0)
+                    await _db.SaveChangesAsync();
+
                 // ===== 2) قراءة ملف الإكسل فى الذاكرة =====
                 using var stream = new MemoryStream();                 // متغيّر: stream يحمل بيانات الملف
                 await excelFile.CopyToAsync(stream);                   // نسخ الملف إلى الـ stream
@@ -2481,99 +2717,246 @@ namespace ERP.Controllers
                 int lastRow = sheet.Dimension.End.Row;    // متغيّر: رقم آخر صف
                 int lastCol = sheet.Dimension.End.Column; // متغيّر: رقم آخر عمود
 
-                // ===== 3) خريطة الهيدر (اسم العمود -> رقم العمود) =====
-                var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);  // متغيّر: يحتفظ بأرقام الأعمدة حسب أسمائها
-
+                // ===== 3) خريطة الهيدر — أعمدة ثابتة فقط (أي عمود إضافي في الإكسل يُتجاهل) =====
+                var fixedProductCols = new HashSet<string>(ExcelImportColumns.Products, StringComparer.OrdinalIgnoreCase);
+                var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
                 for (int col = 1; col <= lastCol; col++)
                 {
-                    var headerText = sheet.Cells[1, col].Text?.Trim(); // متغيّر: نص الهيدر فى الصف الأول
-                    if (!string.IsNullOrWhiteSpace(headerText) && !headers.ContainsKey(headerText))
+                    var headerText = sheet.Cells[1, col].Text?.Trim();
+                    if (!string.IsNullOrWhiteSpace(headerText) && fixedProductCols.Contains(headerText) && !headers.ContainsKey(headerText))
+                        headers[headerText] = col;
+                }
+
+                // ===== 4) عمود اسم الصنف مطلوب (بالإنجليزية أو العربية) =====
+                int nameCol = -1;
+                foreach (var key in new[] { "ProdName", "الصنف", "اسم الصنف" })
+                {
+                    if (headers.TryGetValue(key, out var col)) { nameCol = col; break; }
+                }
+                if (nameCol <= 0)
+                {
+                    TempData["Error"] = "الملف يجب أن يحتوي على عمود اسم الصنف (ProdName أو الصنف أو اسم الصنف).";
+                    return RedirectToAction(nameof(Import));
+                }
+                // عمود الكود (اختياري): إن وُجد وكان رقماً موجباً يُستخدم كـ ProdId خلال الاستيراد فقط — لا نعبّئ كود الإكسل
+                int? codeCol = GetCol(headers, "اسم الكود", "كود الصنف", "ProdId", "Code", "الكود");
+
+                // دالة مساعدة: قراءة نص من عمود بالاسم الإنجليزي أو العربي
+                string? GetCell(string en, string ar, int r)
+                {
+                    if (headers.TryGetValue(en, out var c)) return sheet.Cells[r, c].Text?.Trim();
+                    if (headers.TryGetValue(ar, out c)) return sheet.Cells[r, c].Text?.Trim();
+                    return null;
+                }
+                // قراءة نص من عمود بأي من الأسماء الممكنة (مثلاً الشركة/الشركه، التصنيف/التصنيه)
+                string? GetCellByKeys(int r, params string[] keys)
+                {
+                    foreach (var k in keys)
+                        if (!string.IsNullOrEmpty(k) && headers.TryGetValue(k, out var c))
+                            return sheet.Cells[r, c].Text?.Trim();
+                    return null;
+                }
+                decimal GetCellDecimal(string en, string ar, int r)
+                {
+                    var t = GetCell(en, ar, r);
+                    if (string.IsNullOrWhiteSpace(t)) return 0m;
+                    if (decimal.TryParse(t, NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) return v;
+                    if (decimal.TryParse(t, NumberStyles.Any, CultureInfo.GetCultureInfo("ar-EG"), out v)) return v;
+                    return 0m;
+                }
+                // سعر الجمهور: عمود الإكسل قد يكون "سعر الجمهور" أو "PriceRetail" أو "سعر ج" أو "سعرج"
+                decimal GetPriceRetail(int r)
+                {
+                    var v = GetCellDecimal("سعر الجمهور", "PriceRetail", r);
+                    if (v != 0m) return v;
+                    v = GetCellDecimal("PriceRetail", "سعر ج", r);
+                    if (v != 0m) return v;
+                    return GetCellDecimal("PriceRetail", "سعرج", r);
+                }
+
+                // ===== 5) قائمة المخازن للربط بالاسم من الإكسل =====
+                var warehousesByName = await _db.Warehouses.AsNoTracking()
+                    .Where(w => w.IsActive)
+                    .ToDictionaryAsync(w => w.WarehouseName.Trim(), w => w.WarehouseId, StringComparer.OrdinalIgnoreCase);
+
+                // قائمة التصنيفات للربط بالاسم (مع قبول تاء مربوطة أو هاء في الاسم)
+                var classificationsByName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                foreach (var c in await _db.ProductClassifications.AsNoTracking().Where(x => x.IsActive).ToListAsync())
+                {
+                    var name = c.Name?.Trim() ?? "";
+                    if (string.IsNullOrEmpty(name)) continue;
+                    classificationsByName[name] = c.Id;
+                    var nameNorm = name.Replace('\u0629', '\u0647'); // تاء مربوطة → هاء
+                    if (nameNorm != name) classificationsByName[nameNorm] = c.Id;
+                }
+
+                // تعيين الفئة مرة واحدة إن وُجد (دواء / اكسسوار)
+                int? categoryIdForImport = null;
+                if (!string.IsNullOrWhiteSpace(importType))
+                {
+                    var categoryName = importType.Equals("Medicine", StringComparison.OrdinalIgnoreCase) ? "دواء"
+                        : importType.Equals("Accessory", StringComparison.OrdinalIgnoreCase) ? "اكسسوار" : null;
+                    if (!string.IsNullOrEmpty(categoryName))
                     {
-                        headers[headerText] = col;                     // حفظ اسم العمود مع رقمه
+                        var cat = await _db.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.CategoryName == categoryName);
+                        if (cat != null) categoryIdForImport = cat.CategoryId;
                     }
                 }
 
-                // ===== 4) الأعمدة المطلوبة فى ملف الإكسل (من غير units) =====
-                string[] requiredHeaders =
+                // ===== 6) استيراد على دفعات (Batch) لدعم ملفات كبيرة (أكثر من 24 ألف صنف) =====
+                const int batchSize = 2000;   // حجم الدفعة: تقليل استهلاك الذاكرة وتجنّب مهلة الطلب
+                int totalInserted = 0, totalUpdated = 0;
+                int totalRowsWithName = 0;   // عدد الصفوط التي تحتوي على اسم (غير فارغ) — للمقارنة مع العدد النهائي
+
+                for (int startRow = 2; startRow <= lastRow; startRow += batchSize)
                 {
-                    "ProdName",
-                    "PriceRetail",
-                    "GenericName",
-                    "Company",
-                    "Description",
-                    "DosageForm",
-                    "Barcode",
-                    "Imported"
-                };
-
-                var missing = requiredHeaders
-                    .Where(h => !headers.ContainsKey(h))
-                    .ToList();
-
-                if (missing.Any())
-                {
-                    TempData["Error"] = "بعض الأعمدة غير موجودة في الملف: " +
-                                        string.Join(", ", missing);
-                    return RedirectToAction(nameof(Import));
-                }
-
-                // ===== 5) تجهيز قائمة الأصناف التى سيتم حفظها =====
-                var productsToInsert = new List<Product>(); // متغيّر: قائمة الأصناف الجديدة
-
-                for (int row = 2; row <= lastRow; row++)    // نبدأ من الصف الثانى بعد الهيدر
-                {
-                    // ---- اسم الصنف (لو فاضى نتخطى الصف) ----
-                    string prodName = sheet.Cells[row, headers["ProdName"]].Text?.Trim();
-                    if (string.IsNullOrWhiteSpace(prodName))
-                        continue;
-
-                    // ---- سعر الجمهور ----
-                    decimal priceRetail = 0m;
-                    var priceText = sheet.Cells[row, headers["PriceRetail"]].Text?.Trim();
-
-                    if (!string.IsNullOrWhiteSpace(priceText))
+                    int endRow = Math.Min(startRow + batchSize - 1, lastRow);
+                    var namesInBatch = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int r = startRow; r <= endRow; r++)
                     {
-                        decimal tmp;
-                        // نحاول نقرأ الرقم بأسلوبين (عشان الفاصلة أو النقطة)
-                        if (decimal.TryParse(priceText, NumberStyles.Any, CultureInfo.InvariantCulture, out tmp) ||
-                            decimal.TryParse(priceText, NumberStyles.Any, CultureInfo.GetCultureInfo("ar-EG"), out tmp))
+                        var n = sheet.Cells[r, nameCol].Text?.Trim();
+                        if (!string.IsNullOrWhiteSpace(n)) namesInBatch.Add(n);
+                    }
+                    if (namesInBatch.Count == 0) continue;
+
+                    var existingProducts = await _db.Products
+                        .Where(p => p.ProdName != null && namesInBatch.Contains(p.ProdName))
+                        .ToListAsync();
+                    var existingByName = existingProducts.ToDictionary(p => p.ProdName!.Trim(), p => p, StringComparer.OrdinalIgnoreCase);
+                    var usedProdIds = existingProducts.Select(p => p.ProdId).ToHashSet();
+                    var productsToInsert = new List<Product>();
+
+                    for (int row = startRow; row <= endRow; row++)
+                    {
+                        string prodName = sheet.Cells[row, nameCol].Text?.Trim() ?? "";
+                        if (string.IsNullOrWhiteSpace(prodName)) continue;
+                        totalRowsWithName++;
+
+                        int? warehouseId = null;
+                        var whIdText = GetCell("WarehouseId", "كود المخزن", row);
+                        if (!string.IsNullOrWhiteSpace(whIdText) && int.TryParse(whIdText, NumberStyles.Any, CultureInfo.InvariantCulture, out var whId))
+                            warehouseId = whId;
+                        else
                         {
-                            priceRetail = tmp;
+                            var whName = GetCell("WarehouseName", "اسم المخزن", row) ?? GetCell("المخزن", "", row);
+                            if (!string.IsNullOrWhiteSpace(whName) && warehousesByName.TryGetValue(whName.Trim(), out var whIdByName))
+                                warehouseId = whIdByName;
+                        }
+
+                        // حل التصنيف من اسم العمود (مع قبول تاء/هاء)
+                        int? classificationId = null;
+                        var classificationName = GetCellByKeys(row, "Classification", "التصنيف", "التصنيه");
+                        if (!string.IsNullOrWhiteSpace(classificationName))
+                        {
+                            var cn = classificationName.Trim();
+                            if (classificationsByName.TryGetValue(cn, out var cid))
+                                classificationId = cid;
+                            else if (classificationsByName.TryGetValue(cn.Replace('\u0629', '\u0647'), out cid))
+                                classificationId = cid;
+                        }
+
+                        if (existingByName.TryGetValue(prodName, out var existing))
+                        {
+                            existing.PriceRetail = GetPriceRetail(row);
+                            existing.GenericName = GetCell("GenericName", "الاسم العلمي", row);
+                            existing.Company = GetCellByKeys(row, "Company", "الشركة", "الشركه");
+                            existing.ClassificationId = classificationId;
+                            existing.Location = GetCell("Location", "الموقع", row);
+                            existing.WarehouseId = warehouseId;
+                            existing.Description = GetCell("Description", "الوصف", row);
+                            existing.DosageForm = GetCell("DosageForm", "الشكل الدوائي", row);
+                            existing.Barcode = GetCell("Barcode", "Barcode", row);
+                            existing.Imported = GetCell("Imported", "المنشأ", row);
+                            existing.UpdatedAt = DateTime.UtcNow;
+                            if (categoryIdForImport.HasValue) existing.CategoryId = categoryIdForImport.Value;
+                            if (existing.ProdId != 0) totalUpdated++;
+                        }
+                        else
+                        {
+                            var product = new Product
+                            {
+                                ProdName = prodName,
+                                PriceRetail = GetPriceRetail(row),
+                                GenericName = GetCell("GenericName", "الاسم العلمي", row),
+                                Company = GetCellByKeys(row, "Company", "الشركة", "الشركه"),
+                                ClassificationId = classificationId,
+                                Location = GetCell("Location", "الموقع", row),
+                                WarehouseId = warehouseId,
+                                Description = GetCell("Description", "الوصف", row),
+                                DosageForm = GetCell("DosageForm", "الشكل الدوائي", row),
+                                Barcode = GetCell("Barcode", "Barcode", row),
+                                Imported = GetCell("Imported", "المنشأ", row),
+                                IsActive = true,
+                                CreatedAt = DateTime.UtcNow,
+                                UpdatedAt = DateTime.UtcNow
+                            };
+                            if (categoryIdForImport.HasValue) product.CategoryId = categoryIdForImport.Value;
+                            // خلال الاستيراد فقط: إن وُجد عمود الكود (اسم الكود / كود الصنف...) رقماً موجباً وغير مكرر يُستخدم كـ ProdId — لا نعبّئ كود الإكسل
+                            if (codeCol.HasValue && codeCol.Value > 0)
+                            {
+                                var codeStr = sheet.Cells[row, codeCol.Value].Text?.Trim();
+                                if (!string.IsNullOrWhiteSpace(codeStr) && int.TryParse(codeStr, NumberStyles.Any, CultureInfo.InvariantCulture, out var codeInt) && codeInt > 0 && !usedProdIds.Contains(codeInt))
+                                {
+                                    product.ProdId = codeInt;
+                                    usedProdIds.Add(codeInt);
+                                }
+                            }
+                            productsToInsert.Add(product);
+                            existingByName[prodName.Trim()] = product;
                         }
                     }
 
-                    // ---- إنشاء كائن Product جديد ----
-                    var product = new Product
+                    var withIdentity = productsToInsert.Where(p => p.ProdId == 0).ToList();
+                    var withExplicitId = productsToInsert.Where(p => p.ProdId > 0).ToList();
+                    if (withIdentity.Count > 0)
+                        _db.Products.AddRange(withIdentity);
+                    if (withExplicitId.Count > 0)
                     {
-                        // Id: تلقائي Identity من قاعدة البيانات
-                        ProdName = prodName,                                                   // اسم الصنف
-                        PriceRetail = priceRetail,                                             // سعر الجمهور
-                        GenericName = sheet.Cells[row, headers["GenericName"]].Text?.Trim(),   // الاسم العلمي
-                        Company = sheet.Cells[row, headers["Company"]].Text?.Trim(),           // الشركة
-                        Description = sheet.Cells[row, headers["Description"]].Text?.Trim(),   // الوصف
-                        DosageForm = sheet.Cells[row, headers["DosageForm"]].Text?.Trim(),     // الشكل الدوائي
-                        Barcode = sheet.Cells[row, headers["Barcode"]].Text?.Trim(),           // الباركود
-                        Imported = sheet.Cells[row, headers["Imported"]].Text?.Trim(),         // محلى / مستورد
-
-                        IsActive = true,                                                       // جعل الصنف نشط افتراضياً
-                        CreatedAt = DateTime.Now,                                              // تاريخ الإنشاء
-                        UpdatedAt = DateTime.Now                                               // آخر تعديل
-                    };
-
-                    productsToInsert.Add(product);
+                        // تشغيل SET ON والـ INSERT وSET OFF على نفس الاتصال (Transaction) حتى لا يفقد الإعداد
+                        using var tran = await _db.Database.BeginTransactionAsync();
+                        try
+                        {
+                            await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Products] ON");
+                            foreach (var p in withExplicitId)
+                            {
+                                await _db.Database.ExecuteSqlRawAsync(
+                                    "INSERT INTO [Products] (ProdId, ProdName, PriceRetail, ExternalCode, GenericName, Company, ClassificationId, Location, WarehouseId, Description, DosageForm, Barcode, Imported, IsActive, CreatedAt, UpdatedAt, CategoryId) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16})",
+                                    p.ProdId, p.ProdName ?? "", p.PriceRetail, p.ExternalCode, p.GenericName, p.Company, p.ClassificationId, p.Location, p.WarehouseId, p.Description, p.DosageForm, p.Barcode, p.Imported, p.IsActive, p.CreatedAt, p.UpdatedAt, p.CategoryId);
+                            }
+                            await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Products] OFF");
+                            await tran.CommitAsync();
+                        }
+                        catch
+                        {
+                            await tran.RollbackAsync();
+                            throw;
+                        }
+                    }
+                    await _db.SaveChangesAsync();
+                    totalInserted += productsToInsert.Count;
                 }
 
-                if (productsToInsert.Count == 0)
+                if (totalInserted == 0 && totalUpdated == 0)
                 {
                     TempData["Error"] = "لم يتم العثور على أي صف صالح للاستيراد.";
                     return RedirectToAction(nameof(Import));
                 }
 
-                // ===== 6) الحفظ في قاعدة البيانات مرة واحدة =====
-                _db.Products.AddRange(productsToInsert);  // إضافة جميع الأصناف إلى الكونتكست
-                await _db.SaveChangesAsync();             // حفظ فعلي فى قاعدة البيانات
+                int totalRowsInFile = lastRow - 1;  // من صف 2 إلى lastRow
+                int skippedEmpty = totalRowsInFile - totalRowsWithName;
 
-                TempData["Success"] = $"تم استيراد {productsToInsert.Count} صنفاً بنجاح.";
+                var typeLabel = importType == "Medicine" ? " (أصناف دواء)" : importType == "Accessory" ? " (أصناف إكسسوار)" : "";
+                var msg = totalUpdated > 0 && totalInserted > 0
+                    ? $"تم استيراد {totalInserted} صنفاً جديداً وتحديث {totalUpdated} صنفاً موجوداً{typeLabel}."
+                    : totalUpdated > 0
+                        ? $"تم تحديث {totalUpdated} صنفاً موجوداً (بدون إضافة جديدة){typeLabel}."
+                        : $"تم استيراد {totalInserted} صنفاً بنجاح{typeLabel}.";
+                if (skippedEmpty > 0)
+                    msg += $" صفوط مُتخطّاة (اسم فارغ): {skippedEmpty}.";
+                // عندما يكون عدد الصفوط (ذات الاسم) أكبر من ما نُحصيه (إضافة + تحديث من القاعدة) فالفارق بسبب تكرار الاسم في الملف
+                if (totalRowsWithName > totalInserted + totalUpdated)
+                    msg += " ملاحظة: عدد الصفوط المعالجة في الملف أكبر من العدد الظاهر لأن نفس اسم الصنف قد تكرر في أكثر من صف — البرنامج يحتفظ بسجل واحد لكل اسم (آخر ظهور في الملف).";
+                TempData["Success"] = msg;
                 return RedirectToAction(nameof(Import));       // رجوع لنفس الصفحة مع رسالة نجاح
             }
             catch (Exception ex)
@@ -2582,6 +2965,1151 @@ namespace ERP.Controllers
                 TempData["Error"] = "حدث خطأ أثناء استيراد الأصناف: " +
                                     (ex.InnerException?.Message ?? ex.Message);
 
+                return RedirectToAction(nameof(Import));
+            }
+        }
+
+        // =====================
+        // استيراد أرصدة الأصناف (رصيد أول المدة) — أعمدة ثابتة فقط؛ الزيادة تُتجاهل
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> ImportProductOpeningBalance(IFormFile excelFile)
+        {
+            if (excelFile == null || excelFile.Length == 0)
+            {
+                TempData["Error"] = "من فضلك اختر ملف أرصدة الأصناف (Excel) أولاً.";
+                return RedirectToAction(nameof(Import));
+            }
+
+            try
+            {
+                using var stream = new MemoryStream();
+                await excelFile.CopyToAsync(stream);
+                stream.Position = 0;
+                ExcelPackage.License.SetNonCommercialPersonal("Amr ERP Dev");
+
+                using var package = new ExcelPackage(stream);
+                var sheet = package.Workbook.Worksheets[0];
+                if (sheet.Dimension == null)
+                {
+                    TempData["Error"] = "الملف لا يحتوي على بيانات.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int lastRow = sheet.Dimension.End.Row;
+                int lastCol = sheet.Dimension.End.Column;
+
+                // بناء خريطة الهيدر للأعمدة الثابتة فقط — أي عمود غير معرّف يُتجاهل
+                var fixedNames = new HashSet<string>(ExcelImportColumns.ProductOpeningBalance, StringComparer.OrdinalIgnoreCase);
+                var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int col = 1; col <= lastCol; col++)
+                {
+                    var headerText = sheet.Cells[1, col].Text?.Trim();
+                    if (!string.IsNullOrWhiteSpace(headerText) && fixedNames.Contains(headerText) && !headers.ContainsKey(headerText))
+                        headers[headerText] = col;
+                }
+
+                // مطلوب: الصنف (كود أو اسم) + الكمية — عمود الكود: اسم الكود / كود الصنف...؛ عمود الاسم: ProdName ثم الصنف ثم اسم الصنف
+                int? colProdId = GetCol(headers, "اسم الكود", "كود الصنف", "ProdId");
+                int? colProdName = GetCol(headers, "ProdName", "الصنف", "اسم الصنف");
+                int prodCol = colProdId ?? colProdName ?? -1;
+                if (prodCol <= 0)
+                {
+                    TempData["Error"] = "الملف يجب أن يحتوي على عمود الصنف (كود الصنف أو ProdId أو الصنف أو اسم الصنف).";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int? colQty = GetCol(headers, "الكمية", "QtyIn", "Quantity");
+                if (!colQty.HasValue || colQty <= 0)
+                {
+                    TempData["Error"] = "الملف يجب أن يحتوي على عمود الكمية (الكمية أو QtyIn أو Quantity).";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int? colDiscount = GetCol(headers, "الخصم المرجح", "PurchaseDiscount", "المرجح");
+                int? colTotalCost = GetCol(headers, "إجمالي التكلفة", "اجمالي التكلفة", "إجمالي تكلفة", "TotalCost");
+                int? colUnitCost = GetCol(headers, "تكلفة العلبة", "تكلفة الوحدة", "UnitCost");
+                int? colPriceRetail = GetCol(headers, "سعر الجمهور", "PriceRetail", "PriceRetailBatch");
+                int? colWarehouse = GetCol(headers, "كود المخزن", "WarehouseId", "المخزن", "اسم المخزن", "WarehouseName");
+
+                var defaultWarehouse = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseId).Select(w => w.WarehouseId).FirstOrDefaultAsync();
+                if (defaultWarehouse == 0 && !colWarehouse.HasValue)
+                {
+                    TempData["Error"] = "لا يوجد مخزن فعّال. أضف مخزناً أو ضع عمود كود المخزن في الملف.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                var warehousesByName = await _db.Warehouses.AsNoTracking()
+                    .Where(w => w.IsActive)
+                    .ToDictionaryAsync(w => w.WarehouseName.Trim(), w => w.WarehouseId, StringComparer.OrdinalIgnoreCase);
+
+                var productById = await _db.Products.AsNoTracking().ToDictionaryAsync(p => p.ProdId, p => p);
+                var productByName = await _db.Products.AsNoTracking().Where(p => p.ProdName != null).ToDictionaryAsync(p => p.ProdName!.Trim(), p => p, StringComparer.OrdinalIgnoreCase);
+
+                var entries = new List<StockLedger>();
+                var tranDate = DateTime.UtcNow.Date;
+                var skippedNoProduct = 0;
+                var skippedNoQty = 0;
+
+                for (int row = 2; row <= lastRow; row++)
+                {
+                    var prodVal = sheet.Cells[row, prodCol].Text?.Trim();
+                    if (string.IsNullOrWhiteSpace(prodVal)) continue;
+
+                    int prodId;
+                    if (int.TryParse(prodVal, out var id) && productById.TryGetValue(id, out var pById))
+                        prodId = pById.ProdId;
+                    else if (productByName.TryGetValue(prodVal, out var pByName))
+                        prodId = pByName.ProdId;
+                    else
+                    {
+                        skippedNoProduct++;
+                        continue;
+                    }
+
+                    int qty = 0;
+                    var qtyCell = sheet.Cells[row, colQty!.Value];
+                    var qtyDecimal = GetDecimalFromCell(qtyCell);
+                    if (qtyDecimal > 0m) qty = (int)Math.Round(qtyDecimal);
+                    if (qty <= 0)
+                    {
+                        skippedNoQty++;
+                        continue;
+                    }
+
+                    decimal totalCost = 0m;
+                    if (colTotalCost.HasValue)
+                        totalCost = GetDecimalFromCell(sheet.Cells[row, colTotalCost.Value]);
+
+                    decimal purchaseDiscount = 0m;
+                    if (colDiscount.HasValue)
+                        purchaseDiscount = GetDecimalFromCell(sheet.Cells[row, colDiscount.Value]);
+
+                    int warehouseId = defaultWarehouse;
+                    if (colWarehouse.HasValue)
+                    {
+                        var whText = sheet.Cells[row, colWarehouse.Value].Text?.Trim();
+                        if (!string.IsNullOrWhiteSpace(whText))
+                        {
+                            if (int.TryParse(whText, NumberStyles.Any, CultureInfo.InvariantCulture, out var whId))
+                                warehouseId = whId;
+                            else if (warehousesByName.TryGetValue(whText, out var whIdByName))
+                                warehouseId = whIdByName;
+                        }
+                    }
+
+                    decimal unitCost = 0m;
+                    if (colUnitCost.HasValue)
+                        unitCost = GetDecimalFromCell(sheet.Cells[row, colUnitCost.Value]);
+                    if (unitCost == 0m && qty > 0 && totalCost != 0m)
+                        unitCost = totalCost / qty;
+
+                    decimal? priceRetailBatch = null;
+                    if (colPriceRetail.HasValue)
+                    {
+                        var pr = GetDecimalFromCell(sheet.Cells[row, colPriceRetail.Value]);
+                        if (pr != 0m) priceRetailBatch = pr;
+                    }
+                    if (!priceRetailBatch.HasValue && productById.TryGetValue(prodId, out var prodRef) && prodRef.PriceRetail > 0)
+                        priceRetailBatch = prodRef.PriceRetail;
+
+                    entries.Add(new StockLedger
+                    {
+                        TranDate = tranDate,
+                        WarehouseId = warehouseId,
+                        ProdId = prodId,
+                        QtyIn = qty,
+                        QtyOut = 0,
+                        UnitCost = unitCost,
+                        TotalCost = totalCost,
+                        PurchaseDiscount = purchaseDiscount,
+                        PriceRetailBatch = priceRetailBatch,
+                        RemainingQty = qty,
+                        SourceType = "Opening",
+                        SourceId = 0,
+                        SourceLine = row - 1,
+                        CreatedAt = DateTime.UtcNow
+                    });
+                }
+
+                if (entries.Count == 0)
+                {
+                    TempData["Error"] = "لم يتم العثور على أي صف صالح (صنف موجود + كمية > 0).";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                // مسح القديم كله ثم استيراد الجديد: حذف كل قيود رصيد أول المدة (Opening) من دفتر الحركة
+                var allOpening = await _db.StockLedger.Where(sl => sl.SourceType == "Opening").ToListAsync();
+                if (allOpening.Count > 0)
+                {
+                    _db.StockLedger.RemoveRange(allOpening);
+                    await _db.SaveChangesAsync();
+                }
+
+                _db.StockLedger.AddRange(entries);
+                await _db.SaveChangesAsync();
+                var msg = allOpening.Count > 0
+                    ? $"تم مسح {allOpening.Count} قيد رصيد قديم واستيراد رصيد أول المدة لـ {entries.Count} صفاً."
+                    : $"تم استيراد رصيد أول المدة لـ {entries.Count} صفاً بنجاح.";
+                if (skippedNoProduct > 0 || skippedNoQty > 0)
+                {
+                    var parts = new List<string>();
+                    if (skippedNoProduct > 0) parts.Add($"{skippedNoProduct} صنف غير موجود في القائمة");
+                    if (skippedNoQty > 0) parts.Add($"{skippedNoQty} كمية صفر أو فارغة");
+                    msg += " (تم تخطي: " + string.Join("، ", parts) + ").";
+                }
+                TempData["Success"] = msg;
+                return RedirectToAction(nameof(Import));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "خطأ أثناء استيراد أرصدة الأصناف: " + (ex.InnerException?.Message ?? ex.Message);
+                return RedirectToAction(nameof(Import));
+            }
+        }
+
+        /// <summary>
+        /// تحويل أرصدة الأصناف إلى المخزن المعيّن لكل صنف (Product.WarehouseId).
+        /// للأصناف التي معها مخزن معيّن (مثل الاكسسوار) لكن رصيدها الفعلي في مخزن آخر — ينقل الرصيد إلى المخزن المعيّن دون إعادة استيراد.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> SyncStockToProductWarehouse(int? warehouseId)
+        {
+            var productsQuery = _db.Products.AsNoTracking()
+                .Where(p => p.WarehouseId != null);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                productsQuery = productsQuery.Where(p => p.WarehouseId == warehouseId.Value);
+
+            var products = await productsQuery
+                .Select(p => new { p.ProdId, p.WarehouseId })
+                .ToListAsync();
+
+            if (products.Count == 0)
+            {
+                TempData["Error"] = warehouseId.HasValue
+                    ? "لا توجد أصناف معيّن لها هذا المخزن (المخزن الافتراضي للصنف)."
+                    : "لا توجد أصناف لها مخزن معيّن (Product.WarehouseId).";
+                return RedirectToAction(nameof(Import));
+            }
+
+            int totalMoved = 0;
+            var tranDate = DateTime.UtcNow;
+            const string sourceType = "SyncToProductWarehouse";
+            const int sourceId = 0;
+
+            foreach (var prod in products)
+            {
+                int targetWh = prod.WarehouseId!.Value;
+                var sourceRows = await _db.StockLedger
+                    .Where(sl => sl.ProdId == prod.ProdId && sl.WarehouseId != targetWh && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                    .OrderBy(sl => sl.TranDate)
+                    .ToListAsync();
+
+                int lineNo = 0;
+                foreach (var row in sourceRows)
+                {
+                    int take = row.RemainingQty ?? 0;
+                    if (take <= 0) continue;
+
+                    _db.StockLedger.Add(new StockLedger
+                    {
+                        TranDate = tranDate,
+                        WarehouseId = row.WarehouseId,
+                        ProdId = row.ProdId,
+                        BatchNo = row.BatchNo,
+                        BatchId = row.BatchId,
+                        Expiry = row.Expiry,
+                        QtyIn = 0,
+                        QtyOut = take,
+                        UnitCost = row.UnitCost,
+                        RemainingQty = null,
+                        SourceType = sourceType,
+                        SourceId = sourceId,
+                        SourceLine = lineNo,
+                        CounterWarehouseId = targetWh,
+                        Note = "تحويل رصيد إلى المخزن المعيّن للصنف",
+                        CreatedAt = tranDate
+                    });
+
+                    row.RemainingQty = 0;
+                    _db.StockLedger.Update(row);
+
+                    // نسخ تكلفة الوحدة والخصم وسعر الجمهور حتى يظهر الخصم المرجح وتكلفة العلبة في تقرير أرصدة الأصناف
+                    var lineTotalCost = (decimal)take * row.UnitCost;
+                    var lineTotalCostNullable = row.TotalCost.HasValue && row.TotalCost.Value != 0 ? (decimal?)lineTotalCost : null;
+                    _db.StockLedger.Add(new StockLedger
+                    {
+                        TranDate = tranDate,
+                        WarehouseId = targetWh,
+                        ProdId = row.ProdId,
+                        BatchNo = row.BatchNo,
+                        BatchId = row.BatchId,
+                        Expiry = row.Expiry,
+                        QtyIn = take,
+                        QtyOut = 0,
+                        UnitCost = row.UnitCost,
+                        TotalCost = lineTotalCostNullable,
+                        PurchaseDiscount = row.PurchaseDiscount,
+                        PriceRetailBatch = row.PriceRetailBatch,
+                        RemainingQty = take,
+                        SourceType = sourceType,
+                        SourceId = sourceId,
+                        SourceLine = lineNo,
+                        CounterWarehouseId = row.WarehouseId,
+                        Note = "تحويل رصيد إلى المخزن المعيّن للصنف",
+                        CreatedAt = tranDate
+                    });
+
+                    totalMoved += take;
+                    lineNo++;
+                }
+            }
+
+            await _db.SaveChangesAsync();
+
+            var whName = warehouseId.HasValue && warehouseId.Value > 0
+                ? (await _db.Warehouses.FindAsync(warehouseId.Value))?.WarehouseName ?? warehouseId.ToString()
+                : "المخازن المعيّنة";
+            TempData["Success"] = $"تم تحويل الرصيد إلى المخزن المعيّن للصنف: {totalMoved} وحدة من {products.Count} صنفاً (باتجاه {whName}).";
+            return RedirectToAction(nameof(Import));
+        }
+
+        private static int? GetCol(Dictionary<string, int> headers, params string[] names)
+        {
+            foreach (var n in names)
+                if (headers.TryGetValue(n, out var c)) return c;
+            return null;
+        }
+
+        /// <summary>قراءة قيمة رقمية من خلية إكسل — نفضّل القيمة المخزنة (Value) لتجنّب خطأ التنسيق (مثل 163 ألف تُستورد 72 مليون).</summary>
+        private static decimal GetDecimalFromCell(ExcelRangeBase cell)
+        {
+            if (cell?.Value == null) return 0m;
+            var v = cell.Value;
+            if (v is double d) return (decimal)d;
+            if (v is decimal dec) return dec;
+            if (v is int i) return (decimal)i;
+            if (v is long l) return (decimal)l;
+            if (v is float f) return (decimal)f;
+            var text = cell.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(text)) return 0m;
+            text = text.Replace(" ", "");
+            int lastComma = text.LastIndexOf(',');
+            if (lastComma >= 0)
+            {
+                string after = text.Substring(lastComma + 1);
+                if (after.Length >= 2 && after.Length <= 3 && after.All(char.IsDigit))
+                    text = text.Substring(0, lastComma) + "." + after;
+                else
+                    text = text.Replace(",", "");
+            }
+            else
+                text = text.Replace(",", "");
+            decimal.TryParse(text, NumberStyles.Any, CultureInfo.InvariantCulture, out var result);
+            return result;
+        }
+
+        // =====================
+        // استيراد العملاء من إكسل — مسلسل → كود الإكسل (ExternalCode)، والاسم مطلوب (Upsert بالاسم)
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> ImportCustomers(IFormFile? excelFile)
+        {
+            if (excelFile == null || excelFile.Length == 0)
+            {
+                TempData["Error"] = "من فضلك اختر ملف قائمة العملاء (Excel) أولاً.";
+                return RedirectToAction(nameof(Import));
+            }
+
+            try
+            {
+                // مسح القديم كله ثم استيراد الجديد: حذف الجداول المرتبطة بالعملاء ثم حذف كل العملاء (نفس سياسة الأصناف)
+                var ledgerCust = await _db.LedgerEntries.Where(e => e.CustomerId != null).ToListAsync();
+                if (ledgerCust.Count > 0) { _db.LedgerEntries.RemoveRange(ledgerCust); await _db.SaveChangesAsync(); }
+                var cashR = await _db.CashReceipts.ToListAsync();
+                if (cashR.Count > 0) { _db.CashReceipts.RemoveRange(cashR); await _db.SaveChangesAsync(); }
+                var cashP = await _db.CashPayments.ToListAsync();
+                if (cashP.Count > 0) { _db.CashPayments.RemoveRange(cashP); await _db.SaveChangesAsync(); }
+                var sil = await _db.SalesInvoiceLines.ToListAsync();
+                if (sil.Count > 0) { _db.SalesInvoiceLines.RemoveRange(sil); await _db.SaveChangesAsync(); }
+                var si = await _db.SalesInvoices.ToListAsync();
+                if (si.Count > 0) { _db.SalesInvoices.RemoveRange(si); await _db.SaveChangesAsync(); }
+                var srl = await _db.SalesReturnLines.ToListAsync();
+                if (srl.Count > 0) { _db.SalesReturnLines.RemoveRange(srl); await _db.SaveChangesAsync(); }
+                var sr = await _db.SalesReturns.ToListAsync();
+                if (sr.Count > 0) { _db.SalesReturns.RemoveRange(sr); await _db.SaveChangesAsync(); }
+                var pil = await _db.PILines.ToListAsync();
+                if (pil.Count > 0) { _db.PILines.RemoveRange(pil); await _db.SaveChangesAsync(); }
+                var pi = await _db.PurchaseInvoices.ToListAsync();
+                if (pi.Count > 0) { _db.PurchaseInvoices.RemoveRange(pi); await _db.SaveChangesAsync(); }
+                var prl = await _db.PurchaseReturnLines.ToListAsync();
+                if (prl.Count > 0) { _db.PurchaseReturnLines.RemoveRange(prl); await _db.SaveChangesAsync(); }
+                var pr = await _db.PurchaseReturns.ToListAsync();
+                if (pr.Count > 0) { _db.PurchaseReturns.RemoveRange(pr); await _db.SaveChangesAsync(); }
+                var so = await _db.SalesOrders.ToListAsync();
+                if (so.Count > 0) { _db.SalesOrders.RemoveRange(so); await _db.SaveChangesAsync(); }
+                var prLines = await _db.PRLines.ToListAsync();
+                if (prLines.Count > 0) { _db.PRLines.RemoveRange(prLines); await _db.SaveChangesAsync(); }
+                var preq = await _db.PurchaseRequests.ToListAsync();
+                if (preq.Count > 0) { _db.PurchaseRequests.RemoveRange(preq); await _db.SaveChangesAsync(); }
+                var dn = await _db.DebitNotes.ToListAsync();
+                if (dn.Count > 0) { _db.DebitNotes.RemoveRange(dn); await _db.SaveChangesAsync(); }
+                var cn = await _db.CreditNotes.ToListAsync();
+                if (cn.Count > 0) { _db.CreditNotes.RemoveRange(cn); await _db.SaveChangesAsync(); }
+                var usersWithCust = await _db.Users.Where(u => u.CustomerId != null).ToListAsync();
+                foreach (var u in usersWithCust) u.CustomerId = null;
+                if (usersWithCust.Count > 0) await _db.SaveChangesAsync();
+                var batchesWithCust = await _db.Batches.Where(b => b.CustomerId != null).ToListAsync();
+                foreach (var b in batchesWithCust) b.CustomerId = null;
+                if (batchesWithCust.Count > 0) await _db.SaveChangesAsync();
+                var allCust = await _db.Customers.ToListAsync();
+                if (allCust.Count > 0) { _db.Customers.RemoveRange(allCust); await _db.SaveChangesAsync(); }
+
+                using var stream = new MemoryStream();
+                await excelFile.CopyToAsync(stream);
+                stream.Position = 0;
+                ExcelPackage.License.SetNonCommercialPersonal("Amr ERP Dev");
+                using var package = new ExcelPackage(stream);
+                var sheet = package.Workbook.Worksheets[0];
+                if (sheet.Dimension == null)
+                {
+                    TempData["Error"] = "الملف لا يحتوي على بيانات.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int lastRow = sheet.Dimension.End.Row;
+                int lastCol = sheet.Dimension.End.Column;
+                var fixedNames = new HashSet<string>(ExcelImportColumns.Customers, StringComparer.OrdinalIgnoreCase);
+                var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int col = 1; col <= lastCol; col++)
+                {
+                    var headerText = sheet.Cells[1, col].Text?.Trim();
+                    if (!string.IsNullOrWhiteSpace(headerText) && fixedNames.Contains(headerText) && !headers.ContainsKey(headerText))
+                        headers[headerText] = col;
+                }
+
+                int? colName = GetCol(headers, "الاسم", "اسم العميل", "CustomerName");
+                if (!colName.HasValue || colName <= 0)
+                {
+                    TempData["Error"] = "الملف يجب أن يحتوي على عمود الاسم (الاسم أو اسم العميل أو CustomerName).";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                // عمود الكود: نفس ترتيب استيراد الأصناف — إن كان رقماً يُستخدم كـ CustomerId
+                int? colSerial = GetCol(headers, "اسم الكود", "كود العميل", "CustomerId", "مسلسل", "الرقم", "كود", "Code", "الكود");
+                int? colPhone = GetCol(headers, "التليفون", "الهاتف", "Phone", "Phone1");
+                int? colDate = GetCol(headers, "التاريخ", "Date", "EntryDate");
+                int? colResponsible = GetCol(headers, "اسم المسؤول", "اسم المسئول", "OrderContactName");
+                int? colNotes = GetCol(headers, "ملاحظات", "Notes");
+                int? colRegion = GetCol(headers, "المنطقة", "Region", "RegionName", "Area", "AreaName");
+                int? colAddress = GetCol(headers, "العنوان", "Address");
+                int? colSegment = GetCol(headers, "الشريحه", "الشريحة", "Segment");
+                int? colBalance = GetCol(headers, "الأرصدة", "Balance", "CurrentBalance");
+                int? colRep = GetCol(headers, "المندوب", "UserId", "SalesRep");
+                int? colTaxId = GetCol(headers, "رقم البطاقة الضريبية", "الرقم القومى", "رقم البطاقة الضريبية / الرقم القومى", "TaxId", "NationalId");
+                int? colRecordNum = GetCol(headers, "رقم السجل", "RecordNumber");
+                int? colLicense = GetCol(headers, "رقم الرخصة", "LicenseNumber");
+
+                var usersByName = await _db.Users.AsNoTracking()
+                    .Where(u => u.DisplayName != null || u.UserName != null)
+                    .ToListAsync();
+                var userByDisplayName = usersByName
+                    .Where(u => !string.IsNullOrWhiteSpace(u.DisplayName))
+                    .ToDictionary(u => u.DisplayName!.Trim(), u => u.UserId, StringComparer.OrdinalIgnoreCase);
+                var userByUserName = usersByName
+                    .Where(u => !string.IsNullOrWhiteSpace(u.UserName))
+                    .ToDictionary(u => u.UserName!.Trim(), u => u.UserId, StringComparer.OrdinalIgnoreCase);
+
+                string GetCell(int row, int? col)
+                {
+                    if (!col.HasValue || col <= 0) return "";
+                    var v = sheet.Cells[row, col.Value].Value;
+                    if (v is double d) return d.ToString(CultureInfo.InvariantCulture);
+                    return sheet.Cells[row, col.Value].Text?.Trim() ?? "";
+                }
+
+                decimal GetCellDecimal(int row, int? col)
+                {
+                    var t = GetCell(row, col);
+                    if (string.IsNullOrWhiteSpace(t)) return 0m;
+                    if (decimal.TryParse(t, NumberStyles.Any, CultureInfo.InvariantCulture, out var v)) return v;
+                    if (decimal.TryParse(t, NumberStyles.Any, CultureInfo.GetCultureInfo("ar-EG"), out v)) return v;
+                    return 0m;
+                }
+
+                DateTime? GetCellDate(int row, int? col)
+                {
+                    var t = GetCell(row, col);
+                    if (string.IsNullOrWhiteSpace(t)) return null;
+                    if (DateTime.TryParse(t, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt)) return dt;
+                    if (DateTime.TryParse(t, CultureInfo.GetCultureInfo("ar-EG"), DateTimeStyles.None, out dt)) return dt;
+                    return null;
+                }
+
+                int inserted = 0, updated = 0;
+                var existingByName = await _db.Customers.Where(c => c.CustomerName != null).ToDictionaryAsync(c => c.CustomerName!.Trim(), c => c, StringComparer.OrdinalIgnoreCase);
+                var usedCustomerIds = existingByName.Values.Select(c => c.CustomerId).ToHashSet();
+                var newCustomersList = new List<Customer>();
+                var areasByName = await _db.Areas.AsNoTracking().Where(a => a.AreaName != null).ToDictionaryAsync(a => a.AreaName!.Trim(), a => a.AreaId, StringComparer.OrdinalIgnoreCase);
+
+                for (int row = 2; row <= lastRow; row++)
+                {
+                    var name = GetCell(row, colName).Trim();
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+
+                    var externalCode = colSerial.HasValue ? GetCell(row, colSerial).Trim() : null;
+                    var phone1 = colPhone.HasValue ? GetCell(row, colPhone).Trim() : null;
+                    var dateVal = GetCellDate(row, colDate);
+                    var orderContactName = colResponsible.HasValue ? GetCell(row, colResponsible).Trim() : null;
+                    var notes = colNotes.HasValue ? GetCell(row, colNotes).Trim() : null;
+                    var regionName = colRegion.HasValue ? GetCell(row, colRegion).Trim() : null;
+                    var address = colAddress.HasValue ? GetCell(row, colAddress).Trim() : null;
+                    var segment = colSegment.HasValue ? GetCell(row, colSegment).Trim() : null;
+                    var balance = GetCellDecimal(row, colBalance);
+                    var taxId = colTaxId.HasValue ? GetCell(row, colTaxId).Trim() : null;
+                    var recordNumber = colRecordNum.HasValue ? GetCell(row, colRecordNum).Trim() : null;
+                    var licenseNumber = colLicense.HasValue ? GetCell(row, colLicense).Trim() : null;
+
+                    int? userId = null;
+                    if (colRep.HasValue)
+                    {
+                        var repText = GetCell(row, colRep).Trim();
+                        if (!string.IsNullOrWhiteSpace(repText) && (userByDisplayName.TryGetValue(repText, out var uid) || userByUserName.TryGetValue(repText, out uid)))
+                            userId = uid;
+                    }
+
+                    int? areaId = null;
+                    string? regionNameOnly = null;
+                    if (!string.IsNullOrWhiteSpace(regionName))
+                    {
+                        if (areasByName.TryGetValue(regionName, out var aid))
+                            areaId = aid;
+                        else
+                            regionNameOnly = regionName;
+                    }
+
+                    if (existingByName.TryGetValue(name, out var existing))
+                    {
+                        existing.ExternalCode = string.IsNullOrWhiteSpace(externalCode) ? existing.ExternalCode : externalCode;
+                        existing.Phone1 = string.IsNullOrWhiteSpace(phone1) ? existing.Phone1 : phone1;
+                        existing.OrderContactName = string.IsNullOrWhiteSpace(orderContactName) ? existing.OrderContactName : orderContactName;
+                        existing.Notes = string.IsNullOrWhiteSpace(notes) ? existing.Notes : notes;
+                        if (areaId.HasValue) { existing.AreaId = areaId; existing.RegionName = null; }
+                        else { existing.RegionName = regionNameOnly ?? existing.RegionName; if (regionNameOnly != null) existing.AreaId = null; }
+                        existing.Address = string.IsNullOrWhiteSpace(address) ? existing.Address : address;
+                        existing.Segment = string.IsNullOrWhiteSpace(segment) ? existing.Segment : segment;
+                        existing.CurrentBalance = balance;
+                        existing.UserId = userId ?? existing.UserId;
+                        existing.TaxIdOrNationalId = string.IsNullOrWhiteSpace(taxId) ? existing.TaxIdOrNationalId : taxId;
+                        existing.RecordNumber = string.IsNullOrWhiteSpace(recordNumber) ? existing.RecordNumber : recordNumber;
+                        existing.LicenseNumber = string.IsNullOrWhiteSpace(licenseNumber) ? existing.LicenseNumber : licenseNumber;
+                        existing.UpdatedAt = DateTime.UtcNow;
+                        updated++;
+                    }
+                    else
+                    {
+                        var created = dateVal ?? DateTime.UtcNow;
+                        var newCust = new Customer
+                        {
+                            CustomerName = name,
+                            Phone1 = string.IsNullOrWhiteSpace(phone1) ? null : phone1,
+                            OrderContactName = string.IsNullOrWhiteSpace(orderContactName) ? null : orderContactName,
+                            Notes = string.IsNullOrWhiteSpace(notes) ? null : notes,
+                            AreaId = areaId,
+                            RegionName = regionNameOnly,
+                            Address = string.IsNullOrWhiteSpace(address) ? null : address,
+                            Segment = string.IsNullOrWhiteSpace(segment) ? null : segment,
+                            CurrentBalance = balance,
+                            UserId = userId,
+                            TaxIdOrNationalId = string.IsNullOrWhiteSpace(taxId) ? null : taxId,
+                            RecordNumber = string.IsNullOrWhiteSpace(recordNumber) ? null : recordNumber,
+                            LicenseNumber = string.IsNullOrWhiteSpace(licenseNumber) ? null : licenseNumber,
+                            CreatedAt = created,
+                            UpdatedAt = DateTime.UtcNow,
+                            IsActive = true
+                        };
+                        // خلال الاستيراد فقط: إن وُجد عمود الكود رقماً موجباً وغير مكرر يُستخدم كـ CustomerId (مثل الأصناف)
+                        int codeInt = 0;
+                        if (colSerial.HasValue && colSerial.Value > 0)
+                        {
+                            var codeVal = GetDecimalFromCell(sheet.Cells[row, colSerial.Value]);
+                            if (codeVal >= 1m && codeVal <= 2147483647m) codeInt = (int)Math.Round(codeVal);
+                        }
+                        if (codeInt > 0 && !usedCustomerIds.Contains(codeInt))
+                        {
+                            newCust.CustomerId = codeInt;
+                            newCust.ExternalCode = null;
+                            usedCustomerIds.Add(codeInt);
+                        }
+                        else
+                        {
+                            var codeStr = colSerial.HasValue ? GetCell(row, colSerial).Trim() : null;
+                            if (!string.IsNullOrWhiteSpace(codeStr))
+                                newCust.ExternalCode = codeStr.Length <= 50 ? codeStr : codeStr.Substring(0, 50);
+                        }
+                        newCustomersList.Add(newCust);
+                        inserted++;
+                        existingByName[name] = newCust;
+                    }
+                }
+
+                var withIdentityCust = newCustomersList.Where(c => c.CustomerId == 0).ToList();
+                var withExplicitIdCust = newCustomersList.Where(c => c.CustomerId > 0).ToList();
+                if (withIdentityCust.Count > 0)
+                    _db.Customers.AddRange(withIdentityCust);
+                if (withExplicitIdCust.Count > 0)
+                {
+                    using var tran = await _db.Database.BeginTransactionAsync();
+                    try
+                    {
+                        await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Customers] ON");
+                        foreach (var c in withExplicitIdCust)
+                        {
+                            await _db.Database.ExecuteSqlRawAsync(
+                                "INSERT INTO [Customers] (CustomerId, CustomerName, ExternalCode, Phone1, OrderContactName, Notes, AreaId, RegionName, Address, Segment, CreditLimit, CurrentBalance, UserId, TaxIdOrNationalId, RecordNumber, LicenseNumber, CreatedAt, UpdatedAt, IsActive) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}, {18})",
+                                c.CustomerId, c.CustomerName ?? "", c.ExternalCode, c.Phone1, c.OrderContactName, c.Notes, c.AreaId, c.RegionName, c.Address, c.Segment, c.CreditLimit, c.CurrentBalance, c.UserId, c.TaxIdOrNationalId, c.RecordNumber, c.LicenseNumber, c.CreatedAt, c.UpdatedAt, c.IsActive);
+                        }
+                        await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Customers] OFF");
+                        await tran.CommitAsync();
+                    }
+                    catch
+                    {
+                        await tran.RollbackAsync();
+                        throw;
+                    }
+                }
+                await _db.SaveChangesAsync();
+                TempData["Success"] = $"تم استيراد قائمة العملاء: {inserted} جديد، {updated} محدّث.";
+                return RedirectToAction(nameof(Import));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "خطأ أثناء استيراد العملاء: " + (ex.InnerException?.Message ?? ex.Message);
+                return RedirectToAction(nameof(Import));
+            }
+        }
+
+        // =====================
+        // استيراد المناطق من عمود «المنطقة» في ملف إكسل (وليس من أسماء العملاء)
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> ImportRegionsFromExcel(IFormFile? excelFile, int? governorateId, int? districtId)
+        {
+            if (excelFile == null || excelFile.Length == 0)
+            {
+                TempData["Error"] = "من فضلك اختر ملف إكسل يحتوي على عمود «المنطقة».";
+                return RedirectToAction(nameof(Import));
+            }
+
+            try
+            {
+                int gid;
+                int did;
+                if (governorateId.HasValue && districtId.HasValue)
+                {
+                    var district = await _db.Districts.FindAsync(districtId.Value);
+                    if (district == null || district.GovernorateId != governorateId.Value)
+                    {
+                        TempData["Error"] = "الحي المختار لا يتبع المحافظة المختارة.";
+                        return RedirectToAction(nameof(Import));
+                    }
+                    gid = governorateId.Value;
+                    did = districtId.Value;
+                }
+                else
+                {
+                    var firstGov = await _db.Governorates.OrderBy(g => g.GovernorateId).FirstOrDefaultAsync();
+                    if (firstGov == null)
+                    {
+                        TempData["Error"] = "لا توجد محافظات في النظام. أضف محافظة وحيّاً أولاً.";
+                        return RedirectToAction(nameof(Import));
+                    }
+                    var firstDist = await _db.Districts.Where(d => d.GovernorateId == firstGov.GovernorateId).OrderBy(d => d.DistrictId).FirstOrDefaultAsync();
+                    if (firstDist == null)
+                    {
+                        TempData["Error"] = "لا يوجد حي/مركز في المحافظة الأولى. أضف حيّاً أولاً.";
+                        return RedirectToAction(nameof(Import));
+                    }
+                    gid = firstGov.GovernorateId;
+                    did = firstDist.DistrictId;
+                }
+
+                // مسح القديم كله ثم استيراد الجديد: فك ربط العملاء بالمناطق ثم حذف كل المناطق
+                var customersWithArea = await _db.Customers.Where(c => c.AreaId != null).ToListAsync();
+                foreach (var c in customersWithArea) c.AreaId = null;
+                if (customersWithArea.Count > 0) await _db.SaveChangesAsync();
+                var allAreas = await _db.Areas.ToListAsync();
+                if (allAreas.Count > 0) { _db.Areas.RemoveRange(allAreas); await _db.SaveChangesAsync(); }
+
+                using var stream = new MemoryStream();
+                await excelFile.CopyToAsync(stream);
+                stream.Position = 0;
+                ExcelPackage.License.SetNonCommercialPersonal("Amr ERP Dev");
+                using var package = new ExcelPackage(stream);
+                var sheet = package.Workbook.Worksheets[0];
+                if (sheet.Dimension == null)
+                {
+                    TempData["Error"] = "الملف لا يحتوي على بيانات.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int lastRow = sheet.Dimension.End.Row;
+                int lastCol = sheet.Dimension.End.Column;
+                var fixedNames = new HashSet<string>(ExcelImportColumns.Regions, StringComparer.OrdinalIgnoreCase);
+                var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int col = 1; col <= lastCol; col++)
+                {
+                    var headerText = sheet.Cells[1, col].Text?.Trim();
+                    if (!string.IsNullOrWhiteSpace(headerText) && fixedNames.Contains(headerText) && !headers.ContainsKey(headerText))
+                        headers[headerText] = col;
+                }
+
+                int? colRegion = GetCol(headers, "المنطقة", "Region", "Area", "AreaName");
+                if (!colRegion.HasValue || colRegion <= 0)
+                {
+                    TempData["Error"] = "الملف يجب أن يحتوي على عمود «المنطقة» (أو Region / Area / AreaName).";
+                    return RedirectToAction(nameof(Import));
+                }
+                int? colCode = GetCol(headers, "اسم الكود", "كود المنطقة", "AreaId");
+
+                var regionRows = new List<(int? AreaId, string Name)>();
+                var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int row = 2; row <= lastRow; row++)
+                {
+                    var cell = sheet.Cells[row, colRegion.Value];
+                    var val = cell.Value;
+                    string? text = null;
+                    if (val is double d) text = d.ToString(CultureInfo.InvariantCulture);
+                    else text = cell.Text?.Trim();
+                    var name = text?.Trim();
+                    if (string.IsNullOrWhiteSpace(name) || seenNames.Contains(name)) continue;
+                    seenNames.Add(name);
+                    int? areaId = null;
+                    if (colCode.HasValue && colCode.Value > 0)
+                    {
+                        var codeText = sheet.Cells[row, colCode.Value].Text?.Trim();
+                        if (!string.IsNullOrWhiteSpace(codeText) && int.TryParse(codeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var codeInt) && codeInt > 0)
+                            areaId = codeInt;
+                    }
+                    regionRows.Add((areaId, name));
+                }
+
+                if (regionRows.Count == 0)
+                {
+                    TempData["Error"] = "لم يُعثَر على أي قيمة في عمود المنطقة.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                var usedAreaIds = new HashSet<int>();
+                int created = 0;
+                var withIdentityAreas = new List<Area>();
+                var withExplicitIdAreas = new List<Area>();
+                foreach (var (areaId, name) in regionRows)
+                {
+                    var newArea = new Area
+                    {
+                        AreaName = name,
+                        GovernorateId = gid,
+                        DistrictId = did,
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        UpdatedAt = DateTime.UtcNow
+                    };
+                    if (areaId.HasValue && areaId.Value > 0 && !usedAreaIds.Contains(areaId.Value))
+                    {
+                        newArea.AreaId = areaId.Value;
+                        usedAreaIds.Add(areaId.Value);
+                        withExplicitIdAreas.Add(newArea);
+                    }
+                    else
+                        withIdentityAreas.Add(newArea);
+                }
+                if (withIdentityAreas.Count > 0)
+                    _db.Areas.AddRange(withIdentityAreas);
+                if (withExplicitIdAreas.Count > 0)
+                {
+                    using var tran = await _db.Database.BeginTransactionAsync();
+                    try
+                    {
+                        await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Areas] ON");
+                        foreach (var a in withExplicitIdAreas)
+                        {
+                            await _db.Database.ExecuteSqlRawAsync(
+                                "INSERT INTO [Areas] (AreaId, AreaName, GovernorateId, DistrictId, IsActive, CreatedAt, UpdatedAt) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6})",
+                                a.AreaId, a.AreaName ?? "", a.GovernorateId, a.DistrictId, a.IsActive, a.CreatedAt, a.UpdatedAt);
+                        }
+                        await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Areas] OFF");
+                        await tran.CommitAsync();
+                    }
+                    catch
+                    {
+                        await tran.RollbackAsync();
+                        throw;
+                    }
+                }
+                await _db.SaveChangesAsync();
+                created = regionRows.Count;
+
+                TempData["Success"] = $"تم استيراد المناطق: إنشاء {created} منطقة (مسح القديم ثم استيراد الجديد، مع دعم عمود اسم الكود).";
+                return RedirectToAction(nameof(Import));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "خطأ أثناء استيراد المناطق: " + (ex.InnerException?.Message ?? ex.Message);
+                return RedirectToAction(nameof(Import));
+            }
+        }
+
+        // =====================
+        // استيراد أرصدة العملاء (رصيد أول المدة) — دفتر الأستاذ LedgerEntry، SourceType = Opening
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> ImportCustomerBalances(IFormFile? excelFile)
+        {
+            if (excelFile == null || excelFile.Length == 0)
+            {
+                TempData["Error"] = "من فضلك اختر ملف أرصدة العملاء (Excel) أولاً.";
+                return RedirectToAction(nameof(Import));
+            }
+
+            try
+            {
+                using var stream = new MemoryStream();
+                await excelFile.CopyToAsync(stream);
+                stream.Position = 0;
+                ExcelPackage.License.SetNonCommercialPersonal("Amr ERP Dev");
+                using var package = new ExcelPackage(stream);
+                var sheet = package.Workbook.Worksheets[0];
+                if (sheet.Dimension == null)
+                {
+                    TempData["Error"] = "الملف لا يحتوي على بيانات.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int lastRow = sheet.Dimension.End.Row;
+                int lastCol = sheet.Dimension.End.Column;
+                var fixedNames = new HashSet<string>(ExcelImportColumns.CustomerOpeningBalance, StringComparer.OrdinalIgnoreCase);
+                var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (int col = 1; col <= lastCol; col++)
+                {
+                    var headerText = sheet.Cells[1, col].Text?.Trim();
+                    if (!string.IsNullOrWhiteSpace(headerText) && fixedNames.Contains(headerText) && !headers.ContainsKey(headerText))
+                        headers[headerText] = col;
+                }
+
+                int? colCustomerCode = GetCol(headers, "اسم الكود", "كود العميل", "CustomerId", "رقم الحساب");
+                int? colCustomerName = GetCol(headers, "اسم العميل", "العميل", "الاسم");
+                if ((!colCustomerCode.HasValue || colCustomerCode <= 0) && (!colCustomerName.HasValue || colCustomerName <= 0))
+                {
+                    TempData["Error"] = "الملف يجب أن يحتوي على عمود للعميل (كود العميل أو رقم الحساب أو الاسم).";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int? colDebit = GetCol(headers, "مدين", "Debit", "مدین");
+                int? colCredit = GetCol(headers, "دائن", "Credit");
+                if ((!colDebit.HasValue || colDebit <= 0) && (!colCredit.HasValue || colCredit <= 0))
+                {
+                    TempData["Error"] = "الملف يجب أن يحتوي على عمود مدين و/أو عمود دائن.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int? colEntryDate = GetCol(headers, "تاريخ", "EntryDate");
+                int? colAccountId = GetCol(headers, "AccountId");
+
+                var entryDateDefault = DateTime.Today;
+                var customers = await _db.Customers.ToListAsync();
+                var customerById = customers.ToDictionary(c => c.CustomerId);
+                // تجنّب تكرار المفتاح: إذا تكرر كود الإكسل أو الاسم نأخذ أول عميل فقط
+                var customerByExternalCode = customers
+                    .Where(c => !string.IsNullOrWhiteSpace(c.ExternalCode))
+                    .GroupBy(c => c.ExternalCode!.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+                var customerByName = customers
+                    .Where(c => !string.IsNullOrWhiteSpace(c.CustomerName))
+                    .GroupBy(c => c.CustomerName!.Trim(), StringComparer.OrdinalIgnoreCase)
+                    .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+                int defaultAccountId = await _db.Accounts
+                    .Where(a => a.AccountCode == "1103")
+                    .Select(a => a.AccountId)
+                    .FirstOrDefaultAsync();
+                if (defaultAccountId == 0)
+                    defaultAccountId = await _db.Accounts.OrderBy(a => a.AccountId).Select(a => a.AccountId).FirstOrDefaultAsync();
+
+                var toAdd = new List<LedgerEntry>();
+                var errors = new List<string>();
+                var lineNo = 0;
+                var newCustomersCount = 0;
+
+                for (int row = 2; row <= lastRow; row++)
+                {
+                    string? codeVal = null;
+                    if (colCustomerCode.HasValue && colCustomerCode.Value > 0)
+                        codeVal = sheet.Cells[row, colCustomerCode.Value].Text?.Trim();
+                    string? nameVal = null;
+                    if (colCustomerName.HasValue && colCustomerName.Value > 0)
+                        nameVal = sheet.Cells[row, colCustomerName.Value].Text?.Trim();
+
+                    decimal debit = 0m;
+                    if (colDebit.HasValue && colDebit.Value > 0)
+                        debit = GetDecimalFromCell(sheet.Cells[row, colDebit.Value]);
+                    decimal credit = 0m;
+                    if (colCredit.HasValue && colCredit.Value > 0)
+                        credit = GetDecimalFromCell(sheet.Cells[row, colCredit.Value]);
+
+                    if (debit == 0m && credit == 0m)
+                        continue;
+
+                    // مثل دفتر الأستاذ: كل قيد له جانب واحد فقط — إما مدين أو دائن (الآخر صفر)
+                    if (debit > 0m && credit > 0m)
+                    {
+                        var net = debit - credit;
+                        if (net >= 0) { debit = net; credit = 0m; }
+                        else { credit = -net; debit = 0m; }
+                    }
+
+                    Customer? customer = null;
+                    if (!string.IsNullOrWhiteSpace(codeVal))
+                    {
+                        if (int.TryParse(codeVal, out var id) && customerById.TryGetValue(id, out var byId))
+                            customer = byId;
+                        else if (customerByExternalCode.TryGetValue(codeVal, out var byCode))
+                            customer = byCode;
+                    }
+                    if (customer == null && !string.IsNullOrWhiteSpace(nameVal) && customerByName.TryGetValue(nameVal, out var cn))
+                        customer = cn;
+                    // ربط رقم الحساب من الإكسل بكود الإكسل في البرنامج (للمقارنة والربط)
+                    if (customer != null && !string.IsNullOrWhiteSpace(codeVal))
+                    {
+                        customer.ExternalCode = codeVal.Length <= 50 ? codeVal : codeVal.Substring(0, 50);
+                        customer.UpdatedAt = DateTime.Now;
+                    }
+                    if (customer == null)
+                    {
+                        var newName = !string.IsNullOrWhiteSpace(nameVal) ? nameVal : ("عميل " + (codeVal ?? "بدون كود"));
+                        if (newName.Length > 200) newName = newName.Substring(0, 200);
+                        var newCustomer = new Customer
+                        {
+                            CustomerName = newName,
+                            ExternalCode = !string.IsNullOrWhiteSpace(codeVal) && codeVal.Length <= 50 ? codeVal : (codeVal?.Length > 50 ? codeVal.Substring(0, 50) : null),
+                            PartyCategory = "عميل",
+                            AccountId = defaultAccountId > 0 ? defaultAccountId : null,
+                            IsActive = true,
+                            CreatedAt = DateTime.Now,
+                            UpdatedAt = DateTime.Now
+                        };
+                        _db.Customers.Add(newCustomer);
+                        await _db.SaveChangesAsync();
+                        newCustomersCount++;
+                        customerById[newCustomer.CustomerId] = newCustomer;
+                        if (!string.IsNullOrWhiteSpace(newCustomer.ExternalCode))
+                            customerByExternalCode[newCustomer.ExternalCode.Trim()] = newCustomer;
+                        customerByName[newCustomer.CustomerName.Trim()] = newCustomer;
+                        customer = newCustomer;
+                    }
+
+                    int accountId = defaultAccountId;
+                    if (colAccountId.HasValue && colAccountId.Value > 0)
+                    {
+                        var accText = sheet.Cells[row, colAccountId.Value].Text?.Trim();
+                        if (!string.IsNullOrWhiteSpace(accText) && int.TryParse(accText, out var fileAccId) && fileAccId > 0)
+                            accountId = fileAccId;
+                        else if (customer.AccountId.HasValue && customer.AccountId.Value > 0)
+                            accountId = customer.AccountId.Value;
+                    }
+                    else if (customer.AccountId.HasValue && customer.AccountId.Value > 0)
+                        accountId = customer.AccountId.Value;
+
+                    if (accountId == 0)
+                    {
+                        errors.Add($"صف {row}: لا يوجد حساب محاسبي للعميل «{customer.CustomerName}».");
+                        continue;
+                    }
+
+                    DateTime entryDate = entryDateDefault;
+                    if (colEntryDate.HasValue && colEntryDate.Value > 0)
+                    {
+                        var dateText = sheet.Cells[row, colEntryDate.Value].Text?.Trim();
+                        if (!string.IsNullOrWhiteSpace(dateText) && DateTime.TryParse(dateText, CultureInfo.GetCultureInfo("ar-EG"), DateTimeStyles.None, out var parsed))
+                            entryDate = parsed.Date;
+                    }
+
+                    lineNo++;
+                    toAdd.Add(new LedgerEntry
+                    {
+                        EntryDate = entryDate,
+                        SourceType = LedgerSourceType.Opening,
+                        VoucherNo = "رصيد افتتاحي",
+                        SourceId = null,
+                        LineNo = lineNo,
+                        PostVersion = 1,
+                        AccountId = accountId,
+                        CustomerId = customer.CustomerId,
+                        Debit = debit,
+                        Credit = credit,
+                        Description = "رصيد افتتاحي - " + customer.CustomerName,
+                        CreatedAt = DateTime.Now
+                    });
+                }
+
+                var existingOpening = await _db.LedgerEntries
+                    .Where(e => e.SourceType == LedgerSourceType.Opening && e.CustomerId != null)
+                    .ToListAsync();
+                _db.LedgerEntries.RemoveRange(existingOpening);
+                await _db.LedgerEntries.AddRangeAsync(toAdd);
+                await _db.SaveChangesAsync();
+
+                // إعادة حساب أرصدة العملاء (Customer.CurrentBalance) من دفتر الأستاذ لضبط إجمالي المدين/الدائن في القوائم والتقارير
+                var ledgerPosting = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
+                await ledgerPosting.RecalcAllCustomerBalancesAsync();
+
+                var msg = $"تم استيراد أرصدة افتتاحية لـ {toAdd.Count} عميل.";
+                if (newCustomersCount > 0)
+                    msg += $" تمت إضافة {newCustomersCount} عميل جديد من الملف إلى قائمة العملاء.";
+                if (errors.Count > 0)
+                    msg += " تحذيرات: " + string.Join(" ", errors.Take(5)) + (errors.Count > 5 ? " ..." : "");
+                TempData["Success"] = msg;
+                return RedirectToAction(nameof(Import));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "خطأ أثناء استيراد أرصدة العملاء: " + (ex.InnerException?.Message ?? ex.Message);
+                return RedirectToAction(nameof(Import));
+            }
+        }
+
+        // =====================
+        // استيراد أسماء المستخدمين من إكسل
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public IActionResult ImportUsers(IFormFile? excelFile)
+        {
+            if (excelFile == null || excelFile.Length == 0)
+            {
+                TempData["Error"] = "من فضلك اختر ملف أسماء المستخدمين (Excel) أولاً.";
+                return RedirectToAction(nameof(Import));
+            }
+            TempData["Error"] = "استيراد المستخدمين من إكسل قيد الإعداد. سيتم الربط عند توفير نموذج الملف.";
+            return RedirectToAction(nameof(Import));
+        }
+
+        // =====================
+        // استيراد رصيد الخزينة (رصيد أول المدة) — من شيت: خلية "رصيد الخزينة" والرقم تحتها أو بجانبها
+        // =====================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Products.Import")]
+        public async Task<IActionResult> ImportTreasuryBalance(IFormFile? excelFile, string? accountId)
+        {
+            if (excelFile == null || excelFile.Length == 0)
+            {
+                TempData["Error"] = "ارفع ملف إكسل يحتوي على «رصيد الخزينة» والرقم تحتها (مثال: 425000).";
+                return RedirectToAction(nameof(Import));
+            }
+
+            try
+            {
+                int treasuryAccountId = 0;
+                if (!string.IsNullOrWhiteSpace(accountId) && int.TryParse(accountId.Trim(), out var parsed) && parsed > 0)
+                    treasuryAccountId = parsed;
+                if (treasuryAccountId == 0)
+                {
+                    treasuryAccountId = await _db.Accounts
+                        .Where(a => a.AccountCode == "1101" || a.AccountCode.StartsWith("1101"))
+                        .OrderBy(a => a.AccountCode)
+                        .Select(a => a.AccountId)
+                        .FirstOrDefaultAsync();
+                    if (treasuryAccountId == 0)
+                        treasuryAccountId = await _db.Accounts.OrderBy(a => a.AccountId).Select(a => a.AccountId).FirstOrDefaultAsync();
+                }
+                if (treasuryAccountId == 0)
+                {
+                    TempData["Error"] = "لم يُعثر على حساب خزينة. أدخل رقم الحساب يدوياً أو أضف حساباً بكود 1101.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                using var stream = new MemoryStream();
+                await excelFile.CopyToAsync(stream);
+                stream.Position = 0;
+                ExcelPackage.License.SetNonCommercialPersonal("Amr ERP Dev");
+                using var package = new ExcelPackage(stream);
+                var sheet = package.Workbook.Worksheets[0];
+                if (sheet.Dimension == null)
+                {
+                    TempData["Error"] = "الملف لا يحتوي على بيانات.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                int lastRow = sheet.Dimension.End.Row;
+                int lastCol = sheet.Dimension.End.Column;
+                const string label = "رصيد الخزينة";
+                decimal amount = 0m;
+                bool found = false;
+
+                for (int r = 1; r <= lastRow && !found; r++)
+                {
+                    for (int c = 1; c <= lastCol; c++)
+                    {
+                        var cellText = sheet.Cells[r, c].Text?.Trim() ?? "";
+                        if (string.IsNullOrEmpty(cellText) || !cellText.Contains(label, StringComparison.OrdinalIgnoreCase))
+                            continue;
+                        amount = GetDecimalFromCell(sheet.Cells[r + 1, c]);
+                        if (c < lastCol && amount == 0m) amount = GetDecimalFromCell(sheet.Cells[r, c + 1]);
+                        found = true;
+                        break;
+                    }
+                    if (found) break;
+                }
+
+                if (!found)
+                {
+                    TempData["Error"] = "لم يُعثر في الملف على خلية «رصيد الخزينة» مع رقم صالح تحتها أو بجانبها.";
+                    return RedirectToAction(nameof(Import));
+                }
+
+                decimal debit = amount >= 0 ? amount : 0m;
+                decimal credit = amount < 0 ? Math.Abs(amount) : 0m;
+
+                var existingOpening = await _db.LedgerEntries
+                    .Where(e => e.SourceType == LedgerSourceType.Opening && e.AccountId == treasuryAccountId && e.CustomerId == null)
+                    .ToListAsync();
+                _db.LedgerEntries.RemoveRange(existingOpening);
+                _db.LedgerEntries.Add(new LedgerEntry
+                {
+                    EntryDate = DateTime.Today,
+                    SourceType = LedgerSourceType.Opening,
+                    VoucherNo = "رصيد افتتاحي خزينة",
+                    SourceId = null,
+                    LineNo = 1,
+                    PostVersion = 1,
+                    AccountId = treasuryAccountId,
+                    CustomerId = null,
+                    Debit = debit,
+                    Credit = credit,
+                    Description = "رصيد افتتاحي خزينة - مستورد من إكسل",
+                    CreatedAt = DateTime.Now
+                });
+                await _db.SaveChangesAsync();
+
+                var balanceText = amount >= 0 ? $"{amount:N0} مدين" : $"{Math.Abs(amount):N0} دائن";
+                TempData["Success"] = $"تم استيراد رصيد الخزينة: {balanceText} كرصيد افتتاحي لحساب رقم {treasuryAccountId}.";
+                return RedirectToAction(nameof(Import));
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "خطأ أثناء استيراد رصيد الخزينة: " + (ex.InnerException?.Message ?? ex.Message);
                 return RedirectToAction(nameof(Import));
             }
         }

@@ -1,0 +1,322 @@
+/* =========================================================
+   ERP — نظام طباعة موحد
+   - القوائم: استخدم .erp-print-area و .no-print (site.css)
+   - شاشات الفواتير: رأس الصفحة → سطور الفاتورة → الإجماليات
+     صفحة واحدة = ورقة طولية (portrait)
+     نسختان أو ثلاث = ورقة عرضية (landscape)
+   ========================================================= */
+
+/* مخفي في الشاشة — منطقة طباعة الفاتورة */
+.erp-print-invoice-wrapper.print-only {
+    display: none !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 2mm;
+    }
+
+    .erp-print-invoice-wrapper.print-only {
+        display: block !important;
+    }
+
+    /* وضع طباعة الفاتورة: إخفاء كل شيء وإظهار منطقة الطباعة فقط */
+    body.printing-invoice * {
+        display: none !important;
+    }
+    body.printing-invoice .erp-print-invoice-wrapper,
+    body.printing-invoice .erp-print-invoice-wrapper *,
+    body.printing-invoice #piPrintWrapper,
+    body.printing-invoice #piPrintWrapper * {
+        display: block !important;
+    }
+    body.printing-invoice .erp-print-invoice-wrapper table,
+    body.printing-invoice .erp-print-invoice-wrapper thead,
+    body.printing-invoice .erp-print-invoice-wrapper tbody,
+    body.printing-invoice .erp-print-invoice-wrapper tr,
+    body.printing-invoice .erp-print-invoice-wrapper th,
+    body.printing-invoice .erp-print-invoice-wrapper td {
+        display: table !important;
+    }
+    body.printing-invoice .erp-print-invoice-wrapper thead { display: table-header-group !important; }
+    body.printing-invoice .erp-print-invoice-wrapper tbody { display: table-row-group !important; }
+    body.printing-invoice .erp-print-invoice-wrapper tr { display: table-row !important; }
+    body.printing-invoice .erp-print-invoice-wrapper th,
+    body.printing-invoice .erp-print-invoice-wrapper td { display: table-cell !important; }
+    body.printing-invoice #piPrintWrapper table,
+    body.printing-invoice #piPrintWrapper thead,
+    body.printing-invoice #piPrintWrapper tbody,
+    body.printing-invoice #piPrintWrapper tr,
+    body.printing-invoice #piPrintWrapper th,
+    body.printing-invoice #piPrintWrapper td { display: table !important; }
+    body.printing-invoice #piPrintWrapper thead { display: table-header-group !important; }
+    body.printing-invoice #piPrintWrapper tbody { display: table-row-group !important; }
+    body.printing-invoice #piPrintWrapper tr { display: table-row !important; }
+    body.printing-invoice #piPrintWrapper th,
+    body.printing-invoice #piPrintWrapper td { display: table-cell !important; }
+
+    body.printing-invoice .erp-print-invoice-wrapper,
+    body.printing-invoice #piPrintWrapper {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+        z-index: 99999 !important;
+        background: white !important;
+    }
+
+    .erp-print-invoice-wrapper,
+    #piPrintWrapper {
+        position: relative !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: visible !important;
+    }
+
+    .erp-print-invoice-area,
+    .erp-print-copy,
+    #piPrintArea {
+        width: 100% !important;
+        max-width: 100% !important;
+        overflow: visible !important;
+    }
+
+    .erp-table-wrapper {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+
+    .erp-print-invoice-area table,
+    .erp-print-copy table,
+    #piPrintArea table {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-collapse: collapse;
+        font-size: 12px;
+        table-layout: auto;
+    }
+
+    .erp-print-invoice-area th, .erp-print-invoice-area td,
+    .erp-print-copy th, .erp-print-copy td,
+    #piPrintArea th, #piPrintArea td {
+        border: 1px solid #333;
+        padding: 6px 8px;
+        vertical-align: middle;
+        white-space: normal;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+    }
+
+    .erp-print-invoice-area thead,
+    .erp-print-copy thead,
+    #piPrintArea thead {
+        display: table-header-group;
+    }
+
+    .erp-print-invoice-area tr,
+    .erp-print-copy tr,
+    #piPrintArea tr {
+        break-inside: avoid;
+    }
+
+    /* هيدر الطباعة: اسم الشركة فوق مع خط ومساحة للوجو — نفس التنسيق لكل نسخة */
+    #piPrintWrapper > * .pi-print-header,
+    #piPrintArea .pi-print-header,
+    .erp-print-invoice-area .pi-print-header,
+    .pi-print-copy .pi-print-header {
+        font-size: 11px !important;
+        line-height: 1.35;
+    }
+    #piPrintWrapper > * .pi-print-company-row,
+    #piPrintArea .pi-print-company-row,
+    .erp-print-invoice-area .pi-print-company-row,
+    .pi-print-copy .pi-print-company-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+    }
+    #piPrintWrapper > * .pi-print-company-name,
+    #piPrintArea .pi-print-company-name,
+    .pi-print-copy .pi-print-company-name {
+        font-size: 1.1rem !important;
+    }
+    #piPrintWrapper > * .pi-print-company-underline,
+    #piPrintArea .pi-print-company-underline,
+    .pi-print-copy .pi-print-company-underline {
+        border: 0;
+        border-bottom: 1px solid #333;
+    }
+    #piPrintWrapper > * .pi-print-logo-placeholder,
+    #piPrintArea .pi-print-logo-placeholder,
+    .pi-print-copy .pi-print-logo-placeholder {
+        width: 80px;
+        min-height: 36px;
+    }
+    #piPrintWrapper > * .pi-print-header .small,
+    #piPrintArea .pi-print-header .small,
+    .pi-print-copy .pi-print-header .small { font-size: 10px !important; }
+    /* فاتورة مبيعات بجانب اسم الشركة (بدون رقم) */
+    #piPrintWrapper > * .pi-print-doc-title,
+    .pi-print-copy .pi-print-doc-title {
+        font-size: 12px !important;
+        font-weight: 600;
+    }
+    /* جدول التفاصيل: البيانات في خلايا أفقية (اسم العميل والكاتب والمخزن والتاريخ في سطر واحد) */
+    #piPrintWrapper > * .pi-print-details-table,
+    .pi-print-copy .pi-print-details-table {
+        border-collapse: collapse;
+        table-layout: fixed;
+        width: 100% !important;
+    }
+    #piPrintWrapper > * .pi-print-details-table td,
+    .pi-print-copy .pi-print-details-table td {
+        padding: 0.15rem 0.35rem !important;
+        vertical-align: top !important;
+        border: none !important;
+    }
+    #piPrintWrapper > * .pi-print-details-table tr td:first-child,
+    .pi-print-copy .pi-print-details-table tr td:first-child { width: 25%; }
+    #piPrintWrapper > * .pi-print-details-table tr td:nth-child(2),
+    .pi-print-copy .pi-print-details-table tr td:nth-child(2) { width: 25%; }
+    #piPrintWrapper > * .pi-print-details-table tr td:nth-child(3),
+    .pi-print-copy .pi-print-details-table tr td:nth-child(3) { width: 25%; }
+    #piPrintWrapper > * .pi-print-details-table tr td:nth-child(4),
+    .pi-print-copy .pi-print-details-table tr td:nth-child(4) { width: 25%; }
+
+    /* الإجماليات كروت — نفس التنسيق لكل نسخة (عبر الأبناء المباشرين للـ wrapper) */
+    #piPrintWrapper > * .invoice-totals-card,
+    #piPrintArea .invoice-totals-card,
+    .erp-print-invoice-area .invoice-totals-card,
+    .pi-print-copy .invoice-totals-card {
+        border: 1px solid #64748b !important;
+        border-radius: 6px !important;
+    }
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-box,
+    #piPrintArea .invoice-totals-card .invoice-summary-box,
+    .erp-print-invoice-area .invoice-totals-card .invoice-summary-box,
+    .pi-print-copy .invoice-totals-card .invoice-summary-box {
+        background: #f8fafc !important;
+        border: 1px solid #64748b !important;
+        border-radius: 6px !important;
+        padding: 0.25rem 0.35rem !important;
+    }
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-box-main,
+    #piPrintArea .invoice-totals-card .invoice-summary-box-main,
+    .pi-print-copy .invoice-totals-card .invoice-summary-box-main {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-box-main .invoice-summary-label,
+    #piPrintArea .invoice-totals-card .invoice-summary-box-main .invoice-summary-label,
+    .pi-print-copy .invoice-totals-card .invoice-summary-box-main .invoice-summary-label { color: rgba(255,255,255,.9) !important; }
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-box-main .invoice-summary-value,
+    #piPrintArea .invoice-totals-card .invoice-summary-box-main .invoice-summary-value,
+    .pi-print-copy .invoice-totals-card .invoice-summary-box-main .invoice-summary-value { color: #fff !important; }
+
+    /* كروت الإجماليات بجانب بعضها (صفوف أفقية) — لكل نسخة */
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-row,
+    #piPrintArea .invoice-totals-card .invoice-summary-row,
+    .erp-print-invoice-area .invoice-totals-card .invoice-summary-row,
+    .pi-print-copy .invoice-totals-card .invoice-summary-row {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 0.35rem 0.5rem !important;
+        align-items: stretch !important;
+    }
+    #piPrintWrapper > * .invoice-totals-card .invoice-summary-item.invoice-summary-box,
+    #piPrintArea .invoice-totals-card .invoice-summary-item.invoice-summary-box,
+    .erp-print-invoice-area .invoice-totals-card .invoice-summary-item.invoice-summary-box,
+    .pi-print-copy .invoice-totals-card .invoice-summary-item.invoice-summary-box {
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+
+    /* صفحة واحدة — طولية */
+    .erp-print-mode-1 .erp-print-invoice-area,
+    .print-mode-1 #piPrintArea {
+        font-size: 14px !important;
+        padding: 0 !important;
+    }
+    .erp-print-mode-1 .erp-print-invoice-area .mb-3,
+    .erp-print-mode-1 .erp-print-invoice-area .small,
+    .print-mode-1 #piPrintArea .mb-3,
+    .print-mode-1 #piPrintArea .small {
+        font-size: 12px !important;
+    }
+    .erp-print-mode-1 .erp-print-invoice-area table,
+    .print-mode-1 #piPrintArea table {
+        font-size: 13px !important;
+    }
+
+    /* أصل وصورة — ورقة واحدة مقسومة نصفين: في كل نصف نفس الفاتورة (عرضية) */
+    body.printing-invoice #piPrintWrapper.print-mode-2,
+    body.printing-invoice .erp-print-invoice-wrapper.erp-print-mode-2,
+    .erp-print-mode-2,
+    .print-mode-2 {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px;
+        width: 100% !important;
+        height: 100% !important;
+        box-sizing: border-box !important;
+        padding: 0 !important;
+        align-content: start;
+    }
+    .erp-print-mode-2 .erp-print-copy,
+    .print-mode-2 .pi-print-copy {
+        break-inside: avoid;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        transform: scale(0.88);
+        transform-origin: top center;
+        font-size: 8px !important;
+    }
+    .erp-print-mode-2 .erp-print-copy table,
+    .print-mode-2 .pi-print-copy table { font-size: 8px !important; }
+    .erp-print-mode-2 .erp-print-copy th, .erp-print-mode-2 .erp-print-copy td,
+    .print-mode-2 .pi-print-copy th, .print-mode-2 .pi-print-copy td { padding: 1px 3px !important; border-width: 0.5px !important; }
+    .erp-print-mode-2 .erp-print-copy .mb-3, .erp-print-mode-2 .erp-print-copy .small,
+    .print-mode-2 .pi-print-copy .mb-3, .print-mode-2 .pi-print-copy .small { font-size: 7px !important; }
+
+    /* أصل وصورتين — ورقة واحدة مقسومة ثلاثة: في كل قسم نفس الفاتورة (عرضية) */
+    body.printing-invoice #piPrintWrapper.print-mode-3,
+    body.printing-invoice .erp-print-invoice-wrapper.erp-print-mode-3,
+    .erp-print-mode-3,
+    .print-mode-3 {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 3px;
+        width: 100% !important;
+        height: 100% !important;
+        box-sizing: border-box !important;
+        padding: 0 !important;
+        align-content: start;
+    }
+    .erp-print-mode-3 .erp-print-copy,
+    .print-mode-3 .pi-print-copy {
+        break-inside: avoid;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        overflow: hidden !important;
+        transform: scale(0.72);
+        transform-origin: top center;
+        font-size: 6px !important;
+    }
+    .erp-print-mode-3 .erp-print-copy table,
+    .print-mode-3 .pi-print-copy table { font-size: 6px !important; }
+    .erp-print-mode-3 .erp-print-copy th, .erp-print-mode-3 .erp-print-copy td,
+    .print-mode-3 .pi-print-copy th, .print-mode-3 .pi-print-copy td { padding: 1px 2px !important; border-width: 0.5px !important; }
+    .erp-print-mode-3 .erp-print-copy .mb-3, .erp-print-mode-3 .erp-print-copy .small,
+    .print-mode-3 .pi-print-copy .mb-3, .print-mode-3 .pi-print-copy .small { font-size: 5px !important; }
+}

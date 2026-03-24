@@ -30,12 +30,24 @@ namespace ERP.Controllers
         // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;   // متغير: السياق الأساسي للتعامل مع الـ DB
         private readonly ILedgerPostingService _ledgerPostingService;
+        private readonly IPermissionService _permissionService;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
-        public LedgerEntriesController(AppDbContext context, ILedgerPostingService ledgerPostingService)
+        private const string InvestorAccountCode = "3101";
+
+        public LedgerEntriesController(
+            AppDbContext context,
+            ILedgerPostingService ledgerPostingService,
+            IPermissionService permissionService,
+            IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
+            _permissionService = permissionService;
+            _accountVisibilityService = accountVisibilityService;
         }
+
+        private static Task<bool> CanViewInvestorsAsync() => Task.FromResult(true); // إظهار/إخفاء 3101 يعتمد على «الحسابات المسموح رؤيتها» فقط
 
         // =========================================================
         // دالة خاصة: تجهيز الاستعلام الأساسي + الفلاتر + البحث + الترتيب
@@ -50,13 +62,31 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            bool canViewInvestors,
+            List<int> hiddenCustomerAccountIds,
+            bool restrictedToAllowedOnly)
         {
             // (1) الاستعلام الأساسي من جدول القيود مع الحساب والعميل (بدون تتبّع لتحسين الأداء)
             IQueryable<LedgerEntry> q = _context.LedgerEntries
                 .AsNoTracking()
                 .Include(e => e.Account)
                 .Include(e => e.Customer);
+
+            if (!canViewInvestors)
+                q = q.Where(e => e.Account != null && e.Account.AccountCode != InvestorAccountCode);
+
+            // إخفاء أي قيد مرتبط بعميل غير ظاهر (حساب رئيسي أو قيود بحساب مسموح)
+            if (hiddenCustomerAccountIds != null && hiddenCustomerAccountIds.Count > 0)
+            {
+                q = restrictedToAllowedOnly
+                    ? q.Where(e => (e.Customer != null && e.Customer.AccountId != null && !hiddenCustomerAccountIds.Contains(e.Customer.AccountId.Value))
+                        || (e.Customer != null && (e.Customer.PartyCategory == "Customer" || e.Customer.PartyCategory == "Supplier")
+                            && e.CustomerId != null && _context.LedgerEntries.Any(le => le.CustomerId == e.CustomerId && !hiddenCustomerAccountIds.Contains(le.AccountId))))
+                    : q.Where(e => e.Customer == null || e.Customer.AccountId == null || !hiddenCustomerAccountIds.Contains(e.Customer.AccountId.Value)
+                        || (e.Customer != null && (e.Customer.PartyCategory == "Customer" || e.Customer.PartyCategory == "Supplier")
+                            && e.CustomerId != null && _context.LedgerEntries.Any(le => le.CustomerId == e.CustomerId && !hiddenCustomerAccountIds.Contains(le.AccountId))));
+            }
 
             // (2) فلتر كود من/إلى (نعتمد هنا على Id كرقم القيد)
             if (fromCode.HasValue)
@@ -234,7 +264,27 @@ namespace ERP.Controllers
         {
             var searchTerm = (search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
-            var q = _context.LedgerEntries.AsNoTracking().Include(e => e.Account).Include(e => e.Customer);
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedCol = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
+            IQueryable<LedgerEntry> q = _context.LedgerEntries.AsNoTracking()
+                .Include(e => e.Account)
+                .Include(e => e.Customer);
+            if (!canViewInvestors)
+                q = q.Where(e => e.Account != null && e.Account.AccountCode != InvestorAccountCode);
+
+            // إخفاء قيود أي عميل غير ظاهر (حساب رئيسي أو قيود بحساب مسموح)
+            if (hiddenList.Count > 0)
+            {
+                q = restrictedCol
+                    ? q.Where(e => (e.Customer != null && e.Customer.AccountId != null && !hiddenList.Contains(e.Customer.AccountId.Value))
+                        || (e.Customer != null && (e.Customer.PartyCategory == "Customer" || e.Customer.PartyCategory == "Supplier")
+                            && e.CustomerId != null && _context.LedgerEntries.Any(le => le.CustomerId == e.CustomerId && !hiddenList.Contains(le.AccountId))))
+                    : q.Where(e => e.Customer == null || e.Customer.AccountId == null || !hiddenList.Contains(e.Customer.AccountId.Value)
+                        || (e.Customer != null && (e.Customer.PartyCategory == "Customer" || e.Customer.PartyCategory == "Supplier")
+                            && e.CustomerId != null && _context.LedgerEntries.Any(le => le.CustomerId == e.CustomerId && !hiddenList.Contains(le.AccountId))));
+            }
 
             if (columnLower == "id")
             {
@@ -330,6 +380,11 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 50)
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
+
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -339,7 +394,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
 
             q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_sourceId, filterCol_accId, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_credit, filterCol_desc);
 
@@ -432,6 +490,12 @@ namespace ERP.Controllers
             if (entry == null)
                 return NotFound();
 
+            // منع عرض قيود الحساب المستثمر
+            if (!await CanViewInvestorsAsync() &&
+                entry.Account != null &&
+                entry.Account.AccountCode == InvestorAccountCode)
+                return NotFound();
+
             return View(entry); // Views/LedgerEntries/Show.cshtml (نعمله لاحقاً بنفس نمط Show الثابت)
         }
 
@@ -462,6 +526,10 @@ namespace ERP.Controllers
             string? filterCol_desc = null,
             string format = "excel")
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -471,7 +539,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
 
             q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_sourceId, filterCol_accId, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_credit, filterCol_desc);
 
@@ -513,6 +584,35 @@ namespace ERP.Controllers
             const string contentType = "text/csv";
 
             return File(bytes, contentType, fileName);
+        }
+
+        // =========================================================
+        // حذف قيود الرصيد الافتتاحي للعملاء فقط (لإعادة استيراد أرصدة العملاء من إكسل)
+        // =========================================================
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteCustomerOpeningEntries()
+        {
+            var toRemove = await _context.LedgerEntries
+                .Where(e => e.SourceType == LedgerSourceType.Opening && e.CustomerId != null)
+                .ToListAsync();
+            if (toRemove.Count == 0)
+            {
+                TempData["Info"] = "لا توجد قيود رصيد افتتاحي للعملاء لحذفها.";
+                return RedirectToAction(nameof(Index));
+            }
+            try
+            {
+                _context.LedgerEntries.RemoveRange(toRemove);
+                await _context.SaveChangesAsync();
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
+                TempData["Success"] = $"تم حذف {toRemove.Count} قيد رصيد افتتاحي للعملاء. يمكنك الآن إعادة استيراد أرصدة العملاء من شاشة الاستيراد.";
+            }
+            catch (DbUpdateException ex)
+            {
+                TempData["Error"] = "لم يتم الحذف: " + (ex.InnerException?.Message ?? ex.Message);
+            }
+            return RedirectToAction(nameof(Index));
         }
 
         // =========================================================

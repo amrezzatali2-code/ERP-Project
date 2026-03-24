@@ -1,0 +1,60 @@
+@{
+    ViewData["Title"] = "استيراد المناطق من جدول العملاء";
+    var governorates = ViewBag.Governorates as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var districts = ViewBag.Districts as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+}
+
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">استيراد المناطق من جدول العملاء</h4>
+
+    @if (TempData["Error"] != null)
+    {
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
+    }
+
+    <div class="card border-info mb-3">
+        <div class="card-body">
+            <p class="text-muted mb-3">
+                يقرأ هذا الإجراء <strong>الأسماء المميزة</strong> من عمود «المنطقة (نص)» عند العملاء الذين لديهم منطقة مكتوبة (مثلاً بعد استيراد قائمة العملاء من إكسل)،
+                وينشئ لكل اسم غير موجود في جدول المناطق سجلاً جديداً، ثم يربط كل عميل بالمنطقة المناسبة.
+            </p>
+            <p class="text-muted mb-3">
+                <strong>بعد التشغيل:</strong> ستظهر المنطقة أمام كل عميل في قائمة العملاء من <strong>جدول المناطق</strong> (عمود «المنطقة» يعرض اسم المنطقة من الجدول).
+            </p>
+            <p class="text-muted small">
+                اختر المحافظة والحي الذي ستُضاف تحته المناطق الجديدة. إن تركت الاختيار فارغاً سيتم استخدام أول محافظة وأول حي في النظام.
+            </p>
+        </div>
+    </div>
+
+    <form asp-action="CreateAreasFromCustomerRegions" method="post" class="card mb-3">
+        @Html.AntiForgeryToken()
+        <div class="card-header bg-light">تشغيل الاستيراد</div>
+        <div class="card-body row g-3">
+            <div class="col-md-4">
+                <label class="form-label">المحافظة (اختياري — إن تركت فارغاً تُستخدم أول محافظة)</label>
+                <select name="governorateId" class="form-select" asp-items="governorates">
+                    <option value="">— استخدم أول محافظة —</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">الحي / المركز (اختياري — إن تركت فارغاً يُستخدم أول حي)</label>
+                <select name="districtId" class="form-select" asp-items="districts">
+                    <option value="">— استخدم أول حي —</option>
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-erp btn-erp-primary">إنشاء المناطق من أسماء العملاء وربطها</button>
+            </div>
+        </div>
+    </form>
+
+    <div class="d-flex gap-2">
+        <a asp-controller="Products" asp-action="Import" class="btn btn-erp btn-erp-secondary">رجوع إلى استيراد البيانات</a>
+        <a asp-action="Index" class="btn btn-erp btn-erp-secondary">قائمة العملاء</a>
+    </div>
+</div>

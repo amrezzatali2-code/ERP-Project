@@ -1427,7 +1427,7 @@
                     e.preventDefault();
                     var id = getCurrentProdId();
                     if (!id) { showToast('من فضلك اختر صنفاً أولاً.', 'warning'); document.getElementById('ProdNameInput')?.focus(); return; }
-                    openTabFromFrame(buildEditUrl(id), 'prod-edit-' + id, 'تعديل الصنف');
+                    openTabFromFrame(buildEditUrl(id), 'product-edit-tab', 'تعديل الصنف');
                 });
             }
             if (btnMovement && !btnMovement.dataset.boundMove) {

@@ -76,6 +76,7 @@ namespace ERP
             builder.Services.AddScoped<ERP.Services.StockAnalysisService>();
             builder.Services.AddScoped<IFullReturnService, FullReturnService>();
             builder.Services.AddScoped<ERP.Services.IPermissionService, ERP.Services.PermissionService>();
+            builder.Services.AddScoped<ERP.Services.IUserAccountVisibilityService, ERP.Services.UserAccountVisibilityService>();
 
             // متغير: نظام الصلاحيات (PermissionService للتحقق من الصلاحيات)
             builder.Services.AddAuthorization();
@@ -102,25 +103,20 @@ namespace ERP
                 // تطبيق كل الـ Migrations لو ناقصة
                 db.Database.Migrate();
 
-                // ========== صلاحيات وأدوار من الكود فقط: مسح القديم وإعادة البناء ==========
+                // ========== مزامنة كتالوج الصلاحيات من الكود — دون مسح ربط الأدوار المحفوظ لدى العميل ==========
+                // لا نحذف RolePermissions بالجملة: تعديلات «صلاحيات الأدوار» وأدوار المستخدمين تبقى بعد التحديث أو إعادة التشغيل.
+                // يُحذف من الكتالوج فقط الأكواد التي لم تعد في PermissionCodes؛ روابطها في RolePermissions تُزال عبر Cascade.
                 var syncList = ERP.Security.PermissionCodes.GetAllForSync()
                     .Where(x => !string.IsNullOrWhiteSpace(x.Code))
                     .DistinctBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
                     .ToList();
 
-                // 1) حذف كل ربط دور-صلاحية (لأننا سنعيد بناء الصلاحيات)
-                var allRolePerms = await db.RolePermissions.ToListAsync();
-                db.RolePermissions.RemoveRange(allRolePerms);
-                await db.SaveChangesAsync();
-
-                // 2) حذف صلاحيات غير موجودة في القائمة الجديدة (أكواد قديمة)
                 var syncCodes = new HashSet<string>(syncList.Select(x => x.Code), StringComparer.OrdinalIgnoreCase);
-                var oldPerms = await db.Permissions.Where(p => p.Code != null && !syncCodes.Contains(p.Code)).ToListAsync();
-                db.Permissions.RemoveRange(oldPerms);
-                await db.SaveChangesAsync();
 
-                // 3) إضافة/تحديث الصلاحيات من مصدر الكود فقط
-                var existingPerms = await db.Permissions.ToDictionaryAsync(p => p.Code, p => p, StringComparer.OrdinalIgnoreCase);
+                // 1) إضافة/تحديث الصلاحيات من مصدر الكود
+                var existingPerms = await db.Permissions
+                    .Where(p => p.Code != null)
+                    .ToDictionaryAsync(p => p.Code!, p => p, StringComparer.OrdinalIgnoreCase);
                 var now = DateTime.UtcNow;
                 foreach (var (Code, NameAr, Module) in syncList)
                 {
@@ -128,6 +124,7 @@ namespace ERP
                     {
                         p.NameAr = NameAr;
                         p.Module = Module;
+                        p.IsActive = true;
                         p.UpdatedAt = now;
                     }
                     else
@@ -137,36 +134,53 @@ namespace ERP
                 }
                 await db.SaveChangesAsync();
 
-                // 4) إعادة بناء الأدوار من الـ Seeder (قائمة مختصرة من الكود)
+                // 2) حذف صلاحيات لم تعد في الكود (الروابط المرتبطة تُحذف تلقائياً مع الصلاحية)
+                var oldPerms = await db.Permissions.Where(p => p.Code != null && !syncCodes.Contains(p.Code)).ToListAsync();
+                if (oldPerms.Count > 0)
+                {
+                    db.Permissions.RemoveRange(oldPerms);
+                    await db.SaveChangesAsync();
+                }
+
+                // 3) ضمان وجود الأدوار الأساسية (تحديث أو إدراج — بدون مسح أدوار مخصّصة)
                 await RoleSeeder.SeedAsync(db);
 
-                // 5) ربط دور "مالك النظام" بكل الصلاحيات
+                // 4) دور «مالك النظام»: إضافة أي صلاحية جديدة فقط (لا نلمس بقية الأدوار)
                 var ownerRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "مالك النظام");
                 if (ownerRole != null)
                 {
-                    var allPerms = await db.Permissions.ToListAsync();
-                    var existingOwnerLinks = (await db.RolePermissions.Where(rp => rp.RoleId == ownerRole.RoleId).Select(rp => rp.PermissionId).ToListAsync()).ToHashSet();
+                    var allPerms = await db.Permissions.AsNoTracking().ToListAsync();
+                    var existingOwnerLinks = (await db.RolePermissions
+                        .Where(rp => rp.RoleId == ownerRole.RoleId)
+                        .Select(rp => rp.PermissionId)
+                        .ToListAsync()).ToHashSet();
                     var nowRp = DateTime.UtcNow;
                     foreach (var perm in allPerms)
                     {
                         if (!existingOwnerLinks.Contains(perm.PermissionId))
                         {
-                            db.RolePermissions.Add(new RolePermission { RoleId = ownerRole.RoleId, PermissionId = perm.PermissionId, IsAllowed = true, CreatedAt = nowRp });
+                            db.RolePermissions.Add(new RolePermission
+                            {
+                                RoleId = ownerRole.RoleId,
+                                PermissionId = perm.PermissionId,
+                                IsAllowed = true,
+                                CreatedAt = nowRp
+                            });
                         }
                     }
                     await db.SaveChangesAsync();
                 }
 
-                // 6) سياسات التسعير (لو موجودة)
+                // 5) سياسات التسعير (لو موجودة)
                 await PolicySeeder.SeedAsync(db);
 
-                // 5) مجموعات الأصناف Group A..Z
+                // 6) مجموعات الأصناف Group A..Z
                 await ProductGroupSeeder.SeedAsync(db);
 
-                // 6) مجموعات البونص للأصناف
+                // 7) مجموعات البونص للأصناف
                 await ProductBonusGroupSeeder.SeedAsync(db);
 
-                // 7) شجرة الحسابات
+                // 8) شجرة الحسابات (فقط إن كان الجدول فارغاً)
                 await AccountsSeeder.SeedAsync(db);
             }
 

@@ -1,12 +1,12 @@
 namespace ERP.ViewModels
 {
     /// <summary>
-    /// بيانات لوحة التحكم (جميع المستويات)
+    /// بيانات لوحة «مبيعاتي الشخصية» فقط.
     /// </summary>
     public class DashboardViewModel
     {
-        public string Level { get; set; } = "owner";  // sales | manager | owner
-        public string LevelName { get; set; } = "لوحة الإدارة الكاملة";
+        public string Level { get; set; } = "sales";
+        public string LevelName { get; set; } = "مبيعاتي الشخصية";
         public string? UserDisplayName { get; set; }
         /// <summary>فلتر التاريخ: من (للوحة مبيعاتي الشخصية).</summary>
         public DateTime? FromDate { get; set; }

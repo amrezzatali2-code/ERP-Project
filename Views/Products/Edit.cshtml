@@ -6,7 +6,10 @@
 
 <div class="container" dir="rtl">
     <h3 class="mb-3">@ViewData["Title"]</h3>
-
+    @if (TempData["Msg"] != null)
+    {
+        <div class="alert alert-success mb-3">@TempData["Msg"]</div>
+    }
     <form asp-action="Edit" method="post" class="row g-3">
         @Html.AntiForgeryToken()
 
@@ -92,7 +95,7 @@
             </select>
         </div>
 
-        @* السعر + الشركة + محلي/مستورد — نستخدم تنسيقاً عدديّاً ثابتاً (نقطة) لتفادي خطأ "must be a number" عند الفاصلة العشرية *@
+        @* السعر + الشركة + الموقع + محلي/مستورد *@
         <div class="col-md-4">
             <label asp-for="PriceRetail" class="form-label"></label>
             <input type="number" step="0.01" name="PriceRetail" id="PriceRetail" value="@(Model.PriceRetail.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))" class="form-control" />
@@ -102,6 +105,23 @@
         <div class="col-md-4">
             <label asp-for="Company" class="form-label"></label>
             <input asp-for="Company" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="ExternalCode" class="form-label"></label>
+            <input asp-for="ExternalCode" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="Location" class="form-label"></label>
+            <input asp-for="Location" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="WarehouseId" class="form-label"></label>
+            <select asp-for="WarehouseId" class="form-select" asp-items="ViewBag.Warehouses">
+                <option value="">-- اختر المخزن --</option>
+            </select>
         </div>
 
         <div class="col-md-4">

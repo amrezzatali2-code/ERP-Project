@@ -40,7 +40,7 @@ namespace ERP.Models
         // - التحقق يجب أن يكون على الـ IDs (لأن اللي بييجي من الفورم هو Id)
         // - ومنع التحقق على الـ Navigation Properties (CashAccount / CounterAccount)
 
-        [Display(Name = "حساب الصندوق / البنك")]
+        [Display(Name = "الخزينة / الصندوق")]
         [Range(1, int.MaxValue, ErrorMessage = "حساب الصندوق / البنك مطلوب.")] // ✅ يمنع 0 ويعطي رسالة واضحة
         public int CashAccountId { get; set; }      // متغير: حساب النقدية (صندوق/بنك) الذي يستلم الفلوس
 

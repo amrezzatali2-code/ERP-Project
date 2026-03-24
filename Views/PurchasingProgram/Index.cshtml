@@ -1,0 +1,63 @@
+@{
+    ViewData["Title"] = "برنامج المشتريات";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">برنامج المشتريات</h4>
+    <p class="text-muted">موديول برنامج المشتريات — الأصناف والعملاء والمستخدمون والصلاحيات من الـ ERP.</p>
+
+    @* جدول قاعدة البيانات — مطابقة أصناف العميل (بداخله زر الاستيراد) *@
+    <div class="card border-primary mb-3 shadow-sm">
+        <div class="card-header bg-light">
+            <strong>جدول قاعدة البيانات: VendorProductMappings</strong>
+            <span class="text-muted small ms-2">— مطابقة أصناف العميل</span>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">عرض وتحرير بيانات مطابقة أصناف العميل (اسم الصنف، كود صنف العميل، سعر الجمهور، الربط مع صنف الـ ERP).</p>
+            <p class="text-muted small mb-2"><strong>للعلم:</strong> زر الاستيراد مخصّص للاستخدام <strong>مرة واحدة فقط</strong> — لاستيراد قاعدة البيانات (مطابقة الأصناف) مرة واحدة.</p>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <a asp-controller="VendorProductMappings" asp-action="Index" class="btn btn-erp btn-erp-primary app-menu-link"
+                   data-tab-id="VendorProductMappings" data-tab-title="مطابقة أصناف العميل">
+                    عرض الجدول
+                </a>
+                <a asp-controller="VendorProductMappings" asp-action="Import" class="btn btn-erp btn-erp-success app-menu-link"
+                   data-tab-id="VendorProductMappings-Import" data-tab-title="استيراد مطابقة أصناف العميل">
+                    استيراد من Excel
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border shadow-sm erp-list-filter-bar mb-3">
+        <div class="card-body">
+            <h6 class="card-title mb-3">قوائم الجداول — عرض بيانات كل جدول</h6>
+            <div class="row g-2">
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="VendorProductMappings" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start app-menu-link" data-tab-id="VendorProductMappings" data-tab-title="مطابقة أصناف العميل">مطابقة أصناف العميل (VendorProductMappings)</a>
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="PurchasePolicyRules" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start">سياسات الشراء (PurchasePolicyRules)</a>
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="PurchasingDataSourceConfigs" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start">إعداد مصدر البيانات (PurchasingDataSourceConfigs)</a>
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="VendorFaxUploads" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start">رؤوس استيراد الفاكس (VendorFaxUploads)</a>
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="VendorFaxLines" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start">سطور الفاكس (VendorFaxLines)</a>
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="PurchasingOrders" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start">طلبات الشراء (PurchasingOrders)</a>
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="PurchasingOrderLines" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start">سطور طلب الشراء (PurchasingOrderLines)</a>
+                </div>
+                <div class="col-12 col-md-6 col-lg-4">
+                    <a asp-controller="PurchasingOrderAmendments" asp-action="Index" class="btn btn-erp btn-erp-primary w-100 text-start">سجل التأكيد/التعديل (PurchasingOrderAmendments)</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

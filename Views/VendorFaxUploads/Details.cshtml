@@ -1,0 +1,17 @@
+@model ERP.Models.VendorFaxUpload
+@{
+    ViewData["Title"] = "تفاصيل رأس استيراد الفاكس";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">@ViewData["Title"]</h4>
+    <dl class="row">
+        <dt class="col-sm-3">كود</dt><dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">العميل</dt><dd class="col-sm-9">@Model.Customer?.CustomerName</dd>
+        <dt class="col-sm-3">تاريخ الاستلام</dt><dd class="col-sm-9">@Model.ReceivedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+        <dt class="col-sm-3">اسم الملف</dt><dd class="col-sm-9">@Model.FileName</dd>
+        <dt class="col-sm-3">المستورد</dt><dd class="col-sm-9">@Model.ImportedBy</dd>
+        <dt class="col-sm-3">تاريخ الإنشاء</dt><dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+    </dl>
+    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">العودة للقائمة</a>
+</div>

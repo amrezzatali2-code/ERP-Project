@@ -1,0 +1,15 @@
+@model ERP.Models.PurchasingDataSourceConfig
+@{
+    ViewData["Title"] = "تفاصيل إعداد مصدر البيانات";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">@ViewData["Title"]</h4>
+    <dl class="row">
+        <dt class="col-sm-3">كود</dt><dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">نوع المصدر</dt><dd class="col-sm-9">@Model.SourceType</dd>
+        <dt class="col-sm-3">الاسم</dt><dd class="col-sm-9">@Model.DisplayName</dd>
+        <dt class="col-sm-3">تاريخ الإنشاء</dt><dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+    </dl>
+    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">العودة للقائمة</a>
+</div>

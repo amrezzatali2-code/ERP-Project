@@ -572,6 +572,175 @@ main.erp-list-page-layout {
     padding-right: 0;
 }
 
+/* إطار الجدول فقط — العنوان يبقى خارجه */
+.erp-list-table-frame {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+}
+
+/* كروت إجمالي العدد/الصافي — نفس الحجم بالضبط (عرض ثابت) */
+.erp-list-summary-card {
+    width: 170px;
+    min-width: 170px;
+    max-width: 170px;
+    box-sizing: border-box;
+}
+
+/* صف كروت الإجماليات: mt = mb (مسافة متساوية فوق وتحت) */
+.erp-list-summary-row {
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+
+.erp-list-table-after-summary {
+    margin-top: 0;
+}
+
+/* شريط إجراءات السجل المحدّد — RTL: flex-start = محاذاة المجموعة لليمين */
+.erp-list-selection-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 0.625rem;
+    width: 100%;
+    direction: rtl;
+}
+
+/* زر شريط القائمة: أيقونة + نص (معيار التعميم) — يتجاوز حدود/لون Bootstrap .btn */
+.erp-list-toolbar-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 2.5rem;
+    padding: 0.4rem 1.1rem;
+    border-radius: 10px;
+    border-width: 1px !important;
+    border-style: solid !important;
+    font-size: 0.95rem;
+    font-weight: 600;
+    line-height: 1.2;
+    transition: background-color .15s ease, color .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.erp-list-toolbar-action-icon {
+    flex-shrink: 0;
+    display: block;
+    vertical-align: middle;
+}
+
+/* مدمج مع أزرار الشريط الصغيرة (مثل btn-erp-sm) */
+.erp-list-toolbar-action--compact {
+    min-height: auto;
+    padding: 0.25rem 0.65rem !important;
+    font-size: 0.8rem !important;
+    gap: 0.35rem;
+}
+
+.erp-list-toolbar-action--compact .erp-list-toolbar-action-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* فصل بصري لمجموعة «السطر المحدد» داخل شريط الفلاتر */
+.erp-list-filter-bar .erp-list-toolbar-selected-actions {
+    padding-inline-start: 0.5rem;
+    margin-inline-start: 0.15rem;
+    border-inline-start: 1px solid #c7d2fe;
+}
+
+.erp-list-toolbar-action > i {
+    font-size: 1.1rem;
+    line-height: 1;
+}
+
+.erp-list-toolbar-action:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+button.btn.erp-list-toolbar-action--primary,
+button.btn.erp-list-toolbar-action--primary:disabled {
+    color: #3730a3 !important;
+    border-color: #4338ca !important;
+    background: #fff !important;
+    box-shadow: none;
+}
+
+button.btn.erp-list-toolbar-action--primary:not(:disabled):hover {
+    background: linear-gradient(180deg, #f5f7ff 0%, #eef2ff 100%) !important;
+    color: #312e81 !important;
+    border-color: #3730a3 !important;
+    box-shadow: none;
+}
+
+button.btn.erp-list-toolbar-action--danger,
+button.btn.erp-list-toolbar-action--danger:disabled {
+    color: #991b1b !important;
+    border-color: #b91c1c !important;
+    background: #fff !important;
+    box-shadow: none;
+}
+
+button.btn.erp-list-toolbar-action--danger:not(:disabled):hover {
+    background: linear-gradient(180deg, #fff5f5 0%, #fee2e2 100%) !important;
+    color: #7f1d1d !important;
+    border-color: #991b1b !important;
+    box-shadow: none;
+}
+
+/* اختياري: زر مربع أيقونة فقط (قوائم أخرى) */
+.erp-list-toolbar-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border-radius: 10px;
+    border-width: 1px;
+    border-style: solid;
+    font-size: 1.15rem;
+    line-height: 1;
+    transition: background-color .15s ease, color .15s ease, box-shadow .15s ease, border-color .15s ease;
+}
+
+.erp-list-toolbar-icon-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.erp-list-toolbar-icon-btn--primary {
+    color: #3730a3;
+    border-color: #4338ca;
+    background: #fff;
+    box-shadow: none;
+}
+
+.erp-list-toolbar-icon-btn--primary:not(:disabled):hover {
+    background: #eef2ff;
+    color: #312e81;
+    border-color: #3730a3;
+    box-shadow: none;
+}
+
+.erp-list-toolbar-icon-btn--danger {
+    color: #991b1b;
+    border-color: #b91c1c;
+    background: #fff;
+    box-shadow: none;
+}
+
+.erp-list-toolbar-icon-btn--danger:not(:disabled):hover {
+    background: #fef2f2;
+    color: #7f1d1d;
+    border-color: #991b1b;
+    box-shadow: none;
+}
+
 /* الغلاف الخارجي للجدول — LTR حتى يكون شريط التمرير العمودي على اليمين ويزول الشريط الأبيض عن اليسار */
 .erp-table-wrapper {
     max-height: 500px;
@@ -627,7 +796,17 @@ main.erp-list-page-layout {
     box-shadow: 0 2px 0 0 #adb5bd; /* إطار سفلي أوضح للهيدر */
 }
 
-/* توافق مع table-light في Bootstrap */
+/* رأس الجدول وصف الإجمالي — خلفية بيضاء لتمييز الجدول عن أرضية الصفحة */
+.erp-table-wrapper .erp-table thead th {
+    background: #fff !important;
+    border-bottom: 1px solid #e2e8f0;
+}
+.erp-table-wrapper .erp-table tfoot tr.table-light,
+.erp-table-wrapper .erp-table tfoot td {
+    background: #fff !important;
+    border-top: 1px solid #e2e8f0;
+}
+/* توافق مع table-light في Bootstrap (للجداول خارج الـ wrapper) */
 .table-light th {
     background-color: #fafbfc !important;
 }
@@ -641,10 +820,38 @@ main.erp-list-page-layout {
     border-spacing: 0;
 }
 
-/* توسيط جميع عناصر الجدول (نص وأزرار) */
+/* توسيط جميع عناصر الجدول (نص وأزرار) — يشمل tfoot لئلا تنحرف الإجماليات عن عمودها */
 .erp-table-wrapper .erp-table thead th,
-.erp-table-wrapper .erp-table tbody td {
+.erp-table-wrapper .erp-table tbody td,
+.erp-table-wrapper .erp-table tfoot td {
     text-align: center !important;
+}
+
+/* صفوف قابلة للاختيار — هوفر بلون بنفسجي واضح بدل رمادي Bootstrap؛ الصف المحدد أوضح من الهوفر */
+.erp-table-wrapper .erp-table > tbody > tr.erp-list-selectable-row {
+    cursor: pointer;
+    transition: background-color 0.12s ease;
+}
+
+.erp-table-wrapper .erp-table.table-hover > tbody > tr.erp-list-selectable-row:hover > td {
+    --bs-table-bg-state: transparent !important;
+    --bs-table-color-state: inherit;
+    background-color: rgba(129, 140, 248, 0.26) !important;
+    color: inherit;
+}
+
+.erp-table-wrapper .erp-table > tbody > tr.erp-list-selectable-row.selected > td {
+    --bs-table-bg-state: transparent !important;
+    background-color: rgba(99, 102, 241, 0.38) !important;
+    color: inherit;
+}
+
+.erp-table-wrapper .erp-table > tbody > tr.erp-list-selectable-row.selected:hover > td {
+    background-color: rgba(79, 70, 229, 0.42) !important;
+}
+
+.erp-table-wrapper .erp-table > tbody > tr.erp-list-selectable-row.selected > td:first-child {
+    border-inline-start: 3px solid #6366f1;
 }
 
 .erp-table-wrapper .erp-table thead th .erp-col-header-filterable,
@@ -805,14 +1012,15 @@ main.erp-list-page-layout {
 .erp-col-filter-btn:hover {
     background-color: rgba(37, 99, 235, 0.1);
 }
+/* لوحة فلتر العمود — لون محايد (slate) مناسب */
 .erp-column-filter-panel {
     position: fixed;
     z-index: 1060;
     background: #fff;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    padding: 0.75rem;
+    border: 1px solid #94a3b8;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+    padding: 0;
     max-height: 75vh;
     font-size: 0.8rem;
     width: 300px;
@@ -820,17 +1028,27 @@ main.erp-list-page-layout {
     max-width: 300px;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 .erp-column-filter-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 0.5rem;
-    margin-bottom: 0.5rem;
-    border-bottom: 1px solid #eee;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0;
+    border-bottom: none;
+    background: linear-gradient(135deg, #475569 0%, #64748b 50%, #94a3b8 100%);
+    color: #fff;
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
     flex-shrink: 0;
+}
+.erp-column-filter-header .btn-close {
+    filter: invert(1) brightness(2);
+    opacity: 0.9;
+}
+.erp-column-filter-header .btn-close:hover {
+    opacity: 1;
 }
 .erp-column-filter-body {
     min-width: 200px;
@@ -838,6 +1056,7 @@ main.erp-list-page-layout {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    padding: 0.75rem;
 }
 .erp-column-filter-body .erp-filter-section {
     flex: 1;
@@ -852,40 +1071,88 @@ main.erp-list-page-layout {
     min-width: 0;
     box-sizing: border-box;
 }
+.erp-sort-arrow {
+    display: inline-block;
+    margin-left: 0.35rem;
+    font-size: 0.75em;
+    opacity: 0.9;
+}
 .erp-filter-sort-section {
     padding-bottom: 0.5rem;
 }
 .erp-filter-sort-section .erp-sort-btn {
-    font-size: 0.75rem;
-    padding: 0.35rem 0.5rem;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.6rem;
     text-align: right;
-    border-radius: 4px;
+    border-radius: 6px;
+    border-color: rgba(100, 116, 139, 0.5);
+    color: #475569;
     transition: all 0.15s;
 }
 .erp-filter-sort-section .erp-sort-btn:hover {
-    background-color: rgba(37, 99, 235, 0.08);
+    background-color: rgba(100, 116, 139, 0.08);
+    border-color: #64748b;
 }
 .erp-filter-sort-section .erp-sort-btn.active {
-    background-color: var(--erp-primary);
+    background: linear-gradient(135deg, #475569, #64748b);
     color: #fff;
-    border-color: var(--erp-primary);
+    border-color: #64748b;
+}
+/* بوكس الفلترة — حدود وظل وتمييز واضح */
+.erp-column-filter-body .erp-filter-section {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.6rem 0.75rem;
+    margin-top: 0.25rem;
+}
+.erp-column-filter-body .erp-filter-section label.form-label {
+    color: #475569;
+    font-size: 0.85rem;
+    margin-bottom: 0.4rem;
+}
+.erp-column-filter-panel #erpColumnFilterSearch {
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.85rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+.erp-column-filter-panel #erpColumnFilterSearch:focus {
+    border-color: #64748b;
+    box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.15);
+    outline: none;
+}
+.erp-column-filter-panel #erpColumnFilterSearch::placeholder {
+    color: #94a3b8;
 }
 .erp-column-filter-list .form-check {
-    padding: 0.1rem 0;
+    padding: 0.25rem 0.35rem;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+.erp-column-filter-list .form-check:hover {
+    background: rgba(255, 255, 255, 0.7);
 }
 .erp-column-filter-list .form-check-input {
     margin-left: 0.25rem;
-    transform: scale(0.9);
+    transform: scale(0.95);
+    accent-color: #64748b;
 }
 .erp-column-filter-list .form-check-label {
     white-space: normal;
     word-wrap: break-word;
     overflow-wrap: break-word;
     min-width: 0;
+    font-size: 0.85rem;
+    color: #334155;
 }
 .erp-column-filter-list .erp-filter-items {
-    margin-top: 0.25rem;
-    padding-bottom: 0.5rem;
+    margin-top: 0.35rem;
+    padding: 0.25rem 0;
+    max-height: 200px;
+    overflow-y: auto;
+    border-radius: 4px;
 }
 .erp-column-filter-actions {
     display: flex;
@@ -893,11 +1160,94 @@ main.erp-list-page-layout {
     gap: 0.5rem;
     flex-shrink: 0;
     padding-top: 0.5rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid #e5e7eb;
     background: #fff;
 }
 .erp-column-filter-actions .btn {
     width: 100%;
+}
+
+/* =========================================================
+   مودال اختيار الأعمدة الظاهرة — نفس تصميم بوكس «أصناف المشتريات الحديثة»
+   (رأس بنفسجي، حدود وظل موحّد، محتوى نظيف)
+   ========================================================= */
+.erp-columns-modal .modal-dialog {
+    max-width: 380px;
+}
+.erp-columns-modal .modal-content {
+    border: 1px solid #6366f1;
+    border-radius: 12px;
+    box-shadow: 0 1px 3px rgba(99, 102, 241, 0.25);
+    overflow: hidden;
+    background: #fff;
+}
+.erp-columns-modal .modal-header {
+    border-bottom: none;
+    padding: 0.6rem 1rem;
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%);
+    color: #fff;
+    flex-shrink: 0;
+}
+.erp-columns-modal .modal-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #fff;
+}
+.erp-columns-modal .modal-header .btn-close {
+    filter: invert(1) brightness(2);
+    opacity: 0.9;
+}
+.erp-columns-modal .modal-header .btn-close:hover {
+    opacity: 1;
+}
+.erp-columns-modal .modal-body {
+    padding: 0.75rem 1rem;
+    max-height: 60vh;
+    overflow-y: auto;
+    background: #fff;
+}
+.erp-columns-modal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.erp-columns-modal-list .form-check {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-bottom: 0;
+    padding: 0.35rem 0.5rem;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+.erp-columns-modal-list .form-check:hover {
+    background: rgba(99, 102, 241, 0.06);
+}
+.erp-columns-modal-list .form-check-input {
+    margin: 0;
+    flex-shrink: 0;
+    width: 1rem;
+    height: 1rem;
+    margin-left: 0;
+}
+.erp-columns-modal-list .form-check-label {
+    flex: 1;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.erp-columns-modal-list .erp-columns-select-all-row {
+    border-bottom: 1px solid rgba(99, 102, 241, 0.2);
+    padding-bottom: 0.5rem;
+    margin-bottom: 2px;
+    font-weight: 600;
+    color: #4338ca;
+}
+.erp-columns-modal .modal-footer {
+    border-top: 1px solid #e5e7eb;
+    padding: 0.5rem 1rem;
+    background: #fff;
 }
 
 
@@ -1102,4 +1452,83 @@ select#ProdBatchSelectInRow {
 /* كارت الأزرار الجانبية — radius */
 .invoice-page .invoice-side-card {
     border-radius: 1rem !important;
+}
+
+/* ================== رسالة نجاح عامة (TempData SuccessMessage) — بوب-أب وسط الشاشة + اختفاء تلقائي ================== */
+.erp-global-success-toast {
+    position: fixed;
+    inset: 0;
+    z-index: 10560;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    pointer-events: none;
+    animation: erpGlobalToastIn 0.35s ease-out;
+}
+
+.erp-global-success-toast__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.35);
+    pointer-events: none;
+}
+
+.erp-global-success-toast__box {
+    position: relative;
+    max-width: min(420px, 92vw);
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    padding: 1.1rem 1.35rem;
+    cursor: pointer;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #34d399;
+    box-shadow: 0 18px 45px rgba(16, 185, 129, 0.28), 0 4px 14px rgba(0, 0, 0, 0.12);
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #065f46;
+    pointer-events: auto;
+}
+
+.erp-global-success-toast__icon {
+    flex-shrink: 0;
+    width: 2.2rem;
+    height: 2.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: #10b981;
+    color: #fff;
+    font-size: 1.15rem;
+    line-height: 1;
+}
+
+.erp-global-success-toast__text {
+    text-align: right;
+    line-height: 1.45;
+}
+
+.erp-global-success-toast--hide {
+    animation: erpGlobalToastOut 0.4s ease-in forwards;
+}
+
+@keyframes erpGlobalToastIn {
+    from {
+        opacity: 0;
+        transform: scale(0.92);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+@keyframes erpGlobalToastOut {
+    to {
+        opacity: 0;
+        transform: scale(0.95);
+    }
 }

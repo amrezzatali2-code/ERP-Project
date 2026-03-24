@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Product
+@model ERP.Models.Product
 @{
     ViewData["Title"] = "تفاصيل الصنف";
 }
@@ -8,6 +8,8 @@
     <dl class="row">
         <dt class="col-sm-3">المعرّف</dt>
         <dd class="col-sm-9">@Model.ProdId</dd>
+        <dt class="col-sm-3">كود الإكسل</dt>
+        <dd class="col-sm-9">@Model.ExternalCode</dd>
         <dt class="col-sm-3">الاسم</dt>
         <dd class="col-sm-9">@Model.ProdName</dd>
         <dt class="col-sm-3">الباركود</dt>
@@ -22,6 +24,10 @@
         <dd class="col-sm-9">@Model.PriceRetail.ToString("N2")</dd>
         <dt class="col-sm-3">الشركة</dt>
         <dd class="col-sm-9">@Model.Company</dd>
+        <dt class="col-sm-3">الموقع</dt>
+        <dd class="col-sm-9">@Model.Location</dd>
+        <dt class="col-sm-3">المخزن</dt>
+        <dd class="col-sm-9">@(Model.Warehouse?.WarehouseName)</dd>
         <dt class="col-sm-3">مستورد</dt>
         <dd class="col-sm-9">@Model.Imported</dd>
         <dt class="col-sm-3">نشِط (نص)</dt>

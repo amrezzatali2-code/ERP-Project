@@ -58,6 +58,10 @@
     string? filterCol_created = ViewBag.FilterCol_Created as string ?? Context.Request.Query["filterCol_created"].ToString();
     string? filterCol_updated = ViewBag.FilterCol_Updated as string ?? Context.Request.Query["filterCol_updated"].ToString();
     string? filterCol_quota = ViewBag.FilterCol_Quota as string ?? Context.Request.Query["filterCol_quota"].ToString();
+    string? filterCol_taxid = ViewBag.FilterCol_TaxId as string ?? Context.Request.Query["filterCol_taxid"].ToString();
+    string? filterCol_recordnumber = ViewBag.FilterCol_RecordNumber as string ?? Context.Request.Query["filterCol_recordnumber"].ToString();
+    string? filterCol_licensenumber = ViewBag.FilterCol_LicenseNumber as string ?? Context.Request.Query["filterCol_licensenumber"].ToString();
+    string? filterCol_segment = ViewBag.FilterCol_Segment as string ?? Context.Request.Query["filterCol_segment"].ToString();
 
     // دالة توليد لينكات الترقيم مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
@@ -77,7 +81,8 @@
         filterCol_id, filterCol_idExpr, filterCol_name, filterCol_type, filterCol_phone, filterCol_Address,
         filterCol_governorate, filterCol_district, filterCol_area, filterCol_account, filterCol_PolicyId,
         filterCol_credit, filterCol_isactive, filterCol_CurrentBalance, filterCol_ordercontact,
-        filterCol_created, filterCol_updated, filterCol_quota
+        filterCol_created, filterCol_updated, filterCol_quota,
+        filterCol_taxid, filterCol_recordnumber, filterCol_licensenumber, filterCol_segment
     })!;
 
     // دالة عمود قابل للفلترة (بنمط Excel — ترتيب + فلترة)
@@ -88,7 +93,9 @@
             colKey == "governorate" ? filterCol_governorate : colKey == "district" ? filterCol_district : colKey == "area" ? filterCol_area :
             colKey == "account" ? filterCol_account : colKey == "PolicyId" ? filterCol_PolicyId : colKey == "credit" ? filterCol_credit :
             colKey == "isactive" ? filterCol_isactive : colKey == "CurrentBalance" ? filterCol_CurrentBalance : colKey == "ordercontact" ? filterCol_ordercontact :
-            colKey == "created" ? filterCol_created : colKey == "updated" ? filterCol_updated : colKey == "quota" ? filterCol_quota : null;
+            colKey == "created" ? filterCol_created : colKey == "updated" ? filterCol_updated : colKey == "quota" ? filterCol_quota :
+            colKey == "taxid" ? filterCol_taxid : colKey == "recordnumber" ? filterCol_recordnumber :
+            colKey == "licensenumber" ? filterCol_licensenumber : colKey == "segment" ? filterCol_segment : null;
         bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
         var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
         var sortDir = isCurrentSort ? dir : "asc";
@@ -228,6 +235,11 @@
                     <th data-col="district">@filterableCol("district", "district", "الحي")</th>
                     <th data-col="area">@filterableCol("area", "area", "المنطقة")</th>
 
+                    <th data-col="taxid">@filterableCol("taxid", "taxid", "الرقم الضريبي/القومي")</th>
+                    <th data-col="recordnumber">@filterableCol("recordnumber", "recordnumber", "رقم السجل")</th>
+                    <th data-col="licensenumber">@filterableCol("licensenumber", "licensenumber", "رقم الرخصة")</th>
+                    <th data-col="segment">@filterableCol("segment", "segment", "الشريحة")</th>
+
                     <th data-col="account">@filterableCol("account", "account", "الحساب المحاسبي")</th>
                     <th data-col="PolicyId">@filterableCol("PolicyId", "name", "سياسة العميل")</th>
                     <th data-col="credit">@filterableCol("credit", "name", "الحد الائتماني")</th>
@@ -254,8 +266,8 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        @* عدد الأعمدة = 17 (شامل الاختيار + الأكشن) *@
-                        <td colspan="17" class="text-center text-muted py-4">
+                        @* عدد الأعمدة = 23 (شامل الاختيار + الأكشن + الأعمدة الجديدة) *@
+                        <td colspan="22" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -273,11 +285,14 @@
 
                             <td data-col="id">@c.CustomerId</td>
                             <td data-col="name">@c.CustomerName</td>
-                            <td data-col="type">@c.PartyCategory</td>
+                            <td data-col="type">@{
+                                var _typeNames = ViewBag.PartyCategoryDisplayNames as IReadOnlyDictionary<string, string>;
+                                var _typeText = _typeNames != null && !string.IsNullOrEmpty(c.PartyCategory) && _typeNames.TryGetValue(c.PartyCategory, out var _t) ? _t : (c.PartyCategory ?? "");
+                            }@_typeText</td>
                             <td data-col="phone">@(c.Phone1 ?? c.Phone2 ?? c.Whatsapp)</td>
                             <td data-col="Address">@c.Address</td>
                             <td data-col="governorate">
-                                @* المحافظة: لو موجودة اطبع الاسم، لو مش موجودة خلية فاضية *@
+                                @* المحافظة *@
                                 @(c.Governorate?.GovernorateName ?? "")
                             </td>
 
@@ -287,9 +302,14 @@
                             </td>
 
                             <td data-col="area">
-                                @* المنطقة *@
-                                @(c.Area?.AreaName ?? "")
+                                @* المنطقة: من جدول المناطق (Area) أو النص المستورد (RegionName) *@
+                                @(c.RegionName ?? c.Area?.AreaName ?? "")
                             </td>
+
+                            <td data-col="taxid">@(c.TaxIdOrNationalId ?? "")</td>
+                            <td data-col="recordnumber">@(c.RecordNumber ?? "")</td>
+                            <td data-col="licensenumber">@(c.LicenseNumber ?? "")</td>
+                            <td data-col="segment">@(c.Segment ?? "")</td>
 
                             <td data-col="account">
                                 @if (c.Account != null)
@@ -412,6 +432,10 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_quota)) { <input type="hidden" name="filterCol_quota" value="@filterCol_quota" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_taxid)) { <input type="hidden" name="filterCol_taxid" value="@filterCol_taxid" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_recordnumber)) { <input type="hidden" name="filterCol_recordnumber" value="@filterCol_recordnumber" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_licensenumber)) { <input type="hidden" name="filterCol_licensenumber" value="@filterCol_licensenumber" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_segment)) { <input type="hidden" name="filterCol_segment" value="@filterCol_segment" /> }
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize"

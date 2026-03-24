@@ -1,0 +1,22 @@
+@model ERP.Models.PurchasingOrderLine
+@{
+    ViewData["Title"] = "تفاصيل سطر طلب الشراء";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">@ViewData["Title"]</h4>
+    <dl class="row">
+        <dt class="col-sm-3">كود</dt><dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">طلب الشراء</dt><dd class="col-sm-9">@Model.PurchasingOrderId</dd>
+        <dt class="col-sm-3">رقم السطر</dt><dd class="col-sm-9">@Model.LineNo</dd>
+        <dt class="col-sm-3">الصنف</dt><dd class="col-sm-9">@Model.Product?.ProdName</dd>
+        <dt class="col-sm-3">كود العميل</dt><dd class="col-sm-9">@Model.VendorProductCode</dd>
+        <dt class="col-sm-3">اسم الصنف</dt><dd class="col-sm-9">@Model.ProductName</dd>
+        <dt class="col-sm-3">الكمية</dt><dd class="col-sm-9">@Model.Qty.ToString("N2")</dd>
+        <dt class="col-sm-3">سعر الوحدة</dt><dd class="col-sm-9">@(Model.UnitPrice?.ToString("N2") ?? "")</dd>
+        <dt class="col-sm-3">الخصم %</dt><dd class="col-sm-9">@(Model.DiscountPct?.ToString("N2") ?? "")</dd>
+        <dt class="col-sm-3">ملاحظات</dt><dd class="col-sm-9">@Model.Notes</dd>
+        <dt class="col-sm-3">تاريخ الإنشاء</dt><dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+    </dl>
+    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">العودة للقائمة</a>
+</div>

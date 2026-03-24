@@ -311,6 +311,7 @@
                     <th class="text-end" data-col="qtyin">@filterableCol("qtyin", "QtyIn", "كمية داخلة")</th>
                     <th class="text-end" data-col="qtyout">@filterableCol("qtyout", "QtyOut", "كمية خارجة")</th>
                     <th class="text-end" data-col="unitcost">@filterableCol("unitcost", "UnitCost", "تكلفة/وحدة")</th>
+                    <th class="text-end" data-col="totalcost">@filterableCol("totalcost", "TotalCost", "إجمالي التكلفة")</th>
                     <th class="text-end" data-col="rem">@filterableCol("rem", "EntryId", "المتبقي (للـدخول)")</th>
                     <th data-col="source">@filterableCol("source", "SourceType", "نوع المصدر")</th>
                     <th data-col="sourceid">@filterableCol("sourceid", "EntryId", "رقم الفاتورة")</th>
@@ -322,7 +323,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="18" class="text-center text-muted py-4">
+                        <td colspan="19" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -355,9 +356,9 @@
                                 @(x.Expiry.HasValue? x.Expiry.Value.ToString("MM-yyyy") : "")
                             </td>
 
-                            <!-- سعر الجمهور -->
+                            <!-- سعر الجمهور (من القيد أو من التشغيلة) -->
                             <td class="text-end" data-col="priceretail">
-                                @x.Batch?.PriceRetailBatch?.ToString("0.00")
+                                @((x.PriceRetailBatch ?? x.Batch?.PriceRetailBatch)?.ToString("0.00"))
                             </td>
 
                             <td data-col="PurchaseDiscount">@x.PurchaseDiscount</td>
@@ -373,6 +374,10 @@
                             <!-- تكلفة وحدة -->
                             <td class="text-end" data-col="unitcost">
                                 @x.UnitCost.ToString("0.00")
+                            </td>
+                            <!-- إجمالي التكلفة -->
+                            <td class="text-end" data-col="totalcost">
+                                @(((x.TotalCost ?? 0m) > 0 ? x.TotalCost!.Value : (x.QtyIn * x.UnitCost)).ToString("0.00"))
                             </td>
                             <!-- المتبقي -->
                             <td class="text-end" data-col="rem">
@@ -406,7 +411,7 @@
 
                     @* صف إجمالي بعد آخر سطر (محاذاة لـ RTL: النص من جهة اليمين) *@
                     <tr class="table-secondary fw-bold">
-                        <td colspan="17" class="text-start">
+                        <td colspan="18" class="text-start">
                             عدد القيود (حسب الفلتر الحالي):
                         </td>
                         <td class="text-start">
@@ -594,7 +599,7 @@
 </div>
 
 @* ===== Modal اختيار الأعمدة ===== *@
-<div class="modal fade no-print"
+<div class="modal fade no-print erp-columns-modal"
      id="columnsModalLedger"
      tabindex="-1"
      aria-labelledby="columnsModalLedgerLabel"
@@ -611,7 +616,7 @@
                         aria-label="إغلاق"></button>
             </div>
             <div class="modal-body">
-                <div id="columnsListLedger"></div>
+                <div id="columnsListLedger" class="erp-columns-modal-list"></div>
             </div>
             <div class="modal-footer">
                 <button type="button"

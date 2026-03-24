@@ -1,9 +1,12 @@
 @model ERP.Models.CashReceipt
+@using Microsoft.AspNetCore.Mvc.Rendering
 
 @{
     ViewData["Title"] = "إضافة إذن استلام نقدية";
     bool lockCustomer = ViewBag.LockCustomer is bool b && b;
     bool isPosted = Model.CashReceiptId > 0 && (Model.IsPosted || (Model.Status != null && Model.Status.Contains("مرحلة")));
+    var cashAccountSelectList = ViewData["CashAccountId"] as SelectList;
+    bool treasuryCashBoxesEmpty = ViewData["TreasuryCashBoxesEmpty"] as bool? ?? false;
 }
 
 <div class="container" dir="rtl">
@@ -109,23 +112,28 @@
                         <span asp-validation-for="CustomerId" class="text-danger"></span>
                     </div>
 
-                    <!-- حساب الصندوق/البنك (يتم تعبئته تلقائياً) -->
+                    <!-- الخزينة / الصندوق (قائمة من حسابات 1101* و 1102*) -->
                     <div class="col-md-4">
                         <label asp-for="CashAccountId" class="form-label"></label>
+                        @if (treasuryCashBoxesEmpty)
+                        {
+                            <div class="alert alert-warning py-2 small mb-2">
+                                لا توجد خزينة متاحة للاختيار. أضف حساباً نشطاً كوده يبدأ بـ <strong>1101</strong> أو <strong>1102</strong> (مثل الخزينة الرئيسية أو <code>1101-2</code>)، أو راجع «الحسابات المسموح رؤيتها» إن كانت كل الخزائن مخفية عنك.
+                            </div>
+                        }
                         @if (isPosted)
                         {
-                            <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId" disabled>
-                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                            <select asp-for="CashAccountId" asp-items="cashAccountSelectList" class="form-select" id="CashAccountId" disabled>
                             </select>
                             <input type="hidden" asp-for="CashAccountId" />
                         }
                         else
                         {
-                            <select asp-for="CashAccountId" asp-items="ViewBag.CashAccountId" class="form-select" id="CashAccountId">
-                                <option value="">-- اختر حساب الصندوق/البنك --</option>
+                            <select asp-for="CashAccountId" asp-items="cashAccountSelectList" class="form-select" id="CashAccountId">
+                                <option value="">-- اختر الخزينة / الصندوق --</option>
                             </select>
                         }
-                        <small class="text-muted">سيتم اختيار حساب الخزينة تلقائياً</small>
+                        <small class="text-muted">الافتراضي: الخزينة الرئيسية (1101) عند توفرها.</small>
                         <span asp-validation-for="CashAccountId" class="text-danger"></span>
                     </div>
 

@@ -17,8 +17,8 @@ namespace ERP.Security
         /// </summary>
         private static readonly (string Controller, string[] Actions, string Module)[] Definitions =
         {
-            ("Dashboard", new[] { "Index", "Sales", "Manager", "Owner" }, "لوحات التحكم"),
-            ("Home", new[] { "Index", "Privacy" }, "لوحات التحكم"),
+            ("Dashboard", new[] { "Sales" }, "لوحات التحكم"),
+            ("Home", new[] { "Index" }, "لوحات التحكم"),
             ("SalesInvoices", new[] { "Index", "Show", "Create", "Edit", "Export", "SaveHeader", "GetProductsForDatalist", "GetAlternativeProducts", "GetSalesProductInfo", "DiagnosePolicy", "AddLineJson", "RemoveLineJson", "ClearAllLinesJson", "SaveTaxJson", "PostInvoice", "CreateFullReturn", "OpenInvoice", "Delete", "DeleteConfirmed", "DeleteOneFromList", "DeleteOneFromShow", "BulkDelete", "DeleteAll" }, "المبيعات"),
             ("SalesReturns", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetInvoiceItems", "AddLineJson", "RemoveLineJson", "ClearLinesJson", "OpenReturn", "PostReturn" }, "المبيعات"),
             ("SalesOrders", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المبيعات"),
@@ -76,6 +76,7 @@ namespace ERP.Security
             ("UserRoles", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetRolePermissionsPreview", "GetRolePermissionsEditable" }, "المستخدمون والصلاحيات"),
             ("UserExtraPermissions", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المستخدمون والصلاحيات"),
             ("UserDeniedPermissions", new[] { "Index", "Details", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المستخدمون والصلاحيات"),
+            ("UserAccountVisibility", new[] { "Index", "Edit", "Update", "SeeAll" }, "المستخدمون والصلاحيات"),
             ("Departments", new[] { "Index", "Create", "Edit", "Delete", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "الموظفون"),
             ("Jobs", new[] { "Index", "Create", "Edit", "Delete", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "الموظفون"),
             ("Employees", new[] { "Index", "Create", "Edit", "Delete", "DeleteConfirmed", "Show", "Export", "BulkDelete", "DeleteAll" }, "الموظفون"),
@@ -87,13 +88,9 @@ namespace ERP.Security
         /// </summary>
         private static readonly Dictionary<string, string> NameArByCode = new(StringComparer.OrdinalIgnoreCase)
         {
-            // لوحات التحكم
-            ["Dashboard.Index"] = "لوحة التحكم الرئيسية",
-            ["Dashboard.Sales"] = "لوحة تحكم المبيعات",
-            ["Dashboard.Manager"] = "لوحة تحكم المدير",
-            ["Dashboard.Owner"] = "لوحة تحكم المالك",
+            // لوحات التحكم — لوحة واحدة فقط: مبيعاتي الشخصية (تفتح مع الدخول للبرنامج)
+            ["Dashboard.Sales"] = "مبيعاتي الشخصية",
             ["Home.Index"] = "الصفحة الرئيسية",
-            ["Home.Privacy"] = "الخصوصية",
             // فواتير المبيعات
             ["SalesInvoices.Index"] = "قائمة فواتير المبيعات",
             ["SalesInvoices.Show"] = "عرض فاتورة مبيعات",
@@ -259,6 +256,12 @@ namespace ERP.Security
             ["Employees.Export"] = "تصدير الموظفين",
             ["Employees.BulkDelete"] = "مسح مجموعة موظفين",
             ["Employees.DeleteAll"] = "مسح كل الموظفين",
+
+            // الحسابات المسموح رؤيتها لكل مستخدم
+            ["UserAccountVisibility.Index"] = "الحسابات المسموح رؤيتها (موجّه — استخدم صلاحيات الأدوار)",
+            ["UserAccountVisibility.Edit"] = "تعديل ظهور الحسابات (موجّه — استخدم صلاحيات الأدوار)",
+            ["UserAccountVisibility.Update"] = "حفظ ظهور الحسابات (موجّه — استخدم صلاحيات الأدوار)",
+            ["UserAccountVisibility.SeeAll"] = "رؤية جميع الحسابات (بما فيها المستثمر)",
         };
 
         /// <summary>

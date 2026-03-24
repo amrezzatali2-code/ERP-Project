@@ -393,13 +393,12 @@ namespace ERP.Controllers
         [RequirePermission("Areas.Create")]
         public async Task<IActionResult> Create(Area area)
         {
-            // تحقق منطقي: الحي يتبع المحافظة المختارة
-            if (!await DistrictMatchesGovernorateAsync(area.DistrictId, area.GovernorateId))
+            // تحقق منطقي: إذا وُجد حي/مركز يجب أن يتبع المحافظة المختارة
+            if (area.DistrictId.HasValue && !await DistrictMatchesGovernorateAsync(area.DistrictId, area.GovernorateId))
                 ModelState.AddModelError("DistrictId", "الحي/المركز المختار لا يتبع المحافظة المحددة.");
 
             if (!ModelState.IsValid)
             {
-                // إعادة تحميل القوائم المنسدلة عند وجود أخطاء
                 await LoadLookupsAsync(area.GovernorateId, area.DistrictId);
                 return View(area);
             }
@@ -441,8 +440,8 @@ namespace ERP.Controllers
             if (id != area.AreaId)
                 return BadRequest();
 
-            // تحقق منطقي: الحي يتبع المحافظة المختارة
-            if (!await DistrictMatchesGovernorateAsync(area.DistrictId, area.GovernorateId))
+            // تحقق منطقي: إذا وُجد حي/مركز يجب أن يتبع المحافظة المختارة
+            if (area.DistrictId.HasValue && !await DistrictMatchesGovernorateAsync(area.DistrictId, area.GovernorateId))
                 ModelState.AddModelError("DistrictId", "الحي/المركز المختار لا يتبع المحافظة المحددة.");
 
             if (!ModelState.IsValid)
@@ -456,7 +455,6 @@ namespace ERP.Controllers
                 return NotFound();
 
             var oldValues = System.Text.Json.JsonSerializer.Serialize(new { dbItem.AreaName, dbItem.GovernorateId, dbItem.DistrictId, dbItem.IsActive });
-            // نسخ القيم المسموح بتعديلها
             dbItem.AreaName = area.AreaName;
             dbItem.GovernorateId = area.GovernorateId;
             dbItem.DistrictId = area.DistrictId;
@@ -793,23 +791,26 @@ namespace ERP.Controllers
                     .Where(d => d.GovernorateId == selectedGovId.Value)
                     .OrderBy(d => d.DistrictName);
 
-            ViewBag.DistrictId = new SelectList(
-                await dQuery.ToListAsync(),
-                "DistrictId",
-                "DistrictName",
-                selectedDistrictId);
+            var districtList = await dQuery.ToListAsync();
+            var districtItems = new List<SelectListItem>
+            {
+                new SelectListItem { Value = "", Text = "— لا يوجد حي/مركز —", Selected = !selectedDistrictId.HasValue }
+            };
+            foreach (var d in districtList)
+                districtItems.Add(new SelectListItem { Value = d.DistrictId.ToString(), Text = d.DistrictName ?? "", Selected = selectedDistrictId == d.DistrictId });
+            ViewBag.DistrictId = new SelectList(districtItems, "Value", "Text", selectedDistrictId.HasValue ? selectedDistrictId.Value.ToString() : "");
         }
 
         /// <summary>
-        /// فحص اتساق: هل الحي المختار يتبع نفس المحافظة؟
+        /// فحص اتساق: هل الحي المختار يتبع نفس المحافظة؟ (إذا لم يُختر حي تُرجَع true)
         /// </summary>
-        private async Task<bool> DistrictMatchesGovernorateAsync(int districtId, int governorateId)
+        private async Task<bool> DistrictMatchesGovernorateAsync(int? districtId, int governorateId)
         {
+            if (!districtId.HasValue || districtId.Value == 0) return true;
             var distGovId = await _db.Districts
-                                     .Where(d => d.DistrictId == districtId)
+                                     .Where(d => d.DistrictId == districtId.Value)
                                      .Select(d => d.GovernorateId)
                                      .FirstOrDefaultAsync();
-
             return distGovId == governorateId;
         }
     }

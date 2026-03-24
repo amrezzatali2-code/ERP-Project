@@ -239,7 +239,7 @@
 
                             <td data-col="id">@a.AreaId</td>
                             <td data-col="name">@a.AreaName</td>
-                            <td data-col="district">@a.District?.DistrictName</td>
+                            <td data-col="district">@(a.District != null ? a.District.DistrictName : "— لا يوجد —")</td>
                             <td data-col="gov">@a.Governorate?.GovernorateName</td>
                             <td data-col="isactive">
                                 @(a.IsActive ? "نشط" : "موقوف")

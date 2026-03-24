@@ -1,0 +1,72 @@
+@{
+    ViewData["Title"] = "استيراد مطابقة أصناف العميل من Excel";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    var customers = ViewBag.Customers as Microsoft.AspNetCore.Mvc.Rendering.SelectList ?? new Microsoft.AspNetCore.Mvc.Rendering.SelectList(Enumerable.Empty<SelectListItem>());
+}
+
+<div class="container-fluid mt-3" dir="rtl">
+    @if (ViewBag.Error != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @ViewBag.Error
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="إغلاق"></button>
+        </div>
+    }
+    @if (ViewBag.Success != null)
+    {
+        <div class="alert alert-success alert-dismissible fade show">
+            @ViewBag.Success
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="إغلاق"></button>
+        </div>
+    }
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">استيراد مطابقة أصناف العميل من Excel</h4>
+        <a asp-action="Index" asp-controller="VendorProductMappings" class="btn btn-erp btn-erp-secondary">العودة للقائمة</a>
+    </div>
+
+    <p class="text-muted mb-3">
+        <strong>جدول قاعدة البيانات:</strong> <code>VendorProductMappings</code> — نفس البيانات المعروضة في قائمة «مطابقة أصناف العميل».
+    </p>
+    <p class="alert alert-info py-2 mb-3 small">
+        <strong>للعلم:</strong> هذا الاستيراد مخصّص للاستخدام <strong>مرة واحدة فقط</strong> — لاستيراد قاعدة البيانات (مطابقة أصناف العميل) مرة واحدة.
+    </p>
+    <p class="text-info small mb-3">
+        الأعمدة المتوقعة في ملف Excel: <strong>اسم العميل</strong>، <strong>اسم الصنف</strong>، <strong>الكود</strong> (كود صنف العميل — يمكن تركه فارغاً وتعبئته لاحقاً عند المطابقة مع اسم الصنف)، <strong>سعر الجمهور</strong>. الصف الأول = عناوين الأعمدة. الكود يطابق إما كود الصنف (ProdId) أو كود الإكسل (ExternalCode) في جدول الأصناف.
+    </p>
+
+    <div class="card border-primary">
+        <div class="card-header bg-light"><strong>رفع ملف Excel</strong></div>
+        <div class="card-body">
+            <form asp-action="Import" asp-controller="VendorProductMappings" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-4">
+                    <label class="form-label">العميل (إذا كان الملف لا يحتوي عمود «اسم العميل» أو كل الصفوف لعميل واحد)</label>
+                    <select name="customerIdOverride" class="form-select" asp-items="customers">
+                        <option value="">— من عمود «اسم العميل» في الملف —</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">ملف Excel (.xlsx أو .xlsm)</label>
+                    <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xlsm,.xls" required />
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-vpm">استيراد البيانات</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    document.querySelector('.btn-import-vpm')?.addEventListener('click', function () {
+        var btn = this;
+        var form = btn.closest('form');
+        if (form && form.checkValidity && form.checkValidity()) {
+            btn.disabled = true;
+            btn.textContent = 'جاري الاستيراد...';
+        }
+    });
+</script>
+}

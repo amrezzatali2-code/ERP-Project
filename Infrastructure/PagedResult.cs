@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -107,7 +107,7 @@ namespace ERP.Infrastructure
         /// </summary>
         public bool HasNext
         {
-            get => _hasNext ?? (PageNumber * PageSize < TotalCount);
+            get => _hasNext ?? (PageSize == 0 ? false : (PageNumber * PageSize < TotalCount));
             init => _hasNext = value;
         }
 
@@ -207,13 +207,13 @@ namespace ERP.Infrastructure
             // تجهيز عناصر الصفحة الحالية
             Items = (items ?? Enumerable.Empty<T>()).ToList();
 
-            // ضبط القيم مع حماية من الأرقام غير المنطقية
+            // ضبط القيم مع حماية من الأرقام غير المنطقية (pageSize=0 يعني «الكل» → صفحة واحدة)
             PageNumber = pageNumber < 1 ? 1 : pageNumber;
-            PageSize = pageSize < 1 ? 10 : pageSize;
+            PageSize = pageSize < 0 ? 10 : pageSize;  // السماح بـ 0 للعرض «الكل»
             TotalCount = totalCount < 0 ? 0 : totalCount;
 
-            // حساب عدد الصفحات وتخزينها في المتغير الداخلي
-            _totalPages = Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
+            // حساب عدد الصفحات: عند 0 = صفحة واحدة، وإلا بالمعتاد
+            _totalPages = PageSize == 0 ? 1 : Math.Max(1, (int)Math.Ceiling(TotalCount / (double)PageSize));
         }
 
         // =============== الدالة الأساسية (3 بارامترات + ct) ===============

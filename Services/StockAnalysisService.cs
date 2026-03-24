@@ -73,17 +73,17 @@ namespace ERP.Services
 
         // ============================================================
         // 3) الخصم المرجح الحالي بعد البيع
-        // ✅ تعديل: يعتمد فقط على "مشتريات" المتبقية (RemainingQty > 0) + SourceType == "Purchase"
+        // ✅ يعتمد على المتبقي من "مشتريات" أو "رصيد أول المدة" (مطابق لتقرير أرصدة الأصناف)
         // ============================================================
         public async Task<decimal> GetWeightedPurchaseDiscountCurrentAsync(int prodId)
         {
             // تعليق: RemainingQty تُملأ فقط لسطور الدخول
-            // ✅ هنا نضمن إننا ناخد المتبقي من "المشتريات" فقط
+            // ✅ مشتريات أو رصيد أول المدة (Opening) حتى يظهر الخصم المرجح مثل تقرير أرصدة الأصناف
             var rows = await _context.StockLedger
                 .AsNoTracking()
                 .Where(x =>
                     x.ProdId == prodId &&
-                    x.SourceType == "Purchase" &&            // ✅ فلترة: مشتريات فقط
+                    (x.SourceType == "Purchase" || x.SourceType == "Opening") &&
                     (x.RemainingQty ?? 0) > 0)
                 .Select(x => new
                 {
@@ -106,6 +106,7 @@ namespace ERP.Services
 
         /// <summary>
         /// الخصم المرجح للصنف في مخزن معين (للاستخدام في التحويل بين المخازن).
+        /// يشمل Purchase و Opening (مطابق لتقرير أرصدة الأصناف).
         /// </summary>
         public async Task<decimal> GetWeightedPurchaseDiscountForWarehouseAsync(int prodId, int warehouseId)
         {
@@ -114,7 +115,7 @@ namespace ERP.Services
                 .Where(x =>
                     x.ProdId == prodId &&
                     x.WarehouseId == warehouseId &&
-                    x.SourceType == "Purchase" &&
+                    (x.SourceType == "Purchase" || x.SourceType == "Opening") &&
                     (x.RemainingQty ?? 0) > 0)
                 .Select(x => new
                 {

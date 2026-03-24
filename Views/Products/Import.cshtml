@@ -1,70 +1,261 @@
-﻿@{
-    ViewData["Title"] = "استيراد الأصناف من ملف Excel";
+@using ERP.Infrastructure
+@{
+    ViewData["Title"] = "استيراد البيانات من ملفات Excel";
+    var colProducts = string.Join("، ", ExcelImportColumns.Products);
+    var colProductBal = string.Join("، ", ExcelImportColumns.ProductOpeningBalance);
+    var colCustomers = string.Join("، ", ExcelImportColumns.Customers);
+    var colCustBal = string.Join("، ", ExcelImportColumns.CustomerOpeningBalance);
+    var colUsers = string.Join("، ", ExcelImportColumns.Users);
+    var colTreasury = string.Join("، ", ExcelImportColumns.TreasuryOpeningBalance);
 }
 
 <div class="container-fluid mt-3" dir="rtl">
 
-    @* رسائل النجاح/الخطأ *@
-    @if (ViewBag.Error != null)
+    @if (TempData["Error"] != null)
     {
-        <div class="alert alert-danger">
-            @ViewBag.Error
-        </div>
+        <div class="alert alert-danger">@TempData["Error"]</div>
+    }
+    @if (TempData["Success"] != null)
+    {
+        <div class="alert alert-success">@TempData["Success"]</div>
     }
 
-    @if (ViewBag.Success != null)
-    {
-        <div class="alert alert-success">
-            @ViewBag.Success
-        </div>
-    }
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">استيراد البيانات — زر واحد لكل ملف</h4>
+        <a asp-action="Index" asp-controller="Products" class="btn btn-erp btn-erp-secondary">رجوع لقائمة الأصناف</a>
+    </div>
 
-    <div class="card mb-3">
+    <p class="text-muted small mb-3">
+        <strong>الأعمدة ثابتة:</strong> البرنامج يقرأ الأعمدة المذكورة تحت كل قسم فقط. أي عمود إضافي في ملف الإكسل يُتجاهل ما لم تُحدَّث قائمة الأعمدة.
+    </p>
+    <p class="text-info small mb-3">
+        <strong>شيت واحد:</strong> اجمع أصناف الدواء والإكسسوار في شيت واحد وأضف عمود <strong>المخزن</strong>. استيراد الأصناف يملأ قائمة الأصناف، واستيراد أرصدة الأصناف يقرأ من <strong>نفس الملف</strong> (نفس الأعمدة: صنف، مخزن، كمية، مرجح، إجمالي تكلفة).
+    </p>
+
+    @* ========== 1) استيراد الأصناف — شيت واحد (دواء + اكسسوار + عمود المخزن) ========== *@
+    <div class="card mb-3 border-primary">
+        <div class="card-header bg-light"><strong>استيراد الأصناف</strong></div>
         <div class="card-body">
-
-            <form asp-action="Import"
-                  asp-controller="Products"
-                  method="post"
-                  enctype="multipart/form-data"
-                  class="row g-3 align-items-end">
-
+            <form asp-action="Import" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
                 @Html.AntiForgeryToken()
-
-                <div class="col-md-6">
-                    <label class="form-label">ملف الأصناف (Excel)</label>
-                    <input type="file"
-                           name="excelFile" @* مهم: نفس اسم براميتر الأكشن *@
-                           class="form-control" />
-                    <small class="text-muted">
-                        يجب أن يحتوي الملف على الأعمدة بالترتيب أو بالاسم:
-                        <strong>
-                            ProdName, PriceRetail, GenericName, Company,
-                            Description, DosageForm, Barcode, Imported
-                        </strong>.
-                    </small>
+                <div class="col-md-7">
+                    <label class="form-label">ملف الأصناف (Excel) — شيت واحد يجمع الدواء والإكسسوار مع عمود المخزن</label>
+                    <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" required />
+                    <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colProducts</small>
+                    <small class="text-info d-block mt-1">الملفات الكبيرة (أكثر من 24 ألف صنف) تُعالَج على دفعات؛ قد يستغرق الاستيراد دقائقاً. لا تغادر الصفحة حتى تظهر رسالة النجاح.</small>
                 </div>
-
-                <div class="col-md-3 d-grid">
-                    <button type="submit"
-                            class="btn btn-erp btn-erp-primary">
-                        استيراد الأصناف
-                    </button>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit" id="btnImportProducts">استيراد الأصناف</button>
                 </div>
+            </form>
+        </div>
+    </div>
 
-                <div class="col-md-3 d-grid">
-                    <a asp-action="Index"
-                       asp-controller="Products"
-                       class="btn btn-erp btn-erp-secondary">
-                        رجوع لقائمة الأصناف
-                    </a>
+    @* ========== 2) استيراد أرصدة الأصناف — من نفس الملف ========== *@
+    <div class="card mb-3 border-info">
+        <div class="card-header bg-light"><strong>استيراد أرصدة الأصناف (رصيد أول المدة)</strong></div>
+        <div class="card-body">
+            <form asp-action="ImportProductOpeningBalance" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-7">
+                    <label class="form-label">نفس ملف الأصناف (Excel) — يقرأ الأعمدة: صنف، مخزن، كمية، مرجح، إجمالي التكلفة، تكلفة العلبة، سعر الجمهور</label>
+                    <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" required />
+                    <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colProductBal</small>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد أرصدة الأصناف</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ========== 2ب) تحويل الأرصدة إلى المخزن المعيّن للصنف (بدون إعادة استيراد) ========== *@
+    @{
+        var whList = ViewBag.Warehouses as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    }
+    <div class="card mb-3 border-success">
+        <div class="card-header bg-light"><strong>تحويل الأرصدة إلى المخزن المعيّن للصنف</strong></div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                للأصناف التي لها مخزن افتراضي معيّن (مثل مخزن الاكسسوار في بيانات الصنف) لكن رصيدها الفعلي مسجّل في مخزن آخر — ينقل الرصيد إلى المخزن المعيّن دون إعادة استيراد. اختر مخزنًا لتحويل أصنافه فقط، أو «الكل» لتحويل كل الأصناف التي لها مخزن معيّن.
+            </p>
+            <form asp-action="SyncStockToProductWarehouse" asp-controller="Products" method="post" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-4">
+                    <label class="form-label">المخزن المستهدف</label>
+                    <select name="warehouseId" class="form-select">
+                        <option value="">الكل (كل الأصناف التي لها مخزن معيّن)</option>
+                        @foreach (var w in whList)
+                        {
+                            <option value="@w.Value">@w.Text</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-success">تحويل الأرصدة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ========== 3ب) استيراد المناطق من عمود «المنطقة» في ملف إكسل ========== *@
+    @{
+        var govList = ViewBag.Governorates as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+        var distList = ViewBag.Districts as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+        var colRegions = string.Join("، ", ExcelImportColumns.Regions);
+    }
+    <div class="card mb-3 border-success">
+        <div class="card-header bg-light"><strong>استيراد المناطق من ملف إكسل (عمود المنطقة)</strong></div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                يقرأ القيم المميزة من عمود <strong>«المنطقة»</strong> في الملف وينشئ لها سجلات في جدول المناطق. يمكن استخدام نفس ملف العملاء (يُقرأ عمود المنطقة فقط).
+            </p>
+            <form asp-action="ImportRegionsFromExcel" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-3">
+                    <label class="form-label">ملف إكسل (يحتوي عمود المنطقة)</label>
+                    <input type="file" name="excelFile" class="form-control form-control-sm" accept=".xlsx,.xls" required />
+                    <small class="text-muted d-block mt-1">أسماء العمود: @colRegions</small>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">المحافظة (اختياري)</label>
+                    <select name="governorateId" class="form-select form-select-sm" asp-items="govList">
+                        <option value="">— أول محافظة —</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">الحي (اختياري)</label>
+                    <select name="districtId" class="form-select form-select-sm" asp-items="distList">
+                        <option value="">— أول حي —</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد المناطق</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card mb-3 border-secondary">
+        <div class="card-header bg-light"><strong>أو: إنشاء مناطق من أسماء المناطق النصية للعملاء</strong></div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                إذا كان لديك عملاء ومعهم منطقة مكتوبة في الحقل النصي (RegionName) وترغب بتحويلها إلى سجلات في جدول المناطق وربط العملاء بها.
+            </p>
+            <form asp-controller="Customers" asp-action="CreateAreasFromCustomerRegions" method="post" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-3">
+                    <label class="form-label">المحافظة (اختياري)</label>
+                    <select name="governorateId" class="form-select form-select-sm" asp-items="govList">
+                        <option value="">— أول محافظة —</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">الحي / المركز (اختياري)</label>
+                    <select name="districtId" class="form-select form-select-sm" asp-items="distList">
+                        <option value="">— أول حي —</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-secondary">إنشاء المناطق من أسماء العملاء وربطها</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ========== 4) ملف قائمة العملاء ========== *@
+    <div class="card mb-3">
+        <div class="card-header bg-light"><strong>استيراد قائمة العملاء</strong></div>
+        <div class="card-body">
+            <form asp-action="ImportCustomers" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-7">
+                    <label class="form-label">ملف قائمة العملاء (Excel)</label>
+                    <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" required />
+                    <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colCustomers</small>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد العملاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ========== 5) ملف أرصدة العملاء (رصيد أول المدة) ========== *@
+    <div class="card mb-3">
+        <div class="card-header bg-light"><strong>استيراد أرصدة العملاء (رصيد أول المدة)</strong></div>
+        <div class="card-body">
+            <form asp-action="ImportCustomerBalances" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-7">
+                    <label class="form-label">ملف أرصدة العملاء (Excel)</label>
+                    <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" required />
+                    <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colCustBal</small>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد أرصدة العملاء</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ========== 6) ملف أسماء المستخدمين ========== *@
+    <div class="card mb-3">
+        <div class="card-header bg-light"><strong>استيراد أسماء المستخدمين</strong></div>
+        <div class="card-body">
+            <form asp-action="ImportUsers" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-7">
+                    <label class="form-label">ملف أسماء المستخدمين (Excel)</label>
+                    <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" required />
+                    <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colUsers</small>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد المستخدمين</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    @* ========== 7) ملف / إدخال رصيد الخزينة (رصيد أول المدة) ========== *@
+    <div class="card mb-3">
+        <div class="card-header bg-light"><strong>استيراد رصيد الخزينة (رصيد أول المدة)</strong></div>
+        <div class="card-body">
+            <form asp-action="ImportTreasuryBalance" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
+                @Html.AntiForgeryToken()
+                <div class="col-md-3">
+                    <label class="form-label">رقم حساب الخزينة</label>
+                    <input type="text" name="accountId" class="form-control" placeholder="مثال: 1001" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">ملف رصيد الخزينة (Excel)</label>
+                    <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" />
+                    <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colTreasury</small>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد رصيد الخزينة</button>
                 </div>
             </form>
         </div>
     </div>
 
     <div class="alert alert-warning">
-        بعد انتهاء التجارب، يمكنك مسح كل الأصناف التجريبية من جدول
-        <strong>Products</strong>
-        وإعادة الاستيراد من جديد قبل تشغيل البرنامج في الشركة.
+        بعد انتهاء التجارب، يمكنك مسح كل الأصناف التجريبية من جدول <strong>Products</strong> وإعادة الاستيراد من جديد قبل تشغيل البرنامج في الشركة.
     </div>
 </div>
+
+@section Scripts {
+<script>
+    (function () {
+        document.querySelectorAll('.btn-import-submit').forEach(function (btn) {
+            var form = btn.closest('form');
+            if (form) {
+                form.addEventListener('submit', function () {
+                    btn.disabled = true;
+                    btn.textContent = 'جاري الاستيراد...';
+                });
+            }
+        });
+    })();
+</script>
+}

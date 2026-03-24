@@ -1,4 +1,4 @@
-﻿@model ERP.ViewModels.LoginViewModel
+@model ERP.ViewModels.LoginViewModel
 
 @{
     ViewData["Title"] = "تسجيل الدخول";
@@ -33,9 +33,7 @@
                         <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 mb-3 d-none" id="valSummary"></div>
 
                         @* =========================
-                           اسم المستخدم
-                           - datalist: usersList
-                           - autofocus: فوكس تلقائي عند فتح الصفحة
+                           اسم المستخدم — قائمة منسدلة مع فوكس كامل عند الفتح
                            ========================= *@
                         <div class="mb-3">
                             <label asp-for="UserName" class="form-label fw-semibold"></label>
@@ -43,24 +41,19 @@
                             <div class="input-group">
                                 <span class="input-group-text bg-light">👤</span>
 
-                                <input asp-for="UserName"
-                                       id="UserName"
-                                       class="form-control"
-                                       list="usersList"
-                                       autocomplete="off"
-                                       placeholder="اختر اسم المستخدم..."
-                                       autofocus />
-
-                                @* datalist: قائمة أسماء المستخدمين *@
-                                <datalist id="usersList">
+                                <select asp-for="UserName"
+                                        id="UserName"
+                                        class="form-select login-username-select"
+                                        autofocus>
+                                    <option value="">اختر اسم المستخدم...</option>
                                     @if (users != null)
                                     {
                                         foreach (var u in users)
                                         {
-                                            <option value="@u.Name" data-id="@u.Id"></option>
+                                            <option value="@u.Name">@u.Name</option>
                                         }
                                     }
-                                </datalist>
+                                </select>
                             </div>
 
                             <span asp-validation-for="UserName" class="text-danger small"></span>
@@ -122,32 +115,57 @@
 
     <script>
         // =========================================================
-        // تحسين بسيط:
-        // - لو Summary فاضي نخفيه (Bootstrap d-none)
-        // - تأكيد فوكس على اسم المستخدم (لو أي سكربت خطف الفوكس)
+        // تحسين بسيط + تنقل بانتر: اسم المستخدم → كلمة المرور → دخول
         // =========================================================
         document.addEventListener('DOMContentLoaded', function () {
 
-            // متغير: ملخص الأخطاء
             const summary = document.getElementById('valSummary');
             if (summary) {
                 const hasText = (summary.textContent || '').trim().length > 0;
                 if (hasText) summary.classList.remove('d-none');
             }
 
-            // متغير: مربع اسم المستخدم
-            const userBox = document.getElementById('UserName');
-            if (userBox) userBox.focus();
+            const userSelect = document.getElementById('UserName');
+            const passwordInput = document.getElementById('Password');
+            const loginForm = userSelect && userSelect.closest('form');
+
+            if (userSelect) userSelect.focus();
+
+            // في قائمة الاسم: انتر → الانتقال إلى كلمة المرور
+            if (userSelect) {
+                userSelect.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (passwordInput) passwordInput.focus();
+                    }
+                });
+            }
+
+            // في كلمة المرور: انتر يرسل النموذج (دخول)
+            if (passwordInput && loginForm) {
+                passwordInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        loginForm.submit();
+                    }
+                });
+            }
         });
     </script>
 
     <style>
-        /* =========================================================
-                   تحسين شكل بسيط - بدون تغيير روح التصميم
-                   ========================================================= */
         .login-header {
             background: linear-gradient(90deg, #0d6efd 0%, #0dcaf0 100%);
             color: #fff;
+        }
+        /* قائمة اسم المستخدم: ظهور واضح للسهم وحجم مريح */
+        .login-username-select {
+            cursor: pointer;
+            min-height: 2.5rem;
+        }
+        .login-username-select:focus {
+            border-color: #0d6efd;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
         }
     </style>
 }

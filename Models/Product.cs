@@ -49,6 +49,21 @@ namespace ERP.Models
         [Display(Name = "الشركة")]
         public string? Company { get; set; }            // متغير: اسم الشركة المنتجة
 
+        [Display(Name = "الموقع")]
+        [StringLength(50)]
+        public string? Location { get; set; }           // متغير: الموقع (من استيراد إكسل أصناف الدواء/الإكسسوار)
+
+        [Display(Name = "كود الإكسل")]
+        [StringLength(50)]
+        public string? ExternalCode { get; set; }       // متغير: الكود كما في الإكسل (ليس ProdId التلقائي)
+
+        [Display(Name = "المخزن")]
+        public int? WarehouseId { get; set; }             // متغير: المخزن الافتراضي للصنف
+
+        [ForeignKey(nameof(WarehouseId))]
+        [Display(Name = "المخزن")]
+        public Warehouse? Warehouse { get; set; }
+
         [Display(Name = "فعال")]
         public bool IsActive { get; set; }              // متغير: هل الصنف مفعل في النظام؟
 

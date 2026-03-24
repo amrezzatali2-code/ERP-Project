@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Area
+@model ERP.Models.Area
 
 @{
     ViewData["Title"] = "إضافة منطقة";
@@ -24,14 +24,14 @@
             <span asp-validation-for="GovernorateId" class="text-danger"></span>
         </div>
 
-        @* الحي/المركز (يتأثر بالمحافظة المختارة) *@
+        @* الحي/المركز (اختياري: يمكن اختيار «لا يوجد حي/مركز») *@
         <div class="col-12 col-md-6">
             <label class="form-label">الحي / المركز</label>
             @Html.DropDownListFor(m => m.DistrictId,
                         (SelectList)ViewBag.DistrictId,
-                        "-- اختر الحي/المركز --",
                         new { @class = "form-select" })
             <span asp-validation-for="DistrictId" class="text-danger"></span>
+            <small class="text-muted">اختر «لا يوجد حي/مركز» إن كانت المنطقة دون ربط بحي معيّن.</small>
         </div>
 
         @* اسم المنطقة *@

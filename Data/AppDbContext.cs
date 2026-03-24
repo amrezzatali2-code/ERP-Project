@@ -58,6 +58,11 @@ namespace ERP.Data
         public DbSet<UserExtraPermissions> UserExtraPermissions { get; set; } = null!;
         public DbSet<UserActivityLog> UserActivityLogs { get; set; } = null!; // سجل نشاط المستخدمين
 
+        // ===== إخفاء الحسابات عن المستخدم =====
+        public DbSet<UserAccountVisibilityOverride> UserAccountVisibilityOverrides { get; set; } = null!;
+        /// <summary>الحسابات المسموح رؤيتها لكل دور (يُدمج مع إعداد المستخدم إن وُجد).</summary>
+        public DbSet<RoleAccountVisibilityOverride> RoleAccountVisibilityOverrides { get; set; } = null!;
+
         // جداول السياسات
         public DbSet<Policy> Policies { get; set; } = null!;                    // جدول السياسات العامة
         public DbSet<WarehousePolicyRule> WarehousePolicyRules { get; set; } = null!; // قواعد السياسة لكل مخزن
@@ -95,6 +100,16 @@ namespace ERP.Data
         public DbSet<Department> Departments { get; set; } = null!;
         public DbSet<Job> Jobs { get; set; } = null!;
         public DbSet<Employee> Employees { get; set; } = null!;
+
+        // ===== موديول برنامج المشتريات =====
+        public DbSet<VendorProductMapping> VendorProductMappings { get; set; } = null!;
+        public DbSet<PurchasePolicyRule> PurchasePolicyRules { get; set; } = null!;
+        public DbSet<PurchasingDataSourceConfig> PurchasingDataSourceConfigs { get; set; } = null!;
+        public DbSet<VendorFaxUpload> VendorFaxUploads { get; set; } = null!;
+        public DbSet<VendorFaxLine> VendorFaxLines { get; set; } = null!;
+        public DbSet<PurchasingOrder> PurchasingOrders { get; set; } = null!;
+        public DbSet<PurchasingOrderLine> PurchasingOrderLines { get; set; } = null!;
+        public DbSet<PurchasingOrderAmendment> PurchasingOrderAmendments { get; set; } = null!;
 
 
 
@@ -545,6 +560,46 @@ namespace ERP.Data
                 entity.HasOne(x => x.Permission)
                       .WithMany(p => p.UserDeniedPermissions)
                       .HasForeignKey(x => x.PermissionId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ===== إخفاء/إظهار الحسابات للمستخدم (UserAccountVisibilityOverrides) =====
+            mb.Entity<UserAccountVisibilityOverride>(entity =>
+            {
+                entity.ToTable("UserAccountVisibilityOverrides");
+
+                entity.HasKey(x => x.Id);
+
+                entity.HasIndex(x => new { x.UserId, x.AccountId }).IsUnique();
+
+                entity.HasOne(x => x.User)
+                      .WithMany()
+                      .HasForeignKey(x => x.UserId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.Account)
+                      .WithMany()
+                      .HasForeignKey(x => x.AccountId)
+                      .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            // ===== الحسابات المسموح رؤيتها لكل دور (RoleAccountVisibilityOverrides) =====
+            mb.Entity<RoleAccountVisibilityOverride>(entity =>
+            {
+                entity.ToTable("RoleAccountVisibilityOverrides");
+
+                entity.HasKey(x => x.Id);
+
+                entity.HasIndex(x => new { x.RoleId, x.AccountId }).IsUnique();
+
+                entity.HasOne(x => x.Role)
+                      .WithMany()
+                      .HasForeignKey(x => x.RoleId)
+                      .OnDelete(DeleteBehavior.Cascade);
+
+                entity.HasOne(x => x.Account)
+                      .WithMany()
+                      .HasForeignKey(x => x.AccountId)
                       .OnDelete(DeleteBehavior.Cascade);
             });
 
@@ -1274,13 +1329,14 @@ namespace ERP.Data
                       .HasForeignKey(e => e.GovernorateId)
                       .OnDelete(DeleteBehavior.Restrict);
 
-                // FK: الحي/المركز
+                // FK: الحي/المركز (اختياري — «لا يوجد حي/مركز»)
                 entity.HasOne(e => e.District)
                       .WithMany(d => d.Areas)
                       .HasForeignKey(e => e.DistrictId)
+                      .IsRequired(false)
                       .OnDelete(DeleteBehavior.Restrict);
 
-                // منع التكرار: نفس الاسم داخل نفس الحي (كافي منطقياً)
+                // منع التكرار: نفس الاسم داخل نفس الحي (والمناطق دون حي يُسمح بتكرار الاسم)
                 entity.HasIndex(e => new { e.DistrictId, e.AreaName })
                       .IsUnique()
                       .HasDatabaseName("UX_Areas_District_Name");
@@ -1431,6 +1487,16 @@ namespace ERP.Data
                 e.Property(x => x.Company)              // الشركة
                     .IsUnicode(true);
 
+                e.Property(x => x.Location)             // الموقع
+                    .HasMaxLength(50)
+                    .IsUnicode(true);
+
+                e.Property(x => x.ExternalCode)        // كود الإكسل
+                    .HasMaxLength(50)
+                    .IsUnicode(true);
+
+                e.Property(x => x.WarehouseId);         // المخزن الافتراضي
+
                 e.Property(x => x.IsActive);            // فعال
 
                 e.Property(x => x.LastPriceChangeDate); // تاريخ آخر تغيير للسعر
@@ -1450,6 +1516,11 @@ namespace ERP.Data
                 e.HasOne(p => p.Classification)
                  .WithMany(c => c.Products)
                  .HasForeignKey(p => p.ClassificationId)
+                 .OnDelete(DeleteBehavior.SetNull);
+
+                e.HasOne(p => p.Warehouse)
+                 .WithMany()
+                 .HasForeignKey(p => p.WarehouseId)
                  .OnDelete(DeleteBehavior.SetNull);
             });
 
@@ -1551,9 +1622,10 @@ namespace ERP.Data
                 e.ToTable("SalesInvoiceRoutes");
                 e.HasKey(x => x.SIId);
                 e.Property(x => x.Notes).HasMaxLength(500);
-                e.HasOne(x => x.ControlEmployee).WithMany().HasForeignKey(x => x.ControlEmployeeId).OnDelete(DeleteBehavior.SetNull);
-                e.HasOne(x => x.PreparerEmployee).WithMany().HasForeignKey(x => x.PreparerEmployeeId).OnDelete(DeleteBehavior.SetNull);
-                e.HasOne(x => x.DistributorEmployee).WithMany().HasForeignKey(x => x.DistributorEmployeeId).OnDelete(DeleteBehavior.SetNull);
+                // NO ACTION لتجنب multiple cascade paths في SQL Server (حذف الموظف لا يغيّر القيد؛ يُفضّل التعامل في الكود إن لزم)
+                e.HasOne(x => x.ControlEmployee).WithMany().HasForeignKey(x => x.ControlEmployeeId).OnDelete(DeleteBehavior.NoAction);
+                e.HasOne(x => x.PreparerEmployee).WithMany().HasForeignKey(x => x.PreparerEmployeeId).OnDelete(DeleteBehavior.NoAction);
+                e.HasOne(x => x.DistributorEmployee).WithMany().HasForeignKey(x => x.DistributorEmployeeId).OnDelete(DeleteBehavior.NoAction);
                 e.HasMany(x => x.FridgeLines).WithOne(l => l.Route).HasForeignKey(l => l.SIId).OnDelete(DeleteBehavior.Cascade);
             });
 
@@ -2183,6 +2255,40 @@ namespace ERP.Data
                 e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
                 e.HasOne(x => x.Warehouse).WithMany().HasForeignKey(x => x.WarehouseId).OnDelete(DeleteBehavior.Restrict);
                 e.HasOne(x => x.Batch).WithMany().HasForeignKey(x => x.BatchId).OnDelete(DeleteBehavior.Restrict);
+            });
+
+            // ===== موديول برنامج المشتريات =====
+            mb.Entity<VendorProductMapping>(e =>
+            {
+                e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+                e.HasIndex(x => new { x.CustomerId, x.VendorProductCode });
+                e.HasIndex(x => new { x.CustomerId, x.VendorProductName });
+            });
+            mb.Entity<PurchasePolicyRule>(e => { });
+            mb.Entity<PurchasingDataSourceConfig>(e => { });
+            mb.Entity<VendorFaxUpload>(e =>
+            {
+                e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+                e.HasMany(x => x.Lines).WithOne(x => x.VendorFaxUpload).HasForeignKey(x => x.VendorFaxUploadId).OnDelete(DeleteBehavior.Cascade);
+            });
+            mb.Entity<VendorFaxLine>(e =>
+            {
+                e.HasOne(x => x.MatchedProduct).WithMany().HasForeignKey(x => x.MatchedProductId).OnDelete(DeleteBehavior.Restrict);
+            });
+            mb.Entity<PurchasingOrder>(e =>
+            {
+                e.HasOne(x => x.Customer).WithMany().HasForeignKey(x => x.CustomerId).OnDelete(DeleteBehavior.Restrict);
+                e.HasOne(x => x.ErpPurchaseRequest).WithMany().HasForeignKey(x => x.ErpPurchaseRequestId).HasPrincipalKey(p => p.PRId).OnDelete(DeleteBehavior.SetNull);
+                e.HasMany(x => x.Lines).WithOne(x => x.PurchasingOrder).HasForeignKey(x => x.PurchasingOrderId).OnDelete(DeleteBehavior.Cascade);
+            });
+            mb.Entity<PurchasingOrderLine>(e =>
+            {
+                e.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+            });
+            mb.Entity<PurchasingOrderAmendment>(e =>
+            {
+                e.HasOne(x => x.PurchasingOrder).WithMany().HasForeignKey(x => x.PurchasingOrderId).OnDelete(DeleteBehavior.Cascade);
             });
         }
 

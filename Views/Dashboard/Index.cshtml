@@ -2,7 +2,7 @@
 @{
     ViewData["Title"] = Model.LevelName;
     bool hasAnyData = Model.CustomersCount > 0 || Model.ProductsCount > 0 || Model.SalesInvoicesMonthCount > 0 || Model.SalesInvoicesTodayCount > 0
-        || Model.PurchaseInvoicesMonthCount > 0 || Model.RecentItems.Any();
+        || Model.RecentItems.Any();
 }
 <div class="container-fluid py-3" dir="rtl">
     <div class="mb-4">
@@ -23,7 +23,7 @@
                 }
                 else
                 {
-                    <span>أضف العملاء والأصناف، ثم ابدأ بتسجيل الفواتير. ستظهر ملخصاتك وإحصائياتك هنا.</span>
+                    <span>أضف عملاءك، ثم أنشئ أول فاتورة مبيعات. ستظهر إحصائياتك هنا.</span>
                 }
             </div>
         }
@@ -65,7 +65,7 @@
                             <span class="fw-bold text-primary">👥</span>
                         </div>
                     </div>
-                    <small class="text-muted d-block mt-2">@(Model.Level == "sales" ? "عملائي" : "إجمالي العملاء النشطين")</small>
+                    <small class="text-muted d-block mt-2">عملائي</small>
                 </div>
             </div>
         </div>
@@ -122,95 +122,11 @@
         </div>
     </div>
 
-    @if (Model.Level != "sales")
-    {
-        <div class="row g-3 mb-4">
-            <div class="col-md-3 col-sm-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="text-muted mb-1">مشتريات الشهر</h6>
-                                <h3 class="mb-0">@Model.PurchaseInvoicesMonthCount.ToString("N0")</h3>
-                            </div>
-                            <div class="rounded-circle bg-secondary bg-opacity-10 p-3">
-                                <span class="fw-bold text-secondary">🛒</span>
-                            </div>
-                        </div>
-                        <small class="text-muted d-block mt-2">@Model.PurchaseInvoicesMonthTotal.ToString("N2") ج.م</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 col-sm-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="text-muted mb-1">إيصالات الشهر</h6>
-                                <h3 class="mb-0">@Model.CashReceiptsMonthTotal.ToString("N2")</h3>
-                            </div>
-                            <div class="rounded-circle bg-success bg-opacity-10 p-3">
-                                <span class="fw-bold text-success">💰</span>
-                            </div>
-                        </div>
-                        <small class="text-muted d-block mt-2">إيصالات قبض</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 col-sm-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="text-muted mb-1">مدفوعات الشهر</h6>
-                                <h3 class="mb-0">@Model.CashPaymentsMonthTotal.ToString("N2")</h3>
-                            </div>
-                            <div class="rounded-circle bg-danger bg-opacity-10 p-3">
-                                <span class="fw-bold text-danger">💳</span>
-                            </div>
-                        </div>
-                        <small class="text-muted d-block mt-2">أوامر دفع</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3 col-sm-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="text-muted mb-1">أصناف نفدت</h6>
-                                <h3 class="mb-0">@Model.LowStockProductsCount.ToString("N0")</h3>
-                            </div>
-                            <div class="rounded-circle bg-warning bg-opacity-10 p-3">
-                                <span class="fw-bold text-warning">⚠️</span>
-                            </div>
-                        </div>
-                        <small class="text-muted d-block mt-2">أصناف بلا رصيد</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
-    @if (Model.ProfitMonth.HasValue && Model.Level == "owner")
-    {
-        <div class="row g-3 mb-4">
-            <div class="col-12">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body">
-                        <h6 class="text-muted mb-1">الربح التقديري للشهر (مبيعات - مشتريات)</h6>
-                        <h2 class="mb-0 @(Model.ProfitMonth >= 0 ? "text-success" : "text-danger")">@Model.ProfitMonth.Value.ToString("N2") ج.م</h2>
-                    </div>
-                </div>
-            </div>
-        </div>
-    }
-
     <div class="row g-3 mb-4">
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-white border-0">
-                    <h6 class="mb-0">@(Model.Level == "sales" ? "مبيعاتي الأخيرة" : "مبيعات آخر 7 أيام")</h6>
+                    <h6 class="mb-0">مبيعاتي في الفترة</h6>
                 </div>
                 <div class="card-body">
                     <div class="border rounded-3 bg-light position-relative" style="height:220px;">
@@ -314,20 +230,6 @@
                 </div>
             </a>
         </div>
-        @if (Model.Level == "owner" || Model.Level == "manager")
-        {
-            <div class="col-md-3 col-sm-6">
-                <a asp-controller="Reports" asp-action="SalesPerformanceReport" class="text-decoration-none">
-                    <div class="card border-0 shadow-sm h-100 card-hover">
-                        <div class="card-body text-center">
-                            <h5 class="mb-1">تقرير أداء المبيعات</h5>
-                            <small class="text-muted d-block mb-2">بالكاتب — فلاتر تاريخ ومنطقة ومحافظة وعملاء</small>
-                            <span class="badge bg-success bg-opacity-10 text-success border rounded-pill px-3 py-1">فتح</span>
-                        </div>
-                    </div>
-                </a>
-            </div>
-        }
     </div>
 </div>
 <style>

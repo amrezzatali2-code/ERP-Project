@@ -11,7 +11,9 @@
     @* فورم إسناد الدور للمستخدم *@
     <form asp-action="Create"
           method="post"
-          class="card">
+          class="card"
+          id="userRoleCreateForm">
+        <input type="hidden" name="SelectedRoleAccountIds" id="SelectedRoleAccountIds" value="" />
 
         <div class="card-body">
 
@@ -232,6 +234,17 @@
             }
 
             roleSelect.addEventListener("change", loadPermissions);
+
+            const urForm = document.getElementById("userRoleCreateForm");
+            if (urForm) {
+                urForm.addEventListener("submit", function () {
+                    const h = document.getElementById("SelectedRoleAccountIds");
+                    if (!h) return;
+                    const ids = [];
+                    urForm.querySelectorAll(".role-account-visibility-cb:checked").forEach(function (c) { if (c.value) ids.push(c.value); });
+                    h.value = ids.join(",");
+                });
+            }
         });
     </script>
 }

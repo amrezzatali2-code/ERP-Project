@@ -91,14 +91,7 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @* ===== رسائل النجاح/الخطأ ===== *@
-    @if (TempData["SuccessMessage"] != null)
-    {
-        <div class="alert alert-success alert-dismissible fade show mt-2" role="alert">
-            @TempData["SuccessMessage"]
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-        </div>
-    }
+    @* ===== رسائل الخطأ (النجاح يُعرض من _Layout كبوب-أب وسط الشاشة) ===== *@
     @if (TempData["ErrorMessage"] != null)
     {
         <div class="alert alert-danger alert-dismissible fade show mt-2" role="alert">

@@ -99,6 +99,30 @@ namespace ERP.Models
         public string? OrderContactName { get; set; }   // اسم المسئول عن الطلب
         public string? OrderContactPhone { get; set; }  // موبايله / واتسابه
 
+        [StringLength(50)]
+        [Display(Name = "كود الإكسل")]
+        public string? ExternalCode { get; set; }      // مسلسل / كود من ملف الإكسل
+
+        [StringLength(100)]
+        [Display(Name = "رقم البطاقة الضريبية / الرقم القومي")]
+        public string? TaxIdOrNationalId { get; set; }
+
+        [StringLength(50)]
+        [Display(Name = "رقم السجل")]
+        public string? RecordNumber { get; set; }
+
+        [StringLength(50)]
+        [Display(Name = "رقم الرخصة")]
+        public string? LicenseNumber { get; set; }
+
+        [StringLength(50)]
+        [Display(Name = "الشريحة")]
+        public string? Segment { get; set; }
+
+        [StringLength(150)]
+        [Display(Name = "المنطقة (نص)")]
+        public string? RegionName { get; set; }        // منطقة كنص من الإكسل (إن لم تُربط بجدول المناطق)
+
         public bool IsQuotaMultiplierEnabled { get; set; }   // تفعيل مضاعفة الكوتة
         public int QuotaMultiplier { get; set; } = 1;        // رقم المضاعفة
 

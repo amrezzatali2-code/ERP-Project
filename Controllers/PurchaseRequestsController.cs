@@ -44,6 +44,7 @@ namespace ERP.Controllers
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IPermissionService _permissionService;
         private readonly StockAnalysisService _stockAnalysis;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
         public PurchaseRequestsController(AppDbContext context,
@@ -51,7 +52,8 @@ namespace ERP.Controllers
                                           IUserActivityLogger activityLogger,
                                           ILedgerPostingService ledgerPosting,
                                           IPermissionService permissionService,
-                                          StockAnalysisService stockAnalysis)
+                                          StockAnalysisService stockAnalysis,
+                                          IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _docTotals = docTotals;
@@ -59,6 +61,7 @@ namespace ERP.Controllers
             _ledgerPostingService = ledgerPosting;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
             _stockAnalysis = stockAnalysis ?? throw new ArgumentNullException(nameof(stockAnalysis));
+            _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
         }
 
 
@@ -589,9 +592,9 @@ private async Task PopulateDropDownsAsync(
         // (1) تحميل الموردين من جدول Customers
         // - نفس منطق فاتورة الشراء (معلومات كاملة للعرض في datalist)
         // =========================================================
-        var customers = await _context.Customers
-            .AsNoTracking()
-            .Where(c => c.IsActive == true)
+        var customerQueryPr = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
+        customerQueryPr = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customerQueryPr);
+        var customers = await customerQueryPr
             .Include(c => c.Governorate)
             .Include(c => c.District)
             .Include(c => c.Area)
@@ -746,7 +749,10 @@ private async Task PopulateDropDownsAsync(
             int qtyInWh = warehouseId.HasValue && warehouseId.Value > 0
                 ? await _stockAnalysis.GetCurrentQtyAsync(prodId, warehouseId)
                 : qtyAll;
-            decimal weightedDisc = await _stockAnalysis.GetWeightedPurchaseDiscountCurrentAsync(prodId);
+            // الخصم المرجح: نفس منطق تقرير أرصدة الأصناف (مخزن محدد = خصم فعّال يشمل الـ override، وإلا متوسط عام)
+            decimal weightedDisc = warehouseId.HasValue && warehouseId.Value > 0
+                ? await _stockAnalysis.GetEffectivePurchaseDiscountAsync(prodId, warehouseId, null)
+                : await _stockAnalysis.GetWeightedPurchaseDiscountCurrentAsync(prodId);
 
             return Json(new
             {
@@ -2357,25 +2363,13 @@ private async Task PopulateDropDownsAsync(
                 .ToListAsync();
 
             // =========================
-            // 2) شرط أمان: منع الحذف حسب حالة الطلب (Status + IsConverted)
+            // 2) شرط أمان: منع الحذف فقط إذا وُجدت فاتورة شراء مرتبطة بالطلب
             // =========================
-            // متغير: التحقق من IsConverted أولاً
-            if (pr.IsConverted)
+            // يُسمح بحذف الطلب (حتى لو مغلق أو محوّل) طالما فاتورة الشراء المرتبطة به تم حذفها
+            var hasLinkedInvoice = await _context.PurchaseInvoices.AnyAsync(pi => pi.RefPRId == id);
+            if (hasLinkedInvoice)
             {
-                TempData["ErrorMessage"] = "لا يمكن حذف طلب الشراء لأنه تم تحويله إلى فاتورة شراء.";
-                return RedirectToAction(nameof(Index));
-            }
-
-            // متغير: نص الحالة (لو عندك عمود Status)
-            var status = (pr.Status ?? "").Trim();
-
-            // تعليق: لو الحالة تدل أنه غير مفتوح للتعديل → امنع الحذف
-            // (عدّل الكلمات حسب النصوص الفعلية عندك لو مختلفة)
-            if (status.Contains("معتمد") || status.Contains("مغلق") || status.Contains("منفذ") || status.Contains("مرحّل") || 
-                string.Equals(status, "Converted", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase))
-            {
-                TempData["ErrorMessage"] = "لا يمكن حذف طلب الشراء لأنه غير مفتوح للتعديل (معتمد/مغلق/منفذ/مرحّل/محوّل).";
+                TempData["ErrorMessage"] = "لا يمكن حذف طلب الشراء لأن هناك فاتورة شراء مرتبطة به. احذف فاتورة الشراء أولاً.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -2520,7 +2514,7 @@ private async Task PopulateDropDownsAsync(
             {
                 TempData["SuccessMessage"] = summary;
                 if (blockedIds.Count > 0)
-                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (لها فواتير شراء مرتبطة): {string.Join(", ", blockedIds)}";
                 if (failedIds.Count > 0)
                     TempData["ErrorMessage"] = $"طلبات فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
             }
@@ -2528,7 +2522,7 @@ private async Task PopulateDropDownsAsync(
             {
                 TempData["ErrorMessage"] = $"لم يتم حذف أي طلب. {summary}";
                 if (blockedIds.Count > 0)
-                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (لها فواتير شراء مرتبطة): {string.Join(", ", blockedIds)}";
                 if (failedIds.Count > 0)
                     TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | طلبات فشل حذفها: {string.Join(", ", failedIds)}";
             }
@@ -2595,7 +2589,7 @@ private async Task PopulateDropDownsAsync(
             {
                 TempData["SuccessMessage"] = summary;
                 if (blockedIds.Count > 0)
-                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (لها فواتير شراء مرتبطة): {string.Join(", ", blockedIds)}";
                 if (failedIds.Count > 0)
                     TempData["ErrorMessage"] = $"طلبات فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
             }
@@ -2603,7 +2597,7 @@ private async Task PopulateDropDownsAsync(
             {
                 TempData["ErrorMessage"] = $"لم يتم حذف أي طلب. {summary}";
                 if (blockedIds.Count > 0)
-                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (محوّلة/مغلقة): {string.Join(", ", blockedIds)}";
+                    TempData["WarningMessage"] = $"طلبات ممنوع حذفها (لها فواتير شراء مرتبطة): {string.Join(", ", blockedIds)}";
                 if (failedIds.Count > 0)
                     TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | طلبات فشل حذفها: {string.Join(", ", failedIds)}";
             }
@@ -2673,21 +2667,14 @@ private async Task PopulateDropDownsAsync(
                 return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed, "الطلب غير موجود.");
 
             // =========================
-            // 1) شرط أمان: منع الحذف حسب حالة الطلب (Status + IsConverted)
+            // 1) شرط أمان: منع الحذف فقط إذا وُجدت فاتورة شراء مرتبطة بالطلب
             // =========================
-            if (pr.IsConverted)
+            // يُسمح بحذف الطلب (حتى لو مغلق أو محوّل) طالما فاتورة الشراء المرتبطة به تم حذفها
+            var hasLinkedInvoice = await _context.PurchaseInvoices.AnyAsync(pi => pi.RefPRId == id);
+            if (hasLinkedInvoice)
             {
                 return new DeleteInvoiceResult(DeleteInvoiceStatus.BlockedByStatus,
-                    "ممنوع الحذف: تم تحويل الطلب إلى فاتورة شراء.");
-            }
-
-            var status = (pr.Status ?? "").Trim();
-            if (status.Contains("معتمد") || status.Contains("مغلق") || status.Contains("منفذ") || status.Contains("مرحّل") ||
-                string.Equals(status, "Converted", StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(status, "Closed", StringComparison.OrdinalIgnoreCase))
-            {
-                return new DeleteInvoiceResult(DeleteInvoiceStatus.BlockedByStatus,
-                    "ممنوع الحذف: الطلب غير مفتوح للتعديل (معتمد/مغلق/منفذ/مرحّل/محوّل).");
+                    "ممنوع الحذف: توجد فاتورة شراء مرتبطة بالطلب. احذف فاتورة الشراء أولاً.");
             }
 
             // =========================

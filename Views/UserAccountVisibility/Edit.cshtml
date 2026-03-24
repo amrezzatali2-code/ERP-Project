@@ -1,0 +1,82 @@
+@{
+    ViewData["Title"] = "الحسابات المسموح رؤيتها للمستخدم";
+    var user = ViewBag.User as dynamic;
+    var accounts = ViewBag.Accounts as IEnumerable<dynamic> ?? Enumerable.Empty<dynamic>();
+    var allowedIds = ViewBag.AllowedAccountIds as HashSet<int> ?? new HashSet<int>();
+}
+
+<div class="container" dir="rtl">
+    <h2 class="mb-2">@ViewData["Title"]</h2>
+    @if (user != null)
+    {
+        <p class="text-muted mb-3">
+            <strong>المستخدم:</strong> @(user.DisplayName ?? user.UserName) (@user.UserName)
+        </p>
+    }
+
+    @* رسالة النجاح تُعرض مرة واحدة من _Layout كبوب-أب في المنتصف وتختفي تلقائياً *@
+
+    <p class="text-muted small mb-2">
+        حدد الحسابات التي يحق لهذا المستخدم رؤيتها فقط. إذا لم تختر أي حساب، فلن يُطبّق تقييد (يرى كل الحسابات). إذا اخترت حسابات، فسيظهر له فقط العملاء/الموردين/الأطراف المرتبطين بهذه الحسابات في كل الشاشات. <strong>تحديد الكل = نفس النتيجة (يرى كل الحسابات).</strong>
+    </p>
+
+    <form id="accountVisibilityForm" asp-action="Update" method="post" asp-route-userId="@user?.UserId">
+        @Html.AntiForgeryToken()
+        <input type="hidden" name="AllAccountIds" value="@string.Join(",", accounts.Cast<dynamic>().Select(a => (int)a.AccountId))" />
+        <input type="hidden" name="SelectedAccountIds" id="SelectedAccountIds" value="" />
+
+        <div class="card border border-primary rounded-3 overflow-hidden mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span>الحسابات</span>
+                <div>
+                    <button type="button" id="selectAll" class="btn btn-sm btn-outline-secondary">تحديد الكل</button>
+                    <button type="button" id="clearAll" class="btn btn-sm btn-outline-secondary">إلغاء تحديد الكل</button>
+                </div>
+            </div>
+            <div class="card-body p-2" style="max-height: 60vh; overflow-y: auto;">
+                <div class="row g-2">
+                    @{ var idx = 0; }
+                    @foreach (var a in accounts)
+                    {
+                        var isChecked = allowedIds.Contains((int)a.AccountId);
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <div class="form-check">
+                                <input class="form-check-input account-cb" type="checkbox" name="AccountIds[@idx]" value="@a.AccountId" id="acc_@a.AccountId" data-account-id="@a.AccountId" @(isChecked ? "checked" : "") />
+                                <label class="form-check-label" for="acc_@a.AccountId">
+                                    <span class="text-muted small">@a.AccountCode</span> — @a.AccountName
+                                </label>
+                            </div>
+                        </div>
+                        idx++;
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+            <button type="submit" class="btn btn-erp btn-erp-success">حفظ</button>
+            <a asp-action="Index" class="btn btn-erp btn-erp-secondary">قائمة المستخدمين</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            var selectAll = document.getElementById("selectAll");
+            var clearAll = document.getElementById("clearAll");
+            var checkboxes = document.querySelectorAll(".account-cb");
+            var form = document.getElementById("accountVisibilityForm");
+            var hiddenSelected = document.getElementById("SelectedAccountIds");
+            if (selectAll) selectAll.addEventListener("click", function () { checkboxes.forEach(function (c) { c.checked = true; }); });
+            if (clearAll) clearAll.addEventListener("click", function () { checkboxes.forEach(function (c) { c.checked = false; }); });
+            if (form && hiddenSelected) {
+                form.addEventListener("submit", function () {
+                    var ids = [];
+                    checkboxes.forEach(function (c) { if (c.checked && c.value) ids.push(c.value); });
+                    hiddenSelected.value = ids.join(",");
+                });
+            }
+        });
+    </script>
+}

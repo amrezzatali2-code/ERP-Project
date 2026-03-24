@@ -1,0 +1,119 @@
+@using ERP.Infrastructure
+@model PagedResult<ERP.Models.VendorFaxUpload>
+
+@{
+    ViewData["Title"] = "رؤوس استيراد الفاكس";
+    var action = "Index"; var controller = "VendorFaxUploads";
+    var search = Model.Search ?? (string?)ViewBag.Search ?? ""; var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "Id"; var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
+    int ps = Model.PageSize; int total = Model.TotalCount; int page = Model.PageNumber; int pages = Model.TotalPages;
+    int start = total == 0 ? 0 : ((page - 1) * ps) + 1; int end = Math.Min(total, page * ps);
+    int first = 1, last = Math.Max(1, pages); int prev = Math.Max(first, page - 1); int next = Math.Min(last, page + 1);
+    int? fromCode = ViewBag.FromCode as int?; int? toCode = ViewBag.ToCode as int?; string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string Link(int p) => Url.Action(action, controller, new { search, searchBy, sort, dir, page = p, pageSize = ps, fromCode, toCode, filterCol_id })!;
+}
+
+<div dir="rtl" class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h4 class="mb-0">@ViewData["Title"]</h4>
+        <small class="text-muted d-none d-md-inline">إجمالي السجلات: @total</small>
+    </div>
+    <div class="erp-list-filter-bar d-print-none mt-2">
+        <div class="row g-3 align-items-center flex-wrap justify-content-center">
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
+                    <label class="form-label w-100 text-center">بحث</label>
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="بحث..." value="@search" style="min-width:120px" />
+                        <select name="searchBy" class="form-select erp-filter-input" style="max-width:120px">
+                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
+                            <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود</option>
+                        </select>
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
+                    </div>
+                    <input type="hidden" name="sort" value="@sort" /><input type="hidden" name="dir" value="@dir" /><input type="hidden" name="page" value="1" /><input type="hidden" name="pageSize" value="@ps" />
+                    @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                    @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                </form>
+            </div>
+            <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
+                <label class="form-label w-100 text-center">من كود – إلى كود</label>
+                <div class="erp-list-code-filter justify-content-center">
+                    <input id="codeFromInput" type="number" class="form-control erp-filter-input" placeholder="من" value="@(fromCode?.ToString() ?? "")" />
+                    <input id="codeToInput" type="number" class="form-control erp-filter-input" placeholder="إلى" value="@(toCode?.ToString() ?? "")" />
+                    <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                    <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
+                </div>
+            </div>
+            <div class="col-12 col-lg-4 erp-filter-section"><button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button></div>
+        </div>
+    </div>
+    <div class="erp-table-scroll-container mt-3 ps-0 pe-0" dir="rtl">
+        <div class="erp-table-wrapper" style="max-height: 70vh; overflow: auto;">
+            <table id="tableMain" class="table table-striped table-hover erp-table">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
+                    <tr>
+                        <th class="no-print text-center" data-col-fixed="true" style="width:42px;"><input type="checkbox" id="selectAll" class="form-check-input" /></th>
+                        <th>كود</th><th>العميل</th><th>تاريخ الاستلام</th><th>اسم الملف</th><th>المستورد</th><th>تاريخ الإنشاء</th>
+                        <th class="no-print text-start" data-col-fixed="true" style="width:100px;">إجراءات</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (!Model.Items.Any())
+                    { <tr><td colspan="8" class="text-center text-muted py-4">لا توجد بيانات.</td></tr> }
+                    else
+                    {
+                        foreach (var r in Model.Items)
+                        {
+                            <tr>
+                                <td class="no-print text-center"><input type="checkbox" class="form-check-input row-select" value="@r.Id" /></td>
+                                <td>@r.Id</td><td>@r.Customer?.CustomerName</td><td>@r.ReceivedAt.ToString("yyyy-MM-dd HH:mm")</td><td>@r.FileName</td><td>@r.ImportedBy</td><td>@r.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                                <td class="no-print text-start"><a class="btn btn-erp btn-erp-secondary btn-erp-sm" asp-action="Details" asp-route-id="@r.Id">عرض</a></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+                <tfoot class="table-light"><tr class="fw-bold text-start"><td></td><td class="text-muted">إجمالي</td><td colspan="6"></td></tr></tfoot>
+            </table>
+        </div>
+    </div>
+    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted">عرض @start - @end من @total</small>
+        <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
+            <input type="hidden" name="search" value="@search" /><input type="hidden" name="searchBy" value="@searchBy" /><input type="hidden" name="sort" value="@sort" /><input type="hidden" name="dir" value="@dir" /><input type="hidden" name="page" value="1" />
+            @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+            @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            <label class="form-label m-0">حجم الصفحة</label>
+            <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+            </select>
+        </form>
+        <nav aria-label="pagination">
+            <ul class="pagination pagination-sm mb-0">
+                <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
+                <li class="page-item @(Model.HasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
+                <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
+                <li class="page-item @(Model.HasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
+                <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
+            </ul>
+        </nav>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.getElementById("btnPrint")?.addEventListener("click", function () { window.print(); });
+        (function () {
+            var fromInp = document.getElementById("codeFromInput"); var toInp = document.getElementById("codeToInput");
+            function buildUrl(cf, ct) { var url = new URL(window.location.href); if (cf) url.searchParams.set("fromCode", cf); else url.searchParams.delete("fromCode"); if (ct) url.searchParams.set("toCode", ct); else url.searchParams.delete("toCode"); url.searchParams.set("page", "1"); return url.toString(); }
+            document.getElementById("btnApplyCodeFilter")?.addEventListener("click", function () { window.location.href = buildUrl(fromInp?.value?.trim() || "", toInp?.value?.trim() || ""); });
+            document.getElementById("btnClearCodeFilter")?.addEventListener("click", function () { if (fromInp) fromInp.value = ""; if (toInp) toInp.value = ""; window.location.href = buildUrl("", ""); });
+        })();
+    </script>
+}

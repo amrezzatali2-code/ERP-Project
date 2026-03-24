@@ -1,7 +1,7 @@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
-@using ERP.Models
-@model PagedResult<UserRole>
+@using ERP.ViewModels
+@model PagedResult<UserRoleListRow>
 
 @{
     ViewData["Title"] = "أدوار المستخدمين";
@@ -11,7 +11,7 @@
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
-    var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "Id";
+    var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "UserName";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
     int ps = Model.PageSize;
@@ -19,8 +19,8 @@
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -218,37 +218,76 @@
                 {
                     foreach (var x in Model.Items)
                     {
-                        var userDisplayName = x.User?.DisplayName ?? x.User?.UserName ?? "";
-                        var roleName = x.Role?.Name ?? "";
+                        var userDisplayName = string.IsNullOrWhiteSpace(x.DisplayName) ? x.UserName : x.DisplayName;
+                        var hasAssignment = x.UserRoleId.HasValue;
 
                         <tr>
                             <td class="text-center no-print" data-col="select">
-                                <input type="checkbox"
-                                       class="form-check-input row-select"
-                                       value="@x.Id" />
+                                @if (hasAssignment)
+                                {
+                                    <input type="checkbox"
+                                           class="form-check-input row-select"
+                                           value="@x.UserRoleId" />
+                                }
+                                else
+                                {
+                                    <input type="checkbox"
+                                           class="form-check-input row-select"
+                                           value=""
+                                           disabled
+                                           title="لا يوجد سطر ربط للحذف — استخدم «إسناد دور»" />
+                                }
                             </td>
 
-                            <td data-col="id">@x.Id</td>
+                            <td data-col="id">@(x.UserRoleId?.ToString() ?? "—")</td>
                             <td data-col="user">@userDisplayName</td>
-                            <td data-col="role">@roleName (كود: @x.RoleId)</td>
+                            <td data-col="role">
+                                @if (!hasAssignment)
+                                {
+                                    <span class="text-muted">@UserRoleListRow.NoRoleDisplay</span>
+                                }
+                                else if (!string.IsNullOrEmpty(x.RoleName))
+                                {
+                                    <text>@x.RoleName (كود: @x.RoleId)</text>
+                                }
+                                else if (x.RoleId.HasValue)
+                                {
+                                    <span class="text-muted">كود الدور: @x.RoleId</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
                             <td data-col="primary">
-                                @(x.IsPrimary ? "نعم" : "لا")
+                                @(hasAssignment ? (x.IsPrimary ? "نعم" : "لا") : "—")
                             </td>
                             <td data-col="assigned">
-                                @x.AssignedAt.ToString("yyyy-MM-dd HH:mm")
+                                @(x.AssignedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")
                             </td>
 
                             <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@x.Id">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@x.Id">
-                                    حذف
-                                </a>
+                                @if (hasAssignment)
+                                {
+                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm"
+                                       asp-action="Edit"
+                                       asp-route-id="@x.UserRoleId">
+                                        تعديل
+                                    </a>
+                                    <a class="btn btn-erp btn-erp-danger btn-erp-sm"
+                                       asp-action="Delete"
+                                       asp-route-id="@x.UserRoleId">
+                                        حذف
+                                    </a>
+                                }
+                                else
+                                {
+                                    <a class="btn btn-erp btn-erp-success btn-erp-sm"
+                                       asp-action="Create"
+                                       asp-route-userId="@x.UserId">
+                                        إسناد دور
+                                    </a>
+                                }
                             </td>
                         </tr>
                     }
@@ -310,10 +349,12 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_assigned)) { <input type="hidden" name="filterCol_assigned" value="@filterCol_assigned" /> }
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
         <nav aria-label="pagination">
@@ -598,16 +639,16 @@
             const bulkDeleteIdsContainer = document.getElementById("bulkDeleteIdsContainer");
 
             function getRowCheckboxes() {
-                return Array.from(document.querySelectorAll(".row-select"));
+                return Array.from(document.querySelectorAll(".row-select:not([disabled])"));
             }
 
             selectAll?.addEventListener("change", function () {
                 const checked = this.checked;
-                getRowCheckboxes().forEach(cb => cb.checked = checked);
+                getRowCheckboxes().forEach(cb => { cb.checked = checked; });
             });
 
             bulkBtn?.addEventListener("click", function () {
-                const checks = getRowCheckboxes().filter(cb => cb.checked);
+                const checks = getRowCheckboxes().filter(cb => cb.checked && cb.value);
                 if (checks.length === 0) {
                     alert("من فضلك اختر على الأقل سطر واحد للحذف.");
                     return;
@@ -656,6 +697,8 @@
                 else url.searchParams.delete("toCode");
 
                 url.searchParams.set("page", "1");
+                const psParam = url.searchParams.get("pageSize");
+                if (psParam) url.searchParams.set("pageSize", psParam);
                 return url.toString();
             }
 

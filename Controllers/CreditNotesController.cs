@@ -34,18 +34,35 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly ILedgerPostingService _ledgerPostingService;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IPermissionService _permissionService;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
-        public CreditNotesController(AppDbContext context, ILedgerPostingService ledgerPostingService, IUserActivityLogger activityLogger)
+        private const string InvestorAccountCode = "3101";
+
+        public CreditNotesController(
+            AppDbContext context,
+            ILedgerPostingService ledgerPostingService,
+            IUserActivityLogger activityLogger,
+            IPermissionService permissionService,
+            IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
             _activityLogger = activityLogger;
+            _permissionService = permissionService;
+            _accountVisibilityService = accountVisibilityService;
         }
+
+        private static Task<bool> CanViewInvestorsAsync() => Task.FromResult(true); // إظهار/إخفاء 3101 يعتمد على «الحسابات المسموح رؤيتها» فقط
 
         // =========================================================
         // دالة مساعدة: تحميل القوائم المنسدلة (الطرف + الحسابات)
         // =========================================================
-        private void PopulateLookups(int? customerId = null, int? accountId = null, int? offsetAccountId = null)
+        private void PopulateLookups(
+            int? customerId = null,
+            int? accountId = null,
+            int? offsetAccountId = null,
+            bool canViewInvestors = true)
         {
             // قائمة العملاء/الأطراف
             ViewData["CustomerId"] = new SelectList(
@@ -59,24 +76,17 @@ namespace ERP.Controllers
             );
 
             // قائمة الحسابات (حساب الطرف)
-            ViewData["AccountId"] = new SelectList(
-                _context.Accounts
+            var accountsQ = _context.Accounts
                         .AsNoTracking()
-                        .OrderBy(a => a.AccountName),
-                "AccountId",
-                "AccountName",
-                accountId
-            );
+                        .OrderBy(a => a.AccountName)
+                        .AsQueryable();
+            if (!canViewInvestors)
+                accountsQ = accountsQ.Where(a => a.AccountCode != InvestorAccountCode);
+
+            ViewData["AccountId"] = new SelectList(accountsQ, "AccountId", "AccountName", accountId);
 
             // قائمة حساب مقابل (اختياري)
-            ViewData["OffsetAccountId"] = new SelectList(
-                _context.Accounts
-                        .AsNoTracking()
-                        .OrderBy(a => a.AccountName),
-                "AccountId",
-                "AccountName",
-                offsetAccountId
-            );
+            ViewData["OffsetAccountId"] = new SelectList(accountsQ, "AccountId", "AccountName", offsetAccountId);
         }
 
         // =========================================================
@@ -92,7 +102,10 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            bool canViewInvestors,
+            List<int> hiddenCustomerAccountIds,
+            bool restrictedToAllowedOnly)
         {
             // (1) الاستعلام الأساسي من جدول إشعارات الإضافة مع تحميل الطرف والحسابات (بدون تتبّع لتحسين الأداء)
             IQueryable<CreditNote> q = _context.CreditNotes
@@ -100,6 +113,22 @@ namespace ERP.Controllers
                 .Include(c => c.Customer)
                 .Include(c => c.Account)
                 .Include(c => c.OffsetAccount);
+
+            if (!canViewInvestors)
+                q = q.Where(c => c.Account != null && c.Account.AccountCode != InvestorAccountCode
+                                 && (c.OffsetAccount == null || c.OffsetAccount.AccountCode != InvestorAccountCode));
+
+            // إخفاء أي إشعار مرتبط بعميل غير ظاهر (حساب رئيسي أو قيود بحساب مسموح)
+            if (hiddenCustomerAccountIds != null && hiddenCustomerAccountIds.Count > 0)
+            {
+                q = restrictedToAllowedOnly
+                    ? q.Where(c => (c.Customer != null && c.Customer.AccountId != null && !hiddenCustomerAccountIds.Contains(c.Customer.AccountId.Value))
+                        || (c.Customer != null && (c.Customer.PartyCategory == "Customer" || c.Customer.PartyCategory == "Supplier")
+                            && c.CustomerId != null && _context.LedgerEntries.Any(e => e.CustomerId == c.CustomerId && !hiddenCustomerAccountIds.Contains(e.AccountId))))
+                    : q.Where(c => c.Customer == null || c.Customer.AccountId == null || !hiddenCustomerAccountIds.Contains(c.Customer.AccountId.Value)
+                        || (c.Customer != null && (c.Customer.PartyCategory == "Customer" || c.Customer.PartyCategory == "Supplier")
+                            && c.CustomerId != null && _context.LedgerEntries.Any(e => e.CustomerId == c.CustomerId && !hiddenCustomerAccountIds.Contains(e.AccountId))));
+            }
 
             // (2) فلتر كود من/إلى (نعتمد هنا على CreditNoteId كرقم الإشعار)
             if (fromCode.HasValue)
@@ -399,6 +428,10 @@ namespace ERP.Controllers
             int page = 1,
             int pageSize = 50)
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -408,7 +441,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
 
             q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_account, filterCol_offset, filterCol_amount, filterCol_reason, filterCol_posted, filterCol_created, filterCol_updated, filterCol_desc);
 
@@ -466,6 +502,16 @@ namespace ERP.Controllers
             if (note == null)
                 return NotFound();
 
+            if (!await CanViewInvestorsAsync() &&
+                note.Account != null &&
+                note.Account.AccountCode == InvestorAccountCode)
+                return NotFound();
+
+            if (!await CanViewInvestorsAsync() &&
+                note.OffsetAccount != null &&
+                note.OffsetAccount.AccountCode == InvestorAccountCode)
+                return NotFound();
+
             return View(note); // Views/CreditNotes/Show.cshtml (نعمله لاحقاً بنفس نمط Show الثابت)
         }
 
@@ -498,6 +544,10 @@ namespace ERP.Controllers
             string? filterCol_desc = null,
             string format = "excel")   // excel | csv (الاتنين حالياً يخرجوا CSV)
         {
+            var canViewInvestors = await CanViewInvestorsAsync();
+            var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            var restrictedOnly = await _accountVisibilityService.IsRestrictedToAllowedAccountsOnlyAsync();
             var q = BuildQuery(
                 search,
                 searchBy,
@@ -507,7 +557,10 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                canViewInvestors,
+                hiddenList,
+                restrictedOnly);
 
             q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_account, filterCol_offset, filterCol_amount, filterCol_reason, filterCol_posted, filterCol_created, filterCol_updated, filterCol_desc);
 
@@ -704,7 +757,8 @@ namespace ERP.Controllers
                     ViewBag.LockCustomer = true;
                 }
             }
-            PopulateLookups(model.CustomerId, model.AccountId > 0 ? model.AccountId : null, null);
+            var canViewInvestors = await CanViewInvestorsAsync();
+            PopulateLookups(model.CustomerId, model.AccountId > 0 ? model.AccountId : null, null, canViewInvestors);
             return View(model);
         }
 
@@ -759,7 +813,8 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Edit), new { id = creditNote.CreditNoteId });
             }
 
-            PopulateLookups(creditNote.CustomerId, creditNote.AccountId, creditNote.OffsetAccountId);
+            var canViewInvestors = await CanViewInvestorsAsync();
+            PopulateLookups(creditNote.CustomerId, creditNote.AccountId, creditNote.OffsetAccountId, canViewInvestors);
             return View(creditNote);
         }
 
@@ -788,7 +843,8 @@ namespace ERP.Controllers
             if (creditNote == null)
                 return NotFound();
 
-            PopulateLookups(creditNote.CustomerId, creditNote.AccountId, creditNote.OffsetAccountId);
+            var canViewInvestors = await CanViewInvestorsAsync();
+            PopulateLookups(creditNote.CustomerId, creditNote.AccountId, creditNote.OffsetAccountId, canViewInvestors);
             return View(creditNote);
         }
 
@@ -819,7 +875,8 @@ namespace ERP.Controllers
 
             if (!ModelState.IsValid)
             {
-                PopulateLookups(input.CustomerId, input.AccountId, null);
+                var canViewInvestors = await CanViewInvestorsAsync();
+                PopulateLookups(input.CustomerId, input.AccountId, null, canViewInvestors);
                 return View(input);
             }
 

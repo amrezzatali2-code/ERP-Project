@@ -10,6 +10,7 @@ using ERP.Filters;
 using ERP.Infrastructure;
 using ERP.Models;
 using ERP.Security;
+using ERP.Services;
 
 namespace ERP.Controllers
 {
@@ -20,10 +21,17 @@ namespace ERP.Controllers
     public class CustomerLedgerController : Controller
     {
         private readonly AppDbContext _context;
+        private readonly IPermissionService _permissionService;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
-        public CustomerLedgerController(AppDbContext context)
+        public CustomerLedgerController(
+            AppDbContext context,
+            IPermissionService permissionService,
+            IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
+            _permissionService = permissionService;
+            _accountVisibilityService = accountVisibilityService;
         }
 
         private static string SourceTypeDisplayAr(LedgerSourceType t)
@@ -71,9 +79,10 @@ namespace ERP.Controllers
             int pageSize = 50)
         {
             var sep = new[] { '|', ',' };
+            var custQueryLedger = _context.Customers.AsNoTracking();
+            custQueryLedger = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(custQueryLedger);
             // تجهيز قائمة العملاء للأوتوكومبليت (مثل فاتورة البيع / حجم التعامل)
-            var customersList = await _context.Customers
-                .AsNoTracking()
+            var customersList = await custQueryLedger
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new { id = c.CustomerId, code = c.CustomerId.ToString(), name = c.CustomerName })
                 .ToListAsync();
@@ -112,6 +121,14 @@ namespace ERP.Controllers
             {
                 TempData["Error"] = "العميل غير موجود.";
                 return RedirectToAction("Show", "Customers");
+            }
+
+            // لو العميل غير ظاهر للمستخدم (حسب صلاحيات الحسابات) → لا نسمح بعرض دفتر حسابه
+            var custVisibilityQuery = _context.Customers.AsNoTracking().Where(c => c.CustomerId == customerId.Value);
+            custVisibilityQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(custVisibilityQuery);
+            if (!await custVisibilityQuery.AnyAsync())
+            {
+                return NotFound();
             }
 
             IQueryable<LedgerEntry> q = _context.LedgerEntries

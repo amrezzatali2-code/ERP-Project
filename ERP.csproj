@@ -8,7 +8,23 @@
     <RestorePackagesWithLockFile>false</RestorePackagesWithLockFile>
     <!-- كتم RZ1031: مساعد وسم option يمنع C# في السمات؛ الكود يستخدم Html.Raw وهو صحيح -->
     <NoWarn>$(NoWarn);RZ1031</NoWarn>
+    <!-- منع تكرار سمات الـ Assembly مع الملفات المُنشأة في obj -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
+
+  <!-- سكربتات SQL تظهر في المشروع (لا تُضمّن في البناء) -->
+  <ItemGroup>
+    <None Include="database\Add_Location_To_Products.sql" />
+  </ItemGroup>
+
+  <!-- استبعاد مجلد البرنامج المرجعي (Purchasing1.Web) من البناء — الموديول سيُبنى لاحقاً داخل الـ ERP -->
+  <ItemGroup>
+    <Compile Remove="Purchasing1.Web\**" />
+    <Content Remove="Purchasing1.Web\**" />
+    <EmbeddedResource Remove="Purchasing1.Web\**" />
+    <None Remove="Purchasing1.Web\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.105.0" />

@@ -96,6 +96,23 @@
         </div>
 
         <div class="col-md-4">
+            <label asp-for="ExternalCode" class="form-label"></label>
+            <input asp-for="ExternalCode" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="Location" class="form-label"></label>
+            <input asp-for="Location" class="form-control" />
+        </div>
+
+        <div class="col-md-4">
+            <label asp-for="WarehouseId" class="form-label"></label>
+            <select asp-for="WarehouseId" class="form-select" asp-items="ViewBag.Warehouses">
+                <option value="">-- اختر المخزن --</option>
+            </select>
+        </div>
+
+        <div class="col-md-4">
             <label asp-for="Imported" class="form-label"></label>
             <select asp-for="Imported"
                     class="form-select"

@@ -13,6 +13,7 @@
     @* Bootstrap + CSS الرئيسي *@
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/css/erp-print.css" asp-append-version="true" />
     @* Flatpickr: انتقاء تاريخ/وقت بنظام 24 ساعة *@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css" />
 
@@ -259,11 +260,11 @@
 
                         @* ===== المستخدمين ===== *@
                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="accountsMenu" role="button"
+                            <a class="nav-link dropdown-toggle" href="#" id="usersMenu" role="button"
                                data-bs-toggle="dropdown" aria-expanded="false">
                                 المستخدمين
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="accountsMenu">
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="usersMenu">
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="Users" asp-action="Index"
@@ -841,6 +842,89 @@
                             </ul>
                         </li>
 
+                        @* ===== برنامج المشتريات (قائمة منسدلة + فتح بالتابات) ===== *@
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="purchasingProgramMenu" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false">
+                                برنامج المشتريات
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="purchasingProgramMenu">
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchasingProgram" asp-action="Index"
+                                       data-tab-id="PurchasingProgram"
+                                       data-tab-title="برنامج المشتريات">
+                                        لوحة التحكم
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="VendorProductMappings" asp-action="Index"
+                                       data-tab-id="VendorProductMappings"
+                                       data-tab-title="مطابقة أصناف العميل">
+                                        مطابقة أصناف العميل
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchasePolicyRules" asp-action="Index"
+                                       data-tab-id="PurchasePolicyRules"
+                                       data-tab-title="سياسات الشراء">
+                                        سياسات الشراء
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchasingDataSourceConfigs" asp-action="Index"
+                                       data-tab-id="PurchasingDataSourceConfigs"
+                                       data-tab-title="إعداد مصدر البيانات">
+                                        إعداد مصدر البيانات
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="VendorFaxUploads" asp-action="Index"
+                                       data-tab-id="VendorFaxUploads"
+                                       data-tab-title="رؤوس استيراد الفاكس">
+                                        رؤوس استيراد الفاكس
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="VendorFaxLines" asp-action="Index"
+                                       data-tab-id="VendorFaxLines"
+                                       data-tab-title="سطور الفاكس">
+                                        سطور الفاكس
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchasingOrders" asp-action="Index"
+                                       data-tab-id="PurchasingOrders"
+                                       data-tab-title="طلبات الشراء">
+                                        طلبات الشراء
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchasingOrderLines" asp-action="Index"
+                                       data-tab-id="PurchasingOrderLines"
+                                       data-tab-title="سطور طلب الشراء">
+                                        سطور طلب الشراء
+                                    </a>
+                                </li>
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="PurchasingOrderAmendments" asp-action="Index"
+                                       data-tab-id="PurchasingOrderAmendments"
+                                       data-tab-title="سجل التأكيد/التعديل">
+                                        سجل التأكيد/التعديل
+                                    </a>
+                                </li>
+                            </ul>
+                        </li>
+
                         @* ===== الحسابات ===== *@
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="accountsMenu2" role="button"
@@ -1005,32 +1089,12 @@
                             </ul>
                         </li>
 
-                        @* ===== لوحات التحكم (مستويات متعددة) ===== *@
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="dashboardMenu" role="button"
-                               data-bs-toggle="dropdown" aria-expanded="false">
-                                لوحات التحكم
+                        @* ===== مبيعاتي الشخصية (اللوحة الوحيدة — نفس صفحة فتح البرنامج) ===== *@
+                        <li class="nav-item">
+                            <a class="nav-link app-menu-link" asp-controller="Dashboard" asp-action="Sales"
+                               data-tab-id="dashboard-sales" data-tab-title="مبيعاتي الشخصية">
+                                📊 مبيعاتي الشخصية
                             </a>
-                            <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="dashboardMenu">
-                                <li>
-                                    <a class="dropdown-item app-menu-link" asp-controller="Dashboard" asp-action="Sales"
-                                       data-tab-id="dashboard-sales" data-tab-title="مبيعاتي الشخصية">
-                                        📊 مبيعاتي الشخصية
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link" asp-controller="Dashboard" asp-action="Manager"
-                                       data-tab-id="dashboard-manager" data-tab-title="لوحة المدير">
-                                        📈 لوحة المدير
-                                    </a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link" asp-controller="Dashboard" asp-action="Owner"
-                                       data-tab-id="dashboard-owner" data-tab-title="لوحة الإدارة الكاملة">
-                                        📋 لوحة الإدارة الكاملة
-                                    </a>
-                                </li>
-                            </ul>
                         </li>
                     </ul>
                     @* أزرار تحديث وتسجيل الخروج - أقصى اليسار (order-lg-2 لتظهر بعد العناصر في الوضع العادي) *@
@@ -1087,12 +1151,33 @@
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
             </div>
         }
-        @if (TempData["SuccessMessage"] != null)
+        @{
+            var erpGlobalSuccessMessage = TempData["SuccessMessage"]?.ToString();
+        }
+        @if (!string.IsNullOrEmpty(erpGlobalSuccessMessage))
         {
-            <div class="alert alert-success alert-dismissible fade show mt-2" role="alert" dir="rtl">
-                <strong>تم:</strong> @TempData["SuccessMessage"]
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            <div id="erpGlobalSuccessToast" class="erp-global-success-toast" dir="rtl" role="status" aria-live="polite">
+                <div class="erp-global-success-toast__backdrop" aria-hidden="true"></div>
+                <div class="erp-global-success-toast__box" title="انقر للإغلاق">
+                    <span class="erp-global-success-toast__icon" aria-hidden="true">✓</span>
+                    <span class="erp-global-success-toast__text">@erpGlobalSuccessMessage</span>
+                </div>
             </div>
+            <script>
+                (function () {
+                    var root = document.getElementById('erpGlobalSuccessToast');
+                    if (!root) return;
+                    var t = null;
+                    function hideToast() {
+                        if (t) { clearTimeout(t); t = null; }
+                        root.classList.add('erp-global-success-toast--hide');
+                        setTimeout(function () { try { root.remove(); } catch (e) { } }, 420);
+                    }
+                    t = setTimeout(hideToast, 3200);
+                    var box = root.querySelector('.erp-global-success-toast__box');
+                    if (box) box.addEventListener('click', hideToast);
+                })();
+            </script>
         }
         @if (TempData["WarningMessage"] != null)
         {
@@ -1147,6 +1232,7 @@
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    <script src="~/js/erp-columns-modal.js" asp-append-version="true"></script>
     @* تهيئة حقول التاريخ والوقت بنظام 24 ساعة (بدلاً من AM/PM) *@
     <script>
         (function () {

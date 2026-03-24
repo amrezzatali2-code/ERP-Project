@@ -1,6 +1,9 @@
 @using Microsoft.AspNetCore.Html
 @using ERP.ViewModels
+@using System.Globalization
 @{
+    // تنسيق الأرقام: فاصل الآلاف = فاصلة، العلامة العشرية = نقطة (مثل 14,304,992.81)
+    var n2 = CultureInfo.InvariantCulture;
     ViewData["Title"] = "تقرير: أرصدة العملاء";
 
     var reportData = ViewBag.ReportData as List<CustomerBalanceReportDto> ?? new List<CustomerBalanceReportDto>();
@@ -18,6 +21,8 @@
     var pageSize = ViewBag.PageSize as int? ?? 200;
     var totalPages = ViewBag.TotalPages as int? ?? 1;
     var totalCount = ViewBag.TotalCount as int? ?? 0;
+    var totalCustomersUnfiltered = ViewBag.TotalCustomersUnfiltered as int? ?? 0;
+    var balanceDiff = totalDebit - totalCredit; // الفرق (مدين - دائن)
 
     // الفلاتر من ViewBag
     var search = ViewBag.Search as string ?? "";
@@ -192,16 +197,19 @@
                         }
                     </div>
                 </div>
-                @if (reportData.Any() && totalPages > 1)
+                @if (reportData.Any())
                 {
                     <div class="col-12 col-lg-2 erp-filter-section">
                         <label class="form-label">حجم الصفحة</label>
                         <select name="pageSize" class="form-select erp-filter-input" onchange="this.form.submit()">
+                            <option value="25" @(pageSize == 25 ? "selected" : "")>25</option>
+                            <option value="50" @(pageSize == 50 ? "selected" : "")>50</option>
+                            <option value="100" @(pageSize == 100 ? "selected" : "")>100</option>
                             <option value="200" @(pageSize == 200 ? "selected" : "")>200</option>
                             <option value="500" @(pageSize == 500 ? "selected" : "")>500</option>
                             <option value="1000" @(pageSize == 1000 ? "selected" : "")>1000</option>
                             <option value="5000" @(pageSize == 5000 ? "selected" : "")>5000</option>
-                            <option value="0" @(pageSize == 0 || pageSize >= totalCount ? "selected" : "")>الكل</option>
+                            <option value="0" @(pageSize == 0 || (totalCount > 0 && pageSize >= totalCount) ? "selected" : "")>الكل</option>
                         </select>
                     </div>
                 }
@@ -209,16 +217,52 @@
         </form>
     </div>
 
-    @* ===== Pagination Info ===== *@
-    @if (reportData.Any() && totalPages > 1)
+    @* ===== كروت الإجماليات (بين شريط الفلاتر والجدول — مثل أرصدة الأصناف) ===== *@
+    @if (reportData.Any())
     {
-        <div class="d-flex justify-content-between align-items-center mb-2">
-            <small class="text-muted">
-                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
-            </small>
-            <small class="text-muted">
-                @($"صفحة {page} من {totalPages}")
-            </small>
+        <div class="row g-2 g-md-3 mb-2 no-print">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #6366f1 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي العملاء</div>
+                        <div class="h4 mb-0 text-primary fw-bold">@totalCustomersUnfiltered</div>
+                        <div class="small text-muted mt-1">قبل فلاتر الأعمدة</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #0d6efd !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">بعد الفلترة</div>
+                        <div class="h4 mb-0 text-info fw-bold">@totalCount</div>
+                        <div class="small text-muted mt-1">عدد النتائج الحالية</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #198754 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(25,135,84,.25); overflow: hidden;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">مجموع المدين</div>
+                        <div class="h4 mb-0 text-success fw-bold">@totalDebit.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #dc3545 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(220,53,69,.25); overflow: hidden;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">مجموع الدائن</div>
+                        <div class="h4 mb-0 text-danger fw-bold">@totalCredit.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #6f42c1 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(111,66,193,.25); overflow: hidden;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">الفرق (مدين − دائن)</div>
+                        <div class="h4 mb-0 fw-bold @(balanceDiff >= 0 ? "text-success" : "text-danger")">@balanceDiff.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
         </div>
     }
 
@@ -230,11 +274,12 @@
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #f8f9fa !important;">
                     <tr>
                         <th style="width: 80px;" data-col="code">@filterableCol("code", "code", "الكود")</th>
+                        <th style="width: 90px;" data-col="externalcode">كود الاكسل</th>
                         <th style="width: 200px;" data-col="name">@filterableCol("name", "name", "اسم العميل")</th>
                         <th data-col="category">@filterableCol("category", "category", "فئة العميل")</th>
                         <th data-col="phone">@filterableCol("phone", "phone", "الهاتف")</th>
-                        <th class="text-end" style="width: 120px;" data-col="debit">@filterableCol("debit", "balance", "مدين")</th>
-                        <th class="text-end" style="width: 120px;" data-col="credit">@filterableCol("credit", "balance", "دائن")</th>
+                        <th class="text-end" style="width: 120px;" data-col="debit">@filterableCol("debit", "debit", "مدين")</th>
+                        <th class="text-end" style="width: 120px;" data-col="credit">@filterableCol("credit", "credit", "دائن")</th>
                         <th class="text-end" style="width: 120px;" data-col="creditlimit">@filterableCol("creditlimit", "creditlimit", "الحد الائتماني")</th>
                         <th class="text-end" style="width: 120px;" data-col="sales">@filterableCol("sales", "sales", "المبيعات")</th>
                         <th class="text-end" style="width: 120px;" data-col="purchases">@filterableCol("purchases", "purchases", "المشتريات")</th>
@@ -248,16 +293,17 @@
                     {
                         <tr>
                             <td data-col="code"><strong>@item.CustomerCode</strong></td>
+                            <td data-col="externalcode"><small>@(item.ExternalCode ?? "—")</small></td>
                             <td data-col="name">@item.CustomerName</td>
                             <td data-col="category"><small class="text-muted">@(item.PartyCategory == "Customer" ? "عميل" : item.PartyCategory == "Supplier" ? "مورد" : item.PartyCategory ?? "—")</small></td>
                             <td data-col="phone"><small>@item.Phone1</small></td>
-                            <td data-col="debit" class="text-end">@(item.CurrentBalance > 0 ? item.CurrentBalance.ToString("N2") : "—")</td>
-                            <td data-col="credit" class="text-end">@(item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance).ToString("N2") : "—")</td>
-                            <td data-col="creditlimit" class="text-end">@item.CreditLimit.ToString("N2")</td>
-                            <td data-col="sales" class="text-end">@item.TotalSales.ToString("N2")</td>
-                            <td data-col="purchases" class="text-end">@item.TotalPurchases.ToString("N2")</td>
-                            <td data-col="returns" class="text-end">@item.TotalReturns.ToString("N2")</td>
-                            <td data-col="availablecredit" class="text-end">@item.AvailableCredit.ToString("N2")</td>
+                            <td data-col="debit" class="text-end">@(item.CurrentBalance > 0 ? item.CurrentBalance.ToString("N2", n2) : "—")</td>
+                            <td data-col="credit" class="text-end">@(item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance).ToString("N2", n2) : "—")</td>
+                            <td data-col="creditlimit" class="text-end">@item.CreditLimit.ToString("N2", n2)</td>
+                            <td data-col="sales" class="text-end">@item.TotalSales.ToString("N2", n2)</td>
+                            <td data-col="purchases" class="text-end">@item.TotalPurchases.ToString("N2", n2)</td>
+                            <td data-col="returns" class="text-end">@item.TotalReturns.ToString("N2", n2)</td>
+                            <td data-col="availablecredit" class="text-end">@item.AvailableCredit.ToString("N2", n2)</td>
                             <td class="text-nowrap no-print" data-col="actions">
                                 <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"
                                    asp-controller="Customers"
@@ -273,20 +319,28 @@
                 </tbody>
                 <tfoot class="table-secondary fw-bold">
                     <tr>
-                        <td colspan="4" class="text-end"><strong>المجموع الإجمالي:</strong></td>
-                        <td data-col="debit" class="text-end"><strong>@totalDebit.ToString("N2")</strong></td>
-                        <td data-col="credit" class="text-end"><strong>@totalCredit.ToString("N2")</strong></td>
-                        <td data-col="creditlimit" class="text-end"><strong>@totalCreditLimit.ToString("N2")</strong></td>
-                        <td data-col="sales" class="text-end"><strong>@totalSales.ToString("N2")</strong></td>
-                        <td data-col="purchases" class="text-end"><strong>@totalPurchases.ToString("N2")</strong></td>
-                        <td data-col="returns" class="text-end"><strong>@totalReturns.ToString("N2")</strong></td>
+                        <td colspan="5" class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                        <td data-col="debit" class="text-end"><strong>@totalDebit.ToString("N2", n2)</strong></td>
+                        <td data-col="credit" class="text-end"><strong>@totalCredit.ToString("N2", n2)</strong></td>
+                        <td data-col="creditlimit" class="text-end"><strong>@totalCreditLimit.ToString("N2", n2)</strong></td>
+                        <td data-col="sales" class="text-end"><strong>@totalSales.ToString("N2", n2)</strong></td>
+                        <td data-col="purchases" class="text-end"><strong>@totalPurchases.ToString("N2", n2)</strong></td>
+                        <td data-col="returns" class="text-end"><strong>@totalReturns.ToString("N2", n2)</strong></td>
                         <td data-col="availablecredit" class="text-end">
-                            <strong class="customer-balances-total-value">@totalAvailableCredit.ToString("N2")</strong>
+                            <strong class="customer-balances-total-value">@totalAvailableCredit.ToString("N2", n2)</strong>
                         </td>
                         <td class="no-print" data-col="actions"></td>
                     </tr>
                 </tfoot>
             </table>
+        </div>
+
+        @* ===== الترقيم وعرض النطاق (تحت الجدول) ===== *@
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2 mb-2 d-print-none" dir="rtl">
+            <small class="text-muted">
+                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
+            </small>
+            <small class="text-muted">@($"صفحة {page} من {totalPages}")</small>
         </div>
 
         @* لوحة فلتر العمود (بنمط Excel) *@

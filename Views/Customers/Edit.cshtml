@@ -231,24 +231,41 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const partySelect = document.getElementById('PartyCategorySelect');
-            const accountSelect = document.getElementById('AccountIdSelect');
+            const accountSelect = document.getElementById('AccountId');
             const governorateSelect = document.getElementById('GovernorateId');
             const districtSelect = document.getElementById('DistrictId');
             const areaSelect = document.getElementById('AreaId');
 
-            // ——— ربط نوع الطرف بالحساب المحاسبي الافتراضي ———
+            // ——— ربط نوع الطرف ↔ الحساب المحاسبي (اتجاهين) ———
             if (partySelect && accountSelect) {
+                // عند تغيير نوع الطرف → تحديث الحساب الافتراضي
                 function setDefaultAccount(forceChange) {
                     const party = partySelect.value;
                     if (!party) return;
                     if (!forceChange && accountSelect.value) return;
                     fetch('@Url.Action("GetDefaultAccountForParty", "Customers")?partyCategory=' + encodeURIComponent(party))
                         .then(r => r.ok ? r.json() : null)
-                        .then(data => { if (data && data.accountId) accountSelect.value = data.accountId; })
+                        .then(data => {
+                            if (data && data.success && data.accountId != null)
+                                accountSelect.value = data.accountId.toString();
+                        })
                         .catch(err => console.error('خطأ في تحميل الحساب الافتراضي:', err));
                 }
                 partySelect.addEventListener('change', function () { setDefaultAccount(true); });
                 setDefaultAccount(false);
+
+                // عند تغيير الحساب المحاسبي → تحديث نوع الطرف إن وُجد تطابق
+                accountSelect.addEventListener('change', function () {
+                    const accountId = this.value;
+                    if (!accountId) return;
+                    fetch('@Url.Action("GetPartyCategoryForAccount", "Customers")?accountId=' + encodeURIComponent(accountId))
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => {
+                            if (data && data.success && data.partyCategory)
+                                partySelect.value = data.partyCategory;
+                        })
+                        .catch(err => console.error('خطأ في جلب نوع الطرف للحساب:', err));
+                });
             }
 
             // ——— تعبئة متسلسلة: المحافظة → الحي → المنطقة ———

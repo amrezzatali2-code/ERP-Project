@@ -1,0 +1,27 @@
+@model ERP.Models.VendorProductMapping
+@{
+    ViewData["Title"] = "تفاصيل مطابقة صنف عميل";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+<div class="container-fluid mt-3" dir="rtl">
+    <h4 class="mb-3">@ViewData["Title"]</h4>
+    <dl class="row">
+        <dt class="col-sm-3">كود</dt>
+        <dd class="col-sm-9">@Model.Id</dd>
+        <dt class="col-sm-3">العميل</dt>
+        <dd class="col-sm-9">@Model.Customer?.CustomerName</dd>
+        <dt class="col-sm-3">اسم الصنف عند العميل</dt>
+        <dd class="col-sm-9">@Model.VendorProductName</dd>
+        <dt class="col-sm-3">الصنف (ERP)</dt>
+        <dd class="col-sm-9">@Model.Product?.ProdName</dd>
+        <dt class="col-sm-3">كود صنف العميل</dt>
+        <dd class="col-sm-9">@(Model.VendorProductCode ?? "—")</dd>
+        <dt class="col-sm-3">سعر الجمهور</dt>
+        <dd class="col-sm-9">@(Model.PriceRetail?.ToString("N2") ?? "")</dd>
+        <dt class="col-sm-3">وسم</dt>
+        <dd class="col-sm-9">@Model.Tag</dd>
+        <dt class="col-sm-3">تاريخ الإنشاء</dt>
+        <dd class="col-sm-9">@Model.CreatedAt.ToString("yyyy-MM-dd HH:mm")</dd>
+    </dl>
+    <a asp-action="Index" class="btn btn-erp btn-erp-secondary">العودة للقائمة</a>
+</div>

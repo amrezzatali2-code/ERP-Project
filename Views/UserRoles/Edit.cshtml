@@ -7,7 +7,8 @@
 <div class="container" dir="rtl">
     <h2 class="mb-3">تعديل دور مستخدم — @Model.Id</h2>
 
-    <form asp-action="Edit" method="post" class="card">
+    <form asp-action="Edit" method="post" class="card" id="userRoleEditForm">
+        <input type="hidden" name="SelectedRoleAccountIds" id="SelectedRoleAccountIds" value="" />
         <div class="card-body">
 
             <input type="hidden" asp-for="Id" />
@@ -213,6 +214,17 @@
             roleSelect.addEventListener("change", loadPermissions);
             if (userSelect) userSelect.addEventListener("change", loadPermissions);
             loadPermissions();
+
+            const urForm = document.getElementById("userRoleEditForm");
+            if (urForm) {
+                urForm.addEventListener("submit", function () {
+                    const h = document.getElementById("SelectedRoleAccountIds");
+                    if (!h) return;
+                    const ids = [];
+                    urForm.querySelectorAll(".role-account-visibility-cb:checked").forEach(function (c) { if (c.value) ids.push(c.value); });
+                    h.value = ids.join(",");
+                });
+            }
         });
     </script>
 }

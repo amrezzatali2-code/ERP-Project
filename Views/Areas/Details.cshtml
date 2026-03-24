@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Area
+@model ERP.Models.Area
 @{
     ViewData["Title"] = "تفاصيل المنطقة";
 }
@@ -18,7 +18,7 @@
                 <dd class="col-sm-9">@Model.Governorate?.GovernorateName</dd>
 
                 <dt class="col-sm-3">الحي/المركز</dt>
-                <dd class="col-sm-9">@Model.District?.DistrictName</dd>
+                <dd class="col-sm-9">@(Model.District != null ? Model.District.DistrictName : "— لا يوجد —")</dd>
 
                 <dt class="col-sm-3">الحالة</dt>
                 <dd class="col-sm-9">
