@@ -2,9 +2,7 @@
 @model ERP.Models.SalesReturn
 
 @{
-    ViewData["Title"] = Model.SRId == 0
-        ? "مرتجع بيع"
-        : $"مرتجع بيع — رقم {Model.SRId}";
+    ViewData["Title"] = "مرتجع بيع";
 }
 
 @section Styles {
@@ -14,7 +12,6 @@
         .invoice-page { background-color: #f3f6fb; min-height: 100vh; padding-bottom: 2rem; }
         div.card.invoice-side-card,
         div.card.invoice-header-card,
-        div.card.invoice-product-card,
         div.card.invoice-Add-card,
         div.card.invoice-lines-card,
         div.card.invoice-totals-card {
@@ -32,25 +29,15 @@
         .invoice-header-bar h5, .invoice-header-bar h6 { margin-bottom: 0; font-size: 1rem; color: #fff !important; }
         .invoice-details-card .card-header,
         .invoice-Add-card .card-header,
-        .invoice-product-card .card-header,
         .invoice-lines-card .card-header,
         .invoice-side-card .card-header {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
             color: #ffffff !important;
             padding: 0.55rem 1rem;
         }
-        .invoice-product-card .card-header h6,
         .invoice-side-card .card-header h6 { color: #fff !important; margin-bottom: 0; }
-        .invoice-lines-header,
-        .invoice-lines-header th {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
-            color: #fff !important;
-        }
-        .invoice-lines-header th { border-color: #0b5ed7 !important; }
         .invoice-page .invoice-header-card .form-control,
         .invoice-page .invoice-header-card .form-select,
-        .invoice-page .invoice-product-card .form-control,
-        .invoice-page .invoice-product-card .form-select,
         .invoice-page .invoice-Add-card .form-control,
         .invoice-page .invoice-Add-card .form-select,
         .invoice-page .invoice-totals-card .form-control,
@@ -58,407 +45,128 @@
         .return-line-field { max-width: 5.5rem; }
         .badge-status-draft { background-color: #6f42c1; }
         .badge-status-notposted { background-color: #343a40; }
+
+        /* كارت الإجماليات — نفس فاتورة المبيعات */
+        .invoice-totals-card .invoice-summary-item.invoice-summary-box {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0.25rem 0.35rem;
+            background: #f8fafc;
+            border: 1px solid #64748b;
+            border-radius: 6px;
+        }
+        .invoice-totals-card .invoice-summary-label {
+            font-size: 0.8rem;
+            line-height: 1.2;
+            color: #64748b;
+            margin-bottom: 0;
+        }
+        .invoice-totals-card .invoice-summary-value {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #0f172a;
+        }
+        .invoice-totals-card .invoice-summary-value-main {
+            font-size: 1.05rem;
+            color: #fff !important;
+        }
+        .invoice-summary-box-main {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+            border-color: #0284c7 !important;
+        }
+        .invoice-summary-box-main .invoice-summary-label {
+            color: rgba(255,255,255,.9);
+        }
+        .invoice-summary-row {
+            flex-wrap: wrap;
+            gap: 0.35rem 0.5rem;
+            align-items: stretch;
+            justify-content: space-between;
+        }
+
+        #srToastContainer {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+            pointer-events: none;
+        }
+        #srToastContainer .sr-toast {
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,.12);
+            transition: opacity 0.25s ease;
+        }
+        #srToastContainer .sr-toast.text-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+        #srToastContainer .sr-toast.text-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+        #srToastContainer .sr-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        #srToastContainer .sr-toast.text-muted { background: #f1f5f9; color: #334155; border: 1px solid #64748b; }
+
+        /* رقم فاتورة البيع: حقل ضيق أعلى يمين الهيدر */
+        .sr-invoice-no-wrap { max-width: 7.5rem; }
+        .sr-invoice-no-wrap .form-control { max-width: 7rem; margin-inline: auto; }
+        /* كود العميل ورقم المرتجع وحقول التاريخ/الوقت — مضغوطة مثل فاتورة المبيعات */
+        .sr-header-card-body .sr-hdr-compact .form-control,
+        .sr-header-card-body .sr-hdr-compact .form-select {
+            min-width: 0;
+            padding-inline: 0.3rem;
+            font-size: 0.8rem;
+        }
+        .sr-header-card-body .sr-hdr-compact .invoice-small-input { max-width: 100%; }
+
+        /* قائمة أصناف المرتجع: مسافة عن السهم + عرض الاسم في منتصف البوكس */
+        .invoice-page .invoice-Add-card select#InvoiceItemSelect.sr-invoice-item-select {
+            padding-left: 2.85rem !important;
+            padding-right: 0.55rem !important;
+            text-align: center;
+            text-align-last: center;
+        }
+        /* جدول سطور المرتجع — نفس كثافة خلايا فاتورة المبيعات */
+        .invoice-page .invoice-lines-container .erp-table tbody td,
+        .invoice-page .invoice-lines-container .erp-table tbody th { padding: 0.45rem 0.55rem; }
+        .invoice-page .invoice-lines-container .erp-table thead th { padding: 0.5rem 0.55rem; }
+
+        /* رأس جدول السطور: مظهر محايد (رمادي فاتح + نص داكن) مثل الجدول المرجعي */
+        .invoice-page .invoice-lines-container .erp-table-wrapper .erp-table > thead.sr-return-lines-thead > tr > th {
+            background: linear-gradient(180deg, #e8edf3 0%, #f1f5f9 50%, #f8fafc 100%) !important;
+            color: #1e293b !important;
+            font-weight: 600;
+            border-top: 2px solid #64748b !important;
+            border-bottom: 1px solid #cbd5e1 !important;
+            border-inline-end: 1px solid #e2e8f0 !important;
+            box-shadow: none !important;
+        }
+        .invoice-page .invoice-lines-container .erp-table-wrapper .erp-table > thead.sr-return-lines-thead > tr > th:first-child {
+            border-inline-start: 1px solid #e2e8f0 !important;
+        }
     </style>
 }
 
 <div class="invoice-page" dir="rtl">
+    <div id="srToastContainer" aria-live="polite"></div>
     <div class="container-fluid pt-3">
 
-        <div class="row g-3">
+        <div class="row g-3 align-items-start">
 
-            @* =========================
-               العمود الرئيسي (الهيدر + العميل + الأصناف + الإجماليات)
-               ========================= *@
-            <div class="col-lg-10">
-
-                @* ====================================================
-                   1) كارت بيانات مرتجع البيع + العميل + المخزن
-                   ==================================================== *@
-                <div class="card shadow-sm mb-2 invoice-header-card">
-
-                    @{
-                        // لو SRId = 0 يبقى لسه مرتجع جديد (لسه ما اتسجلش في الداتا)
-                        bool isNewReturn = Model == null || Model.SRId == 0;
-
-                        bool hasReturn = Model.SRId > 0;
-
-                        // نص تاريخ/وقت المرتجع المعروضين في الكروت
-                        string returnDateText = hasReturn
-                        ? Model.SRDate.ToString("d/M/yyyy")
-                        : "";
-
-                        string returnTimeText = hasReturn
-                        ? Model.SRTime.ToString(@"hh\:mm")
-                        : "";
-                    }
-
-                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        @* الجزء الأيسر: عنوان مرتجع البيع + اسم المنشئ *@
-                        <div>
-                            <h5 class="mb-1">
-                                @if (isNewReturn)
-                                {
-                                    @:مرتجع بيع
-                                }
-                                else
-                                {
-                                    @:مرتجع بيع
-                                    <span class="small opacity-100">رقم @Model.SRId</span>
-                                }
-                            </h5>
-
-                            @if (!isNewReturn && !string.IsNullOrWhiteSpace(Model.CreatedBy))
-                            {
-                                <div class="small opacity-100">
-                                    أُنشئ بواسطة:
-                                    <span class="fw-semibold">@Model.CreatedBy</span>
-                                </div>
-                            }
-                        </div>
-
-                        @* الجزء الأيمن: حالة المرتجع *@
-                        <div class="text-end">
-                            @if (isNewReturn)
-                            {
-                                <span class="text-white fw-semibold">
-                                    اضغط على "مرتجع جديد".
-                                </span>
-                            }
-                            else if (Model.IsPosted)
-                            {
-                                <span class="text-white fw-semibold">
-                                    مرتجع مرحّل
-                                </span>
-                            }
-                            else if (string.Equals(Model.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
-                            {
-                                <span class="text-white fw-semibold">
-                                    مرتجع ملغى
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="text-white fw-semibold">
-                                    مرتجع مفتوح
-                                </span>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="card-body sr-header-card-body">
-                        @* صفان منسقان: الصف الأول (اسم العميل، كود العميل، تاريخ، وقت) — الصف الثاني (رقم المرتجع، الحالة، المخزن، رقم الفاتورة) *@
-                        <div class="row g-3 align-items-end mb-2">
-                            <div class="col-lg-4 col-md-6">
-                                <label for="CustomerNameInput" class="form-label form-label-sm">اسم العميل</label>
-                                <input id="CustomerNameInput"
-                                       class="form-control form-control-sm"
-                                       placeholder="اكتب اسم العميل أو جزء منه للبحث..."
-                                       list="customersList"
-                                       autocomplete="off"
-                                       data-lock-posted="1" />
-                                <datalist id="customersList">
-                                    @if (ViewBag.Customers != null)
-                                    {
-                                        foreach (var c in ViewBag.Customers)
-                                        {
-                                            <option value="@c.Name"
-                                                    data-id="@c.Id"
-                                                    data-policy="@c.PolicyName"
-                                                    data-user="@c.UserName"
-                                                    data-phone="@c.Phone"
-                                                    data-address="@c.Address"
-                                                    data-credit="@c.CreditLimit">
-                                            </option>
-                                        }
-                                    }
-                                </datalist>
-                            </div>
-                            <div class="col-lg-2 col-md-2">
-                                <label class="form-label form-label-sm">كود العميل</label>
-                                <input id="CustomerCodeDisplay"
-                                       class="form-control form-control-sm text-center"
-                                       readonly />
-                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
-                                <input type="hidden" id="SRId" value="@Model.SRId" />
-                            </div>
-                            <div class="col-lg-2 col-md-2">
-                                <label class="form-label form-label-sm">تاريخ المرتجع</label>
-                                <input id="ReturnDateDisplay" class="form-control form-control-sm text-center"
-                                       value="@returnDateText" readonly />
-                            </div>
-                            <div class="col-lg-2 col-md-2">
-                                <label class="form-label form-label-sm">وقت المرتجع</label>
-                                <input id="ReturnTimeDisplay" class="form-control form-control-sm text-center"
-                                       value="@returnTimeText" readonly />
-                            </div>
-                        </div>
-                        <div class="row g-3 align-items-end">
-                            <div class="col-lg-2 col-md-3">
-                                <label class="form-label form-label-sm">رقم المرتجع</label>
-                                <input id="ReturnNumberDisplay"
-                                       class="form-control form-control-sm text-center fw-semibold"
-                                       value="@(Model.SRId > 0 ? Model.SRId.ToString() : "—")" readonly />
-                            </div>
-                            <div class="col-lg-2 col-md-3">
-                                <label class="form-label form-label-sm">حالة المرتجع</label>
-                                @{
-                                    int? stage = ViewBag.ReturnStage as int?;
-                                    string statusDisplayValue = Model.Status switch
-                                    {
-                                        "Draft" => "غير مرحلة",
-                                        "Posted" => (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل"),
-                                        "Cancelled" => "ملغى",
-                                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
-                                    };
-                                }
-                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@statusDisplayValue" readonly />
-                            </div>
-                            <div class="col-lg-3 col-md-4">
-                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
-                                <select asp-for="WarehouseId" asp-items="ViewBag.Warehouses" data-lock-posted="1"
-                                        class="form-select form-select-sm" data-is-posted="@(Model.IsPosted ? "1" : "0")">
-                                    <option value="">اختر المخزن...</option>
-                                </select>
-                            </div>
-                            <div class="col-lg-3 col-md-4">
-                                <label class="form-label form-label-sm">رقم فاتورة البيع</label>
-                                <input type="number" id="SalesInvoiceIdInput" class="form-control form-control-sm text-center"
-                                       value="@(Model.SalesInvoiceId?.ToString() ?? "")" placeholder="أدخل رقم الفاتورة" data-lock-posted="1" />
-                                <input type="hidden" asp-for="SalesInvoiceId" id="SalesInvoiceId" />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                @* =====================================================
-                   3) كارت بيانات الصنف (مخزون + خصومات) — حدود الكارت فقط مثل طلب الشراء
-                   ===================================================== *@
-                <div class="card shadow-sm mb-3 invoice-product-card">
-                    <div class="card-body">
-                        <div class="row g-3 mb-2">
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">الكمية المتاحة في هذا المخزن</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="0"
-                                       readonly />
-                            </div>
-
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="0"
-                                       readonly />
-                            </div>
-
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">كمية الكوتة المتبقية</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="0"
-                                       readonly />
-                            </div>
-
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="0"
-                                       readonly />
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-
-                @* =====================================================
-                   4) كارت إدخال الصنف في المرتجع — حدود الكارت فقط مثل طلب الشراء
-                   ===================================================== *@
-                <div class="card shadow-sm mb-3 invoice-Add-card">
-                    <div class="card-body">
-                        <div class="row g-2 align-items-end">
-                            <div class="col-lg-5 col-md-4">
-                                <label class="form-label form-label-sm">اختر صنف من فاتورة البيع</label>
-                                <select id="InvoiceItemSelect"
-                                        class="form-select form-select-sm"
-                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
-                                    <option value="">-- اختر صنف من الفاتورة --</option>
-                                </select>
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">الكمية المرتجعة</label>
-                                <input type="number"
-                                       id="ReturnQtyInput"
-                                       class="form-control form-control-sm text-center return-line-field"
-                                       placeholder="0"
-                                       min="1"
-                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">الكمية في الفاتورة</label>
-                                <input type="number"
-                                       id="InvoiceQtyDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">التشغيلة</label>
-                                <input type="text"
-                                       id="ReturnBatchDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
-                                <input type="text"
-                                       id="ReturnExpiryDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4 d-grid">
-                                <label class="form-label form-label-sm">&nbsp;</label>
-                                <button type="button"
-                                        id="btnAddReturnLine"
-                                        class="btn btn-primary btn-sm w-100"
-                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
-                                    إضافة
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                @* ==========================================
-                   5) جدول سطور المرتجع (بنفس تنسيق فاتورة المبيعات)
-                   ========================================== *@
-                <div class="erp-table-wrapper mb-0">
-                    <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                                <thead>
-                                    <tr>
-                                        <th class="text-center">#</th>
-                                        <th>اسم الصنف</th>
-                                        <th class="text-center">الكمية</th>
-                                        <th class="text-center">سعر الجمهور</th>
-                                        <th class="text-center">خصم 1 %</th>
-                                        <th class="text-center">خصم 2 %</th>
-                                        <th class="text-center">خصم 3 %</th>
-                                        <th class="text-center">الإجمالي</th>
-                                        <th class="text-center">مسح</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="SalesReturnLinesTableBody">
-                                    @if (Model.Lines != null && Model.Lines.Any())
-                                    {
-                                        var _prodNames = ViewBag.ProdNames as Dictionary<int, string>;
-                                        foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
-                                        {
-                                            var prodName = (_prodNames != null && _prodNames.TryGetValue(line.ProdId, out var _pn)) ? _pn : line.ProdId.ToString();
-                                            <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
-                                                <td class="text-center">@line.LineNo</td>
-                                                <td>@prodName</td>
-                                                <td class="text-center">@line.Qty</td>
-                                                <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
-                                                <td class="text-center">@line.Disc1Percent.ToString("0.##")</td>
-                                                <td class="text-center">@line.Disc2Percent.ToString("0.##")</td>
-                                                <td class="text-center">@line.Disc3Percent.ToString("0.##")</td>
-                                                <td class="text-center">@line.LineNetTotal.ToString("0.00")</td>
-                                                <td class="text-center">
-                                                    <button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine"
-                                                            data-line-no="@line.LineNo" data-sr-id="@Model.SRId"
-                                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")"
-                                                            title="مسح السطر">مسح</button>
-                                                </td>
-                                            </tr>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <tr id="SalesReturnLinesEmptyRow">
-                                            <td colspan="9" class="text-center text-muted py-4">
-                                                لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                </div>
-
-                @* ====================================
-                   6) ملخص إجماليات المرتجع (بنفس تنسيق فاتورة المبيعات)
-                   ==================================== *@
-                <div class="card shadow-sm invoice-totals-card">
-                    <div class="card-body">
-
-                        <div class="row g-3 align-items-center mb-2">
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي قبل الخصم</span>
-                                    <span id="TotalBeforeDiscountBadge" class="badge bg-light text-dark summary-badge">@Model.TotalBeforeDiscount.ToString("0.00")</span>
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">خصم الهيدر (قيمة)</span>
-                                    <span class="badge bg-warning text-dark summary-badge">@Model.HeaderDiscountValue.ToString("0.00") <span class="small">(@Model.HeaderDiscountPercent.ToString("0.##") %)</span></span>
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">بعد الخصم وقبل الضريبة</span>
-                                    <span id="TotalAfterDiscountBeforeTaxBadge" class="badge bg-light text-dark summary-badge">@Model.TotalAfterDiscountBeforeTax.ToString("0.00")</span>
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">قيمة الضريبة</span>
-                                    <span id="TaxAmountBadge" class="badge bg-info text-dark summary-badge">@Model.TaxAmount.ToString("0.00")</span>
-                                </div>
-                            </div>
-                        </div>
-                        <hr class="my-3" />
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <div>
-                                <span class="small text-muted d-block">الصافي النهائي للمرتجع</span>
-                                <h3 id="NetTotalBadge" class="mb-0 text-success">@Model.NetTotal.ToString("0.00")</h3>
-                            </div>
-
-                            <div class="text-end small text-muted">
-                                @if (Model.UpdatedAt.HasValue)
-                                {
-                                    <div>
-                                        آخر تعديل:
-                                        <span class="fw-semibold">
-                                            @Model.UpdatedAt.Value.ToString("d/M/yyyy HH:mm")
-                                        </span>
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>
-
-            @* =========================
-               العمود الجانبي (أزرار الحركة)
-               ========================= *@
-            <div class="col-lg-2">
+            @* كارت الإجراءات أولاً في الـ HTML مع order حتى يُرسم مع الصف دون تأخير بصري *@
+            <div class="col-lg-2 order-last">
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
                     <div class="card-header py-2 text-center">
                         <h6 class="mb-0">إجراءات مرتجع البيع</h6>
                     </div>
 
-                    <!-- =========================================================
-                    ثابت: رقم المرتجع + علم الترحيل (Flag)
-                    - SRId: رقم المرتجع الحالي (0 لو جديد)
-                    - ReturnIsPostedFlag: 1 لو مترحّل / 0 لو مفتوح
-                    ========================================================= -->
                     <input type="hidden" id="ReturnId" value="@Model.SRId" />
                     <input type="hidden" id="ReturnIsPostedFlag" value="@(Model.IsPosted ? "1" : "0")" />
 
@@ -575,6 +283,14 @@
                         <div id="postReturnMsg" class="small mt-2"></div>
 
                         <button type="button"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
+                                id="btnDeleteSelectedReturnLine"
+                                data-lock-posted="1"
+                                title="اختر سطراً في الجدول ثم اضغط لمسحه">
+                            🗑️ مسح السطر المحدد
+                        </button>
+
+                        <button type="button"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
                                 id="btnOpenReturn">
                             ⏪ فتح المرتجع
@@ -602,6 +318,289 @@
 
                     </div>
                 </div>
+            </div>
+
+            @* =========================
+               العمود الرئيسي (الهيدر + العميل + الأصناف + الإجماليات)
+               ========================= *@
+            <div class="col-lg-10 order-first">
+
+                @* ====================================================
+                   1) كارت بيانات مرتجع البيع + العميل + المخزن
+                   ==================================================== *@
+                <div class="card shadow-sm mb-2 invoice-header-card">
+
+                    @{
+                        // لو SRId = 0 يبقى لسه مرتجع جديد (لسه ما اتسجلش في الداتا)
+                        bool isNewReturn = Model == null || Model.SRId == 0;
+
+                        bool hasReturn = Model.SRId > 0;
+
+                        // نص تاريخ/وقت المرتجع المعروضين في الكروت
+                        string returnDateText = hasReturn
+                        ? Model.SRDate.ToString("d/M/yyyy")
+                        : "";
+
+                        string returnTimeText = hasReturn
+                        ? Model.SRTime.ToString(@"hh\:mm")
+                        : "";
+                    }
+
+                    @* عنوان ثابت مثل فاتورة المبيعات — بدون رقم المرتجع أو المنشئ في الشريط *@
+                    <div class="invoice-header-bar">
+                        <h6 class="mb-0">مرتجع بيع</h6>
+                    </div>
+
+                    <div class="card-body sr-header-card-body">
+                        @* RTL: أول عمود يمين الشاشة — رقم فاتورة البيع ثم كود العميل ثم اسم أضيق ثم باقي الحقول *@
+                        <div class="row g-2 g-lg-3 align-items-end mb-2 sr-hdr-compact">
+                            <div class="col-auto sr-invoice-no-wrap text-center">
+                                <label for="SalesInvoiceIdInput" class="form-label form-label-sm">رقم فاتورة البيع</label>
+                                <input type="number" id="SalesInvoiceIdInput" class="form-control form-control-sm text-center"
+                                       value="@(Model.SalesInvoiceId?.ToString() ?? "")" placeholder="رقم" data-lock-posted="1"
+                                       @(isNewReturn ? Html.Raw("autofocus") : Html.Raw("")) />
+                                <input type="hidden" asp-for="SalesInvoiceId" id="SalesInvoiceId" />
+                            </div>
+                            <div class="col-auto" style="max-width: 5.5rem;">
+                                <label class="form-label form-label-sm">كود العميل</label>
+                                <input id="CustomerCodeDisplay"
+                                       class="form-control form-control-sm text-center invoice-small-input"
+                                       readonly />
+                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                                <input type="hidden" id="SRId" value="@Model.SRId" />
+                            </div>
+                            <div class="col-lg-5 col-md-6 min-w-0">
+                                <label for="CustomerNameInput" class="form-label form-label-sm">اسم العميل</label>
+                                <input id="CustomerNameInput"
+                                       class="form-control form-control-sm"
+                                       placeholder="اكتب اسم العميل أو جزء منه للبحث..."
+                                       list="customersList"
+                                       autocomplete="off"
+                                       data-lock-posted="1" />
+                            </div>
+                            <div class="col-auto" style="max-width: 5.5rem;">
+                                <label class="form-label form-label-sm">رقم المرتجع</label>
+                                <input id="ReturnNumberDisplay"
+                                       class="form-control form-control-sm text-center fw-semibold invoice-small-input"
+                                       value="@(Model.SRId > 0 ? Model.SRId.ToString() : "—")" readonly />
+                            </div>
+                            <div class="col-lg-2 col-md-4">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">تاريخ المرتجع</label>
+                                        <input id="ReturnDateDisplay" class="form-control form-control-sm text-center"
+                                               value="@returnDateText" readonly />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">وقت المرتجع</label>
+                                        <input id="ReturnTimeDisplay" class="form-control form-control-sm text-center"
+                                               value="@returnTimeText" readonly />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 align-items-end">
+                            <div class="col-lg-2 col-md-3">
+                                <label class="form-label form-label-sm">حالة المرتجع</label>
+                                @{
+                                    int? stage = ViewBag.ReturnStage as int?;
+                                    string statusDisplayValue = Model.Status switch
+                                    {
+                                        "Draft" => "غير مرحلة",
+                                        "Posted" => (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل"),
+                                        "Cancelled" => "ملغى",
+                                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
+                                    };
+                                }
+                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@statusDisplayValue" readonly />
+                            </div>
+                            <div class="col-lg-4 col-md-6">
+                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+                                <select asp-for="WarehouseId" asp-items="ViewBag.Warehouses" data-lock-posted="1"
+                                        class="form-select form-select-sm" data-is-posted="@(Model.IsPosted ? "1" : "0")">
+                                    <option value="">اختر المخزن...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* =====================================================
+                   كارت إدخال الصنف في المرتجع
+                   ===================================================== *@
+                <div class="card shadow-sm mb-3 invoice-Add-card">
+                    <div class="card-body">
+                        <div class="row g-2 align-items-end">
+                            <div class="col-lg-5 col-md-4">
+                                <label class="form-label form-label-sm">اختر صنف من فاتورة البيع</label>
+                                <select id="InvoiceItemSelect"
+                                        class="form-select form-select-sm sr-invoice-item-select"
+                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                    <option value="">-- اختر صنف من الفاتورة --</option>
+                                </select>
+                            </div>
+
+                            <div class="col-auto">
+                                <label class="form-label form-label-sm">الكمية المرتجعة</label>
+                                <input type="number"
+                                       id="ReturnQtyInput"
+                                       class="form-control form-control-sm text-center return-line-field"
+                                       placeholder="0"
+                                       min="1"
+                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
+                            </div>
+
+                            <div class="col-auto">
+                                <label class="form-label form-label-sm">الكمية في الفاتورة</label>
+                                <input type="number"
+                                       id="InvoiceQtyDisplay"
+                                       class="form-control form-control-sm text-center bg-light return-line-field"
+                                       readonly />
+                            </div>
+
+                            <div class="col-auto">
+                                <label class="form-label form-label-sm">التشغيلة</label>
+                                <input type="text"
+                                       id="ReturnBatchDisplay"
+                                       class="form-control form-control-sm text-center bg-light return-line-field"
+                                       readonly />
+                            </div>
+
+                            <div class="col-auto">
+                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                <input type="text"
+                                       id="ReturnExpiryDisplay"
+                                       class="form-control form-control-sm text-center bg-light return-line-field"
+                                       readonly />
+                            </div>
+
+                            <div class="col-lg-2 col-md-4 d-grid">
+                                <label class="form-label form-label-sm">&nbsp;</label>
+                                <button type="button"
+                                        id="btnAddReturnLine"
+                                        class="btn btn-primary btn-sm w-100"
+                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                    إضافة
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                @* ==========================================
+                   5) جدول سطور المرتجع — نفس أعمدة فاتورة المبيعات (PILinesTable)
+                   ========================================== *@
+                <div class="invoice-lines-container">
+                    <div class="erp-table-wrapper mb-0">
+                        <table id="SalesReturnLinesTable" class="table table-sm table-striped table-hover mb-0 erp-table">
+                            <thead class="sr-return-lines-thead">
+                                <tr>
+                                    <th class="text-center">#</th>
+                                    <th class="text-center">الموقع</th>
+                                    <th>اسم الصنف</th>
+                                    <th class="text-center">التشغيلة</th>
+                                    <th class="text-center">الصلاحية</th>
+                                    <th class="text-center">الكمية</th>
+                                    <th class="text-center">سعر الجمهور</th>
+                                    <th class="text-center">خصم البيع %</th>
+                                    <th class="text-center">قيمة السطر</th>
+                                </tr>
+                            </thead>
+                            <tbody id="SalesReturnLinesTableBody">
+                                @if (Model.Lines != null && Model.Lines.Any())
+                                {
+                                    var _prodNames = ViewBag.ProdNames as Dictionary<int, string>;
+                                    var _prodLocs = ViewBag.ProdLocations as Dictionary<int, string>;
+                                    foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
+                                    {
+                                        var prodName = (_prodNames != null && _prodNames.TryGetValue(line.ProdId, out var _pn)) ? _pn : ("صنف #" + line.ProdId);
+                                        var locDisp = (_prodLocs != null && _prodLocs.TryGetValue(line.ProdId, out var _pl) && !string.IsNullOrWhiteSpace(_pl)) ? _pl : "—";
+                                        <tr class="erp-list-selectable-row" data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                            <td class="text-center">@line.LineNo</td>
+                                            <td class="text-center text-muted small">@locDisp</td>
+                                            <td>
+                                                <strong>@prodName</strong>
+                                                <span class="text-muted small"> | كود: @line.ProdId</span>
+                                            </td>
+                                            <td class="text-center">@(line.BatchNo ?? "")</td>
+                                            <td class="text-center">@(line.Expiry.HasValue ? line.Expiry.Value.ToString("yyyy-MM-dd") : "")</td>
+                                            <td class="text-center">@line.Qty</td>
+                                            <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
+                                            <td class="text-center">@line.Disc1Percent.ToString("0.##")</td>
+                                            <td class="text-center">@line.LineTotalAfterDiscount.ToString("0.00")</td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr id="SalesReturnLinesEmptyRow">
+                                        <td colspan="9" class="text-center text-muted py-4">
+                                            لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                @* ====================================
+                   6) ملخص إجماليات المرتجع (بنفس تنسيق فاتورة المبيعات)
+                   ==================================== *@
+                <div class="card shadow-sm invoice-totals-card mb-2">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row mb-3">
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">إجمالي قبل الخصم</span>
+                                <span id="TotalBeforeDiscountBadge" class="invoice-summary-value">@Model.TotalBeforeDiscount.ToString("0.00")</span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">خصم الهيدر (قيمة)</span>
+                                <span id="HeaderDiscountSummary" class="invoice-summary-value">@Model.HeaderDiscountValue.ToString("0.00") <span class="small text-muted">(@Model.HeaderDiscountPercent.ToString("0.##") %)</span></span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">بعد الخصم وقبل الضريبة</span>
+                                <span id="TotalAfterDiscountBeforeTaxBadge" class="invoice-summary-value">@Model.TotalAfterDiscountBeforeTax.ToString("0.00")</span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">قيمة الضريبة</span>
+                                <span id="TaxAmountBadge" class="invoice-summary-value">@Model.TaxAmount.ToString("0.00")</span>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-stretch justify-content-between gap-2 invoice-summary-row">
+                            <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main">
+                                <span class="invoice-summary-label">الصافي النهائي للمرتجع</span>
+                                <span id="NetTotalBadge" class="invoice-summary-value invoice-summary-value-main fw-bold">@Model.NetTotal.ToString("0.00")</span>
+                            </div>
+                            @if (Model.UpdatedAt.HasValue)
+                            {
+                                <div class="invoice-summary-item invoice-summary-box align-self-center">
+                                    <span class="invoice-summary-label">آخر تعديل</span>
+                                    <span class="invoice-summary-value small">@Model.UpdatedAt.Value.ToString("d/M/yyyy HH:mm")</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                @* قوائم الأوتوكومبليت الثقيلة: في آخر العمود الرئيسي حتى يكتمل رسم الكروت دفعة واحدة *@
+                <datalist id="customersList" hidden aria-hidden="true">
+                    @if (ViewBag.Customers != null)
+                    {
+                        foreach (var c in ViewBag.Customers)
+                        {
+                            <option value="@c.Name"
+                                    data-id="@c.Id"
+                                    data-policy="@c.PolicyName"
+                                    data-user="@c.UserName"
+                                    data-phone="@c.Phone"
+                                    data-address="@c.Address"
+                                    data-credit="@c.CreditLimit">
+                            </option>
+                        }
+                    }
+                </datalist>
+
             </div>
 
         </div>
@@ -659,6 +658,41 @@
 
         document.addEventListener('DOMContentLoaded', function () {
 
+            function showToast(text, type, durationMs) {
+                if (!text) return;
+                if (typeof ERP !== 'undefined' && typeof ERP.showToast === 'function') {
+                    ERP.showToast(text, type, durationMs);
+                    return;
+                }
+                var container = document.getElementById('srToastContainer');
+                if (!container) return;
+                type = type || 'muted';
+                var ms = typeof durationMs === 'number' && durationMs >= 0 ? durationMs : 4000;
+                var el = document.createElement('div');
+                el.className = 'sr-toast text-' + type;
+                el.textContent = text;
+                container.appendChild(el);
+                setTimeout(function () {
+                    el.style.opacity = '0';
+                    el.style.transition = 'opacity 0.25s ease';
+                    setTimeout(function () {
+                        if (el.parentNode) el.parentNode.removeChild(el);
+                    }, 250);
+                }, ms);
+            }
+
+            function syncDeleteSelectedReturnLineButton() {
+                var btn = document.getElementById('btnDeleteSelectedReturnLine');
+                var tbody = document.getElementById('SalesReturnLinesTableBody');
+                if (!btn || !tbody) return;
+                if (typeof isReturnPosted === 'function' && isReturnPosted()) {
+                    btn.disabled = true;
+                    return;
+                }
+                var sel = tbody.querySelector('tr.erp-list-selectable-row.selected');
+                btn.disabled = !sel;
+            }
+
             // تحويل حالة المرتجع من السيرفر (Draft/Posted/Cancelled) إلى النص المعروض
             function getReturnStatusDisplay(status) {
                 if (!status) return 'غير مرحلة';
@@ -714,6 +748,7 @@
                         }
                     }
                 });
+                syncDeleteSelectedReturnLineButton();
             }
 
             // تشغيل القفل مرة عند تحميل الصفحة
@@ -781,6 +816,13 @@
 
             var invoiceItems = []; // متغير: قائمة أصناف الفاتورة
 
+            function invoiceItemDisplayCode(item) {
+                if (!item) return '';
+                var ext = item.externalCode != null ? String(item.externalCode).trim() : '';
+                if (ext) return ext;
+                return item.prodId != null ? String(item.prodId) : '';
+            }
+
             async function loadInvoiceByNumber() {
                 var invoiceId = parseInt(invoiceIdInput.value || '0', 10);
 
@@ -788,7 +830,9 @@
                     invoiceIdHidden.value = '';
                     itemSelect.innerHTML = '<option value="">-- اختر صنف من الفاتورة --</option>';
                     invoiceItems = [];
-                    return;
+                    var pce = document.getElementById('InvoiceItemProdCodeDisplay');
+                    if (pce) pce.value = '';
+                    return false;
                 }
 
                 try {
@@ -797,7 +841,7 @@
 
                     if (!data.ok) {
                         alert(data.message || 'حدث خطأ في جلب بيانات الفاتورة.');
-                        return;
+                        return false;
                     }
 
                     // حفظ رقم الفاتورة
@@ -826,7 +870,7 @@
                         var option = document.createElement('option');
                         option.value = index.toString();
                         var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
-                        option.textContent = item.prodName + ' - كمية في الفاتورة: ' + item.qty + ' - متبقي للمرتجع: ' + remaining + ' - تشغيلة: ' + (item.batchNo || 'بدون');
+                        option.textContent = (item.prodName && String(item.prodName).trim()) ? String(item.prodName).trim() : ('صنف #' + item.prodId);
                         option.setAttribute('data-prodId', item.prodId);
                         option.setAttribute('data-lineNo', item.lineNo);
                         option.setAttribute('data-qty', item.qty);
@@ -834,6 +878,7 @@
                         option.setAttribute('data-batchNo', item.batchNo || '');
                         option.setAttribute('data-expiry', item.expiry || '');
                         option.setAttribute('data-priceRetail', item.priceRetail);
+                        option.setAttribute('data-prod-code', invoiceItemDisplayCode(item));
                         itemSelect.appendChild(option);
                     });
 
@@ -842,19 +887,25 @@
                     invoiceQtyDisplay.value = '';
                     returnBatchDisplay.value = '';
                     returnExpiryDisplay.value = '';
+                    var prodCodeEl = document.getElementById('InvoiceItemProdCodeDisplay');
+                    if (prodCodeEl) prodCodeEl.value = '';
 
+                    return true;
                 } catch (error) {
                     console.error('Error loading invoice items:', error);
                     alert('حدث خطأ في جلب بيانات الفاتورة.');
+                    return false;
                 }
             }
 
-            // عند الضغط على Enter في حقل رقم الفاتورة
-            invoiceIdInput.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    loadInvoiceByNumber();
-                }
+            // Enter في حقل رقم الفاتورة: جلب البيانات ثم نقل التركيز إلى زر الحفظ (الإنتر التالي يفعّل الحفظ ثم ينتقل للأصناف كما في سكربت الحفظ)
+            invoiceIdInput.addEventListener('keydown', async function (e) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                var ok = await loadInvoiceByNumber();
+                if (!ok) return;
+                var btnSave = document.getElementById('btnSaveReturnHeader');
+                if (btnSave && !btnSave.disabled) btnSave.focus();
             });
 
             // عند تغيير رقم الفاتورة (فقدان التركيز)
@@ -863,16 +914,19 @@
             // عند اختيار صنف من القائمة
             itemSelect.addEventListener('change', function () {
                 var selectedIndex = parseInt(itemSelect.value || '-1', 10);
+                var prodCodeDisplay = document.getElementById('InvoiceItemProdCodeDisplay');
 
                 if (selectedIndex < 0 || selectedIndex >= invoiceItems.length) {
                     returnQtyInput.value = '';
                     invoiceQtyDisplay.value = '';
                     returnBatchDisplay.value = '';
                     returnExpiryDisplay.value = '';
+                    if (prodCodeDisplay) prodCodeDisplay.value = '';
                     return;
                 }
 
                 var item = invoiceItems[selectedIndex];
+                if (prodCodeDisplay) prodCodeDisplay.value = invoiceItemDisplayCode(item);
                 var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
                 invoiceQtyDisplay.value = item.qty;
                 returnBatchDisplay.value = item.batchNo || '';
@@ -916,27 +970,45 @@
                 });
             }
 
+            function srEscapeHtml(s) {
+                if (s == null || s === '') return '';
+                var d = document.createElement('div');
+                d.textContent = s;
+                return d.innerHTML;
+            }
+
             function refreshReturnLinesAndTotals(data) {
                 var tbody = document.getElementById('SalesReturnLinesTableBody');
-                var emptyRow = document.getElementById('SalesReturnLinesEmptyRow');
                 if (!tbody) return;
                 var lines = (data && data.lines) ? data.lines : [];
                 var totals = (data && data.totals) ? data.totals : {};
                 while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
                 if (lines.length === 0) {
-                    var tr = document.createElement('tr');
-                    tr.id = 'SalesReturnLinesEmptyRow';
-                    tr.innerHTML = '<td colspan="9" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع.</td>';
-                    tbody.appendChild(tr);
+                    var trEmpty = document.createElement('tr');
+                    trEmpty.id = 'SalesReturnLinesEmptyRow';
+                    trEmpty.innerHTML = '<td colspan="9" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع.</td>';
+                    tbody.appendChild(trEmpty);
                 } else {
-                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
-                    var lockPosted = (typeof isReturnPosted === "function" && isReturnPosted()) ? '1' : '0';
                     lines.forEach(function(l) {
                         var tr = document.createElement('tr');
+                        tr.className = 'erp-list-selectable-row';
                         tr.setAttribute('data-line-no', l.lineNo);
                         tr.setAttribute('data-prodid', l.prodId);
-                        var btn = '<button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine" data-line-no="' + l.lineNo + '" data-sr-id="' + srId + '" data-lock-posted="' + lockPosted + '" title="مسح السطر">مسح</button>';
-                        tr.innerHTML = '<td class="text-center">' + l.lineNo + '</td><td>' + (l.prodName || '') + '</td><td class="text-center">' + l.qty + '</td><td class="text-center">' + (l.priceRetail != null ? Number(l.priceRetail).toFixed(2) : '') + '</td><td class="text-center">' + (l.disc1Percent != null ? Number(l.disc1Percent).toFixed(2) : '') + '</td><td class="text-center">0</td><td class="text-center">0</td><td class="text-center">' + (l.lineNetTotal != null ? Number(l.lineNetTotal).toFixed(2) : '') + '</td><td class="text-center">' + btn + '</td>';
+                        var loc = srEscapeHtml((l.location != null && String(l.location).trim() !== '') ? String(l.location).trim() : '—');
+                        var pn = srEscapeHtml((l.prodName && String(l.prodName).trim()) ? String(l.prodName).trim() : ('صنف #' + l.prodId));
+                        var batch = srEscapeHtml(l.batchNo != null ? String(l.batchNo) : '');
+                        var exp = srEscapeHtml(l.expiry != null ? String(l.expiry) : '');
+                        var lineVal = (l.lineTotalAfterDiscount != null) ? Number(l.lineTotalAfterDiscount).toFixed(2) : (l.lineNetTotal != null ? Number(l.lineNetTotal).toFixed(2) : '');
+                        tr.innerHTML =
+                            '<td class="text-center">' + l.lineNo + '</td>' +
+                            '<td class="text-center text-muted small">' + loc + '</td>' +
+                            '<td><strong>' + pn + '</strong><span class="text-muted small"> | كود: ' + l.prodId + '</span></td>' +
+                            '<td class="text-center">' + batch + '</td>' +
+                            '<td class="text-center">' + exp + '</td>' +
+                            '<td class="text-center">' + l.qty + '</td>' +
+                            '<td class="text-center">' + (l.priceRetail != null ? Number(l.priceRetail).toFixed(2) : '') + '</td>' +
+                            '<td class="text-center">' + (l.disc1Percent != null ? Number(l.disc1Percent).toFixed(2) : '') + '</td>' +
+                            '<td class="text-center">' + lineVal + '</td>';
                         tbody.appendChild(tr);
                     });
                 }
@@ -948,6 +1020,7 @@
                 if (bid && totals.taxAmount != null) bid.textContent = Number(totals.taxAmount).toFixed(2);
                 bid = document.getElementById('NetTotalBadge');
                 if (bid && totals.netTotal != null) bid.textContent = Number(totals.netTotal).toFixed(2);
+                syncDeleteSelectedReturnLineButton();
             }
 
             // عند إضافة سطر للمرتجع
@@ -1089,30 +1162,48 @@
                 });
             }
 
-            // مسح السطر
-            document.addEventListener('click', async function(ev) {
-                var btn = ev.target.closest('.btnRemoveReturnLine');
-                if (!btn) return;
-                ev.preventDefault();
-                var srId = parseInt(btn.getAttribute('data-sr-id') || '0', 10);
-                var lineNo = parseInt(btn.getAttribute('data-line-no') || '0', 10);
-                if (srId <= 0 || lineNo <= 0) return;
-                if (typeof isReturnPosted === "function" && isReturnPosted()) { 
-                    alert('المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً.'); 
-                    return; 
-                }
-                if (!confirm('هل تريد مسح هذا السطر؟ (مسح سطر المرتجع يقلّل المخزون — عكس البيع)')) return;
-                btn.disabled = true;
-                try {
-                    var res = await fetch('@Url.Action("RemoveLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ SRId: srId, LineNo: lineNo }) });
-                    var txt = await res.text();
-                    var data = null;
-                    if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
-                    if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح السطر.'); return; }
-                    refreshReturnLinesAndTotals(data);
-                } catch (e) { console.error(e); alert('حدث خطأ أثناء مسح السطر.'); }
-                finally { btn.disabled = false; }
-            });
+            var linesTableBody = document.getElementById('SalesReturnLinesTableBody');
+            if (linesTableBody) {
+                linesTableBody.addEventListener('click', function (ev) {
+                    var tr = ev.target.closest('tr.erp-list-selectable-row');
+                    if (!tr || !linesTableBody.contains(tr)) return;
+                    linesTableBody.querySelectorAll('tr.erp-list-selectable-row.selected').forEach(function (r) { r.classList.remove('selected'); });
+                    tr.classList.add('selected');
+                    syncDeleteSelectedReturnLineButton();
+                });
+            }
+
+            var btnDeleteSelectedLine = document.getElementById('btnDeleteSelectedReturnLine');
+            if (btnDeleteSelectedLine) {
+                btnDeleteSelectedLine.addEventListener('click', async function () {
+                    if (btnDeleteSelectedLine.disabled) return;
+                    var tbody = document.getElementById('SalesReturnLinesTableBody');
+                    var sel = tbody && tbody.querySelector('tr.erp-list-selectable-row.selected');
+                    var lineNo = sel ? parseInt(sel.getAttribute('data-line-no') || '0', 10) : 0;
+                    var srId = parseInt(document.getElementById('SRId').value || '0', 10);
+                    if (srId <= 0 || lineNo <= 0) {
+                        alert('اختر سطراً في الجدول أولاً.');
+                        return;
+                    }
+                    if (typeof isReturnPosted === "function" && isReturnPosted()) {
+                        alert('المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً.');
+                        return;
+                    }
+                    if (!confirm('هل تريد مسح هذا السطر؟ (مسح سطر المرتجع يقلّل المخزون — عكس البيع)')) return;
+                    btnDeleteSelectedLine.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("RemoveLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ SRId: srId, LineNo: lineNo }) });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح السطر.'); return; }
+                        refreshReturnLinesAndTotals(data);
+                    } catch (e) { console.error(e); alert('حدث خطأ أثناء مسح السطر.'); }
+                    finally {
+                        syncDeleteSelectedReturnLineButton();
+                    }
+                });
+            }
 
             // مسح كل أصناف المرتجع
             var btnClear = document.getElementById('btnClearReturnLines');
@@ -1233,9 +1324,10 @@
                         }
 
                         if (postMsg) {
-                            postMsg.textContent = (data && data.message) ? data.message : 'تم ترحيل المرتجع بنجاح.';
-                            postMsg.className = "small mt-2 text-success";
+                            postMsg.textContent = '';
+                            postMsg.className = 'small mt-2';
                         }
+                        showToast((data && data.message) ? data.message : 'تم الترحيل.', 'success', 1000);
                     } catch (e) { 
                         console.error(e); 
                         if (postMsg) {
@@ -1244,7 +1336,7 @@
                         }
                     }
                     finally { 
-                        if (!serverIsPosted) btnPost.disabled = false; 
+                        if (typeof isReturnPosted === 'function' && !isReturnPosted()) btnPost.disabled = false;
                     }
                 });
             }

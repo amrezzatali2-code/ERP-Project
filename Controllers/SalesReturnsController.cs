@@ -177,12 +177,13 @@ namespace ERP.Controllers
             await PopulateDropDownsAsync();
 
             var prodIds = model.Lines.Select(l => l.ProdId).Distinct().ToList();
-            var prodNames = await context.Products
+            var prodRows = await context.Products
                 .AsNoTracking()
                 .Where(p => prodIds.Contains(p.ProdId))
-                .Select(p => new { p.ProdId, p.ProdName })
+                .Select(p => new { p.ProdId, p.ProdName, p.Location })
                 .ToListAsync();
-            ViewBag.ProdNames = prodNames.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+            ViewBag.ProdNames = prodRows.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+            ViewBag.ProdLocations = prodRows.ToDictionary(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
 
             // تجهيز نظام الأسهم (نفس نظام فاتورة البيع)
             await FillSalesReturnNavAsync(model.SRId);
@@ -1262,6 +1263,7 @@ namespace ERP.Controllers
                     lineNo = l.LineNo,
                     prodId = l.ProdId,
                     prodName = l.Product != null ? l.Product.ProdName : "",
+                    externalCode = l.Product != null ? l.Product.ExternalCode : null,
                     qty = l.Qty,
                     batchNo = l.BatchNo ?? "",
                     expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
@@ -1287,6 +1289,7 @@ namespace ERP.Controllers
                 l.lineNo,
                 l.prodId,
                 l.prodName,
+                l.externalCode,
                 l.qty,
                 alreadyReturned = returnedDict.GetValueOrDefault(l.lineNo, 0),
                 remaining = l.qty - returnedDict.GetValueOrDefault(l.lineNo, 0),
@@ -1495,18 +1498,21 @@ namespace ERP.Controllers
 
             var linesNow = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-            var prodMap = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var prodRows = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName, p.Location }).ToListAsync();
+            var prodMap = prodRows.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+            var prodLocMap = prodRows.ToDictionary(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
             var linesDto = linesNow.Select(l => new
             {
                 lineNo = l.LineNo,
                 prodId = l.ProdId,
                 prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "",
+                location = prodLocMap.TryGetValue(l.ProdId, out var lc) ? lc : "—",
                 qty = l.Qty,
                 priceRetail = l.PriceRetail,
                 disc1Percent = l.Disc1Percent,
-                batchNo = l.BatchNo,
-                expiry = l.Expiry?.ToString("yyyy-MM-dd"),
-                lineNetTotal = l.LineNetTotal
+                batchNo = l.BatchNo ?? "",
+                expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                lineTotalAfterDiscount = l.LineTotalAfterDiscount
             }).ToList();
             var h = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId);
             return Json(new { ok = true, message = "تمت إضافة السطر.", lines = linesDto, totals = new { totalBeforeDiscount = h.TotalBeforeDiscount, totalAfterDiscountBeforeTax = h.TotalAfterDiscountBeforeTax, taxAmount = h.TaxAmount, netTotal = h.NetTotal } });
@@ -1558,8 +1564,22 @@ namespace ERP.Controllers
 
             var linesNow = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-            var prodMap = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
-            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, priceRetail = l.PriceRetail, disc1Percent = l.Disc1Percent, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineNetTotal = l.LineNetTotal }).ToList();
+            var prodRowsRm = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName, p.Location }).ToListAsync();
+            var prodMapRm = prodRowsRm.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+            var prodLocMapRm = prodRowsRm.ToDictionary(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
+            var linesDto = linesNow.Select(l => new
+            {
+                lineNo = l.LineNo,
+                prodId = l.ProdId,
+                prodName = prodMapRm.TryGetValue(l.ProdId, out var n) ? n : "",
+                location = prodLocMapRm.TryGetValue(l.ProdId, out var lc) ? lc : "—",
+                qty = l.Qty,
+                priceRetail = l.PriceRetail,
+                disc1Percent = l.Disc1Percent,
+                batchNo = l.BatchNo ?? "",
+                expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                lineTotalAfterDiscount = l.LineTotalAfterDiscount
+            }).ToList();
             var h = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId);
             return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { totalBeforeDiscount = h.TotalBeforeDiscount, totalAfterDiscountBeforeTax = h.TotalAfterDiscountBeforeTax, taxAmount = h.TaxAmount, netTotal = h.NetTotal } });
         }
@@ -1612,8 +1632,22 @@ namespace ERP.Controllers
 
             var linesNow = await context.SalesReturnLines.Where(l => l.SRId == dto.SRId).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-            var prodMap = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
-            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, priceRetail = l.PriceRetail, disc1Percent = l.Disc1Percent, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineNetTotal = l.LineNetTotal }).ToList();
+            var prodRowsCl = await context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName, p.Location }).ToListAsync();
+            var prodMapCl = prodRowsCl.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+            var prodLocMapCl = prodRowsCl.ToDictionary(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
+            var linesDto = linesNow.Select(l => new
+            {
+                lineNo = l.LineNo,
+                prodId = l.ProdId,
+                prodName = prodMapCl.TryGetValue(l.ProdId, out var n) ? n : "",
+                location = prodLocMapCl.TryGetValue(l.ProdId, out var lc) ? lc : "—",
+                qty = l.Qty,
+                priceRetail = l.PriceRetail,
+                disc1Percent = l.Disc1Percent,
+                batchNo = l.BatchNo ?? "",
+                expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                lineTotalAfterDiscount = l.LineTotalAfterDiscount
+            }).ToList();
             var h = await context.SalesReturns.AsNoTracking().FirstAsync(sr => sr.SRId == dto.SRId);
             return Json(new { ok = true, message = "تم مسح كل الأصناف.", lines = linesDto, totals = new { totalBeforeDiscount = h.TotalBeforeDiscount, totalAfterDiscountBeforeTax = h.TotalAfterDiscountBeforeTax, taxAmount = h.TaxAmount, netTotal = h.NetTotal } });
         }

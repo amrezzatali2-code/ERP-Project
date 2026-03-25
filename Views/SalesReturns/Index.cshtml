@@ -172,30 +172,10 @@
             overflow: hidden;
         }
         .erp-sr-index .erp-sr-summary-stat .card-body { text-align: right; }
-        .erp-sr-index .erp-sr-summary-stat .erp-sr-summary-label {
-            color: #64748b !important;
-            font-size: 0.8rem;
-            margin-bottom: 0.25rem !important;
-        }
-        .erp-sr-index .erp-sr-summary-stat .erp-sr-summary-sub {
-            color: #94a3b8 !important;
-            font-size: 0.72rem;
-            margin-top: 0.35rem;
-        }
-        .erp-sr-index .erp-sr-summary-stat .erp-sr-summary-value {
-            font-size: 1.35rem;
-            font-weight: 700;
-            line-height: 1.2;
-            letter-spacing: -0.02em;
-        }
-        .erp-sr-summary-stat--count .erp-sr-summary-value { color: #4f46e5; }
-        .erp-sr-summary-stat--net { border-color: #bbf7d0 !important; }
-        .erp-sr-summary-stat--net .erp-sr-summary-value { color: #15803d; }
     </style>
 
-    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+    <div class="d-flex justify-content-between align-items-center mb-2">
         <h5 class="mb-0 fs-6 text-secondary">@ViewData["Title"]</h5>
-        <small class="text-muted d-none d-md-inline">إجمالي مرتجعات البيع: @total</small>
     </div>
 
     @* ===== شريط الفلاتر الموحد (نمط القوائم — مثل أذون الاستلام) ===== *@
@@ -259,13 +239,14 @@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
-                    <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalSR">اختيار الأعمدة</button>
                         <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <button type="button" id="btnCustomerVolumeSR" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حجم تعامل العميل">حجم التعامل</button>
                     </div>
-                    <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center" dir="rtl">
-                        <div class="btn-group">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <div class="dropdown d-inline">
                             <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
                                 <li><button type="button" class="dropdown-item text-danger" id="btnDeleteSelected">حذف المحدد</button></li>
@@ -273,6 +254,7 @@
                                 <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الكل</button></li>
                             </ul>
                         </div>
+                        <button type="button" id="btnShowSR" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض المرتجع">عرض</button>
                         <form method="get" asp-action="Export" asp-controller="SalesReturns" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -301,6 +283,7 @@
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
                     </div>
+                </div>
                     <form id="bulkDeleteForm" asp-action="BulkDelete" asp-controller="SalesReturns" method="post" class="d-none">
                         @Html.AntiForgeryToken()
                         <input type="hidden" name="selectedIds" id="selectedIdsInput" />
@@ -308,7 +291,6 @@
                     <form id="deleteAllForm" asp-action="DeleteAll" asp-controller="SalesReturns" method="post" class="d-none">
                         @Html.AntiForgeryToken()
                     </form>
-                </div>
             </div>
 
         </div>
@@ -317,32 +299,31 @@
     @* ===== كروت إجماليات بعد الفلترة (تتحدث مع كل فلاتر القائمة) ===== *@
     <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mb-3" dir="rtl">
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card erp-sr-summary-stat erp-sr-summary-stat--count">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sr-summary-stat erp-sr-summary-stat--count" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
                 <div class="card-body py-3 px-3">
-                    <div class="erp-sr-summary-label">عدد المرتجعات</div>
-                    <div class="erp-sr-summary-value">@totalSrCards.ToString("N0", n2)</div>
-                    <div class="erp-sr-summary-sub">بعد تطبيق الفلاتر الحالية</div>
+                    <div class="small text-muted mb-1">عدد المرتجعات</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@totalSrCards.ToString("N0", n2)</div>
                 </div>
             </div>
         </div>
         <div class="col-auto">
-            <div class="card h-100 border-0 erp-list-summary-card erp-sr-summary-stat erp-sr-summary-stat--net">
+            <div class="card h-100 border-0 erp-list-summary-card erp-sr-summary-stat erp-sr-summary-stat--net" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
                 <div class="card-body py-3 px-3">
-                    <div class="erp-sr-summary-label">إجمالي الصافي</div>
-                    <div class="erp-sr-summary-value">@totalNetCards.ToString("N2", n2)</div>
-                    <div class="erp-sr-summary-sub">مجموع صافي المرتجعات المفلترة</div>
+                    <div class="small text-muted mb-1">إجمالي الصافي</div>
+                    <div class="h4 mb-0 text-success fw-bold">@totalNetCards.ToString("N2", n2)</div>
                 </div>
             </div>
         </div>
     </div>
 
-    @* ===== جدول مرتجعات البيع داخل حاوية تمرير ===== *@
-    <div class="erp-table-scroll-container mt-3 ps-0 pe-0" dir="rtl">
-        <div id="srTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+    @* ===== جدول مرتجعات البيع — نمط قائمة فواتير المبيعات ===== *@
+    <div class="erp-print-area">
+        <h5 class="mb-2 print-only fs-6 text-secondary">@ViewData["Title"]</h5>
+        <div class="erp-list-table-frame erp-table-scroll-container erp-list-table-after-summary ps-0 pe-0" dir="rtl">
+        <div id="srTableScrollWrapper" class="erp-table-wrapper" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
             <table id="srTable" class="table table-striped table-hover erp-table erp-table-sortable">
-                <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important; font-weight: 600;">
                     <tr>
-                        @* اختيار الصف *@
                         <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
                             <input type="checkbox" id="chkAllRows" />
                         </th>
@@ -358,15 +339,13 @@
                         <th data-col="net">@filterableCol("net", "NetTotal", "الصافي")</th>
                         <th data-col="status">@filterableCol("status", "Status", "الحالة")</th>
                         <th data-col="posted">@filterableCol("posted", "Posted", "مرحل؟")</th>
-
-                        <th class="text-nowrap no-print text-start" data-col="actions" data-col-fixed="true" style="width:220px;">إجراءات</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (!Model.Items.Any())
                     {
                         <tr>
-                            <td colspan="13" class="text-center text-muted py-4">
+                            <td colspan="12" class="text-center text-muted py-4">
                                 لا توجد بيانات.
                             </td>
                         </tr>
@@ -375,7 +354,13 @@
                     {
                         foreach (var sr in Model.Items)
                         {
-                            <tr>
+                            var showUrl = Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 });
+                            var volUrl = sr.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = sr.CustomerId, frame = 1 }) : "";
+                            <tr class="erp-list-selectable-row"
+                                data-sr-id="@sr.SRId"
+                                data-show-url="@showUrl"
+                                data-tab-title="مرتجع مبيعات"
+                                data-customer-volume-url="@volUrl">
                                 <td class="text-center no-print" data-col="select">
                                     <input type="checkbox"
                                            class="row-select"
@@ -393,47 +378,37 @@
                                 <td data-col="net">@sr.NetTotal.ToString("0.00")</td>
                                 <td data-col="status">@sr.Status</td>
                                 <td data-col="posted">@(sr.IsPosted ? "نعم" : "لا")</td>
-
-                                <td class="text-nowrap no-print text-start" data-col="actions">
-                                    <div class="btn-group" role="group">
-                                        <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
-                                           href="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })"
-                                           data-tab-id="sr-show-tab"
-                                           data-tab-title="مرتجع مبيعات"
-                                           data-url="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })">
-                                            عرض
-                                        </a>
-                                        <a class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab"
-                                           href="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })"
-                                           data-tab-id="sr-show-tab"
-                                           data-tab-title="مرتجع مبيعات"
-                                           data-url="@Url.Action("Edit", "SalesReturns", new { id = sr.SRId, frame = 1 })">
-                                            تعديل
-                                        </a>
-                                        <form asp-action="Delete"
-                                              asp-controller="SalesReturns"
-                                              asp-route-id="@sr.SRId"
-                                              method="post"
-                                              class="d-inline"
-                                              onsubmit="return confirm('تأكيد حذف مرتجع البيع رقم @sr.SRId ؟');">
-                                            @Html.AntiForgeryToken()
-                                            <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">
-                                                حذف
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
                             </tr>
                         }
                     }
                 </tbody>
+                <tfoot class="table-light">
+                    <tr class="fw-bold">
+                        <td class="text-center no-print" data-col="select"></td>
+                        <td data-col="id" class="text-muted">إجمالي</td>
+                        <td data-col="date"></td>
+                        <td data-col="time"></td>
+                        <td data-col="customer"></td>
+                        <td data-col="warehouse"></td>
+                        <td data-col="region"></td>
+                        <td data-col="createdby"></td>
+                        <td data-col="ref"></td>
+                        <td data-col="net">@totalNetCards.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)</td>
+                        <td data-col="status"></td>
+                        <td data-col="posted"></td>
+                    </tr>
+                </tfoot>
             </table>
+        </div>
         </div>
     </div>
 
-    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة + ترقيم (محاذاة لليمين — نمط القوائم) ===== *@
-    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted">عرض @start - @end من @total</small>
+    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة (نفس قائمة فواتير المبيعات) ===== *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted text-start">
+            عرض @start - @end من @total
+        </small>
+
         <form method="get"
               action="@Url.Action(action, controller)"
               class="d-flex align-items-center gap-2">
@@ -484,16 +459,27 @@
                 <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
-        <nav aria-label="pagination">
-            <ul class="pagination pagination-sm mb-0">
-                <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
-                <li class="page-item @(Model.HasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
-                <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
-                <li class="page-item @(Model.HasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
-                <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
-            </ul>
-        </nav>
     </div>
+
+    <nav aria-label="pagination" class="mt-3 no-print">
+        <ul class="pagination justify-content-center">
+            <li class="page-item @(page == first ? "disabled" : "")">
+                <a class="page-link" href="@Link(first)">الأول</a>
+            </li>
+            <li class="page-item @(Model.HasPrevious ? "" : "disabled")">
+                <a class="page-link" href="@Link(prev)">السابق</a>
+            </li>
+            <li class="page-item disabled">
+                <span class="page-link">صفحة @(page) من @(pages)</span>
+            </li>
+            <li class="page-item @(Model.HasNext ? "" : "disabled")">
+                <a class="page-link" href="@Link(next)">التالي</a>
+            </li>
+            <li class="page-item @(page == last ? "disabled" : "")">
+                <a class="page-link" href="@Link(last)">الأخير</a>
+            </li>
+        </ul>
+    </nav>
 </div>
 
 @* ===== Modal فلترة التاريخ/الوقت ===== *@
@@ -651,6 +637,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         // =========================
         // تمرير الجدول أفقياً بحيث يبدأ من اليمين (RTL)
@@ -664,6 +651,42 @@
                 });
             }
             scrollToRtlStart("srTableScrollWrapper");
+        })();
+
+        // =========================
+        // مقابض توسعة الأعمدة (نمط قائمة فواتير المبيعات)
+        // =========================
+        (function () {
+            var table = document.getElementById("srTable");
+            var wrapper = document.getElementById("srTableScrollWrapper");
+            if (!table || !wrapper) return;
+            var ths = table.querySelectorAll("thead th");
+            ths.forEach(function (th) {
+                if (th.hasAttribute("data-col-fixed")) return;
+                th.style.position = "relative";
+                var handle = document.createElement("div");
+                handle.className = "erp-col-resize-handle";
+                th.appendChild(handle);
+                var startX, startWidth;
+                handle.addEventListener("mousedown", function (e) {
+                    e.preventDefault();
+                    startX = e.pageX;
+                    startWidth = th.offsetWidth;
+                    function onMouseMove(eMove) {
+                        var diffX = eMove.pageX - startX;
+                        var newWidth = startWidth + diffX;
+                        if (newWidth < 50) newWidth = 50;
+                        th.style.minWidth = newWidth + "px";
+                        th.style.width = newWidth + "px";
+                    }
+                    function onMouseUp() {
+                        document.removeEventListener("mousemove", onMouseMove);
+                        document.removeEventListener("mouseup", onMouseUp);
+                    }
+                    document.addEventListener("mousemove", onMouseMove);
+                    document.addEventListener("mouseup", onMouseUp);
+                });
+            });
         })();
 
         // =========================
@@ -726,6 +749,24 @@
                 deleteAllForm.submit();
             });
         })();
+
+        // =========================
+        // اختيار صف + عرض المرتجع + حجم تعامل العميل (نمط قائمة فواتير المبيعات)
+        // =========================
+        if (typeof ERP !== "undefined" && ERP.initListSelection) {
+            ERP.initListSelection({
+                rowSelector: ".erp-list-selectable-row",
+                showButtonId: "btnShowSR",
+                idAttribute: "data-sr-id",
+                showUrlAttribute: "data-show-url",
+                tabTitleAttribute: "data-tab-title",
+                showTabId: "sr-show-tab",
+                movementButtonId: "btnCustomerVolumeSR",
+                movementUrlAttribute: "data-customer-volume-url",
+                movementTabTitle: "حجم تعامل عميل",
+                movementTabId: "customer-engagement"
+            });
+        }
 
         // =========================
         // اختيار الأعمدة + حفظها في localStorage
