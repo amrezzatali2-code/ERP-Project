@@ -1527,6 +1527,15 @@ namespace ERP.Controllers
                 : new Dictionary<int, string>();
 
             // =========================================================
+            // 11.5) رصيد افتتاحي (عرض فقط — من قيود SourceType = Opening)
+            // =========================================================
+            var openingBalanceAmount = await _context.LedgerEntries
+                .AsNoTracking()
+                .Where(e => e.CustomerId == customer.CustomerId && e.SourceType == LedgerSourceType.Opening)
+                .SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
+            ViewBag.OpeningBalanceAmount = openingBalanceAmount;
+
+            // =========================================================
             // 12) تمرير النتائج للفيو
             // =========================================================
             ViewBag.TotalSales = totalSales;
@@ -2179,13 +2188,13 @@ namespace ERP.Controllers
                     .Concat(Encoding.UTF8.GetBytes(csvBuilder.ToString()))
                     .ToArray();
 
-                var csvName = $"Customers_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                var csvName = ExcelExportNaming.ArabicTimestampedFileName("العملاء والموردين", ".csv");
                 return File(bytes, "text/csv; charset=utf-8", csvName);
             }
             else
             {
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("Customers");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("العملاء والموردين"));
 
                 int row = 1;
                 ws.Cell(row, 1).Value = "كود العميل";
@@ -2257,7 +2266,7 @@ namespace ERP.Controllers
                 using var stream = new MemoryStream();
                 workbook.SaveAs(stream);
                 var content = stream.ToArray();
-                var fileName = $"Customers_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("العملاء والموردين", ".xlsx");
 
                 return File(content,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

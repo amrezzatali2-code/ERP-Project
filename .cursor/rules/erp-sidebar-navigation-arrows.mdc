@@ -1,0 +1,13 @@
+---
+description: تنقّل الأسهم وبحث الرقم في الشريط الجانبي دون فتح تاب جديد
+globs: Views/**/*.cshtml, wwwroot/js/site.js
+---
+
+# تنقّل الأسهم في الشريط الجانبي
+
+عند إضافة أو إصلاح **أسهم التنقّل** (أول/سابق/تالي/آخر) أو **بحث برقم المستند** في شاشة داخل iframe:
+
+- **لا** تستخدم `open-same-tab` على هذه الأزرار إذا كان المطلوب البقاء في **نفس التاب** — `site.js` قد يمرّر الحدث لـ `erp-open-tab` ويفتح تاباً جديداً.
+- **المرجع الكامل:** `docs/erp-sidebar-navigation-arrows.md`
+- **فاتورة مبيعات:** اعتراض `capture` + `loadInvoiceBody` — `Views/SalesInvoices/Show.cshtml` (`docCaptureHandler`).
+- **أمر بيع:** اعتراض `capture` + `window.location.assign` — `Views/SalesOrders/Show.cshtml` (`soOrderNavCapture`, معرفات `btnSo*`).

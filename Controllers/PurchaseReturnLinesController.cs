@@ -509,7 +509,7 @@ namespace ERP.Controllers
                 var sb = new StringBuilder();
 
                 // عناوين الأعمدة
-                sb.AppendLine("PRetId,LineNo,ProdId,Qty,UnitCost,PurchaseDiscountPct,PriceRetail,BatchNo,Expiry");
+                sb.AppendLine("رقم المرتجع,رقم السطر,كود الصنف,الكمية,تكلفة الوحدة,خصم الشراء %,سعر الجمهور,التشغيلة,الصلاحية");
 
                 // كل سطر مرتجع في CSV
                 foreach (var l in list)
@@ -529,8 +529,8 @@ namespace ERP.Controllers
                     sb.AppendLine(line);
                 }
 
-                var bytesCsv = Encoding.UTF8.GetBytes(sb.ToString());
-                var fileNameCsv = $"PurchaseReturnLines_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                var bytesCsv = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("أصناف مرتجع المشتريات", ".csv");
                 const string contentTypeCsv = "text/csv";
 
                 return File(bytesCsv, contentTypeCsv, fileNameCsv);
@@ -539,20 +539,20 @@ namespace ERP.Controllers
             {
                 // ===== تصدير Excel فعلي (.xlsx) باستخدام ClosedXML =====
                 using var workbook = new XLWorkbook();                 // متغير: مصنف Excel
-                var worksheet = workbook.Worksheets.Add("PurchaseReturnLines");  // متغير: شيت البيانات
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أصناف مرتجع المشتريات"));
 
                 int row = 1;   // متغير: رقم الصف الحالي في الشيت
 
-                // عناوين الأعمدة في الصف الأول
-                worksheet.Cell(row, 1).Value = "PRetId";
-                worksheet.Cell(row, 2).Value = "LineNo";
-                worksheet.Cell(row, 3).Value = "ProdId";
-                worksheet.Cell(row, 4).Value = "Qty";
-                worksheet.Cell(row, 5).Value = "UnitCost";
-                worksheet.Cell(row, 6).Value = "PurchaseDiscountPct";
-                worksheet.Cell(row, 7).Value = "PriceRetail";
-                worksheet.Cell(row, 8).Value = "BatchNo";
-                worksheet.Cell(row, 9).Value = "Expiry";
+                // عناوين الأعمدة (عربي)
+                worksheet.Cell(row, 1).Value = "رقم المرتجع";
+                worksheet.Cell(row, 2).Value = "رقم السطر";
+                worksheet.Cell(row, 3).Value = "كود الصنف";
+                worksheet.Cell(row, 4).Value = "الكمية";
+                worksheet.Cell(row, 5).Value = "تكلفة الوحدة";
+                worksheet.Cell(row, 6).Value = "خصم الشراء %";
+                worksheet.Cell(row, 7).Value = "سعر الجمهور";
+                worksheet.Cell(row, 8).Value = "التشغيلة";
+                worksheet.Cell(row, 9).Value = "الصلاحية";
 
                 // تنسيق بسيط للهيدر (غامق + AutoFit بعدين)
                 var headerRange = worksheet.Range(row, 1, row, 9);
@@ -581,7 +581,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 var bytesXlsx = stream.ToArray();
 
-                var fileNameXlsx = $"PurchaseReturnLines_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("أصناف مرتجع المشتريات", ".xlsx");
                 const string contentTypeXlsx =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 

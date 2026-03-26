@@ -733,7 +733,7 @@ namespace ERP.Controllers
 
         var utf8  = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
         var bytes = utf8.GetBytes(sbCsv.ToString());
-        var fileNameCsv = $"Categories_{DateTime.Now:yyyyMMdd_HHmm}_csv.csv";
+        var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("فئات الأصناف", ".csv");
 
         return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
     }
@@ -742,7 +742,7 @@ namespace ERP.Controllers
     // الفرع الثاني: Excel (XLSX)
 // =====================================
     using var workbook = new XLWorkbook();                 // متغير: ملف Excel
-    var ws = workbook.Worksheets.Add("Categories");        // متغير: ورقة العمل
+    var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("فئات الأصناف"));
 
     int r = 1; // متغير: رقم الصف الحالي
 
@@ -777,7 +777,7 @@ namespace ERP.Controllers
     workbook.SaveAs(stream);
     stream.Position = 0;
 
-    var fileNameXlsx = $"Categories_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+    var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("فئات الأصناف", ".xlsx");
     const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);

@@ -105,8 +105,13 @@ namespace ERP.Controllers
         // - أو مع SalesInvoiceId لعمل مرتجع من فاتورة بيع
         // =========================
         [HttpGet]
-        public async Task<IActionResult> Create(int? salesInvoiceId)
+        public async Task<IActionResult> Create(int? salesInvoiceId, bool standalone = false)
         {
+            if (salesInvoiceId.HasValue)
+                standalone = false;
+
+            ViewBag.StandaloneReturn = standalone;
+
             // متغير: نموذج المرتجع اللي هنبعته للفيو
             var model = new SalesReturn
             {
@@ -174,6 +179,8 @@ namespace ERP.Controllers
             if (model == null)
                 return NotFound();                 // المرتجع غير موجود
 
+            ViewBag.StandaloneReturn = !model.SalesInvoiceId.HasValue;
+
             await PopulateDropDownsAsync();
 
             var prodIds = model.Lines.Select(l => l.ProdId).Distinct().ToList();
@@ -199,6 +206,28 @@ namespace ERP.Controllers
             }
 
             return View("Show", model);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportShowExcel(int id)
+        {
+            if (id <= 0)
+                return BadRequest();
+
+            var sr = await context.SalesReturns
+                .Include(x => x.Customer)
+                .Include(x => x.Warehouse)
+                .Include(x => x.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.SRId == id);
+
+            if (sr == null)
+                return NotFound();
+
+            var bytes = ShowDocumentExcelExport.SalesReturn(sr);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ExcelExportNaming.ArabicTimestampedFileName($"مرتجع بيع {id}", ".xlsx"));
         }
 
 
@@ -401,12 +430,14 @@ namespace ERP.Controllers
             string? sort = "SRDate",       // عمود الترتيب
             string? dir = "desc",          // asc | desc
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_time = null,
             string? filterCol_customer = null,
             string? filterCol_warehouse = null,
             string? filterCol_ref = null,
             string? filterCol_net = null,
+            string? filterCol_netExpr = null,
             string? filterCol_status = null,
             string? filterCol_posted = null,
             string? filterCol_region = null,
@@ -428,7 +459,9 @@ namespace ERP.Controllers
             var q = BuildQuery(search, searchBy, sort, dir);
 
             // (1.1) تطبيق فلاتر الأعمدة بنمط Excel
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                q = SalesReturnListNumericExpr.ApplySrIdExpr(q, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -515,7 +548,9 @@ namespace ERP.Controllers
                     q = q.Where(sr => times.Contains(sr.SRTime));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            if (!string.IsNullOrWhiteSpace(filterCol_netExpr))
+                q = SalesReturnListNumericExpr.ApplyNetExpr(q, filterCol_netExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_net))
             {
                 var nets = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
@@ -620,12 +655,14 @@ namespace ERP.Controllers
 
             // قيم فلاتر الأعمدة
             ViewBag.FilterCol_id = filterCol_id ?? string.Empty;
+            ViewBag.FilterCol_idExpr = filterCol_idExpr ?? string.Empty;
             ViewBag.FilterCol_date = filterCol_date ?? string.Empty;
             ViewBag.FilterCol_time = filterCol_time ?? string.Empty;
             ViewBag.FilterCol_customer = filterCol_customer ?? string.Empty;
             ViewBag.FilterCol_warehouse = filterCol_warehouse ?? string.Empty;
             ViewBag.FilterCol_ref = filterCol_ref ?? string.Empty;
             ViewBag.FilterCol_net = filterCol_net ?? string.Empty;
+            ViewBag.FilterCol_netExpr = filterCol_netExpr ?? string.Empty;
             ViewBag.FilterCol_status = filterCol_status ?? string.Empty;
             ViewBag.FilterCol_posted = filterCol_posted ?? string.Empty;
             ViewBag.FilterCol_region = filterCol_region ?? string.Empty;
@@ -838,12 +875,14 @@ namespace ERP.Controllers
             string? sort = "SRDate",
             string? dir = "desc",
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_time = null,
             string? filterCol_customer = null,
             string? filterCol_warehouse = null,
             string? filterCol_ref = null,
             string? filterCol_net = null,
+            string? filterCol_netExpr = null,
             string? filterCol_status = null,
             string? filterCol_posted = null,
             string? filterCol_region = null,
@@ -854,7 +893,9 @@ namespace ERP.Controllers
             var q = BuildQuery(search, searchBy, sort, dir);
 
             // فلاتر الأعمدة (نفس Index)
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                q = SalesReturnListNumericExpr.ApplySrIdExpr(q, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -941,7 +982,9 @@ namespace ERP.Controllers
                     q = q.Where(sr => times.Contains(sr.SRTime));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            if (!string.IsNullOrWhiteSpace(filterCol_netExpr))
+                q = SalesReturnListNumericExpr.ApplyNetExpr(q, filterCol_netExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_net))
             {
                 var nets = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
@@ -996,7 +1039,7 @@ namespace ERP.Controllers
             if (format == "csv")
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("ReturnId,Date,Time,Customer,Warehouse,Region,CreatedBy,InvoiceId,NetTotal,Status,IsPosted");
+                sb.AppendLine("رقم المرتجع,تاريخ المرتجع,الوقت,العميل,المخزن,المنطقة,الكاتب,رقم الفاتورة,الصافي,الحالة,مرحّل");
 
                 foreach (var x in list)
                 {
@@ -1018,7 +1061,7 @@ namespace ERP.Controllers
                         x.SalesInvoiceId?.ToString() ?? "",
                         x.NetTotal.ToString("0.00"),
                         (x.Status ?? "").Replace(",", " "),
-                        x.IsPosted ? "Yes" : "No"
+                        x.IsPosted ? "نعم" : "لا"
                     );
 
                     sb.AppendLine(line);
@@ -1026,14 +1069,14 @@ namespace ERP.Controllers
 
                 var utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytesCsv = utf8Bom.GetBytes(sb.ToString());
-                var fileNameCsv = $"SalesReturns_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("مرتجعات البيع", ".csv");
 
                 return File(bytesCsv, "text/csv; charset=utf-8", fileNameCsv);
             }
             else
             {
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("SalesReturns");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("مرتجعات البيع"));
 
                 int r = 1;
                 ws.Cell(r, 1).Value = "رقم المرتجع";
@@ -1078,7 +1121,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameXlsx = $"SalesReturns_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("مرتجعات البيع", ".xlsx");
                 const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
                 return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);
@@ -1238,80 +1281,162 @@ namespace ERP.Controllers
             return Json(Array.Empty<string>());
         }
 
+        /// <summary>
+        /// بحث أصناف لإضافة سطر في مرتجع بدون فاتورة (واجهة Show).
+        /// </summary>
         [HttpGet]
-        public async Task<IActionResult> GetInvoiceItems(int invoiceId)
+        public async Task<IActionResult> SearchProductsForReturn(string term)
         {
-            if (invoiceId <= 0)
-                return Json(new { ok = false, message = "رقم الفاتورة غير صحيح." });
+            if (string.IsNullOrWhiteSpace(term))
+                return Json(Array.Empty<object>());
 
-            // جلب الفاتورة مع التحقق من وجودها
-            var invoice = await context.SalesInvoices
+            term = term.Trim();
+
+            var results = await context.Products
                 .AsNoTracking()
-                .FirstOrDefaultAsync(si => si.SIId == invoiceId);
-
-            if (invoice == null)
-                return Json(new { ok = false, message = "الفاتورة غير موجودة." });
-
-            // جلب سطور الفاتورة مع بيانات الصنف
-            var lines = await context.SalesInvoiceLines
-                .AsNoTracking()
-                .Include(l => l.Product)
-                .Where(l => l.SIId == invoiceId)
-                .OrderBy(l => l.LineNo)
-                .Select(l => new
+                .Where(p => p.IsActive && (
+                    (p.ProdName != null && p.ProdName.Contains(term)) ||
+                    p.ProdId.ToString().Contains(term) ||
+                    (p.Barcode != null && p.Barcode.Contains(term))))
+                .OrderBy(p => p.ProdName)
+                .Take(25)
+                .Select(p => new
                 {
-                    lineNo = l.LineNo,
-                    prodId = l.ProdId,
-                    prodName = l.Product != null ? l.Product.ProdName : "",
-                    externalCode = l.Product != null ? l.Product.ExternalCode : null,
-                    qty = l.Qty,
-                    batchNo = l.BatchNo ?? "",
-                    expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
-                    priceRetail = l.PriceRetail,
-                    unitSalePrice = l.UnitSalePrice,
-                    disc1Percent = l.Disc1Percent,
-                    disc2Percent = l.Disc2Percent,
-                    disc3Percent = l.Disc3Percent,
-                    lineNetTotal = l.LineNetTotal
+                    id = p.ProdId,
+                    name = p.ProdName ?? "",
+                    priceRetail = p.PriceRetail,
+                    barcode = p.Barcode,
+                    company = p.Company
                 })
                 .ToListAsync();
 
-            // كميات مرتجعة سابقاً من كل سطر (من جميع المرتجعات المرتبطة بنفس الفاتورة)
-            var returnedByLine = await context.SalesReturnLines
-                .Where(l => l.SalesInvoiceId == invoiceId)
-                .GroupBy(l => l.SalesInvoiceLineNo)
-                .Select(g => new { LineNo = g.Key, Returned = g.Sum(l => l.Qty) })
+            return Json(results);
+        }
+
+        /// <summary>
+        /// قائمة أصناف لداتاليست مرتجع بدون فاتورة — أصناف لها رصيد (حسب المخزن إن وُجد)، مع سعر الجمهور من جدول الصنف.
+        /// يُحدَّث من الواجهة عند تغيير المخزن (نفس فكرة فاتورة المبيعات).
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetProductsForReturnDatalist(int? warehouseId = null)
+        {
+            var productsQuery = context.Products.AsNoTracking()
+                .Where(p => p.IsActive)
+                .OrderBy(p => p.ProdName);
+
+            var prodIdsWithStock = context.StockLedger
+                .AsNoTracking()
+                .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                .Select(sl => sl.ProdId);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                prodIdsWithStock = context.StockLedger
+                    .AsNoTracking()
+                    .Where(sl => sl.WarehouseId == warehouseId.Value && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
+                    .Select(sl => sl.ProdId);
+            }
+
+            var ids = await prodIdsWithStock.Distinct().ToListAsync();
+            productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
+
+            var products = await productsQuery
+                .Select(p => new
+                {
+                    id = p.ProdId,
+                    name = p.ProdName ?? string.Empty,
+                    genericName = p.GenericName ?? string.Empty,
+                    company = p.Company ?? string.Empty,
+                    barcode = p.Barcode ?? string.Empty,
+                    priceRetail = p.PriceRetail,
+                    hasQuota = p.HasQuota,
+                    hasBonus = p.ProductBonusGroupId != null,
+                    bonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null
+                })
                 .ToListAsync();
-            var returnedDict = returnedByLine.Where(x => x.LineNo.HasValue).ToDictionary(x => x.LineNo!.Value, x => x.Returned);
 
-            var items = lines.Select(l => new
-            {
-                l.lineNo,
-                l.prodId,
-                l.prodName,
-                l.externalCode,
-                l.qty,
-                alreadyReturned = returnedDict.GetValueOrDefault(l.lineNo, 0),
-                remaining = l.qty - returnedDict.GetValueOrDefault(l.lineNo, 0),
-                l.batchNo,
-                l.expiry,
-                l.priceRetail,
-                l.unitSalePrice,
-                l.disc1Percent,
-                l.disc2Percent,
-                l.disc3Percent,
-                l.lineNetTotal
-            }).ToList();
+            return Json(products);
+        }
 
-            return Json(new
+        [HttpGet]
+        public async Task<IActionResult> GetInvoiceItems(int invoiceId)
+        {
+            try
             {
-                ok = true,
-                invoiceId = invoiceId,
-                customerId = invoice.CustomerId,
-                warehouseId = invoice.WarehouseId,
-                invoiceDate = invoice.SIDate.ToString("yyyy-MM-dd"),
-                items = items
-            });
+                if (invoiceId <= 0)
+                    return Json(new { ok = false, message = "رقم الفاتورة غير صحيح." });
+
+                var invoice = await context.SalesInvoices
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(si => si.SIId == invoiceId);
+
+                if (invoice == null)
+                    return Json(new { ok = false, message = "الفاتورة غير موجودة." });
+
+                var lines = await context.SalesInvoiceLines
+                    .AsNoTracking()
+                    .Where(l => l.SIId == invoiceId)
+                    .OrderBy(l => l.LineNo)
+                    .Select(l => new
+                    {
+                        lineNo = l.LineNo,
+                        prodId = l.ProdId,
+                        prodName = l.Product != null ? (l.Product.ProdName ?? "") : "",
+                        externalCode = l.Product != null ? l.Product.ExternalCode : null,
+                        qty = l.Qty,
+                        batchNo = l.BatchNo ?? "",
+                        expiry = l.Expiry.HasValue ? l.Expiry.Value.ToString("yyyy-MM-dd") : "",
+                        priceRetail = l.PriceRetail,
+                        unitSalePrice = l.UnitSalePrice,
+                        disc1Percent = l.Disc1Percent,
+                        disc2Percent = l.Disc2Percent,
+                        disc3Percent = l.Disc3Percent,
+                        lineNetTotal = l.LineNetTotal
+                    })
+                    .ToListAsync();
+
+                var returnLineRows = await context.SalesReturnLines
+                    .AsNoTracking()
+                    .Where(l => l.SalesInvoiceId == invoiceId && l.SalesInvoiceLineNo != null)
+                    .Select(l => new { l.SalesInvoiceLineNo, l.Qty })
+                    .ToListAsync();
+
+                var returnedDict = returnLineRows
+                    .GroupBy(x => x.SalesInvoiceLineNo!.Value)
+                    .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty));
+
+                var items = lines.Select(l => new
+                {
+                    l.lineNo,
+                    l.prodId,
+                    l.prodName,
+                    l.externalCode,
+                    l.qty,
+                    alreadyReturned = returnedDict.GetValueOrDefault(l.lineNo, 0),
+                    remaining = l.qty - returnedDict.GetValueOrDefault(l.lineNo, 0),
+                    l.batchNo,
+                    l.expiry,
+                    l.priceRetail,
+                    l.unitSalePrice,
+                    l.disc1Percent,
+                    l.disc2Percent,
+                    l.disc3Percent,
+                    l.lineNetTotal
+                }).ToList();
+
+                return Json(new
+                {
+                    ok = true,
+                    invoiceId = invoiceId,
+                    customerId = invoice.CustomerId,
+                    warehouseId = invoice.WarehouseId,
+                    invoiceDate = invoice.SIDate.ToString("yyyy-MM-dd"),
+                    items = items
+                });
+            }
+            catch (Exception ex)
+            {
+                return Json(new { ok = false, message = "تعذر تحميل بيانات الفاتورة: " + ex.Message });
+            }
         }
 
         private async Task<decimal> GetAverageCostAsync(int prodId, int warehouseId)
@@ -1429,7 +1554,7 @@ namespace ERP.Controllers
                 context.SalesReturnLines.Add(line);
                 await context.SaveChangesAsync();
 
-                // هل البيع الأصلي كان من رصيد فعلي (FIFO)؟ لو لا فلا نُنشئ رصيد قابل للبيع (RemainingQty=0) ولا نزيد StockBatches
+                // مرتجع بدون فاتورة: إدخال مخزون قابل للبيع. مرتجع من فاتورة: نفس منطق البيع الوهمي (بدون FIFO) إن وُجد.
                 bool originalSaleHadFifo = true;
                 if (dto.SalesInvoiceId.HasValue && dto.SalesInvoiceId.Value > 0 && dto.SalesInvoiceLineNo.HasValue)
                 {

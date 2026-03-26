@@ -1147,8 +1147,9 @@ namespace ERP.Controllers
 
             var sb = new StringBuilder();
 
-            // عناوين الأعمدة
-            sb.AppendLine("CashReceiptId,ReceiptNumber,ReceiptDate,CustomerName,CashAccount,CounterAccount,Amount,IsPosted,CreatedAt,UpdatedAt,Description");
+            sb.AppendLine("رقم الإذن,رقم المستند,تاريخ الإذن,الطرف,حساب الصندوق/البنك,حساب الطرف,المبلغ,مرحّل؟,تاريخ الإنشاء,آخر تعديل,البيان");
+
+            static string Q(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
 
             foreach (var r in list)
             {
@@ -1158,26 +1159,26 @@ namespace ERP.Controllers
 
                 string line = string.Join(",",
                     r.CashReceiptId,
-                    (r.ReceiptNumber ?? "").Replace(",", " "),
+                    Q(r.ReceiptNumber),
                     r.ReceiptDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-                    customerName.Replace(",", " "),
-                    cashAcc.Replace(",", " "),
-                    counterAcc.Replace(",", " "),
+                    Q(customerName),
+                    Q(cashAcc),
+                    Q(counterAcc),
                     r.Amount.ToString("0.00", CultureInfo.InvariantCulture),
-                    r.IsPosted ? "1" : "0",
+                    r.IsPosted ? "نعم" : "لا",
                     r.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     r.UpdatedAt.HasValue
                         ? r.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
                         : "",
-                    (r.Description ?? "").Replace(",", " ")
+                    Q(r.Description)
                 );
 
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = "CashReceipts.csv";
-            const string contentType = "text/csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("إذون استلام نقدية", ".csv");
+            const string contentType = "text/csv; charset=utf-8";
 
             return File(bytes, contentType, fileName);
         }

@@ -2016,14 +2016,14 @@ namespace ERP.Controllers
                 // تحويل إلى UTF-8 مع BOM علشان Excel يقرا عربى صح
                 var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytes = utf8.GetBytes(sbCsv.ToString());
-                var fileNameCsv = $"Products_{DateTime.Now:yyyyMMdd_HHmm}_csv.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("الأصناف", ".csv");
 
                 return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
             }
 
             // ========= الفرع الثاني: Excel (XLSX) =========
             using var workbook = new XLWorkbook();             // متغير: ملف Excel
-            var ws = workbook.Worksheets.Add("Products");      // متغير: ورقة العمل
+            var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("الأصناف"));
 
             int r = 1; // متغير: رقم الصف الحالى
 
@@ -2083,7 +2083,7 @@ namespace ERP.Controllers
             workbook.SaveAs(stream);
             stream.Position = 0;
 
-            var fileNameXlsx = $"Products_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+            var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("الأصناف", ".xlsx");
             const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
             return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);
@@ -2306,6 +2306,7 @@ namespace ERP.Controllers
             ViewBag.TotalQtyAll = 0;               // متغير: إجمالى الكمية (Placeholder)
             ViewBag.NetQty = 0;                    // متغير: صافى الكمية
             ViewBag.NetAmount = 0m;                // متغير: صافى المبلغ
+            ViewBag.OpeningQty = 0;                // كمية رصيد أول المدة (Opening) — عرض فقط
 
             // تفاصيل الحركة والملخصات
             ViewBag.Lines = Array.Empty<object>();             // حركة مجمعة (لن يُستخدم)
@@ -2342,6 +2343,13 @@ namespace ERP.Controllers
             ViewBag.SelectedProdName = product.ProdName;      // اسم الصنف فى بوكس البحث
             ViewBag.PriceRetail = product.PriceRetail;        // سعر الجمهور من جدول الأصناف
 
+            // كمية افتتاحية (عرض فقط — من StockLedger حيث SourceType = Opening)
+            var openingSlQ = _db.StockLedger.AsNoTracking()
+                .Where(sl => sl.ProdId == finalProdId.Value && sl.SourceType == "Opening");
+            if (warehouseId.HasValue)
+                openingSlQ = openingSlQ.Where(sl => sl.WarehouseId == warehouseId.Value);
+            ViewBag.OpeningQty = await openingSlQ.SumAsync(sl => (int?)sl.QtyIn) ?? 0;
+
             // ===== 8) جلب بيانات المبيعات من SalesInvoiceLines =====
             // تجميعات الملخص: كل الفترات، كل الفواتير (مرحّل + غير مرحّل) — مثل قائمة أصناف المبيعات
             var salesAllTimeQuery = _db.SalesInvoiceLines
@@ -2365,6 +2373,8 @@ namespace ERP.Controllers
             if (finalCustomerId.HasValue)
                 salesQuery = salesQuery.Where(sil => sil.SalesInvoice.CustomerId == finalCustomerId.Value);
 
+            // خصم السطر: نسبة فعّالة من إجمالي قبل الضريبة مقابل سعر الجمهور × الكمية؛
+            // إن تعادل الأرقام (قديم/تقريب) نستخدم الخصم المركّب من Disc1/2/3.
             var salesList = await salesQuery
                 .OrderByDescending(sil => sil.SalesInvoice.SIDate)
                 .ThenByDescending(sil => sil.SalesInvoice.SIId)
@@ -2375,10 +2385,19 @@ namespace ERP.Controllers
                     Customer = sil.SalesInvoice.Customer != null ? sil.SalesInvoice.Customer.CustomerName : "",
                     Qty = sil.Qty,
                     UnitPrice = sil.UnitSalePrice,
-                    DiscountPercent = sil.PriceRetail > 0 
-                        ? ((sil.PriceRetail - sil.UnitSalePrice) / sil.PriceRetail) * 100m
-                        : 0m,
-                    NetAmount = sil.LineNetTotal
+                    DiscountPercent =
+                        sil.Qty > 0 && sil.PriceRetail > 0
+                            ? (
+                                sil.LineTotalAfterDiscount < sil.Qty * sil.PriceRetail - 0.0001m
+                                    ? 100m * (1m - sil.LineTotalAfterDiscount / (sil.Qty * sil.PriceRetail))
+                                    : 100m * (1m
+                                        - (1m - sil.Disc1Percent / 100m)
+                                        * (1m - sil.Disc2Percent / 100m)
+                                        * (1m - sil.Disc3Percent / 100m))
+                              )
+                            : 0m,
+                    NetAmount = sil.LineNetTotal,
+                    InvoiceNetTotal = sil.SalesInvoice.NetTotal
                 })
                 .ToListAsync();
 
@@ -2493,7 +2512,8 @@ namespace ERP.Controllers
                     Customer = srl.SalesReturn.Customer != null ? srl.SalesReturn.Customer.CustomerName : "",
                     Qty = srl.Qty,
                     UnitPrice = srl.UnitSalePrice,
-                    Amount = srl.LineNetTotal
+                    Amount = srl.LineNetTotal,
+                    InvoiceNetTotal = srl.SalesReturn.NetTotal
                 })
                 .ToListAsync();
             ViewBag.SalesReturnLines = salesReturnLinesList;

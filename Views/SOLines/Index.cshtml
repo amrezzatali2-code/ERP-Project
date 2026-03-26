@@ -23,8 +23,8 @@
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -43,15 +43,20 @@
     string? filterCol_soid = ViewBag.FilterCol_soid as string;
     string? filterCol_lineno = ViewBag.FilterCol_lineno as string;
     string? filterCol_prod = ViewBag.FilterCol_prod as string;
+    string? filterCol_prodname = ViewBag.FilterCol_prodname as string;
     string? filterCol_qty = ViewBag.FilterCol_qty as string;
     string? filterCol_reqretail = ViewBag.FilterCol_reqretail as string;
     string? filterCol_disc = ViewBag.FilterCol_disc as string;
-    string? filterCol_unitprice = ViewBag.FilterCol_unitprice as string;
     string? filterCol_linetotal = ViewBag.FilterCol_linetotal as string;
     string? filterCol_batch = ViewBag.FilterCol_batch as string;
     string? filterCol_expiry = ViewBag.FilterCol_expiry as string;
-    string? filterCol_pricebasis = ViewBag.FilterCol_pricebasis as string;
+    string? filterCol_writer = ViewBag.FilterCol_writer as string;
+    string? filterCol_region = ViewBag.FilterCol_region as string;
     string? filterCol_date = ViewBag.FilterCol_date as string;
+
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    int totalQtyForCards = ViewBag.TotalQtyFiltered != null ? Convert.ToInt32(ViewBag.TotalQtyFiltered) : 0;
+    decimal totalValueForCards = ViewBag.TotalValueFiltered != null ? Convert.ToDecimal(ViewBag.TotalValueFiltered) : 0m;
 
     // إجماليات الصفحة الحالية
     decimal pageTotalQty = 0m;   // إجمالي الكمية في الصفحة
@@ -81,14 +86,15 @@
         filterCol_soid,
         filterCol_lineno,
         filterCol_prod,
+        filterCol_prodname,
         filterCol_qty,
         filterCol_reqretail,
         filterCol_disc,
-        filterCol_unitprice,
         filterCol_linetotal,
         filterCol_batch,
         filterCol_expiry,
-        filterCol_pricebasis,
+        filterCol_writer,
+        filterCol_region,
         filterCol_date
     })!;
 
@@ -96,14 +102,15 @@
         colKey == "soid" ? filterCol_soid
         : colKey == "lineno" ? filterCol_lineno
         : colKey == "prod" ? filterCol_prod
+        : colKey == "prodname" ? filterCol_prodname
         : colKey == "qty" ? filterCol_qty
         : colKey == "reqretail" ? filterCol_reqretail
         : colKey == "disc" ? filterCol_disc
-        : colKey == "unitprice" ? filterCol_unitprice
         : colKey == "linetotal" ? filterCol_linetotal
         : colKey == "batch" ? filterCol_batch
         : colKey == "expiry" ? filterCol_expiry
-        : colKey == "pricebasis" ? filterCol_pricebasis
+        : colKey == "writer" ? filterCol_writer
+        : colKey == "region" ? filterCol_region
         : colKey == "date" ? filterCol_date
         : null;
 
@@ -151,14 +158,15 @@
             filterCol_soid,
             filterCol_lineno,
             filterCol_prod,
+            filterCol_prodname,
             filterCol_qty,
             filterCol_reqretail,
             filterCol_disc,
-            filterCol_unitprice,
             filterCol_linetotal,
             filterCol_batch,
             filterCol_expiry,
-            filterCol_pricebasis,
+            filterCol_writer,
+            filterCol_region,
             filterCol_date
         }) ?? "#";
         string icon = isCurrent ? (dir == "asc" ? "▲" : "▼") : "⇅";
@@ -212,9 +220,11 @@
                             <option value="soid" @Html.Raw(searchBy == "soid" ? " selected" : "")>رقم الأمر</option>
                             <option value="lineno" @Html.Raw(searchBy == "lineno" ? " selected" : "")>رقم السطر</option>
                             <option value="prod" @Html.Raw(searchBy == "prod" ? " selected" : "")>كود الصنف</option>
+                            <option value="prodname" @Html.Raw(searchBy == "prodname" ? " selected" : "")>اسم الصنف</option>
                             <option value="qty" @Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
                             <option value="batch" @Html.Raw(searchBy == "batch" ? " selected" : "")>التشغيلة</option>
-                            <option value="pricebasis" @Html.Raw(searchBy == "pricebasis" ? " selected" : "")>مرجع السعر</option>
+                            <option value="writer" @Html.Raw(searchBy == "writer" ? " selected" : "")>الكاتب</option>
+                            <option value="region" @Html.Raw(searchBy == "region" ? " selected" : "")>المنطقة</option>
                         </select>
 
                         <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">
@@ -241,14 +251,15 @@
                     <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
                     <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
                     <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+                    <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
                     <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
                     <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
                     <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
-                    <input type="hidden" name="filterCol_unitprice" value="@(filterCol_unitprice ?? "")" />
                     <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
                     <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
                     <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
-                    <input type="hidden" name="filterCol_pricebasis" value="@(filterCol_pricebasis ?? "")" />
+                    <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
+                    <input type="hidden" name="filterCol_region" value="@(filterCol_region ?? "")" />
                     <input type="hidden" name="filterCol_date" value="@(filterCol_date ?? "")" />
                 </form>
             </div>
@@ -264,7 +275,7 @@
                 </div>
             </div>
 
-            @* --- القسم الثالث: أزرار التحكم --- *@
+            @* --- القسم الثالث: أزرار التحكم (صف أدوات + صف تصدير) --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
@@ -272,7 +283,13 @@
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بتاريخ أمر البيع</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalSOL">اختيار الأعمدة</button>
                         <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
-
+                        @* إجراءات السطر المحدد — دمج مع شريط الفلاتر (نمط فواتير المبيعات) *@
+                        <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السطر المحدد">
+                            <button type="button" id="btnShowSOLine" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض أمر البيع">عرض</button>
+                        </span>
+                    </div>
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
+                        <button type="button" id="btnMovementSOLine" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
                         <form method="get" asp-action="Export" asp-controller="SOLines" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="soId" value="@soIdText" />
                             <input type="hidden" name="search" value="@search" />
@@ -287,14 +304,15 @@
                             <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
                             <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
                             <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+                            <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
                             <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
                             <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
                             <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
-                            <input type="hidden" name="filterCol_unitprice" value="@(filterCol_unitprice ?? "")" />
                             <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
                             <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
                             <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
-                            <input type="hidden" name="filterCol_pricebasis" value="@(filterCol_pricebasis ?? "")" />
+                            <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
+                            <input type="hidden" name="filterCol_region" value="@(filterCol_region ?? "")" />
                             <input type="hidden" name="filterCol_date" value="@(filterCol_date ?? "")" />
 
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
@@ -310,30 +328,62 @@
         </div>
     </div>
 
+    @* كروت إجماليات — بدون كارت منفصل للأزرار (الأزرار في شريط الفلاتر أعلاه) *@
+    <div class="row g-2 g-md-3 justify-content-start align-items-stretch no-print erp-list-summary-row mt-2 mb-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي عدد الأسطر</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #0369a1 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي الكمية</div>
+                    <div class="h4 mb-0 fw-bold" style="color:#0369a1;">@totalQtyForCards.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي القيمة (إجمالي الأصناف)</div>
+                    <div class="h4 mb-0 text-success fw-bold">@totalValueForCards.ToString("N2", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* ===== جدول سطور أمر البيع ===== *@
-    <div class="erp-table-scroll-container mt-3 erp-print-area" id="solTableScrollContainer">
+    <div class="erp-table-scroll-container mt-3 erp-print-area erp-list-table-after-summary" id="solTableScrollContainer">
         <div class="erp-table-wrapper" id="solTableWrapper">
             <table id="solTable" class="table table-striped table-hover erp-table erp-table-sortable">
                 <thead class="table-light sticky-top">
                 <tr>
+                    <th class="text-center no-print" style="width:42px;" data-col="select" data-col-fixed="true">
+                        <input type="checkbox" id="chkAllRowsSOL" title="تحديد الكل في الصفحة" />
+                    </th>
                     <th data-col="soid">@filterableCol("soid", "SOId", "رقم الأمر")</th>
                     <th data-col="lineno">@filterableCol("lineno", "LineNo", "رقم السطر")</th>
                     <th data-col="prod">@filterableCol("prod", "ProdId", "كود الصنف")</th>
+                    <th data-col="prodname">@filterableCol("prodname", "ProdName", "اسم الصنف")</th>
                     <th data-col="qty">@filterableCol("qty", "Qty", "الكمية المطلوبة")</th>
                     <th data-col="reqretail">@filterableCol("reqretail", "RequestedRetailPrice", "سعر الجمهور المطلوب")</th>
                     <th data-col="disc">@filterableCol("disc", "SalesDiscountPct", "خصم المبيعات %")</th>
-                    <th data-col="unitprice">@filterableCol("unitprice", "ExpectedUnitPrice", "السعر المتوقع للوحدة")</th>
-                    <th data-col="linetotal">@filterableCol("linetotal", "ExpectedLineTotal", "قيمة السطر المتوقعة")</th>
+                    <th data-col="linetotal">@filterableCol("linetotal", "ExpectedLineTotal", "إجمالي الصنف")</th>
                     <th data-col="batch">@filterableCol("batch", "Batch", "التشغيلة المفضّلة")</th>
                     <th data-col="expiry">@filterableCol("expiry", "PreferredExpiry", "الصلاحية المفضّلة")</th>
-                    <th data-col="pricebasis">@filterableCol("pricebasis", "PriceBasis", "مرجع السعر")</th>
+                    <th data-col="writer">@filterableCol("writer", "Writer", "الكاتب")</th>
+                    <th data-col="region">@filterableCol("region", "Region", "المنطقة")</th>
                 </tr>
             </thead>
             <tbody>
                 @if (Model.Items == null || !Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">
+                        <td colspan="13" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -342,26 +392,47 @@
                 {
                     foreach (var line in Model.Items)
                     {
-                        <tr>
+                        var regionCell = line.SalesOrder?.Customer != null
+                            ? (line.SalesOrder.Customer.Area != null
+                                ? line.SalesOrder.Customer.Area.AreaName
+                                : (line.SalesOrder.Customer.RegionName ?? ""))
+                            : "";
+                        var rowId = line.SOId + "_" + line.LineNo;
+                        var orderShowUrl = Url.Action("Show", "SalesOrders", new { id = line.SOId }) + "?frame=1";
+                        var movementUrl = Url.Action("Show", "Products", new { id = line.ProdId }) + "?frame=1";
+                        <tr class="erp-list-selectable-row"
+                            data-row-id="@rowId"
+                            data-so-id="@line.SOId"
+                            data-line-no="@line.LineNo"
+                            data-prod-id="@line.ProdId"
+                            data-show-url="@orderShowUrl"
+                            data-movement-url="@movementUrl"
+                            data-tab-title="أمر بيع">
+                            <td class="text-center no-print" data-col="select">
+                                <input type="checkbox" class="row-select" value="@rowId" title="تحديد السطر" />
+                            </td>
                             <td data-col="soid">@line.SOId</td>
                             <td data-col="lineno">@line.LineNo</td>
                             <td data-col="prod">@line.ProdId</td>
+                            <td data-col="prodname">@(line.Product?.ProdName ?? "")</td>
                             <td data-col="qty">@line.QtyRequested</td>
                             <td data-col="reqretail">@line.RequestedRetailPrice.ToString("0.00")</td>
                             <td data-col="disc">@line.SalesDiscountPct.ToString("0.00")</td>
-                            <td data-col="unitprice">@line.ExpectedUnitPrice.ToString("0.0000")</td>
                             <td data-col="linetotal">@line.ExpectedLineTotal.ToString("0.00")</td>
                             <td data-col="batch">@line.PreferredBatchNo</td>
                             <td data-col="expiry">@((line.PreferredExpiry?.ToString("yyyy-MM") ?? ""))</td>
-                            <td data-col="pricebasis">@line.PriceBasis</td>
+                            <td data-col="writer">@(line.SalesOrder?.CreatedBy ?? "")</td>
+                            <td data-col="region">@regionCell</td>
                         </tr>
                     }
 
                     @* صف إجمالي الصفحة الحالية *@
                     <tr class="table-secondary fw-semibold">
+                        <td class="no-print" data-col="select"></td>
                         <td data-col="soid"></td>
                         <td data-col="lineno"></td>
-                        <td data-col="prod" class="text-end">
+                        <td data-col="prod"></td>
+                        <td data-col="prodname" class="text-end">
                             إجمالي الصفحة الحالية:
                         </td>
 
@@ -369,13 +440,13 @@
 
                         <td data-col="reqretail"></td>
                         <td data-col="disc"></td>
-                        <td data-col="unitprice"></td>
 
                         <td data-col="linetotal">@pageTotalValue.ToString("0.00")</td>
 
                         <td data-col="batch"></td>
                         <td data-col="expiry"></td>
-                        <td data-col="pricebasis"></td>
+                        <td data-col="writer"></td>
+                        <td data-col="region"></td>
                     </tr>
                 }
             </tbody>
@@ -383,11 +454,9 @@
         </div>
     </div>
 
-    @* ===== الشريط السفلي ===== *@
+    @* ===== الشريط السفلي (نمط قائمة أوامر البيع) ===== *@
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted text-start">
-            عرض @start - @end من @total
-        </small>
+        <small class="text-muted text-start">عرض @start - @end من @total</small>
 
         <form method="get"
               action="@Url.Action(action, controller)"
@@ -419,31 +488,34 @@
             <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
             <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
             <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+            <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
             <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
             <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
             <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
-            <input type="hidden" name="filterCol_unitprice" value="@(filterCol_unitprice ?? "")" />
             <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
             <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
             <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
-            <input type="hidden" name="filterCol_pricebasis" value="@(filterCol_pricebasis ?? "")" />
+            <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
+            <input type="hidden" name="filterCol_region" value="@(filterCol_region ?? "")" />
             <input type="hidden" name="filterCol_date" value="@(filterCol_date ?? "")" />
 
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize"
                     class="form-select form-select-sm"
                     onchange="this.form.submit()">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
     </div>
 
     <div class="no-print mt-1">
         <small class="text-muted d-none d-md-inline">
-            إجمالي عدد الأسطر: @total
+            إجمالي عدد الأسطر (بعد الفلترة): @total
         </small>
     </div>
 
@@ -504,14 +576,15 @@
                     <input type="hidden" name="filterCol_soid" value="@(filterCol_soid ?? "")" />
                     <input type="hidden" name="filterCol_lineno" value="@(filterCol_lineno ?? "")" />
                     <input type="hidden" name="filterCol_prod" value="@(filterCol_prod ?? "")" />
+                    <input type="hidden" name="filterCol_prodname" value="@(filterCol_prodname ?? "")" />
                     <input type="hidden" name="filterCol_qty" value="@(filterCol_qty ?? "")" />
                     <input type="hidden" name="filterCol_reqretail" value="@(filterCol_reqretail ?? "")" />
                     <input type="hidden" name="filterCol_disc" value="@(filterCol_disc ?? "")" />
-                    <input type="hidden" name="filterCol_unitprice" value="@(filterCol_unitprice ?? "")" />
                     <input type="hidden" name="filterCol_linetotal" value="@(filterCol_linetotal ?? "")" />
                     <input type="hidden" name="filterCol_batch" value="@(filterCol_batch ?? "")" />
                     <input type="hidden" name="filterCol_expiry" value="@(filterCol_expiry ?? "")" />
-                    <input type="hidden" name="filterCol_pricebasis" value="@(filterCol_pricebasis ?? "")" />
+                    <input type="hidden" name="filterCol_writer" value="@(filterCol_writer ?? "")" />
+                    <input type="hidden" name="filterCol_region" value="@(filterCol_region ?? "")" />
                     <input type="hidden" name="filterCol_date" value="@(filterCol_date ?? "")" />
 
                     <div class="mb-3">
@@ -602,7 +675,7 @@
         <div class="modal-content" dir="rtl">
             <div class="modal-header">
                 <h5 class="modal-title flex-grow-1" id="columnsModalSOLLabel">
-                    اختيار الأعمدة الظاهرة
+                    اختيار الأعمدة الظاهرة في قائمة أصناف أوامر البيع
                 </h5>
                 <button type="button"
                         class="btn-close ms-2"
@@ -629,6 +702,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         // يبدأ شريط التمرير الأفقي من اليمين (RTL)
         (function () {
@@ -649,6 +723,44 @@
         document.getElementById("btnPrint")?.addEventListener("click", function () {
             window.print();
         });
+
+        // =========================
+        // اختيار صف + أزرار عرض / حركة الصنف (سكربت مشترك)
+        // =========================
+        if (typeof ERP !== "undefined" && ERP.initListSelection) {
+            ERP.initListSelection({
+                showButtonId: "btnShowSOLine",
+                movementButtonId: "btnMovementSOLine",
+                movementUrlAttribute: "data-movement-url",
+                movementTabTitle: "حركة الصنف",
+                movementTabId: "product-movement-tab",
+                idAttribute: "data-row-id",
+                showUrlAttribute: "data-show-url",
+                tabTitleAttribute: "data-tab-title",
+                showTabId: "so-show-tab"
+            });
+        }
+
+        // =========================
+        // تشيك بوكس الصفوف + تحديد الكل (نفس فكرة فواتير المبيعات)
+        // =========================
+        (function () {
+            const table = document.getElementById("solTable");
+            if (!table) return;
+            const chkAll = document.getElementById("chkAllRowsSOL");
+            const rowsChk = () => table.querySelectorAll("tbody .erp-list-selectable-row .row-select");
+
+            chkAll?.addEventListener("change", function () {
+                rowsChk().forEach(function (cb) { cb.checked = chkAll.checked; });
+            });
+
+            table.addEventListener("change", function (e) {
+                const t = e.target;
+                if (t && t.classList && t.classList.contains("row-select")) {
+                    if (!t.checked && chkAll) chkAll.checked = false;
+                }
+            });
+        })();
 
         // =========================
         // اختيار الأعمدة + حفظها في localStorage

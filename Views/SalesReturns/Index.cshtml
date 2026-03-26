@@ -39,12 +39,14 @@
 
     // فلاتر الأعمدة بنمط Excel
     string? filterCol_id = ViewBag.FilterCol_id as string;
+    string? filterCol_idExpr = ViewBag.FilterCol_idExpr as string;
     string? filterCol_date = ViewBag.FilterCol_date as string;
     string? filterCol_time = ViewBag.FilterCol_time as string;
     string? filterCol_customer = ViewBag.FilterCol_customer as string;
     string? filterCol_warehouse = ViewBag.FilterCol_warehouse as string;
     string? filterCol_ref = ViewBag.FilterCol_ref as string;
     string? filterCol_net = ViewBag.FilterCol_net as string;
+    string? filterCol_netExpr = ViewBag.FilterCol_netExpr as string;
     string? filterCol_status = ViewBag.FilterCol_status as string;
     string? filterCol_posted = ViewBag.FilterCol_posted as string;
     string? filterCol_region = ViewBag.FilterCol_region as string;
@@ -70,12 +72,14 @@
         fromCode,
         toCode,
         filterCol_id,
+        filterCol_idExpr,
         filterCol_date,
         filterCol_time,
         filterCol_customer,
         filterCol_warehouse,
         filterCol_ref,
         filterCol_net,
+        filterCol_netExpr,
         filterCol_status,
         filterCol_posted,
         filterCol_region,
@@ -103,12 +107,14 @@
             fromCode,
             toCode,
             filterCol_id,
+            filterCol_idExpr,
             filterCol_date,
             filterCol_time,
             filterCol_customer,
             filterCol_warehouse,
             filterCol_ref,
             filterCol_net,
+            filterCol_netExpr,
             filterCol_status,
             filterCol_posted,
             filterCol_region,
@@ -124,13 +130,13 @@
 
     // دالة مساعدة لإرجاع قيمة فلتر العمود الحالى
     string? FilterForCol(string colKey) =>
-        colKey == "id" ? filterCol_id
+        colKey == "id" ? (!string.IsNullOrWhiteSpace(filterCol_idExpr) ? filterCol_idExpr : filterCol_id)
         : colKey == "date" ? filterCol_date
         : colKey == "time" ? filterCol_time
         : colKey == "customer" ? filterCol_customer
         : colKey == "warehouse" ? filterCol_warehouse
         : colKey == "ref" ? filterCol_ref
-        : colKey == "net" ? filterCol_net
+        : colKey == "net" ? (!string.IsNullOrWhiteSpace(filterCol_netExpr) ? filterCol_netExpr : filterCol_net)
         : colKey == "status" ? filterCol_status
         : colKey == "posted" ? filterCol_posted
         : colKey == "region" ? filterCol_region
@@ -211,12 +217,14 @@
                     @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     @* الحفاظ على فلاتر الأعمدة الحالية *@
                     @if (!string.IsNullOrWhiteSpace(filterCol_id))       { <input type="hidden" name="filterCol_id"       value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr))   { <input type="hidden" name="filterCol_idExpr"   value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_date))     { <input type="hidden" name="filterCol_date"     value="@filterCol_date" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_time))     { <input type="hidden" name="filterCol_time"     value="@filterCol_time" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_warehouse)){ <input type="hidden" name="filterCol_warehouse" value="@filterCol_warehouse" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_ref))      { <input type="hidden" name="filterCol_ref"      value="@filterCol_ref" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_net))      { <input type="hidden" name="filterCol_net"      value="@filterCol_net" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_netExpr))  { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_status))   { <input type="hidden" name="filterCol_status"   value="@filterCol_status" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_posted))   { <input type="hidden" name="filterCol_posted"   value="@filterCol_posted" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_region))   { <input type="hidden" name="filterCol_region"   value="@filterCol_region" /> }
@@ -242,8 +250,8 @@
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalSR">اختيار الأعمدة</button>
-                        <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <button type="button" id="btnCustomerVolumeSR" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حجم تعامل العميل">حجم التعامل</button>
+                        <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
                         <div class="dropdown d-inline">
@@ -266,12 +274,14 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="codeFrom" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="codeTo" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id))       { <input type="hidden" name="filterCol_id"       value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr))   { <input type="hidden" name="filterCol_idExpr"   value="@filterCol_idExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_date))     { <input type="hidden" name="filterCol_date"     value="@filterCol_date" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_time))     { <input type="hidden" name="filterCol_time"     value="@filterCol_time" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_warehouse)){ <input type="hidden" name="filterCol_warehouse" value="@filterCol_warehouse" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_ref))      { <input type="hidden" name="filterCol_ref"      value="@filterCol_ref" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_net))      { <input type="hidden" name="filterCol_net"      value="@filterCol_net" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_netExpr))  { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_status))   { <input type="hidden" name="filterCol_status"   value="@filterCol_status" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_posted))   { <input type="hidden" name="filterCol_posted"   value="@filterCol_posted" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_region))   { <input type="hidden" name="filterCol_region"   value="@filterCol_region" /> }
@@ -436,12 +446,14 @@
                 <input type="hidden" name="toCode" value="@toCode" />
             }
             @if (!string.IsNullOrWhiteSpace(filterCol_id))       { <input type="hidden" name="filterCol_id"       value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr))   { <input type="hidden" name="filterCol_idExpr"   value="@filterCol_idExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_date))     { <input type="hidden" name="filterCol_date"     value="@filterCol_date" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_time))     { <input type="hidden" name="filterCol_time"     value="@filterCol_time" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_warehouse)){ <input type="hidden" name="filterCol_warehouse" value="@filterCol_warehouse" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_ref))      { <input type="hidden" name="filterCol_ref"      value="@filterCol_ref" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_net))      { <input type="hidden" name="filterCol_net"      value="@filterCol_net" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_netExpr))  { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_status))   { <input type="hidden" name="filterCol_status"   value="@filterCol_status" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_posted))   { <input type="hidden" name="filterCol_posted"   value="@filterCol_posted" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_region))   { <input type="hidden" name="filterCol_region"   value="@filterCol_region" /> }
@@ -512,12 +524,14 @@
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     @if (!string.IsNullOrWhiteSpace(filterCol_id))       { <input type="hidden" name="filterCol_id"       value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr))   { <input type="hidden" name="filterCol_idExpr"   value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_date))     { <input type="hidden" name="filterCol_date"     value="@filterCol_date" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_time))     { <input type="hidden" name="filterCol_time"     value="@filterCol_time" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_warehouse)){ <input type="hidden" name="filterCol_warehouse" value="@filterCol_warehouse" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_ref))      { <input type="hidden" name="filterCol_ref"      value="@filterCol_ref" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_net))      { <input type="hidden" name="filterCol_net"      value="@filterCol_net" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_netExpr))  { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_status))   { <input type="hidden" name="filterCol_status"   value="@filterCol_status" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_posted))   { <input type="hidden" name="filterCol_posted"   value="@filterCol_posted" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_region))   { <input type="hidden" name="filterCol_region"   value="@filterCol_region" /> }
@@ -638,6 +652,7 @@
 
 @section Scripts {
     <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
         // =========================
         // تمرير الجدول أفقياً بحيث يبدأ من اليمين (RTL)
@@ -653,41 +668,15 @@
             scrollToRtlStart("srTableScrollWrapper");
         })();
 
-        // =========================
-        // مقابض توسعة الأعمدة (نمط قائمة فواتير المبيعات)
-        // =========================
-        (function () {
-            var table = document.getElementById("srTable");
-            var wrapper = document.getElementById("srTableScrollWrapper");
-            if (!table || !wrapper) return;
-            var ths = table.querySelectorAll("thead th");
-            ths.forEach(function (th) {
-                if (th.hasAttribute("data-col-fixed")) return;
-                th.style.position = "relative";
-                var handle = document.createElement("div");
-                handle.className = "erp-col-resize-handle";
-                th.appendChild(handle);
-                var startX, startWidth;
-                handle.addEventListener("mousedown", function (e) {
-                    e.preventDefault();
-                    startX = e.pageX;
-                    startWidth = th.offsetWidth;
-                    function onMouseMove(eMove) {
-                        var diffX = eMove.pageX - startX;
-                        var newWidth = startWidth + diffX;
-                        if (newWidth < 50) newWidth = 50;
-                        th.style.minWidth = newWidth + "px";
-                        th.style.width = newWidth + "px";
-                    }
-                    function onMouseUp() {
-                        document.removeEventListener("mousemove", onMouseMove);
-                        document.removeEventListener("mouseup", onMouseUp);
-                    }
-                    document.addEventListener("mousemove", onMouseMove);
-                    document.addEventListener("mouseup", onMouseUp);
-                });
-            });
-        })();
+        ERP.initListColumnFilter({
+            panelId: 'erpColumnFilterPanel',
+            tableId: 'srTable',
+            wrapperId: 'srTableScrollWrapper',
+            getColumnValuesUrl: '@Url.Action("GetColumnValues", "SalesReturns")',
+            defaultSort: 'SRDate',
+            defaultDir: 'desc',
+            numericColumns: ['id', 'net']
+        });
 
         // =========================
         // زر الطباعة — يطبع الجدول فقط
@@ -751,7 +740,7 @@
         })();
 
         // =========================
-        // اختيار صف + عرض المرتجع + حجم تعامل العميل (نمط قائمة فواتير المبيعات)
+        // اختيار صف + عرض المرتجع + حجم تعامل العميل
         // =========================
         if (typeof ERP !== "undefined" && ERP.initListSelection) {
             ERP.initListSelection({
@@ -885,154 +874,6 @@
                 fromInp.value = "";
                 toInp.value   = "";
                 window.location.href = buildUrl("", "");
-            });
-        })();
-
-        // =========================
-        // فلتر الأعمدة بنمط Excel (مثل قائمة الأصناف/فواتير المبيعات)
-        // =========================
-        (function () {
-            var panel = document.getElementById("erpColumnFilterPanel");
-            if (!panel) return;
-            var titleEl = document.getElementById("erpColumnFilterTitle");
-            var searchInp = document.getElementById("erpColumnFilterSearch");
-            var listEl = document.getElementById("erpColumnFilterList");
-            var btnOk = document.getElementById("erpColumnFilterOk");
-            var btnClear = document.getElementById("erpColumnFilterClear");
-            var btnClose = document.getElementById("erpColumnFilterClose");
-
-            var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-
-            function getCurrentFilterValue(col) {
-                return new URL(window.location.href).searchParams.get("filterCol_" + col) || "";
-            }
-            function getCurrentSort() {
-                var url = new URL(window.location.href);
-                return { sort: url.searchParams.get("sort") || "SRDate", dir: url.searchParams.get("dir") || "desc" };
-            }
-            function adjustPanelPosition() {
-                if (!panel || !anchorRect) return;
-                setTimeout(function () {
-                    var r = panel.getBoundingClientRect();
-                    var top = anchorRect.bottom + 4, left = anchorRect.left;
-                    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                    panel.style.top = top + "px";
-                    panel.style.left = left + "px";
-                }, 50);
-            }
-
-            function showPanel(btn) {
-                currentCol = btn.dataset.col;
-                currentSortKey = btn.dataset.sortKey || currentCol;
-                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-                searchInp.value = "";
-                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split("|").filter(Boolean));
-                anchorRect = btn.getBoundingClientRect();
-                panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
-                panel.classList.remove("d-none");
-
-                var currentSort = getCurrentSort();
-                var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-                var currentDir = isCurrent ? currentSort.dir : "asc";
-                panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                    if (isCurrent && b.dataset.sortDir === currentDir) {
-                        b.classList.add("active", "btn-primary");
-                        b.classList.remove("btn-outline-secondary");
-                    } else {
-                        b.classList.remove("active", "btn-primary");
-                        b.classList.add("btn-outline-secondary");
-                    }
-                });
-                adjustPanelPosition();
-                document.getElementById("erpColumnFilterSearchRow").classList.remove("d-none");
-                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-                var url = "@Url.Action("GetColumnValues", "SalesReturns")" + "?column=" + encodeURIComponent(currentCol);
-                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                    allItems = items.map(function (v) { return { value: v, display: v }; });
-                    renderList(searchInp ? searchInp.value : "");
-                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
-            }
-
-            function renderList(search) {
-                var term = (search || "").toLowerCase();
-                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAll" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAll">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                    var v = String(x.value);
-                    var checked = currentSelected.has(v);
-                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-                }).join("") + "</div>";
-                var selectAllCb = listEl.querySelector("#erpFilterSelectAll");
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.onchange = function () {
-                        filtered.forEach(function (x) { if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value)); }.bind(this));
-                        renderList(searchInp.value);
-                    };
-                }
-                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                    cb.onchange = function () { if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value); renderList(searchInp.value); };
-                });
-                adjustPanelPosition();
-            }
-
-            function applyFilter(applySort, sortDir) {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                if (applySort !== undefined && sortDir !== undefined) {
-                    url.searchParams.set("sort", applySort);
-                    url.searchParams.set("dir", sortDir);
-                }
-                var val = Array.from(currentSelected).filter(Boolean).join("|");
-                if (val) url.searchParams.set("filterCol_" + currentCol, val);
-                else url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-            function clearFilter() {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-
-            document.querySelectorAll(".erp-col-filter-btn").forEach(function (btn) {
-                btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); });
-            });
-            document.addEventListener("click", function (e) {
-                if (e.target.closest(".erp-sort-btn")) {
-                    var sortBtn = e.target.closest(".erp-sort-btn");
-                    if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir);
-                }
-            });
-            var fetchDebounce = null;
-            searchInp && searchInp.addEventListener("input", function () {
-                renderList(this.value);
-                if (fetchDebounce) clearTimeout(fetchDebounce);
-                fetchDebounce = setTimeout(function () {
-                    fetchDebounce = null;
-                    if (!currentCol) return;
-                    var url = "@Url.Action("GetColumnValues", "SalesReturns")" + "?column=" + encodeURIComponent(currentCol);
-                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                    fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                        allItems = items.map(function (v) { return { value: v, display: v }; });
-                        renderList(searchInp ? searchInp.value : "");
-                    });
-                }, 400);
-            });
-            searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
-            btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
-            btnClear && btnClear.addEventListener("click", clearFilter);
-            btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
-            document.addEventListener("click", function (e) {
-                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
-                    panel.classList.add("d-none");
             });
         })();
     </script>

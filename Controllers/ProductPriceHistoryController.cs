@@ -586,7 +586,7 @@ namespace ERP.Controllers
                 // UTF-8 مع BOM علشان Excel يقرأ العربي صح
                 var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytes = utf8.GetBytes(sb.ToString());
-                var fileNameCsv = $"ProductPriceHistory_{DateTime.Now:yyyyMMdd_HHmm}_csv.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("سجل تغييرات أسعار الأصناف", ".csv");
 
                 return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
             }
@@ -595,7 +595,7 @@ namespace ERP.Controllers
             // الفرع الثاني: تصدير Excel (XLSX)
             // =====================================
             using var workbook = new XLWorkbook();                      // متغير: ملف Excel
-            var ws = workbook.Worksheets.Add("PriceHistory");           // متغير: ورقة العمل
+            var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("سجل تغييرات الأسعار"));
 
             int r = 1; // متغير: رقم الصف الحالي
 
@@ -638,7 +638,7 @@ namespace ERP.Controllers
             workbook.SaveAs(stream);
             stream.Position = 0;
 
-            var fileNameXlsx = $"ProductPriceHistory_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+            var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("سجل تغييرات أسعار الأصناف", ".xlsx");
             const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
             return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);
@@ -824,7 +824,7 @@ namespace ERP.Controllers
 
             // ===== تكوين CSV بسيط يُفتح في Excel =====
             var sb = new StringBuilder();
-            sb.AppendLine("ChangeDate,Product,OldPrice,NewPrice,User,Reason"); // عناوين الأعمدة
+            sb.AppendLine("التاريخ,اسم الصنف,السعر القديم,السعر الجديد,المستخدم,السبب");
 
             foreach (var r in list)
             {
@@ -846,15 +846,12 @@ namespace ERP.Controllers
                 ));
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
 
-            // نفس المحتوى CSV، بس نغير الامتداد حسب الاختيار
             format = format?.ToLowerInvariant() ?? "excel";
-            var fileName = format == "csv"
-                ? "ProductPriceHistory.csv"
-                : "ProductPriceHistory.xlsx";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("سجل تغييرات أسعار الأصناف", format == "csv" ? ".csv" : ".xlsx");
 
-            return File(bytes, "text/csv", fileName);
+            return File(bytes, "text/csv; charset=utf-8", fileName);
         }
 
 

@@ -1089,13 +1089,12 @@ namespace ERP.Data
 
                 // =========================================================
                 // (5) العلاقة Warehouse (المخزن)
-                // ✅ لا نحذف الفواتير عند حذف المخزن
-                // ✅ شراء الفاتورة مرتبط بمخزن (FK = WarehouseId)
+                // ✅ يجب ربط نفس الـ Navigation (Warehouse) وإلا EF يُنشئ WarehouseId1 ظلاً
                 // =========================================================
-                e.HasOne<Warehouse>()                 // تعليق: PurchaseInvoice لا يحتوي Navigation اسمها Warehouse
-                 .WithMany()                          // تعليق: لو Warehouse مفيهوش ICollection<PurchaseInvoice>
-                 .HasForeignKey(x => x.WarehouseId)   // متغير: FK للمخزن داخل PurchaseInvoice
-                 .OnDelete(DeleteBehavior.Restrict);  // ✅ Restrict
+                e.HasOne(x => x.Warehouse)
+                 .WithMany()
+                 .HasForeignKey(x => x.WarehouseId)
+                 .OnDelete(DeleteBehavior.Restrict);
 
             });
 

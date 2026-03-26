@@ -2715,6 +2715,63 @@ namespace ERP.Controllers
             return View("Show", invoice);
         }
 
+        [HttpGet]
+        public async Task<IActionResult> ExportShowExcel(int id)
+        {
+            if (id <= 0)
+                return new ContentResult
+                {
+                    StatusCode = 400,
+                    Content = "رقم الفاتورة غير صالح.",
+                    ContentType = "text/plain; charset=utf-8"
+                };
+
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Show")))
+            {
+                return new ContentResult
+                {
+                    StatusCode = 403,
+                    Content = "ليس لديك صلاحية تصدير فاتورة المبيعات.",
+                    ContentType = "text/plain; charset=utf-8"
+                };
+            }
+
+            var invoice = await _context.SalesInvoices
+                .Include(s => s.Customer)
+                .Include(s => s.Warehouse)
+                .Include(s => s.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.SIId == id);
+
+            if (invoice == null)
+                return new ContentResult
+                {
+                    StatusCode = 404,
+                    Content = "الفاتورة غير موجودة.",
+                    ContentType = "text/plain; charset=utf-8"
+                };
+
+            byte[] bytes;
+            try
+            {
+                bytes = ShowDocumentExcelExport.SalesInvoice(invoice);
+            }
+            catch (Exception ex)
+            {
+                return new ContentResult
+                {
+                    StatusCode = 500,
+                    Content = "تعذر إنشاء ملف Excel: " + ex.Message,
+                    ContentType = "text/plain; charset=utf-8"
+                };
+            }
+
+            // اسم ملف ASCII يتجنب مشاكل بعض المتصفحات مع التبويبة الجديدة؛ الاسم العربي يبقى في Content-Disposition عبر FileDownloadName عند الدعم
+            var asciiFileName = $"SalesInvoice_{id}_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", asciiFileName);
+        }
+
         /// <summary>
         /// دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر) لفاتورة المبيعات.
         /// </summary>
@@ -2797,17 +2854,19 @@ namespace ERP.Controllers
             int? fromCode = null,                // من رقم فاتورة
             int? toCode = null,                  // إلى رقم فاتورة
             string? filterCol_id = null,         // فلتر عمود رقم الفاتورة
+            string? filterCol_idExpr = null,     // بحث رقمي (<= >= نطاق…) — أولوية على filterCol_id
             string? filterCol_date = null,       // فلتر عمود تاريخ الفاتورة
             string? filterCol_time = null,       // فلتر عمود الوقت
             string? filterCol_customer = null,   // فلتر اسم/كود العميل
             string? filterCol_warehouse = null,  // فلتر اسم/كود المخزن
             string? filterCol_net = null,        // فلتر الصافي
+            string? filterCol_netExpr = null,    // بحث رقمي للصافي
             string? filterCol_status = null,     // فلتر الحالة
             string? filterCol_posted = null,     // فلتر الترحيل
             string? filterCol_region = null,    // فلتر عمود المنطقة (من العميل)
             string? filterCol_createdby = null, // فلتر عمود الكاتب
             int page = 1,                        // رقم الصفحة
-            int pageSize = 25                    // حجم الصفحة
+            int pageSize = 10                    // حجم الصفحة (افتراضي 10 — نفس نمط قائمة الأصناف والقوائم المحدّثة)
         )
         {
             bool canView = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index"));
@@ -2818,7 +2877,7 @@ namespace ERP.Controllers
 
             // قراءة حجم الصفحة من الـ Query (آخر قيمة) لضمان تطابق القائمة المنسدلة مع الرقم المعروض — نمط موحّد لجميع القوائم
             var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
-            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psVal))
                 pageSize = psVal;
 
             // قيم افتراضية لو مش جاية من الكويري
@@ -2828,10 +2887,10 @@ namespace ERP.Controllers
             dateField ??= "SIDate";
 
             if (page < 1) page = 1;
-            if (pageSize < 0) pageSize = 25;
+            if (pageSize < 0) pageSize = 10;
             // السماح فقط بقيم حجم الصفحة المعروضة في الواجهة (0 = الكل، وإلا 10، 25، 50، 100، 200)
             if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
-                pageSize = 25;
+                pageSize = 10;
 
             // نبدأ بالاستعلام الأساسي مع تحميل العميل والمخزن للعرض
             IQueryable<SalesInvoice> query = _context.SalesInvoices
@@ -2875,7 +2934,9 @@ namespace ERP.Controllers
             );
 
             // 1.1) فلاتر الأعمدة بنمط Excel — تُطبّق معاً (AND): كل شرط يضيق النتائج
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = SalesInvoiceListNumericExpr.ApplySiIdExpr(query, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -2958,7 +3019,9 @@ namespace ERP.Controllers
                     query = query.Where(si => times.Contains(si.SITime));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            if (!string.IsNullOrWhiteSpace(filterCol_netExpr))
+                query = SalesInvoiceListNumericExpr.ApplyNetExpr(query, filterCol_netExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_net))
             {
                 var nets = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
@@ -3013,7 +3076,7 @@ namespace ERP.Controllers
             int effectivePageSize = pageSize;
             if (pageSize == 0)
             {
-                effectivePageSize = totalCount == 0 ? 25 : Math.Min(totalCount, 100_000);
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
                 page = 1;
             }
 
@@ -3057,11 +3120,13 @@ namespace ERP.Controllers
 
             // حفظ فلاتر الأعمدة لاستخدامها فى الواجهة
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_Time = filterCol_time;
             ViewBag.FilterCol_Customer = filterCol_customer;
             ViewBag.FilterCol_Warehouse = filterCol_warehouse;
             ViewBag.FilterCol_Net = filterCol_net;
+            ViewBag.FilterCol_NetExpr = filterCol_netExpr;
             ViewBag.FilterCol_Status = filterCol_status;
             ViewBag.FilterCol_Posted = filterCol_posted;
             ViewBag.FilterCol_Region = filterCol_region;
@@ -3330,11 +3395,13 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             string? dateField = "SIDate",
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_time = null,
             string? filterCol_customer = null,
             string? filterCol_warehouse = null,
             string? filterCol_net = null,
+            string? filterCol_netExpr = null,
             string? filterCol_status = null,
             string? filterCol_posted = null,
             string? filterCol_region = null,
@@ -3370,7 +3437,9 @@ namespace ERP.Controllers
             q = ApplyFilters(q, search, searchBy, finalCodeFrom, finalCodeTo, useDateRange, fromDate, toDate, dateField);
 
             // فلاتر الأعمدة بنمط Excel (نفس Index)
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                q = SalesInvoiceListNumericExpr.ApplySiIdExpr(q, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -3453,7 +3522,9 @@ namespace ERP.Controllers
                     q = q.Where(si => times.Contains(si.SITime));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            if (!string.IsNullOrWhiteSpace(filterCol_netExpr))
+                q = SalesInvoiceListNumericExpr.ApplyNetExpr(q, filterCol_netExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_net))
             {
                 var nets = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
@@ -3502,7 +3573,7 @@ namespace ERP.Controllers
             if (format == "csv")
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("InvoiceId,Date,Time,Customer,Region,Warehouse,NetTotal,Status,IsPosted,CreatedBy");
+                sb.AppendLine("رقم الفاتورة,تاريخ الفاتورة,الوقت,العميل,المنطقة,المخزن,الصافي,الحالة,مرحل,الكاتب");
 
                 foreach (var x in list)
                 {
@@ -3526,7 +3597,7 @@ namespace ERP.Controllers
                         warehouseText.Replace(",", " "),
                         x.NetTotal.ToString("0.00"),
                         (x.Status ?? "").Replace(",", " "),
-                        x.IsPosted ? "Yes" : "No",
+                        x.IsPosted ? "نعم" : "لا",
                         (x.CreatedBy ?? "").Replace(",", " ")
                     );
 
@@ -3535,14 +3606,14 @@ namespace ERP.Controllers
 
                 var utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytesCsv = utf8Bom.GetBytes(sb.ToString());
-                var fileNameCsv = $"SalesInvoices_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("فواتير المبيعات", ".csv");
 
                 return File(bytesCsv, "text/csv; charset=utf-8", fileNameCsv);
             }
             else
             {
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("SalesInvoices");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("فواتير المبيعات"));
 
                 int r = 1;
                 ws.Cell(r, 1).Value = "رقم الفاتورة";
@@ -3590,7 +3661,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameXlsx = $"SalesInvoices_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("فواتير المبيعات", ".xlsx");
                 const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
                 return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);

@@ -1065,10 +1065,10 @@ namespace ERP.Controllers
 
             var sb = new StringBuilder();
 
-            // عناوين الأعمدة في ملف CSV
-            sb.AppendLine("CashPaymentId,PaymentNumber,PaymentDate,CustomerName,CashAccount,CounterAccount,Amount,IsPosted,CreatedAt,CreatedBy,PostedAt,PostedBy,Description");
+            sb.AppendLine("رقم الإذن,رقم المستند,تاريخ الإذن,الطرف,حساب الصندوق/البنك,حساب الطرف,المبلغ,مرحّل؟,تاريخ الإنشاء,أنشأه,تاريخ الترحيل,مرحّل بواسطة,البيان");
 
-            // كل صف إذن في سطر CSV
+            static string Q(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
+
             foreach (var p in list)
             {
                 string customerName = p.Customer?.CustomerName ?? "";
@@ -1077,28 +1077,28 @@ namespace ERP.Controllers
 
                 string line = string.Join(",",
                     p.CashPaymentId,
-                    (p.PaymentNumber ?? "").Replace(",", " "),
+                    Q(p.PaymentNumber),
                     p.PaymentDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-                    customerName.Replace(",", " "),
-                    cashAccountName.Replace(",", " "),
-                    counterAccountName.Replace(",", " "),
+                    Q(customerName),
+                    Q(cashAccountName),
+                    Q(counterAccountName),
                     p.Amount.ToString("0.00", CultureInfo.InvariantCulture),
-                    p.IsPosted ? "1" : "0",
+                    p.IsPosted ? "نعم" : "لا",
                     p.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
-                    (p.CreatedBy ?? "").Replace(",", " "),
+                    Q(p.CreatedBy),
                     p.PostedAt.HasValue
                         ? p.PostedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
                         : "",
-                    (p.PostedBy ?? "").Replace(",", " "),
-                    (p.Description ?? "").Replace(",", " ")
+                    Q(p.PostedBy),
+                    Q(p.Description)
                 );
 
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = "CashPayments.csv";
-            const string contentType = "text/csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("إذون دفع نقدية", ".csv");
+            const string contentType = "text/csv; charset=utf-8";
 
             return File(bytes, contentType, fileName);
         }

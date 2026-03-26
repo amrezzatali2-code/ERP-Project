@@ -912,7 +912,7 @@ namespace ERP.Controllers
                 // using ClosedXML.Excel;
                 // using System.IO;
                 using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("RolePermissions");
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("صلاحيات الأدوار"));
 
                 int row = 1;
 
@@ -924,7 +924,7 @@ namespace ERP.Controllers
                 worksheet.Cell(row, 5).Value = "كود الصلاحية";
                 worksheet.Cell(row, 6).Value = "اسم الصلاحية";
                 worksheet.Cell(row, 7).Value = "الموديول";
-                worksheet.Cell(row, 8).Value = "الحالة (Allow/Deny)";
+                worksheet.Cell(row, 8).Value = "الحالة";
 
                 var headerRange = worksheet.Range(row, 1, row, 8);
                 headerRange.Style.Font.Bold = true;   // جعل الهيدر Bold
@@ -938,7 +938,7 @@ namespace ERP.Controllers
                     string permCode = x.Permission?.Code ?? string.Empty;
                     string permName = x.Permission?.NameAr ?? string.Empty;
                     string module = x.Permission?.Module ?? string.Empty;
-                    string allowed = x.IsAllowed ? "Allow" : "Deny";
+                    string allowed = x.IsAllowed ? "مسموح" : "ممنوع";
 
                     worksheet.Cell(row, 1).Value = x.Id;
                     worksheet.Cell(row, 2).Value = x.RoleId;
@@ -957,7 +957,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameExcel = $"RolePermissions_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameExcel = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات الأدوار", ".xlsx");
                 const string excelContentType =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -966,7 +966,7 @@ namespace ERP.Controllers
 
             // ================= فرع CSV (النمط القديم) =================
             var sb = new StringBuilder();
-            sb.AppendLine("Id,RoleId,RoleName,PermissionId,PermissionCode,PermissionName,Module,IsAllowed");
+            sb.AppendLine("رقم السطر,رقم الدور,اسم الدور,رقم الصلاحية,كود الصلاحية,اسم الصلاحية,الموديول,الحالة");
 
             foreach (var x in list)
             {
@@ -974,7 +974,7 @@ namespace ERP.Controllers
                 string permCode = (x.Permission?.Code ?? string.Empty).Replace("\"", "\"\"");
                 string permName = (x.Permission?.NameAr ?? string.Empty).Replace("\"", "\"\"");
                 string module = (x.Permission?.Module ?? string.Empty).Replace("\"", "\"\"");
-                string allowed = x.IsAllowed ? "Allow" : "Deny";
+                string allowed = x.IsAllowed ? "مسموح" : "ممنوع";
 
                 sb.AppendLine(
                     $"{x.Id}," +
@@ -987,9 +987,8 @@ namespace ERP.Controllers
                     $"{allowed}");
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string fileNameCsv = $"RolePermissions_{timeStamp}.csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            string fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات الأدوار", ".csv");
 
             return File(bytes, "text/csv", fileNameCsv);
         }

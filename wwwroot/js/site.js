@@ -323,6 +323,29 @@ if (window.__ERP_TABS_INITED__) {
             return candidates[0].tab;
         }
 
+        /** توحيد التاب القديم sales-orders-create مع so-show-tab (نفس نمط si-show-tab) */
+        function tryAdoptSalesOrderShowTabs() {
+            var candidates = [];
+            var allTabBtns = tabsBar.querySelectorAll('.app-tab');
+            for (var i = 0; i < allTabBtns.length; i++) {
+                var t = allTabBtns[i];
+                var oid = normalizeTabId(t.getAttribute('data-tab-id') || '');
+                if (oid !== 'sales-orders-create') continue;
+                var fr = tabsContainer.querySelector('.app-tab-frame[data-tab-id="sales-orders-create"]');
+                if (!fr) continue;
+                var src = (fr.getAttribute('src') || fr.src || '').toLowerCase();
+                if (src.indexOf('/salesorders/') < 0) continue;
+                candidates.push({ tab: t, frame: fr });
+            }
+            if (candidates.length === 0) return null;
+            for (var j = candidates.length - 1; j >= 1; j--) {
+                closeTab(normalizeTabId(candidates[j].tab.getAttribute('data-tab-id')));
+            }
+            candidates[0].tab.setAttribute('data-tab-id', 'so-show-tab');
+            candidates[0].frame.setAttribute('data-tab-id', 'so-show-tab');
+            return candidates[0].tab;
+        }
+
         function openTab(tabId, url, title) {
 
             tabId = normalizeTabId(tabId);
@@ -340,6 +363,9 @@ if (window.__ERP_TABS_INITED__) {
             var existingTab = tabsBar.querySelector('[data-tab-id="' + tabId + '"]');
             if (!existingTab && tabId === 'si-show-tab') {
                 existingTab = tryAdoptListShowSalesInvoiceTabs();
+            }
+            if (!existingTab && tabId === 'so-show-tab') {
+                existingTab = tryAdoptSalesOrderShowTabs();
             }
 
             // لو التاب موجود → فعّله وحدث الـ URL والعنوان لو اتغير

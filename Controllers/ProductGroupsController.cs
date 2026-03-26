@@ -334,28 +334,29 @@ namespace ERP.Controllers
             var list = await q.ToListAsync();
 
             var sb = new StringBuilder();
-            sb.AppendLine("ProductGroupId,Name,Description,IsActive,CreatedAt");
+            sb.AppendLine("كود المجموعة,اسم المجموعة,الوصف,مفعّلة؟,تاريخ الإنشاء");
 
             foreach (var g in list)
             {
                 string createdText = g.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+                string desc = (g.Description ?? "").Replace("\"", "\"\"");
 
                 var line = string.Join(",",
                     g.ProductGroupId,
-                    $"\"{g.Name}\"",
-                    $"\"{g.Description}\"",
-                    g.IsActive ? "Yes" : "No",
+                    $"\"{(g.Name ?? "").Replace("\"", "\"\"")}\"",
+                    $"\"{desc}\"",
+                    $"\"{(g.IsActive ? "مفعّلة" : "موقوفة")}\"",
                     createdText
                 );
 
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
             var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv";
-            var fileName = $"ProductGroups_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الأصناف", "." + ext);
 
-            return File(bytes, "text/csv", fileName);
+            return File(bytes, "text/csv; charset=utf-8", fileName);
         }
 
         // =========================

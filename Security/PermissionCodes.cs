@@ -20,7 +20,7 @@ namespace ERP.Security
             ("Dashboard", new[] { "Sales" }, "لوحات التحكم"),
             ("Home", new[] { "Index" }, "لوحات التحكم"),
             ("SalesInvoices", new[] { "Index", "Show", "Create", "Edit", "Export", "SaveHeader", "GetProductsForDatalist", "GetAlternativeProducts", "GetSalesProductInfo", "DiagnosePolicy", "AddLineJson", "RemoveLineJson", "ClearAllLinesJson", "SaveTaxJson", "PostInvoice", "CreateFullReturn", "OpenInvoice", "Delete", "DeleteConfirmed", "DeleteOneFromList", "DeleteOneFromShow", "BulkDelete", "DeleteAll" }, "المبيعات"),
-            ("SalesReturns", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetInvoiceItems", "AddLineJson", "RemoveLineJson", "ClearLinesJson", "OpenReturn", "PostReturn" }, "المبيعات"),
+            ("SalesReturns", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "SaveHeader", "DeleteConfirmed", "BulkDelete", "DeleteAll", "GetInvoiceItems", "SearchProductsForReturn", "GetProductsForReturnDatalist", "AddLineJson", "RemoveLineJson", "ClearLinesJson", "OpenReturn", "PostReturn" }, "المبيعات"),
             ("SalesOrders", new[] { "Index", "Show", "Create", "Edit", "Delete", "Export", "DeleteConfirmed", "BulkDelete", "DeleteAll" }, "المبيعات"),
             ("SalesInvoiceLines", new[] { "Index", "Details", "Delete", "BulkDelete", "DeleteAll", "Export" }, "المبيعات"),
             ("SalesReturnLines", new[] { "Index", "Delete", "BulkDelete", "DeleteAll", "Export" }, "المبيعات"),
@@ -188,6 +188,8 @@ namespace ERP.Security
             ["SalesReturns.DeleteAll"] = "مسح كل مرتجعات المبيعات",
             ["SalesReturns.PostReturn"] = "ترحيل مرتجع المبيعات",
             ["SalesReturns.OpenReturn"] = "فتح مرتجع المبيعات",
+            ["SalesReturns.SearchProductsForReturn"] = "بحث أصناف لمرتجع بدون فاتورة",
+            ["SalesReturns.GetProductsForReturnDatalist"] = "قائمة أصناف المرتجع بدون فاتورة (داتاليست)",
             // أوامر البيع
             ["SalesOrders.Index"] = "قائمة أوامر البيع",
             ["SalesOrders.Show"] = "عرض أمر بيع",

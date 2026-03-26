@@ -2,6 +2,7 @@ using ERP.Data;                 // AppDbContext
 using ERP.Models;               // PurchaseInvoice, LedgerEntry, LedgerSourceType
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using System.Text.RegularExpressions;
 
 namespace ERP.Services
@@ -47,10 +48,33 @@ namespace ERP.Services
     public class LedgerPostingService : ILedgerPostingService
     {
         private readonly AppDbContext _db; // متغير: سياق قاعدة البيانات
+        private readonly ILogger<LedgerPostingService> _logger;
 
-        public LedgerPostingService(AppDbContext db)
+        public LedgerPostingService(AppDbContext db, ILogger<LedgerPostingService> logger)
         {
             _db = db;
+            _logger = logger;
+        }
+
+        private async Task ExecuteWithLedgerPerfAsync(string operation, object? id, Func<Task> action)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
+            {
+                await action();
+                sw.Stop();
+                _logger.LogInformation(
+                    "ERP.Technical.Perf LedgerPosting {Operation} Id={Id} DurationMs={DurationMs} Success=true",
+                    operation, id, sw.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                _logger.LogError(ex,
+                    "ERP.Technical.Perf LedgerPosting {Operation} Id={Id} DurationMs={DurationMs} Success=false",
+                    operation, id, sw.ElapsedMilliseconds);
+                throw;
+            }
         }
 
 
@@ -58,10 +82,14 @@ namespace ERP.Services
 
 
 
-        public async Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy)
-            => await PostPurchaseInvoiceAsync(purchaseInvoiceId, postedBy, null);
+        public Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy)
+            => PostPurchaseInvoiceAsync(purchaseInvoiceId, postedBy, null);
 
-        public async Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy, IDbContextTransaction? existingTransaction)
+        public Task PostPurchaseInvoiceAsync(int purchaseInvoiceId, string? postedBy, IDbContextTransaction? existingTransaction)
+            => ExecuteWithLedgerPerfAsync(nameof(PostPurchaseInvoiceAsync), purchaseInvoiceId,
+                () => PostPurchaseInvoiceTransactionAsync(purchaseInvoiceId, postedBy, existingTransaction));
+
+        private async Task PostPurchaseInvoiceTransactionAsync(int purchaseInvoiceId, string? postedBy, IDbContextTransaction? existingTransaction)
         {
             IDbContextTransaction? tx = null;
             if (existingTransaction == null)
@@ -574,7 +602,10 @@ namespace ERP.Services
         // (3) COGS      مدين   = إجمالي تكلفة الخروج (costTotal)
         // (4) مخزون     دائن   = إجمالي تكلفة الخروج
         // =========================================================
-        public async Task PostSalesInvoiceAsync(int salesInvoiceId, string? postedBy)
+        public Task PostSalesInvoiceAsync(int salesInvoiceId, string? postedBy)
+            => ExecuteWithLedgerPerfAsync(nameof(PostSalesInvoiceAsync), salesInvoiceId, () => PostSalesInvoiceCoreAsync(salesInvoiceId, postedBy));
+
+        private async Task PostSalesInvoiceCoreAsync(int salesInvoiceId, string? postedBy)
         {
             // ================================
             // 0) Transaction لضمان سلامة العملية
@@ -1609,7 +1640,10 @@ namespace ERP.Services
         // - تحسب الرصيد لكل عميل من قيوده في LedgerEntries
         // - تحدث CurrentBalance لكل عميل
         // =========================================================
-        public async Task RecalcAllCustomerBalancesAsync()
+        public Task RecalcAllCustomerBalancesAsync()
+            => ExecuteWithLedgerPerfAsync(nameof(RecalcAllCustomerBalancesAsync), "all", RecalcAllCustomerBalancesCoreAsync);
+
+        private async Task RecalcAllCustomerBalancesCoreAsync()
         {
             // ================================
             // 1) حساب الرصيد لكل عميل من LedgerEntries في استعلام واحد (أفضل أداء)

@@ -2085,6 +2085,29 @@ namespace ERP.Controllers
             return View("Show", invoice);
         }
 
+        [HttpGet]
+        [RequirePermission("PurchaseInvoices.Show")]
+        public async Task<IActionResult> ExportShowExcel(int id)
+        {
+            if (id <= 0)
+                return BadRequest();
+
+            var invoice = await _context.PurchaseInvoices
+                .Include(p => p.Customer)
+                .Include(p => p.Warehouse)
+                .Include(p => p.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PIId == id);
+
+            if (invoice == null)
+                return NotFound();
+
+            var bytes = ShowDocumentExcelExport.PurchaseInvoice(invoice);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ExcelExportNaming.ArabicTimestampedFileName($"فاتورة مشتريات {id}", ".xlsx"));
+        }
+
 
 
 
@@ -2838,7 +2861,7 @@ namespace ERP.Controllers
             var sb = new StringBuilder();
 
             // عناوين الأعمدة (الهيدر)
-            sb.AppendLine("PIId,PIDate,CustomerId,WarehouseId,ItemsTotal,DiscountTotal,TaxTotal,NetTotal,Status,IsPosted,CreatedAt,PostedAt");
+            sb.AppendLine("رقم الفاتورة,تاريخ الفاتورة,كود المورد,كود المخزن,إجمالي قبل الخصم,إجمالي الخصم,إجمالي الضريبة,صافي الفاتورة,الحالة,مرحل؟,تاريخ الإنشاء,تاريخ الترحيل");
 
             foreach (var p in list)
             {
@@ -2855,7 +2878,7 @@ namespace ERP.Controllers
                     p.TaxTotal.ToString("0.00"),                   // إجمالي الضريبة
                     p.NetTotal.ToString("0.00"),                   // صافي الفاتورة
                     status,                                        // حالة الفاتورة
-                    p.IsPosted ? "1" : "0",                        // مرحّلة؟
+                    p.IsPosted ? "نعم" : "لا",
                     p.CreatedAt.ToString("yyyy-MM-dd HH:mm"),      // تاريخ الإنشاء
                     p.PostedAt.HasValue
                         ? p.PostedAt.Value.ToString("yyyy-MM-dd HH:mm")
@@ -2866,10 +2889,9 @@ namespace ERP.Controllers
             }
 
             // تحويل النص إلى بايتس
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
 
-            // اسم الملف (إمتداد CSV – يفتح في إكسل عادي)
-            var fileName = $"PurchaseInvoices_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("فواتير المشتريات", ".csv");
 
             // ✅ نوع الملف نخليه نوع إكسل علشان المتصفح يفتحه بـ Excel مباشرة
             const string contentType = "application/vnd.ms-excel";

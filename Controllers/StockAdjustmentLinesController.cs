@@ -397,10 +397,11 @@ namespace ERP.Controllers
             var list = await q.ToListAsync();
 
             var sb = new StringBuilder();
-            sb.AppendLine("Id,StockAdjustmentId,ProductId,BatchId,QtyBefore,QtyAfter,QtyDiff,CostPerUnit,CostDiff,Note");
+            sb.AppendLine("كود السطر,رقم التسوية,كود الصنف,كود التشغيلة,الكمية قبل,الكمية بعد,فرق الكمية,تكلفة الوحدة,فرق التكلفة,ملاحظات");
 
             foreach (var l in list)
             {
+                string note = "\"" + (l.Note ?? "").Replace("\"", "\"\"").Replace(",", "،") + "\"";
                 var line = string.Join(",",
                     l.Id,
                     l.StockAdjustmentId,
@@ -411,17 +412,17 @@ namespace ERP.Controllers
                     l.QtyDiff,
                     l.CostPerUnit?.ToString("0.0000") ?? "",
                     l.CostDiff?.ToString("0.00") ?? "",
-                    (l.Note ?? "").Replace(",", " ")
+                    note
                 );
 
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
             var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv";
-            var fileName = $"StockAdjustmentLines_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("سطور تسويات الجرد", "." + ext);
 
-            return File(bytes, "text/csv", fileName);
+            return File(bytes, "text/csv; charset=utf-8", fileName);
         }
 
         // =========================

@@ -907,7 +907,7 @@ namespace ERP.Controllers
             {
                 // تصدير CSV بسيط
                 var sb = new StringBuilder();
-                sb.AppendLine("BatchId,ProdId,BatchNo,Expiry,PriceRetailBatch,UnitCostDefault,EntryDate,CreatedAt,UpdatedAt,IsActive");
+                sb.AppendLine("كود التشغيلة,كود الصنف,التشغيلة,تاريخ الصلاحية,سعر الجمهور للتشغيلة,التكلفة الافتراضية,تاريخ الإدخال,تاريخ الإنشاء,آخر تعديل,نشط؟");
 
                 foreach (var b in data)
                 {
@@ -921,19 +921,19 @@ namespace ERP.Controllers
                         b.EntryDate.ToString("yyyy-MM-dd"),
                         b.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
                         b.UpdatedAt?.ToString("yyyy-MM-dd HH:mm") ?? "",
-                        b.IsActive ? "1" : "0"
+                        (b.IsActive ? "نشط" : "موقوف").Replace(",", " ")
                     ));
                 }
 
-                var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-                var csvName = $"Batches_{DateTime.Now:yyyyMMdd_HHmm}.csv";
+                var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                var csvName = ExcelExportNaming.ArabicTimestampedFileName("تشغيلات الأصناف", ".csv");
                 return File(bytes, "text/csv", csvName);
             }
             else
             {
                 // تصدير Excel باستخدام ClosedXML
                 using var wb = new XLWorkbook();
-                var ws = wb.Worksheets.Add("Batches");
+                var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("تشغيلات الأصناف"));
 
                 // عناوين الأعمدة
                 ws.Cell(1, 1).Value = "كود التشغيلة";
@@ -971,7 +971,7 @@ namespace ERP.Controllers
 
                 using var stream = new System.IO.MemoryStream();
                 wb.SaveAs(stream);
-                var fileName = $"Batches_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("تشغيلات الأصناف", ".xlsx");
                 return File(stream.ToArray(),
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     fileName);

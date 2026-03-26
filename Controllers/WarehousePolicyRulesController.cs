@@ -515,7 +515,7 @@ namespace ERP.Controllers
             if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
             {
                 using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("WarehouseRules");
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("قواعد سياسات المخازن"));
 
                 int row = 1;
 
@@ -558,7 +558,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileName = $"WarehousePolicyRules_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("قواعد سياسات المخازن", ".xlsx");
                 const string contentType =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -569,7 +569,7 @@ namespace ERP.Controllers
                 // 4) حالة CSV
                 var sb = new StringBuilder();
 
-                sb.AppendLine("RuleId,WarehouseId,WarehouseName,PolicyId,PolicyName,ProfitPercent,MaxDiscountToCustomer,IsActive,CreatedAt,UpdatedAt");
+                sb.AppendLine("المعرف,كود المخزن,اسم المخزن,كود السياسة,اسم السياسة,نسبة الربح %,أقصى خصم للعميل % (اختياري),مفعّلة؟,تاريخ الإنشاء,آخر تعديل");
 
                 foreach (var r in list)
                 {
@@ -598,16 +598,15 @@ namespace ERP.Controllers
                         $"\"{policyName}\"," +
                         $"{profitText}," +
                         $"{maxDiscountText}," +
-                        $"{(r.IsActive ? 1 : 0)}," +
+                        $"\"{(r.IsActive ? "مفعّلة" : "موقوفة")}\"," +
                         $"{created}," +
                         $"{updated}");
                 }
 
-                byte[] bytes = Encoding.UTF8.GetBytes(sb.ToString());
-                string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string fileName = $"WarehousePolicyRules_{timeStamp}.csv";
+                byte[] bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                string fileName = ExcelExportNaming.ArabicTimestampedFileName("قواعد سياسات المخازن", ".csv");
 
-                return File(bytes, "text/csv", fileName);
+                return File(bytes, "text/csv; charset=utf-8", fileName);
             }
         }
 

@@ -967,7 +967,7 @@ namespace ERP.Controllers
                 // using ClosedXML.Excel;
                 // using System.IO;
                 using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("UserRoles");
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أدوار المستخدمين"));
 
                 int row = 1;
 
@@ -990,7 +990,7 @@ namespace ERP.Controllers
 
                     string userName = x.UserName;
                     string roleName = x.RoleName ?? UserRoleListRow.NoRoleDisplay;
-                    string primary = x.IsPrimary ? "Primary" : string.Empty;
+                    string primary = x.IsPrimary ? "نعم" : "";
 
                     if (x.UserRoleId.HasValue)
                         worksheet.Cell(row, 1).Value = x.UserRoleId.Value;
@@ -1010,7 +1010,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameExcel = $"UserRoles_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameExcel = ExcelExportNaming.ArabicTimestampedFileName("أدوار المستخدمين", ".xlsx");
                 const string excelContentType =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -1021,13 +1021,13 @@ namespace ERP.Controllers
             var sb = new StringBuilder();
 
             // الهيدر (بدون DisplayName)
-            sb.AppendLine("Id,UserId,UserName,RoleId,RoleName,IsPrimary,AssignedAt");
+            sb.AppendLine("رقم السطر,رقم المستخدم,اسم الدخول,رقم الدور,اسم الدور,دور أساسي؟,تاريخ الإسناد");
 
             foreach (var x in list)
             {
                 string userName = x.UserName.Replace("\"", "\"\"");
                 string roleName = (x.RoleName ?? UserRoleListRow.NoRoleDisplay).Replace("\"", "\"\"");
-                string primary = x.IsPrimary ? "Primary" : "";
+                string primary = x.IsPrimary ? "نعم" : "";
                 string assigned = x.AssignedAt?.ToString("yyyy-MM-dd HH:mm") ?? "";
 
                 sb.AppendLine(
@@ -1040,9 +1040,8 @@ namespace ERP.Controllers
                     $"{assigned}");
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string fileNameCsv = $"UserRoles_{timeStamp}.csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            string fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("أدوار المستخدمين", ".csv");
 
             return File(bytes, "text/csv", fileNameCsv);
         }

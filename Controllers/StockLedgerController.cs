@@ -720,14 +720,14 @@ namespace ERP.Controllers
                 // تحويل لـ UTF-8 مع BOM علشان Excel يقرأ عربى صح
                 var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytes = utf8.GetBytes(sb.ToString());
-                var fileNameCsv = $"StockLedger_{DateTime.Now:yyyyMMdd_HHmm}_csv.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("دفتر حركة المخزون", ".csv");
 
                 return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
             }
 
             // ===== الفرع الثانى: Excel (XLSX) =====
             using var workbook = new XLWorkbook();                // متغير: ملف Excel
-            var ws = workbook.Worksheets.Add("StockLedger");      // متغير: ورقة العمل
+            var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("دفتر حركة المخزون"));
 
             int r = 1; // متغير: رقم الصف الحالى
 
@@ -789,7 +789,7 @@ namespace ERP.Controllers
             workbook.SaveAs(stream);
             stream.Position = 0;
 
-            var fileNameXlsx = $"StockLedger_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+            var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("دفتر حركة المخزون", ".xlsx");
             const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
             return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);

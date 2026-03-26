@@ -271,19 +271,19 @@
                     <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
-                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
-                            <option value="name"@Html.Raw(searchBy == "name" ? " selected" : "")>اسم الصنف</option>
-                            <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود الصنف</option>
-                            <option value="code"@Html.Raw(searchBy == "code" ? " selected" : "")>الباركود</option>
-                            <option value="gen"@Html.Raw(searchBy == "gen" ? " selected" : "")>الاسم العلمي</option>
-                            <option value="comp"@Html.Raw(searchBy == "comp" ? " selected" : "")>الشركة</option>
-                            <option value="category"@Html.Raw(searchBy == "category" ? " selected" : "")>الفئة</option>
-                            <option value="productgroup"@Html.Raw(searchBy == "productgroup" ? " selected" : "")>مجموعة الصنف</option>
-                            <option value="bonusgroup"@Html.Raw(searchBy == "bonusgroup" ? " selected" : "")>مجموعة البونص</option>
-                            <option value="price"@Html.Raw(searchBy == "price" ? " selected" : "")>سعر الجمهور</option>
-                            <option value="imported"@Html.Raw(searchBy == "imported" ? " selected" : "")>محلي/مستورد</option>
-                            <option value="active"@Html.Raw(searchBy == "active" ? " selected" : "")>نشط/موقوف</option>
-                            <option value="updated"@Html.Raw(searchBy == "updated" ? " selected" : "")>آخر تعديل</option>
+                            <option value="all" selected="@(searchBy == "all")">البحث في الكل</option>
+                            <option value="name" selected="@(searchBy == "name")">اسم الصنف</option>
+                            <option value="id" selected="@(searchBy == "id")">كود الصنف</option>
+                            <option value="code" selected="@(searchBy == "code")">الباركود</option>
+                            <option value="gen" selected="@(searchBy == "gen")">الاسم العلمي</option>
+                            <option value="comp" selected="@(searchBy == "comp")">الشركة</option>
+                            <option value="category" selected="@(searchBy == "category")">الفئة</option>
+                            <option value="productgroup" selected="@(searchBy == "productgroup")">مجموعة الصنف</option>
+                            <option value="bonusgroup" selected="@(searchBy == "bonusgroup")">مجموعة البونص</option>
+                            <option value="price" selected="@(searchBy == "price")">سعر الجمهور</option>
+                            <option value="imported" selected="@(searchBy == "imported")">محلي/مستورد</option>
+                            <option value="active" selected="@(searchBy == "active")">نشط/موقوف</option>
+                            <option value="updated" selected="@(searchBy == "updated")">آخر تعديل</option>
                         </select>
                         <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">بحث</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>

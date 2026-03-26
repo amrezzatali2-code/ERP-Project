@@ -885,7 +885,7 @@ namespace ERP.Controllers
                 var sb = new StringBuilder();
 
                 // عناوين الأعمدة في ملف CSV
-                sb.AppendLine("Id,TransferDate,FromWarehouseId,ToWarehouseId,FromWarehouseName,ToWarehouseName,Note,CreatedAt,UpdatedAt");
+                sb.AppendLine("كود التحويل,تاريخ التحويل,كود من مخزن,كود إلى مخزن,من مخزن,إلى مخزن,الملاحظات,تاريخ الإنشاء,آخر تعديل");
 
                 // كل تحويل في سطر CSV
                 foreach (var t in list)
@@ -915,7 +915,7 @@ namespace ERP.Controllers
                 // استخدام UTF-8 مع BOM علشان Excel يقرأ عربى صح
                 var utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytesCsv = utf8Bom.GetBytes(sb.ToString());
-                var fileNameCsv = $"StockTransfers_{DateTime.Now:yyyyMMdd_HHmm}.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("تحويلات المخزون", ".csv");
                 const string contentTypeCsv = "text/csv; charset=utf-8";
 
                 return File(bytesCsv, contentTypeCsv, fileNameCsv);
@@ -924,7 +924,7 @@ namespace ERP.Controllers
             {
                 // ===== فرع Excel (XLSX) =====
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("StockTransfers");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("تحويلات المخزون"));
 
                 int r = 1;
                 ws.Cell(r, 1).Value = "كود التحويل";
@@ -964,7 +964,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameXlsx = $"StockTransfers_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("تحويلات المخزون", ".xlsx");
                 const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
                 return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);

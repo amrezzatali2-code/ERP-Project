@@ -568,10 +568,10 @@ namespace ERP.Controllers
 
             var sb = new StringBuilder();
 
-            // عناوين الأعمدة في ملف CSV (نفس إشعارات الخصم)
-            sb.AppendLine("CreditNoteId,NoteDate,CustomerId,CustomerName,AccountId,AccountName,OffsetAccountId,OffsetAccountName,Amount,Reason,Description,IsPosted,CreatedAt,UpdatedAt,CreatedBy,PostedAt,PostedBy");
+            sb.AppendLine("رقم الإشعار,تاريخ الإشعار,كود الطرف,اسم الطرف,كود حساب الطرف,اسم حساب الطرف,كود الحساب المقابل,اسم الحساب المقابل,المبلغ,السبب,البيان,مرحّل؟,تاريخ الإنشاء,آخر تعديل,أنشأه,تاريخ الترحيل,مرحّل بواسطة");
 
-            // كل صف إشعار في سطر CSV
+            static string Q(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
+
             foreach (var c in list)
             {
                 string customerName = c.Customer?.CustomerName ?? "";
@@ -582,32 +582,32 @@ namespace ERP.Controllers
                     c.CreditNoteId,
                     c.NoteDate.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     c.CustomerId?.ToString() ?? "",
-                    customerName.Replace(",", " "),
+                    Q(customerName),
                     c.AccountId,
-                    accountName.Replace(",", " "),
+                    Q(accountName),
                     c.OffsetAccountId?.ToString() ?? "",
-                    offsetName.Replace(",", " "),
+                    Q(offsetName),
                     c.Amount.ToString("0.00", CultureInfo.InvariantCulture),
-                    (c.Reason ?? "").Replace(",", " "),
-                    (c.Description ?? "").Replace(",", " "),
-                    c.IsPosted ? "1" : "0",
+                    Q(c.Reason),
+                    Q(c.Description),
+                    c.IsPosted ? "نعم" : "لا",
                     c.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture),
                     c.UpdatedAt.HasValue
                         ? c.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
                         : "",
-                    (c.CreatedBy ?? "").Replace(",", " "),
+                    Q(c.CreatedBy),
                     c.PostedAt.HasValue
                         ? c.PostedAt.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
                         : "",
-                    (c.PostedBy ?? "").Replace(",", " ")
+                    Q(c.PostedBy)
                 );
 
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = "CreditNotes.csv";
-            const string contentType = "text/csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("إشعارات الإضافة", ".csv");
+            const string contentType = "text/csv; charset=utf-8";
 
             return File(bytes, contentType, fileName);
         }

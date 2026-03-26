@@ -145,7 +145,7 @@
                         <option value="">الكل</option>
                         @foreach (var gov in governorates)
                         {
-                            <option value="@gov.Value" @(governorateId?.ToString() == gov.Value ? "selected" : null)>@gov.Text</option>
+                            <option value="@gov.Value" selected="@(governorateId?.ToString() == gov.Value)">@gov.Text</option>
                         }
                     </select>
                 </div>

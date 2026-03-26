@@ -1,4 +1,4 @@
-﻿using ERP.Data;                                   // AppDbContext
+using ERP.Data;                                   // AppDbContext
 using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult
 using ERP.Models;                                 // الموديلات UserExtraPermissions, User, Permission
@@ -759,7 +759,7 @@ namespace ERP.Controllers
             {
                 // تأكد من وجود using ClosedXML.Excel; و using System.IO; أعلى الملف
                 using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("UserExtraPermissions");
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("صلاحيات إضافية للمستخدم"));
 
                 int row = 1;
 
@@ -799,7 +799,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameExcel = $"UserExtraPermissions_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameExcel = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات إضافية للمستخدمين", ".xlsx");
                 const string excelContentType =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -808,7 +808,7 @@ namespace ERP.Controllers
 
             // ================= فرع CSV =================
             var sb = new StringBuilder();
-            sb.AppendLine("Id,UserId,UserName,PermissionId,PermissionCode,PermissionName,CreatedAt");
+            sb.AppendLine("رقم السطر,رقم المستخدم,اسم الدخول,رقم الصلاحية,كود الصلاحية,اسم الصلاحية,تاريخ الإضافة");
 
             foreach (var x in list)
             {
@@ -830,9 +830,8 @@ namespace ERP.Controllers
                     $"{created}");
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string fileNameCsv = $"UserExtraPermissions_{timeStamp}.csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            string fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات إضافية للمستخدمين", ".csv");
 
             return File(bytes, "text/csv", fileNameCsv);
         }

@@ -641,7 +641,7 @@ namespace ERP.Controllers
                 }
 
                 var sb = new StringBuilder();
-                sb.AppendLine("BranchId,BranchName,CreatedAt,UpdatedAt");
+                sb.AppendLine("كود الفرع,اسم الفرع,تاريخ الإنشاء,آخر تعديل");
                 foreach (var b in list)
                 {
                     sb.AppendLine(string.Join(",",
@@ -652,13 +652,13 @@ namespace ERP.Controllers
                     ));
                 }
 
-                var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-                return File(bytes, "text/csv; charset=utf-8", $"Branches_{DateTime.Now:yyyyMMdd_HHmm}.csv");
+                var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                return File(bytes, "text/csv; charset=utf-8", ExcelExportNaming.ArabicTimestampedFileName("الفروع", ".csv"));
             }
 
             // ---------- Excel (.xlsx) ----------
             using var wb = new XLWorkbook();
-            var ws = wb.Worksheets.Add("الفروع");
+            var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("الفروع"));
 
             ws.Cell(1, 1).Value = "كود الفرع";
             ws.Cell(1, 2).Value = "اسم الفرع";
@@ -685,7 +685,7 @@ namespace ERP.Controllers
             wb.SaveAs(stream);
             stream.Position = 0;
             return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                $"Branches_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+                ExcelExportNaming.ArabicTimestampedFileName("الفروع", ".xlsx"));
         }
 
     }

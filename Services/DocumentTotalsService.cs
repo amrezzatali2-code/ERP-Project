@@ -1,9 +1,11 @@
 using System;
+using System.Diagnostics;
 using System.Linq;                      // أوامر LINQ: Where / Sum / ToList
 using System.Threading.Tasks;           // async / Task
 using ERP.Data;                         // سياق قاعدة البيانات AppDbContext
 using ERP.Models;                       // الموديلات
 using Microsoft.EntityFrameworkCore;    // أوامر EF Core: FirstOrDefaultAsync / ToListAsync
+using Microsoft.Extensions.Logging;
 
 namespace ERP.Services
 {
@@ -23,13 +25,36 @@ namespace ERP.Services
     {
         // متغير: كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;
+        private readonly ILogger<DocumentTotalsService> _logger;
 
         /// <summary>
         /// الكونستركتور: يستقبل AppDbContext من الـ DI.
         /// </summary>
-        public DocumentTotalsService(AppDbContext context)
+        public DocumentTotalsService(AppDbContext context, ILogger<DocumentTotalsService> logger)
         {
             _context = context;
+            _logger = logger;
+        }
+
+        private async Task ExecuteWithPerfAsync(string operation, object? id, Func<Task> action)
+        {
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                await action();
+                sw.Stop();
+                _logger.LogInformation(
+                    "ERP.Technical.Perf DocumentTotals {Operation} Id={Id} DurationMs={DurationMs} Success=true",
+                    operation, id, sw.ElapsedMilliseconds);
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                _logger.LogError(ex,
+                    "ERP.Technical.Perf DocumentTotals {Operation} Id={Id} DurationMs={DurationMs} Success=false",
+                    operation, id, sw.ElapsedMilliseconds);
+                throw;
+            }
         }
 
         // ============================================================
@@ -41,7 +66,10 @@ namespace ERP.Services
         /// - TotalQtyRequested      = مجموع الكميات فى السطور
         /// - ExpectedItemsTotal     = مجموع (الكمية × التكلفة المتوقعة)
         /// </summary>
-        public async Task RecalcPurchaseRequestTotalsAsync(int prId)
+        public Task RecalcPurchaseRequestTotalsAsync(int prId)
+            => ExecuteWithPerfAsync(nameof(RecalcPurchaseRequestTotalsAsync), prId, () => RecalcPurchaseRequestTotalsCoreAsync(prId));
+
+        private async Task RecalcPurchaseRequestTotalsCoreAsync(int prId)
         {
             // نجيب هيدر طلب الشراء
             var header = await _context.PurchaseRequests
@@ -188,7 +216,10 @@ namespace ERP.Services
         /// - TaxTotal        = حالياً 0
         /// - NetTotal        = ItemsTotal - DiscountTotal + TaxTotal
         /// </summary>
-        public async Task RecalcPurchaseReturnTotalsAsync(int pretId)
+        public Task RecalcPurchaseReturnTotalsAsync(int pretId)
+            => ExecuteWithPerfAsync(nameof(RecalcPurchaseReturnTotalsAsync), pretId, () => RecalcPurchaseReturnTotalsCoreAsync(pretId));
+
+        private async Task RecalcPurchaseReturnTotalsCoreAsync(int pretId)
         {
             var header = await _context.PurchaseReturns
                 .FirstOrDefaultAsync(r => r.PRetId == pretId);
@@ -236,7 +267,10 @@ namespace ERP.Services
         /// - TotalQtyRequested      = مجموع الكميات المطلوبة
         /// - ExpectedItemsTotal     = مجموع (الكمية × السعر/التكلفة المتوقعة)
         /// </summary>
-        public async Task RecalcSalesOrderTotalsAsync(int soId)
+        public Task RecalcSalesOrderTotalsAsync(int soId)
+            => ExecuteWithPerfAsync(nameof(RecalcSalesOrderTotalsAsync), soId, () => RecalcSalesOrderTotalsCoreAsync(soId));
+
+        private async Task RecalcSalesOrderTotalsCoreAsync(int soId)
         {
             var header = await _context.SalesOrders
                 .FirstOrDefaultAsync(o => o.SOId == soId);
@@ -329,7 +363,10 @@ namespace ERP.Services
         /// - TaxAmount                     = مجموع TaxValue
         /// - NetTotal                      = TotalAfterDiscountBeforeTax + TaxAmount
         /// </summary>
-        public async Task RecalcSalesReturnTotalsAsync(int srId)
+        public Task RecalcSalesReturnTotalsAsync(int srId)
+            => ExecuteWithPerfAsync(nameof(RecalcSalesReturnTotalsAsync), srId, () => RecalcSalesReturnTotalsCoreAsync(srId));
+
+        private async Task RecalcSalesReturnTotalsCoreAsync(int srId)
         {
             var header = await _context.SalesReturns
                 .FirstOrDefaultAsync(r => r.SRId == srId);

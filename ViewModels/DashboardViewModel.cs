@@ -14,7 +14,10 @@ namespace ERP.ViewModels
         public DateTime? ToDate { get; set; }
 
         // إحصائيات أساسية
+        /// <summary>عدد العملاء المربوطين بالمستخدم الذين لديهم فواتير مبيعات مرحّلة في الفترة.</summary>
         public int CustomersCount { get; set; }
+        /// <summary>عدد مناطق/تجميعات جغرافية مختلفة ظهرت في مبيعات الفترة.</summary>
+        public int RegionsCount { get; set; }
         public int ProductsCount { get; set; }
         public int SalesInvoicesTodayCount { get; set; }
         public decimal SalesInvoicesTodayTotal { get; set; }
@@ -39,6 +42,29 @@ namespace ERP.ViewModels
 
         /// <summary>بيانات المخطط البياني: مبيعات آخر 7 أيام</summary>
         public List<DashboardChartPoint> ChartData { get; set; } = new();
+
+        /// <summary>عملاء مربوطون بالمستخدم مع إحصائيات الفترة (للعرض في النافذة المنبثقة).</summary>
+        public List<DashboardLinkedCustomerRow> LinkedCustomersDetail { get; set; } = new();
+
+        /// <summary>مبيعات الفترة مجمّعة حسب المنطقة (أو نص المنطقة / بدون منطقة).</summary>
+        public List<DashboardRegionSalesRow> RegionSalesRows { get; set; } = new();
+    }
+
+    public class DashboardLinkedCustomerRow
+    {
+        public int CustomerId { get; set; }
+        public string CustomerName { get; set; } = "";
+        public string? Phone { get; set; }
+        public int InvoicesInPeriod { get; set; }
+        public decimal SalesTotalInPeriod { get; set; }
+    }
+
+    public class DashboardRegionSalesRow
+    {
+        public int? AreaId { get; set; }
+        public string AreaName { get; set; } = "";
+        public int InvoiceCount { get; set; }
+        public decimal SalesTotal { get; set; }
     }
 
     public class DashboardChartPoint

@@ -11,6 +11,7 @@
     DateTime? toDate = ViewBag.ToDate as DateTime?;
 
     // متغيرات: ملخص حجم التعامل
+    decimal openingBalance = ViewBag.OpeningBalanceAmount as decimal? ?? 0m;
     decimal totalSales = ViewBag.TotalSales as decimal? ?? 0m;
     decimal totalSalesReturns = ViewBag.TotalSalesReturns as decimal? ?? 0m;
     decimal totalPurchaseReturns = ViewBag.TotalPurchaseReturns as decimal? ?? 0m;
@@ -178,6 +179,13 @@
         font-size: 0.8rem !important;
         font-weight: 600 !important;
     }
+
+    /* كارت صف الملخص — نفس حركة الصنف (حدود بنفسجي #6366f1) */
+    .product-movement-unified-card {
+        border: 1px solid #6366f1 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+    }
     
     /* ✅ إصلاح عرض التبويبات مع Flexbox */
     #customerMovementTabsContent.tab-content {
@@ -210,6 +218,11 @@
         flex-direction: column;
         visibility: visible;
         position: relative;
+    }
+
+    #customerMovementTabsContent .erp-list-selectable-row { cursor: pointer; }
+    #customerMovementTabsContent .erp-list-selectable-row.selected > td {
+        background: rgba(99, 102, 241, 0.12) !important;
     }
 
     /* ===== دروب داون مخصص: بحث العميل داخل حجم التعامل ===== */
@@ -434,7 +447,8 @@
                         <small class="text-muted">خط السير: @Model.Route.Name</small>
                     }
                 </div>
-                <div class="d-flex flex-wrap gap-2 flex-nowrap">
+                <div class="d-flex flex-wrap gap-2 flex-nowrap" dir="rtl">
+                    <button type="button" id="customerVolumeBtnView" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض المستند المحدد">عرض</button>
                     <a asp-controller="CustomerLedger" asp-action="Index" asp-route-customerId="@Model.CustomerId" 
                        class="btn btn-erp btn-outline-primary btn-erp-sm app-menu-link customer-volume-btn"
                        data-tab-id="customer-ledger-tab"
@@ -464,10 +478,11 @@
         </div>
 
         @* =====================================================
-           4) بطاقات الملخص: المبيعات أولاً من اليمين، الرصيد الحالي في المنتصف بنفس الحجم
-           ترتيب RTL: أول عنصر في HTML = أقصى اليمين
+           4) بطاقات الملخص داخل كارت — كما في حركة الصنف
            ===================================================== *@
-        <div class="row g-1 mb-2 flex-nowrap customer-summary-cards" style="overflow-x: auto;">
+        <div class="card product-movement-unified-card mb-2 flex-shrink-0">
+            <div class="card-body p-2 p-md-3">
+        <div class="row g-1 flex-nowrap customer-summary-cards" style="overflow-x: auto;">
             <div class="col-auto customer-stat-card">
                 <div class="card compact-card text-center shadow-sm clickable-stat-card" style="cursor: pointer;"
                      onclick="window.location.href='@Url.Action("Index", "SalesInvoices", new { searchBy = "customer", search = Model.CustomerId.ToString() })'">
@@ -505,6 +520,14 @@
                 </div>
             </div>
             <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">رصيد أول المدة</div>
+                        <div class="compact-stat text-secondary" style="font-size: 0.95rem;">@openingBalance.ToString("N2")</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto customer-stat-card">
                 <div class="card compact-card text-center shadow-sm customer-balance-card">
                     <div class="card-body p-1">
                         <div class="compact-label text-muted">الرصيد الحالي</div>
@@ -528,6 +551,9 @@
                         <div class="compact-stat" style="font-size: 0.85rem;">@(lastTransDate?.ToString("yyyy/MM/dd") ?? "-")</div>
                     </div>
                 </div>
+            </div>
+        </div>
+
             </div>
         </div>
 
@@ -593,9 +619,6 @@
                                         <th>الوقت</th>
                                         <th>المخزن</th>
                                         <th class="text-end">الصافي</th>
-                                        <th>الحالة</th>
-                                        <th>مرحل؟</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -603,28 +626,26 @@
                                     {
                                         @foreach (var invoice in salesInvoices)
                                         {
-                                            <tr>
-                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1" data-tab-id="si-show-tab" data-tab-title="فاتورة مبيعات" data-url="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1">@invoice.SIId</a></td>
+                                            var siShowUrl = Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }) + "?frame=1";
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@siShowUrl"
+                                                data-tab-id="si-show-tab"
+                                                data-tab-title="فاتورة مبيعات">
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@siShowUrl" data-tab-id="si-show-tab" data-tab-title="فاتورة مبيعات" data-url="@siShowUrl">@invoice.SIId</a></td>
                                                 <td>@invoice.SIDate.ToString("yyyy-MM-dd")</td>
                                                 <td>@DateTime.Today.Add(invoice.SITime).ToString("HH:mm:ss")</td>
                                                 <td>@(warehouses.TryGetValue(invoice.WarehouseId, out var warehouseName) ? warehouseName : invoice.WarehouseId.ToString())</td>
                                                 <td class="text-end">@invoice.NetTotal.ToString("N2")</td>
-                                                <td>@invoice.Status</td>
-                                                <td>@(invoice.IsPosted ? "نعم" : "لا")</td>
-                                                <td>
-                                                    <a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1" data-tab-id="si-show-tab" data-tab-title="فاتورة مبيعات" data-url="@(Url.Action("Show", "SalesInvoices", new { id = invoice.SIId }))?frame=1">عرض</a>
-                                                </td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="4" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@salesInvoices.Sum(i => i.NetTotal).ToString("N2")</td>
-                                            <td colspan="3"></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="8" class="text-center text-muted py-3"><small>لا توجد فواتير مبيعات للعميل المحدد@(fromDate.HasValue || toDate.HasValue ? " في الفترة المحددة. لرؤية الكل اترك من تاريخ / إلى تاريخ فارغة واضغط عرض." : "")</small></td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-3"><small>لا توجد فواتير مبيعات للعميل المحدد@(fromDate.HasValue || toDate.HasValue ? " في الفترة المحددة. لرؤية الكل اترك من تاريخ / إلى تاريخ فارغة واضغط عرض." : "")</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -641,7 +662,6 @@
                                         <th>المخزن</th>
                                         <th class="text-end">الكمية</th>
                                         <th class="text-end">المبلغ</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -650,25 +670,27 @@
                                         @foreach (var r in salesReturns)
                                         {
                                             var qty = r.Lines?.Sum(l => l.Qty) ?? 0;
-                                            <tr>
+                                            var srUrl = Url.Action("Edit", "SalesReturns", new { id = r.SRId }) + "?frame=1";
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@srUrl"
+                                                data-tab-id="sr-show-tab"
+                                                data-tab-title="مرتجع مبيعات">
                                                 <td>@r.SRDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1" data-tab-id="sr-show-tab" data-tab-title="مرتجع مبيعات" data-url="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1">@r.SRId</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@srUrl" data-tab-id="sr-show-tab" data-tab-title="مرتجع مبيعات" data-url="@srUrl">@r.SRId</a></td>
                                                 <td>@(warehouses.TryGetValue(r.WarehouseId, out var wsr) ? wsr : r.WarehouseId.ToString())</td>
                                                 <td class="text-end">@qty</td>
                                                 <td class="text-end">@r.NetTotal.ToString("N2")</td>
-                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1" data-tab-id="sr-show-tab" data-tab-title="مرتجع مبيعات" data-url="@(Url.Action("Edit", "SalesReturns", new { id = r.SRId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@salesReturns.Sum(r => r.Lines?.Sum(l => l.Qty) ?? 0)</td>
                                             <td class="text-end fw-bold">@salesReturns.Sum(r => r.NetTotal).ToString("N2")</td>
-                                            <td></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مبيعات للعميل المحدد في الفترة.</small></td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد مرتجعات مبيعات للعميل المحدد في الفترة.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -684,8 +706,6 @@
                                         <th>التاريخ</th>
                                         <th>المخزن</th>
                                         <th class="text-end">الصافي</th>
-                                        <th>مرحل؟</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -693,26 +713,25 @@
                                     {
                                         @foreach (var invoice in purchaseInvoices)
                                         {
-                                            <tr>
-                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1" data-tab-id="pi-show-tab" data-tab-title="فاتورة مشتريات" data-url="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1">@invoice.PIId</a></td>
+                                            var piUrl = Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }) + "?frame=1";
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@piUrl"
+                                                data-tab-id="pi-show-tab"
+                                                data-tab-title="فاتورة مشتريات">
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@piUrl" data-tab-id="pi-show-tab" data-tab-title="فاتورة مشتريات" data-url="@piUrl">@invoice.PIId</a></td>
                                                 <td>@invoice.PIDate.ToString("yyyy-MM-dd")</td>
                                                 <td>@(warehouses.TryGetValue(invoice.WarehouseId, out var warehouseName) ? warehouseName : invoice.WarehouseId.ToString())</td>
                                                 <td class="text-end">@invoice.NetTotal.ToString("N2")</td>
-                                                <td>@(invoice.IsPosted ? "نعم" : "لا")</td>
-                                                <td>
-                                                    <a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1" data-tab-id="pi-show-tab" data-tab-title="فاتورة مشتريات" data-url="@(Url.Action("Show", "PurchaseInvoices", new { id = invoice.PIId }))?frame=1">عرض</a>
-                                                </td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@purchaseInvoices.Sum(i => i.NetTotal).ToString("N2")</td>
-                                            <td colspan="2"></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-3"><small>لا توجد فواتير مشتريات مرحّلة للعميل المحدد</small></td></tr>
+                                        <tr><td colspan="4" class="text-center text-muted py-3"><small>لا توجد فواتير مشتريات مرحّلة للعميل المحدد</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -729,7 +748,6 @@
                                         <th>المخزن</th>
                                         <th class="text-end">الكمية</th>
                                         <th class="text-end">المبلغ</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -738,25 +756,27 @@
                                         @foreach (var r in purchaseReturns)
                                         {
                                             var qty = r.Lines?.Sum(l => l.Qty) ?? 0;
-                                            <tr>
+                                            var prUrl = Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }) + "?frame=1";
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@prUrl"
+                                                data-tab-id="pr-ret-show-tab"
+                                                data-tab-title="مرتجع مشتريات">
                                                 <td>@r.PRetDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1" data-tab-id="pr-ret-show-tab" data-tab-title="مرتجع مشتريات" data-url="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1">@r.PRetId</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@prUrl" data-tab-id="pr-ret-show-tab" data-tab-title="مرتجع مشتريات" data-url="@prUrl">@r.PRetId</a></td>
                                                 <td>@(warehouses.TryGetValue(r.WarehouseId, out var wpr) ? wpr : r.WarehouseId.ToString())</td>
                                                 <td class="text-end">@qty</td>
                                                 <td class="text-end">@r.NetTotal.ToString("N2")</td>
-                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1" data-tab-id="pr-ret-show-tab" data-tab-title="مرتجع مشتريات" data-url="@(Url.Action("Edit", "PurchaseReturns", new { id = r.PRetId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@purchaseReturns.Sum(r => r.Lines?.Sum(l => l.Qty) ?? 0)</td>
                                             <td class="text-end fw-bold">@purchaseReturns.Sum(r => r.NetTotal).ToString("N2")</td>
-                                            <td></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد مرتجعات مشتريات للمورد المحدد في الفترة.</small></td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد مرتجعات مشتريات للمورد المحدد في الفترة.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -792,7 +812,6 @@
                                         <th>نوع الخزينة</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>ملاحظات</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -800,24 +819,27 @@
                                     {
                                         @foreach (var r in cashReceipts)
                                         {
-                                            <tr>
+                                            var crUrl = Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }) + "?frame=1";
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@crUrl"
+                                                data-tab-id="cash-receipt-show-tab"
+                                                data-tab-title="إيصال استلام">
                                                 <td>@r.ReceiptDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1" data-tab-id="cash-receipt-show-tab" data-tab-title="إيصال استلام" data-url="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1">@(r.ReceiptNumber ?? r.CashReceiptId.ToString())</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@crUrl" data-tab-id="cash-receipt-show-tab" data-tab-title="إيصال استلام" data-url="@crUrl">@(r.ReceiptNumber ?? r.CashReceiptId.ToString())</a></td>
                                                 <td>@(r.CashAccount != null ? $"{r.CashAccount.AccountCode} - {r.CashAccount.AccountName}" : "-")</td>
                                                 <td class="text-end">@r.Amount.ToString("N2")</td>
                                                 <td><small class="text-muted">@(r.Description ?? "")</small></td>
-                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1" data-tab-id="cash-receipt-show-tab" data-tab-title="إيصال استلام" data-url="@(Url.Action("Show", "CashReceipts", new { id = r.CashReceiptId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@cashReceipts.Sum(r => r.Amount).ToString("N2")</td>
-                                            <td colspan="2"></td>
+                                            <td></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد إيصالات استلام للعميل في الفترة.</small></td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد إيصالات استلام للعميل في الفترة.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -834,7 +856,6 @@
                                         <th>نوع الخزينة</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>ملاحظات</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -842,24 +863,27 @@
                                     {
                                         @foreach (var p in cashPayments)
                                         {
-                                            <tr>
+                                            var cpUrl = Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }) + "?frame=1";
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@cpUrl"
+                                                data-tab-id="cash-payment-details-tab"
+                                                data-tab-title="إيصال دفع">
                                                 <td>@p.PaymentDate.ToString("yyyy-MM-dd")</td>
-                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1" data-tab-id="cash-payment-details-tab" data-tab-title="إيصال دفع" data-url="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1">@(p.PaymentNumber ?? p.CashPaymentId.ToString())</a></td>
+                                                <td><a class="open-same-tab text-primary text-decoration-none" href="@cpUrl" data-tab-id="cash-payment-details-tab" data-tab-title="إيصال دفع" data-url="@cpUrl">@(p.PaymentNumber ?? p.CashPaymentId.ToString())</a></td>
                                                 <td>@(p.CashAccount != null ? $"{p.CashAccount.AccountCode} - {p.CashAccount.AccountName}" : "-")</td>
                                                 <td class="text-end">@p.Amount.ToString("N2")</td>
                                                 <td><small class="text-muted">@(p.Description ?? "")</small></td>
-                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1" data-tab-id="cash-payment-details-tab" data-tab-title="إيصال دفع" data-url="@(Url.Action("Details", "CashPayments", new { id = p.CashPaymentId }))?frame=1">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="3" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@cashPayments.Sum(p => p.Amount).ToString("N2")</td>
-                                            <td colspan="2"></td>
+                                            <td></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="6" class="text-center text-muted py-2"><small>لا توجد إيصالات دفع للعميل في الفترة.</small></td></tr>
+                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد إيصالات دفع للعميل في الفترة.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -875,7 +899,6 @@
                                         <th>رقم الإشعار</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>السبب</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -884,23 +907,25 @@
                                         @foreach (var d in debitNotes)
                                         {
                                             var debitNoteUrl = Url.Action("Edit", "DebitNotes", new { id = d.DebitNoteId }) + "?frame=1";
-                                            <tr>
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@debitNoteUrl"
+                                                data-tab-id="debit-note-form-tab"
+                                                data-tab-title="إشعار خصم">
                                                 <td>@d.NoteDate.ToString("yyyy-MM-dd")</td>
                                                 <td><a class="open-same-tab text-primary text-decoration-none" href="@debitNoteUrl" data-tab-id="debit-note-form-tab" data-tab-title="إشعار خصم" data-url="@debitNoteUrl">@d.DebitNoteId</a></td>
                                                 <td class="text-end">@d.Amount.ToString("N2")</td>
                                                 <td><small class="text-muted">@(d.Reason ?? "")</small></td>
-                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@debitNoteUrl" data-tab-id="debit-note-form-tab" data-tab-title="إشعار خصم" data-url="@debitNoteUrl">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="2" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@debitNotes.Sum(d => d.Amount).ToString("N2")</td>
-                                            <td colspan="2"></td>
+                                            <td></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد إشعارات خصم للعميل في الفترة.</small></td></tr>
+                                        <tr><td colspan="4" class="text-center text-muted py-2"><small>لا توجد إشعارات خصم للعميل في الفترة.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -916,7 +941,6 @@
                                         <th>رقم الإشعار</th>
                                         <th class="text-end">المبلغ</th>
                                         <th>السبب</th>
-                                        <th>إجراءات</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -925,23 +949,25 @@
                                         @foreach (var c in creditNotes)
                                         {
                                             var creditNoteUrl = Url.Action("Edit", "CreditNotes", new { id = c.CreditNoteId }) + "?frame=1";
-                                            <tr>
+                                            <tr class="erp-list-selectable-row"
+                                                data-show-url="@creditNoteUrl"
+                                                data-tab-id="credit-note-form-tab"
+                                                data-tab-title="إشعار إضافة">
                                                 <td>@c.NoteDate.ToString("yyyy-MM-dd")</td>
                                                 <td><a class="open-same-tab text-primary text-decoration-none" href="@creditNoteUrl" data-tab-id="credit-note-form-tab" data-tab-title="إشعار إضافة" data-url="@creditNoteUrl">@c.CreditNoteId</a></td>
                                                 <td class="text-end">@c.Amount.ToString("N2")</td>
                                                 <td><small class="text-muted">@(c.Reason ?? "")</small></td>
-                                                <td><a class="btn btn-sm btn-primary open-same-tab" href="@creditNoteUrl" data-tab-id="credit-note-form-tab" data-tab-title="إشعار إضافة" data-url="@creditNoteUrl">عرض</a></td>
                                             </tr>
                                         }
                                         <tr class="table-info">
                                             <td colspan="2" class="text-end fw-bold">الإجمالي:</td>
                                             <td class="text-end fw-bold">@creditNotes.Sum(c => c.Amount).ToString("N2")</td>
-                                            <td colspan="2"></td>
+                                            <td></td>
                                         </tr>
                                     }
                                     else
                                     {
-                                        <tr><td colspan="5" class="text-center text-muted py-2"><small>لا توجد إشعارات إضافة للعميل في الفترة.</small></td></tr>
+                                        <tr><td colspan="4" class="text-center text-muted py-2"><small>لا توجد إشعارات إضافة للعميل في الفترة.</small></td></tr>
                                     }
                                 </tbody>
                             </table>
@@ -1411,6 +1437,55 @@
                     }
                 });
             });
+        })();
+
+        (function () {
+            function openCvDocInTab(tabId, url, title) {
+                if (!url) return;
+                try {
+                    if (window.top !== window) {
+                        window.top.postMessage({ type: 'erp-open-tab', tabId: tabId, url: url, title: title || 'تبويب' }, '*');
+                        return;
+                    }
+                    if (window.erpTabs && typeof window.erpTabs.openTab === 'function') {
+                        window.erpTabs.openTab(tabId, url, title || 'تبويب');
+                    } else {
+                        window.location.href = url;
+                    }
+                } catch (e) {
+                    window.location.href = url;
+                }
+            }
+            var btnView = document.getElementById('customerVolumeBtnView');
+            var container = document.getElementById('customerMovementTabsContent');
+            if (!btnView || !container) return;
+            function clearCvSelection() {
+                container.querySelectorAll('.erp-list-selectable-row.selected').forEach(function (r) { r.classList.remove('selected'); });
+                btnView.disabled = true;
+            }
+            container.addEventListener('click', function (e) {
+                var row = e.target.closest('.erp-list-selectable-row');
+                if (!row || !container.contains(row)) return;
+                if (e.target.closest('a')) return;
+                container.querySelectorAll('.erp-list-selectable-row').forEach(function (r) { r.classList.remove('selected'); });
+                row.classList.add('selected');
+                btnView.disabled = !row.getAttribute('data-show-url');
+            });
+            btnView.addEventListener('click', function () {
+                var row = container.querySelector('.erp-list-selectable-row.selected');
+                if (!row) return;
+                var url = row.getAttribute('data-show-url');
+                if (!url) return;
+                var tabId = row.getAttribute('data-tab-id') || 'doc-show-tab';
+                var title = row.getAttribute('data-tab-title') || 'عرض';
+                openCvDocInTab(tabId, url, title);
+            });
+            document.querySelectorAll('#customerMovementTabs button[data-bs-toggle="tab"]').forEach(function (b) {
+                b.addEventListener('shown.bs.tab', function () { clearCvSelection(); });
+            });
+        })();
+
+        (function () {
 
             // =========================
             // ✅ دالة تحديث للصفحة (يتم استدعاؤها من زر التحديث في الناف بار)

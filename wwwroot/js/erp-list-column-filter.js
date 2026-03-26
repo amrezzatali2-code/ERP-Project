@@ -1,7 +1,8 @@
 // erp-list-column-filter.js
 // سكربت مشترك: لوحة فلتر الأعمدة (بحث شبيه بإكسل) + مقابض توسعة الأعمدة
 // الفلاتر تراكمية: عند التطبيق لا يُمسح فلتر بقية الأعمدة، يحدّث فقط filterCol_العمودالحالي
-// الاستخدام: ERP.initListColumnFilter({ panelId, tableId, wrapperId, getColumnValuesUrl, defaultSort?, defaultDir? })
+// الأعمدة الرقمية (numericColumns): نفس نمط قائمة الأصناف — بحث رقمي يُخزَّن في filterCol_{col}Expr (< > <= >= : نطاق، أو رقم مطابق)
+// الاستخدام: ERP.initListColumnFilter({ panelId, tableId, wrapperId, getColumnValuesUrl, defaultSort?, defaultDir?, numericColumns?: string[] })
 
 (function () {
     'use strict';
@@ -17,7 +18,8 @@
         var btnClose = panel.querySelector('.erp-column-filter-header .btn-close');
         var searchInp = panel.querySelector('.erp-column-filter-body input[type="text"]');
         var listEl = panel.querySelector('.erp-column-filter-list');
-        var searchRow = searchInp ? (searchInp.closest('.erp-filter-section') || searchInp.parentElement) : null;
+        // إخفاء صف «بحث في العناصر» فقط للأعمدة الرقمية — لا نخفي كامل .erp-filter-section حتى تبقى قائمة القيم/البحث الرقمي ظاهرة
+        var searchRow = panel.querySelector('#erpColumnFilterSearchRow') || (searchInp ? searchInp.parentElement : null);
         var sortSection = panel.querySelector('.erp-filter-sort-section');
         var btnOk = panel.querySelector('.erp-column-filter-actions button[data-action="apply"]') || panel.querySelector('.erp-column-filter-actions .btn-primary') || panel.querySelector('.erp-column-filter-actions .btn-erp-primary');
         var btnClear = panel.querySelector('.erp-column-filter-actions button[data-action="clear"]') || panel.querySelector('.erp-column-filter-actions .btn-secondary') || panel.querySelector('.erp-column-filter-actions .btn-erp-secondary');
@@ -25,10 +27,19 @@
         var defaultSort = (options.defaultSort || '').trim() || 'Id';
         var defaultDir = ((options.defaultDir || '').toLowerCase() === 'desc') ? 'desc' : 'asc';
 
+        var numericCols = (options.numericColumns || []).map(function (c) { return String(c || '').toLowerCase(); });
+        function isNumericCol(col) {
+            return numericCols.indexOf(String(col || '').toLowerCase()) >= 0;
+        }
+
         var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
 
         function getCurrentFilterValue(col) {
-            return new URL(window.location.href).searchParams.get('filterCol_' + col) || '';
+            var url = new URL(window.location.href);
+            if (isNumericCol(col)) {
+                return url.searchParams.get('filterCol_' + col + 'Expr') || url.searchParams.get('filterCol_' + col) || '';
+            }
+            return url.searchParams.get('filterCol_' + col) || '';
         }
         function getCurrentFilterContains(col) {
             return new URL(window.location.href).searchParams.get('filterCol_' + col + '_contains') || '';
@@ -58,10 +69,6 @@
             currentCol = btn.getAttribute('data-col');
             currentSortKey = btn.getAttribute('data-sort-key') || currentCol;
             if (titleEl) titleEl.textContent = 'ترتيب وفلتر: ' + (btn.getAttribute('data-col-title') || currentCol);
-            // لا نعبّئ بوكس البحث في الكارت من الرابط أبداً — حتى لا يظهر نص (مثل كليكسان) لم يكتبه المستخدم.
-            // البوكس للبحث داخل اللوحة فقط؛ الفلتر المطبّق يُقرأ من التشيك بوكسات (filterCol_X).
-            if (searchInp) searchInp.value = '';
-            currentSelected = new Set((getCurrentFilterValue(currentCol) || '').split(/[|,;]/).filter(Boolean));
             anchorRect = btn.getBoundingClientRect();
             panel.style.minWidth = Math.max(250, anchorRect.width) + 'px';
             panel.classList.remove('d-none');
@@ -81,6 +88,38 @@
                 });
             }
 
+            // ——— عمود رقمي: نفس قائمة الأصناف (بحث رقمي فقط، بدون قائمة تشيك بوكس) ———
+            if (isNumericCol(currentCol)) {
+                if (searchInp) searchInp.value = '';
+                currentSelected = new Set();
+                if (searchRow) searchRow.classList.add('d-none');
+                var curExpr = getCurrentFilterValue(currentCol) || '';
+                var safeVal = String(curExpr).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                if (listEl) {
+                    listEl.innerHTML =
+                        '<div class="mb-2">' +
+                        '<label class="form-label small mb-1">بحث رقمي:</label>' +
+                        '<input type="text" id="erpColumnFilterNumericExpr" class="form-control form-control-sm" ' +
+                        'placeholder="رقم أو &lt;10 أو &gt;100 أو 10:100" value="' + safeVal + '">' +
+                        '<small class="text-muted d-block mt-1">مثال: 53812 أو &lt;10 أو &gt;100 أو 10:100</small>' +
+                        '</div>';
+                }
+                adjustPanelPosition();
+                setTimeout(function () {
+                    var numInp = document.getElementById('erpColumnFilterNumericExpr');
+                    if (numInp) {
+                        numInp.addEventListener('keydown', function (e) {
+                            if (e.key === 'Enter') { e.preventDefault(); applyFilter(); }
+                        });
+                        numInp.focus();
+                    }
+                }, 50);
+                return;
+            }
+
+            // ——— عمود غير رقمي: قائمة القيم ———
+            if (searchInp) searchInp.value = '';
+            currentSelected = new Set((new URL(window.location.href).searchParams.get('filterCol_' + currentCol) || '').split(/[|,;]/).filter(Boolean));
             adjustPanelPosition();
             if (searchRow) searchRow.classList.remove('d-none');
             if (listEl) listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
@@ -172,12 +211,29 @@
                 url.searchParams.set('sort', cur.sort);
                 url.searchParams.set('dir', cur.dir);
             }
+
+            if (isNumericCol(currentCol)) {
+                var numInp = document.getElementById('erpColumnFilterNumericExpr');
+                var expr = numInp ? String(numInp.value || '').trim() : '';
+                url.searchParams.delete('filterCol_' + currentCol);
+                url.searchParams.delete('filterCol_' + currentCol + '_contains');
+                if (expr) {
+                    url.searchParams.set('filterCol_' + currentCol + 'Expr', expr);
+                    url.searchParams.delete('search');
+                    url.searchParams.delete('searchBy');
+                } else {
+                    url.searchParams.delete('filterCol_' + currentCol + 'Expr');
+                }
+                url.searchParams.set('page', '1');
+                window.location.href = url.toString();
+                return;
+            }
+
             var val = Array.from(currentSelected).filter(Boolean).join('|');
             var containsParam = 'filterCol_' + currentCol + '_contains';
             if (val) {
                 url.searchParams.set('filterCol_' + currentCol, val);
                 url.searchParams.delete(containsParam);
-                // عند تطبيق فلتر من التشيك بوكسات نزيل البحث العام حتى لا يُطبَّق بحث "يحتوي" ولا يظهر نص في بوكس البحث — ينطبق على كل الأعمدة
                 url.searchParams.delete('search');
                 url.searchParams.delete('searchBy');
             } else {
@@ -192,6 +248,7 @@
             if (!currentCol) return;
             var url = new URL(window.location.href);
             url.searchParams.delete('filterCol_' + currentCol);
+            url.searchParams.delete('filterCol_' + currentCol + 'Expr');
             url.searchParams.set('page', '1');
             window.location.href = url.toString();
         }
@@ -213,11 +270,13 @@
         var fetchDebounce = null;
         if (searchInp) {
             searchInp.addEventListener('input', function () {
+                if (currentCol && isNumericCol(currentCol)) return;
                 renderList(this.value);
                 if (fetchDebounce) clearTimeout(fetchDebounce);
                 fetchDebounce = setTimeout(function () {
                     fetchDebounce = null;
                     if (!currentCol) return;
+                    if (isNumericCol(currentCol)) return;
                     var url = options.getColumnValuesUrl + (options.getColumnValuesUrl.indexOf('?') >= 0 ? '&' : '?') + 'column=' + encodeURIComponent(currentCol);
                     var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : '';
                     if (searchVal) url += '&search=' + encodeURIComponent(searchVal);

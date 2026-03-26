@@ -1,7 +1,17 @@
-﻿using System.ComponentModel.DataAnnotations; // خصائص التحقق من البيانات
+using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations; // خصائص التحقق من البيانات
 
 namespace ERP.ViewModels
 {
+    /// <summary>
+    /// عنصر قائمة المستخدمين في شاشة الدخول (لا نستخدم anonymous مع ViewBag لأن الرازور يرى العنصر كـ object).
+    /// </summary>
+    public class LoginUserListItem
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
     /// <summary>
     /// موديل بسيط لبيانات شاشة تسجيل الدخول.
     /// </summary>

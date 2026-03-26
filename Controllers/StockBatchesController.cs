@@ -614,7 +614,7 @@ namespace ERP.Controllers
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("Id,WarehouseId,WarehouseName,ProdId,ProdName,BatchNo,Expiry,QtyOnHand,QtyReserved,UpdatedAt,Note");
+                sb.AppendLine("كود السجل,كود المخزن,اسم المخزن,كود الصنف,اسم الصنف,رقم التشغيلة,تاريخ الصلاحية,المتاح,محجوز,آخر تحديث,ملاحظة");
 
                 foreach (var x in data)
                 {
@@ -636,14 +636,14 @@ namespace ERP.Controllers
                     ));
                 }
 
-                var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-                var csvName = $"StockBatches_{DateTime.Now:yyyyMMdd_HHmm}.csv";
+                var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                var csvName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة التشغيلات بالمخازن", ".csv");
                 return File(bytes, "text/csv", csvName);
             }
             else
             {
                 using var wb = new XLWorkbook();
-                var ws = wb.Worksheets.Add("Stock_Batches");
+                var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرصدة التشغيلات"));
 
                 ws.Cell(1, 1).Value = "كود السجل";
                 ws.Cell(1, 2).Value = "كود المخزن";
@@ -683,7 +683,7 @@ namespace ERP.Controllers
                 using var stream = new System.IO.MemoryStream();
                 wb.SaveAs(stream);
 
-                var fileName = $"StockBatches_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة التشغيلات بالمخازن", ".xlsx");
                 return File(stream.ToArray(),
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     fileName);

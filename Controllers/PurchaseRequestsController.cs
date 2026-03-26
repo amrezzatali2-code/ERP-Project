@@ -2229,6 +2229,29 @@ private async Task PopulateDropDownsAsync(
 
 
 
+        [HttpGet]
+        [RequirePermission("PurchaseRequests.Show")]
+        public async Task<IActionResult> ExportShowExcel(int id)
+        {
+            if (id <= 0)
+                return BadRequest();
+
+            var request = await _context.PurchaseRequests
+                .Include(p => p.Customer)
+                .Include(p => p.Warehouse)
+                .Include(p => p.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(p => p.PRId == id);
+
+            if (request == null)
+                return NotFound();
+
+            var bytes = ShowDocumentExcelExport.PurchaseRequest(request);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ExcelExportNaming.ArabicTimestampedFileName($"طلب شراء {id}", ".xlsx"));
+        }
+
         // =========================================================
         // دالة مساعدة: تجهيز بيانات التنقل (أول/سابق/التالي/آخر) لطلب الشراء
         // الهدف:
@@ -3099,8 +3122,7 @@ private async Task PopulateDropDownsAsync(
             // ✅ سطر مهم جدًا: يخلي Excel يفهم الفاصل (خصوصًا لو إعدادات الجهاز مختلفة)
             sb.AppendLine("sep=,");
 
-            // هيدر الأعمدة (طلبات الشراء)
-            sb.AppendLine("PRId,PRDate,CustomerId,WarehouseId,TotalQtyRequested,ExpectedItemsTotal,Status,IsConverted,CreatedAt,UpdatedAt,CreatedBy");
+            sb.AppendLine("رقم الطلب,تاريخ الطلب,كود العميل,كود المخزن,إجمالي الكمية المطلوبة,إجمالي التكلفة المتوقعة,الحالة,تم التحويل إلى فاتورة؟,تاريخ الإنشاء,آخر تعديل,أنشأها");
 
             const string sep = ",";
 
@@ -3125,7 +3147,7 @@ private async Task PopulateDropDownsAsync(
                   .Append(pr.TotalQtyRequested.ToString("0")).Append(sep)          // إجمالي الكمية المطلوبة
                   .Append(pr.ExpectedItemsTotal.ToString("0.00")).Append(sep)      // إجمالي التكلفة المتوقعة
                   .Append(status).Append(sep)
-                  .Append(pr.IsConverted ? "1" : "0").Append(sep)                  // هل تم تحويله لفاتورة شراء؟
+                  .Append(pr.IsConverted ? "نعم" : "لا").Append(sep)
                   .Append(createdAtText).Append(sep)
                   .Append(updatedAtText).Append(sep)
                   .Append(createdBy)
@@ -3138,7 +3160,7 @@ private async Task PopulateDropDownsAsync(
             var bytes = utf8Bom.GetBytes(sb.ToString());
 
             // اسم الملف
-            var fileName = $"PurchaseRequests_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("طلبات الشراء", ".csv");
 
             // نوع الملف (يفتح في Excel)
             const string contentType = "application/vnd.ms-excel";

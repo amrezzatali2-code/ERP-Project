@@ -709,6 +709,11 @@
                             📊 حجم تعامل
                         </a>
 
+                        @if (Model?.PIId > 0)
+                        {
+                            <a href="@Url.Action("ExportShowExcel", "PurchaseInvoices", new { id = Model.PIId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
+                        }
+
                         <button type="button"
                                 id="btnPrintInvoice"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">

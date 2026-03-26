@@ -30,14 +30,20 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
         private readonly DocumentTotalsService _docTotals;
+        private readonly IUserAccountVisibilityService _accountVisibilityService;
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        public SalesOrdersController(AppDbContext context, IUserActivityLogger activityLogger, DocumentTotalsService docTotals)
+        public SalesOrdersController(
+            AppDbContext context,
+            IUserActivityLogger activityLogger,
+            DocumentTotalsService docTotals,
+            IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _activityLogger = activityLogger;
             _docTotals = docTotals ?? throw new ArgumentNullException(nameof(docTotals));
+            _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
         }
 
         private string GetCurrentUserDisplayName()
@@ -82,7 +88,11 @@ namespace ERP.Controllers
                 ["CustomerId"] = o => o.CustomerId,
                 ["WarehouseId"] = o => o.WarehouseId,
                 ["Status"] = o => o.Status ?? "",
-                ["CreatedBy"] = o => o.CreatedBy ?? ""
+                ["CreatedBy"] = o => o.CreatedBy ?? "",
+                ["Region"] = o => o.Customer != null && o.Customer.Area != null
+                    ? o.Customer.Area.AreaName ?? ""
+                    : (o.Customer != null ? (o.Customer.RegionName ?? "") : ""),
+                ["ExpectedItemsTotal"] = o => o.ExpectedItemsTotal
             };
 
 
@@ -95,39 +105,80 @@ namespace ERP.Controllers
         // =========================
         private async Task PopulateDropDownsAsync(int? selectedCustomerId = null, int? selectedWarehouseId = null)
         {
-            // قائمة العملاء للأوتوكومبليت في الهيدر (نفس شكل فاتورة المبيعات لملء الحقول)
-            var customers = await _context.Customers
-                .Where(c => c.IsActive == true)
+            var customerBaseQuery = _context.Customers.AsNoTracking();
+            customerBaseQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customerBaseQuery);
+
+            var customers = await customerBaseQuery
+                .Include(c => c.Governorate)
+                .Include(c => c.District)
+                .Include(c => c.Area)
+                .Include(c => c.Policy)
                 .OrderBy(c => c.CustomerName)
                 .Select(c => new
                 {
                     Id = c.CustomerId,
                     Name = c.CustomerName,
-                    PolicyName = c.Policy != null ? c.Policy.Name : "",
-                    PolicyId = c.PolicyId,
-                    Phone = c.Phone1 ?? c.Phone2 ?? c.Whatsapp ?? "",
-                    Address = c.Address ?? "",
-                    CreditLimit = c.CreditLimit,
+                    Phone = c.Phone1 ?? string.Empty,
+                    Address = c.Address ?? string.Empty,
+                    Gov = c.Governorate != null ? c.Governorate.GovernorateName : string.Empty,
+                    District = c.District != null ? c.District.DistrictName : string.Empty,
+                    Area = c.Area != null ? c.Area.AreaName : string.Empty,
+                    Credit = c.CreditLimit,
                     CurrentBalance = c.CurrentBalance,
-                    Gov = c.Governorate != null ? c.Governorate.GovernorateName : "",
-                    District = c.District != null ? c.District.DistrictName : "",
-                    Area = c.Area != null ? c.Area.AreaName : ""
+                    PolicyId = c.PolicyId,
+                    PolicyName = c.Policy != null ? c.Policy.Name : "",
+                    IsActive = c.IsActive
                 })
                 .ToListAsync();
 
+            if (selectedCustomerId.HasValue && !customers.Any(c => c.Id == selectedCustomerId.Value))
+            {
+                var extra = await _context.Customers
+                    .AsNoTracking()
+                    .Where(c => c.CustomerId == selectedCustomerId.Value)
+                    .Include(c => c.Governorate)
+                    .Include(c => c.District)
+                    .Include(c => c.Area)
+                    .Include(c => c.Policy)
+                    .Select(c => new
+                    {
+                        Id = c.CustomerId,
+                        Name = c.CustomerName ?? "",
+                        Phone = c.Phone1 ?? string.Empty,
+                        Address = c.Address ?? string.Empty,
+                        Gov = c.Governorate != null ? c.Governorate.GovernorateName : string.Empty,
+                        District = c.District != null ? c.District.DistrictName : string.Empty,
+                        Area = c.Area != null ? c.Area.AreaName : string.Empty,
+                        Credit = c.CreditLimit,
+                        CurrentBalance = c.CurrentBalance,
+                        PolicyId = c.PolicyId,
+                        PolicyName = c.Policy != null ? c.Policy.Name : "",
+                        IsActive = c.IsActive
+                    })
+                    .FirstOrDefaultAsync();
+                if (extra != null)
+                    customers.Insert(0, extra);
+            }
+
             ViewBag.Customers = customers;
 
-            // قائمة المخازن للدروب داون
+            if (selectedCustomerId.HasValue)
+            {
+                var current = customers.FirstOrDefault(c => c.Id == selectedCustomerId.Value);
+                if (current != null)
+                    ViewBag.SelectedCustomerName = current.Name;
+            }
+
             var warehouses = await _context.Warehouses
+                .AsNoTracking()
                 .OrderBy(w => w.WarehouseName)
                 .ToListAsync();
 
             ViewBag.Warehouses = new SelectList(
                 warehouses,
-                "WarehouseId",          // اسم عمود المفتاح في جدول المخازن
-                "WarehouseName",        // اسم المخزن المعروض
-                selectedWarehouseId     // المخزن المختار (لو موجود)
-            );
+                "WarehouseId",
+                "WarehouseName",
+                selectedWarehouseId);
         }
 
 
@@ -192,7 +243,7 @@ namespace ERP.Controllers
             string? sort = "SODate",
             string? dir = "desc",
             int page = 1,
-            int pageSize = 50,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
@@ -200,17 +251,31 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_customer = null,
             string? filterCol_warehouse = null,
+            string? filterCol_region = null,
             string? filterCol_status = null,
+            string? filterCol_totalExpr = null,
             string? filterCol_createdBy = null
         )
         {
-            // 1) الاستعلام الأساسي مع تحميل العميل والمخزن
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psParsed))
+                pageSize = psParsed;
+
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            int[] allowedPageSizes = { 10, 25, 50, 100, 200, 0 };
+            if (!allowedPageSizes.Contains(pageSize))
+                pageSize = 10;
+
+            // 1) الاستعلام الأساسي مع تحميل العميل (ومنطقة العرض) والمخزن
             IQueryable<SalesOrder> q = _context.SalesOrders
                 .AsNoTracking()
                 .Include(o => o.Customer)
+                    .ThenInclude(c => c!.Area)
                 .Include(o => o.Warehouse);
 
             // 2) تطبيق فلتر التاريخ + فلتر رقم الأمر
@@ -229,8 +294,10 @@ namespace ERP.Controllers
                 defaultSortBy: "SODate"
             );
 
-            // 3.1) فلاتر الأعمدة بنمط Excel
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            // 3.1) فلاتر الأعمدة — رقم الأمر رقمياً عبر Expr عند التوفر
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                q = SalesOrderListNumericExpr.ApplySoIdExpr(q, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -239,6 +306,7 @@ namespace ERP.Controllers
                 if (ids.Count > 0)
                     q = q.Where(o => ids.Contains(o.SOId));
             }
+
             if (!string.IsNullOrWhiteSpace(filterCol_date))
             {
                 var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -272,6 +340,23 @@ namespace ERP.Controllers
                             o.Warehouse != null ? (o.Warehouse.WarehouseName ?? o.WarehouseId.ToString()) : o.WarehouseId.ToString()
                         ));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = filterCol_region.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => !string.IsNullOrEmpty(v))
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(o =>
+                        vals.Contains(
+                            o.Customer == null
+                                ? ""
+                                : (!string.IsNullOrWhiteSpace(o.Customer.RegionName)
+                                    ? o.Customer.RegionName!
+                                    : (o.Customer.Area != null && o.Customer.Area.AreaName != null
+                                        ? o.Customer.Area.AreaName
+                                        : ""))));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_status))
             {
                 var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -281,6 +366,8 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     q = q.Where(o => o.Status != null && vals.Contains(o.Status));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_totalExpr))
+                q = SalesOrderListNumericExpr.ApplyExpectedTotalExpr(q, filterCol_totalExpr);
             if (!string.IsNullOrWhiteSpace(filterCol_createdBy))
             {
                 var vals = filterCol_createdBy.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -291,19 +378,40 @@ namespace ERP.Controllers
                     q = q.Where(o => o.CreatedBy != null && vals.Contains(o.CreatedBy));
             }
 
-            // 4) إنشاء الموديل المقسّم إلى صفحات
-            var model = await PagedResult<SalesOrder>.CreateAsync(q, page, pageSize);
+            var sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-            // 5) تخزين قيم البحث/الترتيب في الموديل (للاستخدام في الفيو)
-            model.Search = search;
-            model.SearchBy = searchBy;
-            model.SortColumn = sort;
-            model.SortDescending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
-            model.UseDateRange = useDateRange;
-            model.FromDate = fromDate;
-            model.ToDate = toDate;
+            // إجمالي القيمة المتوقعة وعدد السجلات بعد الفلاتر (للكروت وـ tfoot)
+            decimal totalExpectedForCards = await q.SumAsync(o => (decimal?)o.ExpectedItemsTotal) ?? 0m;
+            int totalCount = await q.CountAsync();
 
-            // 6) خيارات البحث والفرز للبارشال المشترك أعلى الجدول
+            ViewBag.TotalCountForCards = totalCount;
+            ViewBag.TotalExpectedForCards = totalExpectedForCards;
+
+            PagedResult<SalesOrder> model;
+            if (pageSize == 0)
+            {
+                var effectiveTake = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                var itemsAll = await q.Take(effectiveTake).ToListAsync();
+                model = new PagedResult<SalesOrder>(itemsAll, 1, 0, totalCount)
+                {
+                    SortColumn = sort,
+                    SortDescending = sortDesc,
+                    Search = search,
+                    SearchBy = searchBy,
+                    UseDateRange = useDateRange,
+                    FromDate = fromDate,
+                    ToDate = toDate
+                };
+            }
+            else
+            {
+                model = await PagedResult<SalesOrder>.CreateAsync(
+                    q, page, pageSize, sort, sortDesc, search, searchBy);
+                model.UseDateRange = useDateRange;
+                model.FromDate = fromDate;
+                model.ToDate = toDate;
+            }
+
             ViewBag.SearchOptions = new[]
             {
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("الكل",       "all",       string.Equals(searchBy, "all",       StringComparison.OrdinalIgnoreCase)),
@@ -311,6 +419,7 @@ namespace ERP.Controllers
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("العميل",     "customer",  string.Equals(searchBy, "customer",  StringComparison.OrdinalIgnoreCase)),
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("المخزن",     "warehouse", string.Equals(searchBy, "warehouse", StringComparison.OrdinalIgnoreCase)),
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("الحالة",     "status",    string.Equals(searchBy, "status",    StringComparison.OrdinalIgnoreCase)),
+                new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("الكاتب",    "createdBy", string.Equals(searchBy, "createdBy", StringComparison.OrdinalIgnoreCase)),
             };
 
             ViewBag.SortOptions = new[]
@@ -319,20 +428,20 @@ namespace ERP.Controllers
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("الرقم",   "SOId",        string.Equals(sort, "SOId",        StringComparison.OrdinalIgnoreCase)),
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("العميل",  "CustomerId",  string.Equals(sort, "CustomerId",  StringComparison.OrdinalIgnoreCase)),
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("المخزن",  "WarehouseId", string.Equals(sort, "WarehouseId", StringComparison.OrdinalIgnoreCase)),
+                new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("المنطقة", "Region",      string.Equals(sort, "Region",      StringComparison.OrdinalIgnoreCase)),
                 new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("الحالة",  "Status",      string.Equals(sort, "Status",      StringComparison.OrdinalIgnoreCase)),
-                new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("أنشأه",  "CreatedBy",   string.Equals(sort, "CreatedBy",   StringComparison.OrdinalIgnoreCase)),
+                new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("الإجمالي", "ExpectedItemsTotal", string.Equals(sort, "ExpectedItemsTotal", StringComparison.OrdinalIgnoreCase)),
+                new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem("الكاتب",  "CreatedBy",   string.Equals(sort, "CreatedBy",   StringComparison.OrdinalIgnoreCase)),
             };
 
-            // 7) تخزين القيم في ViewBag (للنماذج والهيدرات)
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "SODate";
-            ViewBag.Dir = model.SortDescending ? "desc" : "asc";
+            ViewBag.Dir = sortDesc ? "desc" : "asc";
 
             ViewBag.Page = model.PageNumber;
             ViewBag.PageSize = model.PageSize;
 
-            // فلتر التاريخ في الفيو
             ViewBag.DateField = dateField ?? "SODate";
 
             ViewBag.FromCode = fromCode;
@@ -341,10 +450,13 @@ namespace ERP.Controllers
             ViewBag.CodeTo = toCode;
 
             ViewBag.FilterCol_Id = filterCol_id ?? "";
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr ?? "";
             ViewBag.FilterCol_Date = filterCol_date ?? "";
             ViewBag.FilterCol_Customer = filterCol_customer ?? "";
             ViewBag.FilterCol_Warehouse = filterCol_warehouse ?? "";
+            ViewBag.FilterCol_Region = filterCol_region ?? "";
             ViewBag.FilterCol_Status = filterCol_status ?? "";
+            ViewBag.FilterCol_TotalExpr = filterCol_totalExpr ?? "";
             ViewBag.FilterCol_CreatedBy = filterCol_createdBy ?? "";
 
             return View(model);
@@ -521,10 +633,13 @@ namespace ERP.Controllers
             int? codeFrom = null,
             int? codeTo = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_customer = null,
             string? filterCol_warehouse = null,
+            string? filterCol_region = null,
             string? filterCol_status = null,
+            string? filterCol_totalExpr = null,
             string? filterCol_createdBy = null,
             string? format = "excel"
         )
@@ -532,6 +647,7 @@ namespace ERP.Controllers
             IQueryable<SalesOrder> q = _context.SalesOrders
                 .AsNoTracking()
                 .Include(o => o.Customer)
+                    .ThenInclude(c => c!.Area)
                 .Include(o => o.Warehouse);
 
             q = ApplyCodeAndDateFilters(q, useDateRange, fromDate, toDate, codeFrom, codeTo);
@@ -542,7 +658,9 @@ namespace ERP.Controllers
                 defaultSortBy: "SODate"
             );
 
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                q = SalesOrderListNumericExpr.ApplySoIdExpr(q, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -572,12 +690,29 @@ namespace ERP.Controllers
                     q = q.Where(o => vals.Contains(
                         o.Warehouse != null ? (o.Warehouse.WarehouseName ?? o.WarehouseId.ToString()) : o.WarehouseId.ToString()));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = filterCol_region.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(o =>
+                        vals.Contains(
+                            o.Customer == null
+                                ? ""
+                                : (!string.IsNullOrWhiteSpace(o.Customer.RegionName)
+                                    ? o.Customer.RegionName!
+                                    : (o.Customer.Area != null && o.Customer.Area.AreaName != null
+                                        ? o.Customer.Area.AreaName
+                                        : ""))));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_status))
             {
                 var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
                 if (vals.Count > 0) q = q.Where(o => o.Status != null && vals.Contains(o.Status));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_totalExpr))
+                q = SalesOrderListNumericExpr.ApplyExpectedTotalExpr(q, filterCol_totalExpr);
             if (!string.IsNullOrWhiteSpace(filterCol_createdBy))
             {
                 var vals = filterCol_createdBy.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -588,30 +723,40 @@ namespace ERP.Controllers
             var data = await q.OrderBy(o => o.SODate).ThenBy(o => o.SOId).ToListAsync();
             format = (format ?? "excel").Trim().ToLowerInvariant();
 
+            static string RegionDisplay(SalesOrder o) =>
+                o.Customer == null
+                    ? ""
+                    : (!string.IsNullOrWhiteSpace(o.Customer.RegionName)
+                        ? o.Customer.RegionName!
+                        : (o.Customer.Area != null ? o.Customer.Area.AreaName : "") ?? "");
+
             if (format == "csv")
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("SOId,SODate,Customer,Warehouse,Status,CreatedBy");
+                sb.AppendLine("رقم الأمر,التاريخ,العميل,المخزن,المنطقة,الحالة,الإجمالي,الكاتب");
                 foreach (var o in data)
                 {
                     var cust = o.Customer != null ? o.Customer.CustomerName : o.CustomerId.ToString();
                     var wh = o.Warehouse != null ? o.Warehouse.WarehouseName : o.WarehouseId.ToString();
-                    sb.AppendLine($"{o.SOId},{o.SODate:yyyy-MM-dd},\"{cust?.Replace("\"", "\"\"")}\",\"{wh?.Replace("\"", "\"\"")}\",\"{(o.Status ?? "").Replace("\"", "\"\"")}\",\"{(o.CreatedBy ?? "").Replace("\"", "\"\"")}\"");
+                    var reg = RegionDisplay(o).Replace("\"", "\"\"");
+                    sb.AppendLine($"{o.SOId},{o.SODate:yyyy-MM-dd},\"{cust?.Replace("\"", "\"\"")}\",\"{wh?.Replace("\"", "\"\"")}\",\"{reg}\",\"{(o.Status ?? "").Replace("\"", "\"\"")}\",{o.ExpectedItemsTotal.ToString(System.Globalization.CultureInfo.InvariantCulture)},\"{(o.CreatedBy ?? "").Replace("\"", "\"\"")}\"");
                 }
                 var utf8Bom = new UTF8Encoding(true);
-                return File(utf8Bom.GetBytes(sb.ToString()), "text/csv; charset=utf-8", $"SalesOrders_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+                return File(utf8Bom.GetBytes(sb.ToString()), "text/csv; charset=utf-8", ExcelExportNaming.ArabicTimestampedFileName("أوامر البيع", ".csv"));
             }
 
             using var workbook = new XLWorkbook();
-            var ws = workbook.Worksheets.Add("SalesOrders");
+            var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أوامر البيع"));
             int r = 1;
             ws.Cell(r, 1).Value = "رقم الأمر";
             ws.Cell(r, 2).Value = "التاريخ";
             ws.Cell(r, 3).Value = "العميل";
             ws.Cell(r, 4).Value = "المخزن";
-            ws.Cell(r, 5).Value = "الحالة";
-            ws.Cell(r, 6).Value = "أنشأه";
-            var headerRange = ws.Range(r, 1, r, 6);
+            ws.Cell(r, 5).Value = "المنطقة";
+            ws.Cell(r, 6).Value = "الحالة";
+            ws.Cell(r, 7).Value = "الإجمالي";
+            ws.Cell(r, 8).Value = "الكاتب";
+            var headerRange = ws.Range(r, 1, r, 8);
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             foreach (var o in data)
@@ -621,15 +766,17 @@ namespace ERP.Controllers
                 ws.Cell(r, 2).Value = o.SODate;
                 ws.Cell(r, 3).Value = o.Customer != null ? o.Customer.CustomerName : o.CustomerId.ToString();
                 ws.Cell(r, 4).Value = o.Warehouse != null ? o.Warehouse.WarehouseName : o.WarehouseId.ToString();
-                ws.Cell(r, 5).Value = o.Status ?? "";
-                ws.Cell(r, 6).Value = o.CreatedBy ?? "";
+                ws.Cell(r, 5).Value = RegionDisplay(o);
+                ws.Cell(r, 6).Value = o.Status ?? "";
+                ws.Cell(r, 7).Value = o.ExpectedItemsTotal;
+                ws.Cell(r, 8).Value = o.CreatedBy ?? "";
             }
             ws.Columns().AdjustToContents();
             ws.Column(2).Style.DateFormat.Format = "yyyy-mm-dd";
             using var stream = new MemoryStream();
             workbook.SaveAs(stream);
             stream.Position = 0;
-            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"SalesOrders_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx");
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", ExcelExportNaming.ArabicTimestampedFileName("أوامر البيع", ".xlsx"));
         }
 
         // =========================================================
@@ -643,18 +790,15 @@ namespace ERP.Controllers
             column = column.ToLowerInvariant();
             search = (search ?? "").Trim();
 
+            // أعمدة رقمية (filterCol_*Expr): القائمة من الواجهة المشتركة — لا نحمّل آلاف القيم هنا
+            if (column is "id" or "total")
+                return Json(Array.Empty<string>());
+
             IQueryable<SalesOrder> q = _context.SalesOrders
                 .AsNoTracking()
                 .Include(o => o.Customer)
+                    .ThenInclude(c => c!.Area)
                 .Include(o => o.Warehouse);
-
-            if (column == "id")
-            {
-                var idsQuery = q.Select(o => o.SOId.ToString());
-                if (!string.IsNullOrEmpty(search)) idsQuery = idsQuery.Where(v => v.Contains(search));
-                var ids = await idsQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
-                return Json(ids);
-            }
             if (column == "date")
             {
                 var datesQuery = q.Select(o => o.SODate.Date);
@@ -689,6 +833,18 @@ namespace ERP.Controllers
                 var createdQuery = q.Select(o => o.CreatedBy ?? "");
                 if (!string.IsNullOrEmpty(search)) createdQuery = createdQuery.Where(v => v.Contains(search));
                 var list = await createdQuery.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+            if (column == "region")
+            {
+                var regionQuery = q.Select(o =>
+                    o.Customer == null
+                        ? ""
+                        : (!string.IsNullOrWhiteSpace(o.Customer.RegionName)
+                            ? o.Customer.RegionName!
+                            : (o.Customer.Area != null ? o.Customer.Area.AreaName : "") ?? ""));
+                if (!string.IsNullOrEmpty(search)) regionQuery = regionQuery.Where(v => v != null && v.Contains(search));
+                var list = await regionQuery.Where(v => v != null && v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
                 return Json(list);
             }
             return Json(Array.Empty<string>());
@@ -758,11 +914,21 @@ namespace ERP.Controllers
                 var ids = await prodIdsWithStock.Distinct().ToListAsync();
                 productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
             }
-            var list = await productsQuery
-                .Select(p => new { ProdId = p.ProdId, ProdName = p.ProdName })
-                .Take(2000)
+            var products = await productsQuery
+                .Select(p => new
+                {
+                    Id = p.ProdId,
+                    Name = p.ProdName ?? string.Empty,
+                    GenericName = p.GenericName ?? string.Empty,
+                    Company = p.Company ?? string.Empty,
+                    HasQuota = p.HasQuota,
+                    PriceRetail = 0m,
+                    BonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null,
+                    HasBonus = p.ProductBonusGroupId != null
+                })
+                .Take(5000)
                 .ToListAsync();
-            ViewBag.Products = list;
+            ViewBag.ProductsAuto = products;
         }
 
         /// <summary>API: قائمة الأصناف للداتاليست (أصناف لها رصيد فقط أو الكل حسب عرض الصفر) — مثل فاتورة المبيعات.</summary>
@@ -793,7 +959,8 @@ namespace ERP.Controllers
                     company = p.Company ?? string.Empty,
                     hasQuota = p.HasQuota,
                     hasBonus = p.ProductBonusGroupId != null,
-                    bonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null
+                    bonusGroupName = p.ProductBonusGroup != null ? p.ProductBonusGroup.Name : null,
+                    price = 0m
                 })
                 .ToListAsync();
             return Json(products);
@@ -899,6 +1066,28 @@ namespace ERP.Controllers
             await FillSalesOrderNavAsync(order.SOId);
 
             return View("Show", order);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportShowExcel(int id)
+        {
+            if (id <= 0)
+                return BadRequest();
+
+            var order = await _context.SalesOrders
+                .Include(o => o.Customer)
+                .Include(o => o.Warehouse)
+                .Include(o => o.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(o => o.SOId == id);
+
+            if (order == null)
+                return NotFound();
+
+            var bytes = ShowDocumentExcelExport.SalesOrder(order);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ExcelExportNaming.ArabicTimestampedFileName($"أمر بيع {id}", ".xlsx"));
         }
 
         private async Task FillSalesOrderNavAsync(int currentId)
@@ -1035,6 +1224,12 @@ namespace ERP.Controllers
             if (dto.WarehouseId <= 0)
                 return BadRequest(new { success = false, message = "يجب اختيار المخزن قبل حفظ أمر البيع." });
 
+            var customer = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == dto.CustomerId);
+            if (customer == null)
+                return BadRequest(new { success = false, message = "العميل غير موجود." });
+            if (!customer.IsActive)
+                return BadRequest(new { success = false, message = "لا يمكن التعامل مع عميل غير نشط. يرجى تفعيل العميل أولاً." });
+
             var now = DateTime.Now;
             var userName = GetCurrentUserDisplayName();
 
@@ -1162,22 +1357,34 @@ namespace ERP.Controllers
 
                 var linesNow = await _context.SOLines.Where(l => l.SOId == dto.SOId).OrderBy(l => l.LineNo).ToListAsync();
                 var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-                var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+                var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId))
+                    .ToDictionaryAsync(p => p.ProdId, p => new { p.ProdName, p.Location });
 
                 var linesDto = linesNow.Select(l =>
                 {
-                    var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                    prodMap.TryGetValue(l.ProdId, out var pm);
+                    var name = pm?.ProdName ?? "";
+                    var loc = string.IsNullOrWhiteSpace(pm?.Location) ? "—" : pm!.Location!;
                     var lv = l.QtyRequested * l.ExpectedUnitPrice;
-                    return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
+                    return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, location = loc, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
                 }).ToList();
 
                 var soHeader = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
+                decimal totalRetailAdd = linesNow.Sum(x => x.QtyRequested * x.RequestedRetailPrice);
+                int totalItemsAdd = linesNow.Select(x => x.ProdId).Distinct().Count();
                 return Json(new
                 {
                     ok = true,
                     message = "تم إضافة السطر بنجاح.",
                     lines = linesDto,
-                    totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m }
+                    totals = new
+                    {
+                        totalLines = linesNow.Count,
+                        totalItems = totalItemsAdd,
+                        totalQty = linesNow.Sum(x => x.QtyRequested),
+                        totalRetail = totalRetailAdd,
+                        expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m
+                    }
                 });
             }
             catch (Exception ex)
@@ -1197,17 +1404,21 @@ namespace ERP.Controllers
 
             var linesNow = await _context.SOLines.Where(l => l.SOId == id).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId))
+                .ToDictionaryAsync(p => p.ProdId, p => new { p.ProdName, p.Location });
 
             var linesDto = linesNow.Select(l =>
             {
-                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                prodMap.TryGetValue(l.ProdId, out var pm);
+                var name = pm?.ProdName ?? "";
+                var loc = string.IsNullOrWhiteSpace(pm?.Location) ? "—" : pm!.Location!;
                 var lv = l.QtyRequested * l.ExpectedUnitPrice;
-                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
+                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, location = loc, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = lv };
             }).ToList();
 
             decimal totalRetail = linesNow.Sum(x => x.QtyRequested * x.RequestedRetailPrice);
-            return Json(new { ok = true, lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), totalRetail, expectedItemsTotal = order.ExpectedItemsTotal } });
+            int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
+            return Json(new { ok = true, lines = linesDto, totals = new { totalLines = linesNow.Count, totalItems, totalQty = linesNow.Sum(x => x.QtyRequested), totalRetail, expectedItemsTotal = order.ExpectedItemsTotal } });
         }
 
         public class RemoveLineJsonDto { public int SOId { get; set; } public int LineNo { get; set; } }
@@ -1235,15 +1446,19 @@ namespace ERP.Controllers
 
             var linesNow = await _context.SOLines.Where(l => l.SOId == dto.SOId).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
-            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
+            var prodMap = await _context.Products.Where(p => prodIds.Contains(p.ProdId))
+                .ToDictionaryAsync(p => p.ProdId, p => new { p.ProdName, p.Location });
             var linesDto = linesNow.Select(l =>
             {
-                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
-                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = l.QtyRequested * l.ExpectedUnitPrice };
+                prodMap.TryGetValue(l.ProdId, out var pm);
+                var name = pm?.ProdName ?? "";
+                var loc = string.IsNullOrWhiteSpace(pm?.Location) ? "—" : pm!.Location!;
+                return new { lineNo = l.LineNo, prodId = l.ProdId, prodName = name, location = loc, qty = l.QtyRequested, requestRetailPrice = l.RequestedRetailPrice, salesDiscountPct = l.SalesDiscountPct, expectedUnitPrice = l.ExpectedUnitPrice, batchNo = l.PreferredBatchNo, expiry = l.PreferredExpiry?.ToString("yyyy-MM-dd"), lineValue = l.QtyRequested * l.ExpectedUnitPrice };
             }).ToList();
             var soHeader = await _context.SalesOrders.FirstOrDefaultAsync(o => o.SOId == dto.SOId);
             decimal totalRetail = linesNow.Sum(x => x.QtyRequested * x.RequestedRetailPrice);
-            return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { totalLines = linesNow.Count, totalQty = linesNow.Sum(x => x.QtyRequested), totalRetail, expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m } });
+            int totalItemsRm = linesNow.Select(x => x.ProdId).Distinct().Count();
+            return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { totalLines = linesNow.Count, totalItems = totalItemsRm, totalQty = linesNow.Sum(x => x.QtyRequested), totalRetail, expectedItemsTotal = soHeader?.ExpectedItemsTotal ?? 0m } });
         }
 
         public class ClearAllLinesJsonDto { public int SOId { get; set; } }
@@ -1263,12 +1478,12 @@ namespace ERP.Controllers
 
             var lines = await _context.SOLines.Where(l => l.SOId == dto.SOId).ToListAsync();
             if (lines.Count == 0)
-                return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, totalRetail = 0m, expectedItemsTotal = 0m } });
+                return Json(new { ok = true, message = "لا توجد أصناف لمسحها.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalItems = 0, totalQty = 0, totalRetail = 0m, expectedItemsTotal = 0m } });
 
             _context.SOLines.RemoveRange(lines);
             await _context.SaveChangesAsync();
             await _docTotals.RecalcSalesOrderTotalsAsync(dto.SOId);
-            return Json(new { ok = true, message = "تم مسح جميع الأصناف.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalQty = 0, totalRetail = 0m, expectedItemsTotal = 0m } });
+            return Json(new { ok = true, message = "تم مسح جميع الأصناف.", lines = Array.Empty<object>(), totals = new { totalLines = 0, totalItems = 0, totalQty = 0, totalRetail = 0m, expectedItemsTotal = 0m } });
         }
 
         [HttpPost]

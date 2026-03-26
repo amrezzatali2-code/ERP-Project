@@ -413,7 +413,7 @@ namespace ERP.Controllers
             {
                 // ===== تصدير Excel حقيقي (.xlsx) باستخدام ClosedXML =====
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("أصناف فواتير المشتريات");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أصناف فاتورة المشتريات"));
 
                 int row = 1;
                 ws.Cell(row, 1).Value = "رقم الفاتورة";
@@ -453,14 +453,14 @@ namespace ERP.Controllers
                 using var stream = new MemoryStream();
                 workbook.SaveAs(stream);
                 var bytesXlsx = stream.ToArray();
-                var fileNameXlsx = $"PILines_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("أصناف فاتورة المشتريات", ".xlsx");
                 const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
                 return File(bytesXlsx, contentTypeXlsx, fileNameXlsx);
             }
 
             // ===== تصدير CSV =====
             var sb = new StringBuilder();
-            sb.AppendLine("PIId,LineNo,ProdId,ProdName,Qty,UnitCost,PurchaseDiscountPct,PriceRetail,LineValue,BatchNo,Expiry,InvoiceDate");
+            sb.AppendLine("رقم الفاتورة,رقم السطر,كود الصنف,اسم الصنف,الكمية,تكلفة الوحدة,خصم الشراء %,سعر الجمهور,قيمة السطر,التشغيلة,الصلاحية,تاريخ الفاتورة");
 
             foreach (var l in list)
             {
@@ -487,8 +487,8 @@ namespace ERP.Controllers
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = $"PILines_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("أصناف فاتورة المشتريات", ".csv");
             return File(bytes, "text/csv", fileName);
         }
 

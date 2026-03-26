@@ -717,7 +717,7 @@ namespace ERP.Controllers
 
             // 7) إنشاء ملف Excel في الذاكرة باستخدام ClosedXML
             using var workbook = new XLWorkbook();            // مصنف جديد
-            var worksheet = workbook.Worksheets.Add("Users"); // شيت باسم Users
+            var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("المستخدمون"));
 
             int row = 1; // رقم الصف الحالي (نبدأ بالهيدر)
 
@@ -764,7 +764,7 @@ namespace ERP.Controllers
             workbook.SaveAs(stream);
             stream.Position = 0;
 
-            var fileName = $"Users_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("المستخدمون", ".xlsx");
             const string contentType =
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 

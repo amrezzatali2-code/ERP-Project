@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -651,14 +651,14 @@ namespace ERP.Controllers
 
                 var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true); // UTF-8 + BOM
                 var bytes = utf8.GetBytes(sbCsv.ToString());
-                var fileNameCsv = $"Warehouses_{DateTime.Now:yyyyMMdd_HHmm}_csv.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("المخازن", ".csv");
 
                 return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
             }
 
             // ============= Excel =============
             using var workbook = new XLWorkbook();                 // متغير: ملف Excel
-            var ws = workbook.Worksheets.Add("Warehouses");        // متغير: ورقة عمل
+            var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("المخازن"));
 
             int r = 1; // متغير: رقم الصف الحالي
 
@@ -697,7 +697,7 @@ namespace ERP.Controllers
             workbook.SaveAs(stream);
             stream.Position = 0;
 
-            var fileNameXlsx = $"Warehouses_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+            var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("المخازن", ".xlsx");
             const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
             return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);

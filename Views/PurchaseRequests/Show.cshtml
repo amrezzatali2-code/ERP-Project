@@ -802,6 +802,11 @@
                             📊 حجم تعامل
                         </a>
 
+                        @if (Model?.PRId > 0)
+                        {
+                            <a href="@Url.Action("ExportShowExcel", "PurchaseRequests", new { id = Model.PRId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
+                        }
+
                         <button type="button"
                                 id="btnPrintInvoice"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">

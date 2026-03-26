@@ -354,7 +354,7 @@ namespace ERP.Controllers
             var inDictExp = inLedgersExp.ToDictionary(x => x.EntryId);
 
             var sb = new StringBuilder();
-            sb.AppendLine("MapId,ProdId,ProdName,OutEntryId,OutSource,InEntryId,InSource,Qty,UnitCost");
+            sb.AppendLine("كود الربط,كود الصنف,اسم الصنف,الخروج (قيد),مصدر الخروج,الدخول (قيد),مصدر الدخول,الكمية,تكلفة الوحدة");
 
             foreach (var x in data)
             {
@@ -368,11 +368,10 @@ namespace ERP.Controllers
                 sb.AppendLine($"{x.MapId},{pid ?? 0},{pname},{x.OutEntryId},{outSrc},{x.InEntryId},{inSrc},{x.Qty},{x.UnitCost.ToString(System.Globalization.CultureInfo.InvariantCulture)}");
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = $"StockFifoMap_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("ربط FIFO للمخزون", ".csv");
 
-            // سواء Excel أو CSV بنرجّع CSV (Excel يفتحه عادي)
-            const string contentType = "text/csv";
+            const string contentType = "text/csv; charset=utf-8";
 
             return File(bytes, contentType, fileName);
         }

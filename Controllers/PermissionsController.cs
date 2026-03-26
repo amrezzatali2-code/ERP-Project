@@ -662,7 +662,7 @@ namespace ERP.Controllers
             {
                 // تأكد إن عندك using ClosedXML.Excel; و using System.IO; فى أعلى الملف
                 using var workbook = new XLWorkbook();                 // مصنف جديد
-                var worksheet = workbook.Worksheets.Add("Permissions"); // شيت باسم Permissions
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("صلاحيات النظام"));
 
                 int row = 1; // الهيدر
 
@@ -699,7 +699,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameExcel = $"Permissions_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameExcel = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات النظام", ".xlsx");
                 const string excelContentType =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -709,8 +709,7 @@ namespace ERP.Controllers
             // ============= فرع CSV (النمط القديم) =============
             var sb = new StringBuilder();
 
-            // عناوين الأعمدة بالإنجليزي (نفس القديم)
-            sb.AppendLine("PermissionId,Code,NameAr,Module,Description,CreatedAt,UpdatedAt");
+            sb.AppendLine("رقم الصلاحية,كود الصلاحية,الاسم (عربي),الوحدة / الموديول,الوصف,تاريخ الإنشاء,آخر تعديل");
 
             foreach (var p in list)
             {
@@ -735,9 +734,8 @@ namespace ERP.Controllers
                     $"{updated}");
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string fileName = $"Permissions_{timeStamp}.csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            string fileName = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات النظام", ".csv");
 
             return File(bytes, "text/csv", fileName);
         }

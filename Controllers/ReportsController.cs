@@ -2849,7 +2849,7 @@ namespace ERP.Controllers
 
             // تصدير Excel (كل البيانات بدون Pagination)
             using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("أرصدة العملاء");
+            var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرصدة العملاء"));
 
             int row = 1;
 
@@ -2894,7 +2894,7 @@ namespace ERP.Controllers
 
             using var stream = new System.IO.MemoryStream();
             workbook.SaveAs(stream);
-            var fileName = $"CustomerBalances_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة العملاء", ".xlsx");
             return File(stream.ToArray(),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 fileName);
@@ -3263,7 +3263,7 @@ namespace ERP.Controllers
 
             // تصدير Excel (كل البيانات بدون Pagination)
             using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("أرصدة الأصناف");
+            var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرصدة الأصناف"));
 
             int row = 1;
 
@@ -3334,7 +3334,7 @@ namespace ERP.Controllers
 
             using var stream = new System.IO.MemoryStream();
             workbook.SaveAs(stream);
-            var fileName = $"ProductBalances_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرصدة الأصناف", ".xlsx");
             return File(stream.ToArray(),
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 fileName);
@@ -3992,7 +3992,7 @@ namespace ERP.Controllers
                 if (format.Equals("excel", StringComparison.OrdinalIgnoreCase))
                 {
                     using var workbook = new XLWorkbook();
-                    var worksheet = workbook.Worksheets.Add("أرباح الأصناف");
+                    var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرباح الأصناف"));
                     int row = 1;
                     worksheet.Cell(row, 1).Value = "الكود";
                     worksheet.Cell(row, 2).Value = "اسم الصنف";
@@ -4026,11 +4026,11 @@ namespace ERP.Controllers
                     worksheet.Columns().AdjustToContents();
                     using var stream = new System.IO.MemoryStream();
                     workbook.SaveAs(stream);
-                    var fileName = $"ProductProfits_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                    var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرباح الأصناف", ".xlsx");
                     return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
                 }
                 var sb = new System.Text.StringBuilder();
-                sb.AppendLine("ProdCode,ProdName,CategoryName,SalesRevenue,SalesCost,SalesProfit,SalesProfitPercent,ReturnProfit,AdjustmentProfit,TransferProfit,SalesQty,NetProfit");
+                sb.AppendLine("الكود,اسم الصنف,الفئة,البيع,التكلفة,الربح (بيع),نسبة الربح %,ربح المرتجعات,الربح (تسويات),الربح (تحويلات),الكمية,صافي الربح");
                 foreach (var r in reportData)
                 {
                     sb.AppendLine(string.Join(",",
@@ -4047,8 +4047,8 @@ namespace ERP.Controllers
                         r.SalesQty.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
                         r.NetProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
                 }
-                var csvBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
-                return File(csvBytes, "text/csv", "ProductProfits.csv");
+                var csvBytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                return File(csvBytes, "text/csv; charset=utf-8", ExcelExportNaming.ArabicTimestampedFileName("أرباح الأصناف", ".csv"));
             }
 
             // =========================================================
@@ -4847,7 +4847,7 @@ namespace ERP.Controllers
                 if (format!.Equals("excel", StringComparison.OrdinalIgnoreCase))
                 {
                     using var workbook = new XLWorkbook();
-                    var worksheet = workbook.Worksheets.Add("أرباح العملاء");
+                    var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أرباح العملاء"));
                     int row = 1;
                     worksheet.Cell(row, 1).Value = "الكود";
                     worksheet.Cell(row, 2).Value = "اسم العميل";
@@ -4877,11 +4877,11 @@ namespace ERP.Controllers
                     worksheet.Columns().AdjustToContents();
                     using var stream = new System.IO.MemoryStream();
                     workbook.SaveAs(stream);
-                    var fileName = $"CustomerProfits_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                    var fileName = ExcelExportNaming.ArabicTimestampedFileName("أرباح العملاء", ".xlsx");
                     return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
                 }
                 var sb = new System.Text.StringBuilder();
-                sb.AppendLine("CustomerCode,CustomerName,PartyCategory,Phone1,SalesRevenue,SalesCost,SalesProfit,SalesProfitPercent,ReturnProfit,NetProfit");
+                sb.AppendLine("الكود,اسم العميل,فئة العميل,الهاتف,الإيرادات,التكلفة,الربح,نسبة الربح %,ربح المرتجعات,صافي الربح");
                 foreach (var r in reportData)
                 {
                     sb.AppendLine(string.Join(",",
@@ -4896,8 +4896,8 @@ namespace ERP.Controllers
                         r.ReturnProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture),
                         r.NetProfit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)));
                 }
-                var csvBytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
-                return File(csvBytes, "text/csv", "CustomerProfits.csv");
+                var csvBytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                return File(csvBytes, "text/csv; charset=utf-8", ExcelExportNaming.ArabicTimestampedFileName("أرباح العملاء", ".csv"));
             }
 
             // =========================================================

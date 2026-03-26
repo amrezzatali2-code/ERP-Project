@@ -112,6 +112,7 @@ html.in-frame .erp-toast-host {
     font-size: 0.95rem;
     line-height: 1.55;
     color: #334155;
+    white-space: pre-line;
 }
 
 .erp-confirm-footer {

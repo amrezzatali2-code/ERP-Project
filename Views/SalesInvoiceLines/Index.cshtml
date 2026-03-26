@@ -69,6 +69,17 @@
     string? filterCol_expiry = ViewBag.FilterCol_Expiry as string;
     string? filterCol_region = ViewBag.FilterCol_Region as string;
     string? filterCol_createdby = ViewBag.FilterCol_Createdby as string;
+    string? filterCol_siidExpr = ViewBag.FilterCol_SiidExpr as string;
+    string? filterCol_linenoExpr = ViewBag.FilterCol_LinenoExpr as string;
+    string? filterCol_prodidExpr = ViewBag.FilterCol_ProdidExpr as string;
+    string? filterCol_qtyExpr = ViewBag.FilterCol_QtyExpr as string;
+    string? filterCol_priceExpr = ViewBag.FilterCol_PriceExpr as string;
+    string? filterCol_disc1Expr = ViewBag.FilterCol_Disc1Expr as string;
+    string? filterCol_disc2Expr = ViewBag.FilterCol_Disc2Expr as string;
+    string? filterCol_disc3Expr = ViewBag.FilterCol_Disc3Expr as string;
+    string? filterCol_discvalExpr = ViewBag.FilterCol_DiscvalExpr as string;
+    string? filterCol_totalExpr = ViewBag.FilterCol_TotalExpr as string;
+    string? filterCol_netExpr = ViewBag.FilterCol_NetExpr as string;
 
     string Link(int p) => Url.Action(action, controller, new
     {
@@ -101,25 +112,36 @@
         filterCol_batch,
         filterCol_expiry,
         filterCol_region,
-        filterCol_createdby
+        filterCol_createdby,
+        filterCol_siidExpr,
+        filterCol_linenoExpr,
+        filterCol_prodidExpr,
+        filterCol_qtyExpr,
+        filterCol_priceExpr,
+        filterCol_disc1Expr,
+        filterCol_disc2Expr,
+        filterCol_disc3Expr,
+        filterCol_discvalExpr,
+        filterCol_totalExpr,
+        filterCol_netExpr
     })!;
 
     string? FilterForCol(string colKey) =>
-        colKey == "siid" ? filterCol_siid
-        : colKey == "lineno" ? filterCol_lineno
-        : colKey == "prodid" ? filterCol_prodid
+        colKey == "siid" ? (!string.IsNullOrWhiteSpace(filterCol_siidExpr) ? filterCol_siidExpr : filterCol_siid)
+        : colKey == "lineno" ? (!string.IsNullOrWhiteSpace(filterCol_linenoExpr) ? filterCol_linenoExpr : filterCol_lineno)
+        : colKey == "prodid" ? (!string.IsNullOrWhiteSpace(filterCol_prodidExpr) ? filterCol_prodidExpr : filterCol_prodid)
         : colKey == "prodname" ? filterCol_prodname
         : colKey == "customername" ? filterCol_customername
         : colKey == "region" ? filterCol_region
         : colKey == "createdby" ? filterCol_createdby
-        : colKey == "qty" ? filterCol_qty
-        : colKey == "price" ? filterCol_price
-        : colKey == "disc1" ? filterCol_disc1
-        : colKey == "disc2" ? filterCol_disc2
-        : colKey == "disc3" ? filterCol_disc3
-        : colKey == "discval" ? filterCol_discval
-        : colKey == "total" ? filterCol_total
-        : colKey == "net" ? filterCol_net
+        : colKey == "qty" ? (!string.IsNullOrWhiteSpace(filterCol_qtyExpr) ? filterCol_qtyExpr : filterCol_qty)
+        : colKey == "price" ? (!string.IsNullOrWhiteSpace(filterCol_priceExpr) ? filterCol_priceExpr : filterCol_price)
+        : colKey == "disc1" ? (!string.IsNullOrWhiteSpace(filterCol_disc1Expr) ? filterCol_disc1Expr : filterCol_disc1)
+        : colKey == "disc2" ? (!string.IsNullOrWhiteSpace(filterCol_disc2Expr) ? filterCol_disc2Expr : filterCol_disc2)
+        : colKey == "disc3" ? (!string.IsNullOrWhiteSpace(filterCol_disc3Expr) ? filterCol_disc3Expr : filterCol_disc3)
+        : colKey == "discval" ? (!string.IsNullOrWhiteSpace(filterCol_discvalExpr) ? filterCol_discvalExpr : filterCol_discval)
+        : colKey == "total" ? (!string.IsNullOrWhiteSpace(filterCol_totalExpr) ? filterCol_totalExpr : filterCol_total)
+        : colKey == "net" ? (!string.IsNullOrWhiteSpace(filterCol_netExpr) ? filterCol_netExpr : filterCol_net)
         : colKey == "batch" ? filterCol_batch
         : colKey == "expiry" ? filterCol_expiry
         : null;
@@ -255,18 +277,29 @@
                         <input type="hidden" name="toCode" value="@toCode" />
                     }
                     @if (!string.IsNullOrWhiteSpace(filterCol_siid)) { <input type="hidden" name="filterCol_siid" value="@filterCol_siid" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_siidExpr)) { <input type="hidden" name="filterCol_siidExpr" value="@filterCol_siidExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_lineno)) { <input type="hidden" name="filterCol_lineno" value="@filterCol_lineno" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr)) { <input type="hidden" name="filterCol_linenoExpr" value="@filterCol_linenoExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_prodid)) { <input type="hidden" name="filterCol_prodid" value="@filterCol_prodid" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_prodidExpr)) { <input type="hidden" name="filterCol_prodidExpr" value="@filterCol_prodidExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customername)) { <input type="hidden" name="filterCol_customername" value="@filterCol_customername" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_disc1)) { <input type="hidden" name="filterCol_disc1" value="@filterCol_disc1" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_disc1Expr)) { <input type="hidden" name="filterCol_disc1Expr" value="@filterCol_disc1Expr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_disc2)) { <input type="hidden" name="filterCol_disc2" value="@filterCol_disc2" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_disc2Expr)) { <input type="hidden" name="filterCol_disc2Expr" value="@filterCol_disc2Expr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_disc3)) { <input type="hidden" name="filterCol_disc3" value="@filterCol_disc3" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_disc3Expr)) { <input type="hidden" name="filterCol_disc3Expr" value="@filterCol_disc3Expr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_discval)) { <input type="hidden" name="filterCol_discval" value="@filterCol_discval" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_discvalExpr)) { <input type="hidden" name="filterCol_discvalExpr" value="@filterCol_discvalExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_total)) { <input type="hidden" name="filterCol_total" value="@filterCol_total" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_totalExpr)) { <input type="hidden" name="filterCol_totalExpr" value="@filterCol_totalExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_net)) { <input type="hidden" name="filterCol_net" value="@filterCol_net" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_netExpr)) { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_batch)) { <input type="hidden" name="filterCol_batch" value="@filterCol_batch" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_expiry)) { <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_region)) { <input type="hidden" name="filterCol_region" value="@filterCol_region" /> }
@@ -332,18 +365,29 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_siid)) { <input type="hidden" name="filterCol_siid" value="@filterCol_siid" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_siidExpr)) { <input type="hidden" name="filterCol_siidExpr" value="@filterCol_siidExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_lineno)) { <input type="hidden" name="filterCol_lineno" value="@filterCol_lineno" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr)) { <input type="hidden" name="filterCol_linenoExpr" value="@filterCol_linenoExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_prodid)) { <input type="hidden" name="filterCol_prodid" value="@filterCol_prodid" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prodidExpr)) { <input type="hidden" name="filterCol_prodidExpr" value="@filterCol_prodidExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_customername)) { <input type="hidden" name="filterCol_customername" value="@filterCol_customername" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_disc1)) { <input type="hidden" name="filterCol_disc1" value="@filterCol_disc1" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_disc1Expr)) { <input type="hidden" name="filterCol_disc1Expr" value="@filterCol_disc1Expr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_disc2)) { <input type="hidden" name="filterCol_disc2" value="@filterCol_disc2" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_disc2Expr)) { <input type="hidden" name="filterCol_disc2Expr" value="@filterCol_disc2Expr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_disc3)) { <input type="hidden" name="filterCol_disc3" value="@filterCol_disc3" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_disc3Expr)) { <input type="hidden" name="filterCol_disc3Expr" value="@filterCol_disc3Expr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_discval)) { <input type="hidden" name="filterCol_discval" value="@filterCol_discval" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_discvalExpr)) { <input type="hidden" name="filterCol_discvalExpr" value="@filterCol_discvalExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_total)) { <input type="hidden" name="filterCol_total" value="@filterCol_total" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_totalExpr)) { <input type="hidden" name="filterCol_totalExpr" value="@filterCol_totalExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_net)) { <input type="hidden" name="filterCol_net" value="@filterCol_net" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_netExpr)) { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_batch)) { <input type="hidden" name="filterCol_batch" value="@filterCol_batch" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_expiry)) { <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_region)) { <input type="hidden" name="filterCol_region" value="@filterCol_region" /> }
@@ -547,20 +591,31 @@
             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
 
             <input type="hidden" name="filterCol_siid" value="@filterCol_siid" />
+            <input type="hidden" name="filterCol_siidExpr" value="@filterCol_siidExpr" />
             <input type="hidden" name="filterCol_lineno" value="@filterCol_lineno" />
+            <input type="hidden" name="filterCol_linenoExpr" value="@filterCol_linenoExpr" />
             <input type="hidden" name="filterCol_prodid" value="@filterCol_prodid" />
+            <input type="hidden" name="filterCol_prodidExpr" value="@filterCol_prodidExpr" />
             <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" />
             <input type="hidden" name="filterCol_customername" value="@filterCol_customername" />
             <input type="hidden" name="filterCol_region" value="@filterCol_region" />
             <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" />
             <input type="hidden" name="filterCol_qty" value="@filterCol_qty" />
+            <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" />
             <input type="hidden" name="filterCol_price" value="@filterCol_price" />
+            <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" />
             <input type="hidden" name="filterCol_disc1" value="@filterCol_disc1" />
+            <input type="hidden" name="filterCol_disc1Expr" value="@filterCol_disc1Expr" />
             <input type="hidden" name="filterCol_disc2" value="@filterCol_disc2" />
+            <input type="hidden" name="filterCol_disc2Expr" value="@filterCol_disc2Expr" />
             <input type="hidden" name="filterCol_disc3" value="@filterCol_disc3" />
+            <input type="hidden" name="filterCol_disc3Expr" value="@filterCol_disc3Expr" />
             <input type="hidden" name="filterCol_discval" value="@filterCol_discval" />
+            <input type="hidden" name="filterCol_discvalExpr" value="@filterCol_discvalExpr" />
             <input type="hidden" name="filterCol_total" value="@filterCol_total" />
+            <input type="hidden" name="filterCol_totalExpr" value="@filterCol_totalExpr" />
             <input type="hidden" name="filterCol_net" value="@filterCol_net" />
+            <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" />
             <input type="hidden" name="filterCol_batch" value="@filterCol_batch" />
             <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" />
 
@@ -632,18 +687,29 @@
                     <input type="hidden" name="dateField" value="@dateField" />
                     @if (siIdFilter.HasValue) { <input type="hidden" name="siId" value="@siIdFilter.Value" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_siid)) { <input type="hidden" name="filterCol_siid" value="@filterCol_siid" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_siidExpr)) { <input type="hidden" name="filterCol_siidExpr" value="@filterCol_siidExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_lineno)) { <input type="hidden" name="filterCol_lineno" value="@filterCol_lineno" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr)) { <input type="hidden" name="filterCol_linenoExpr" value="@filterCol_linenoExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_prodid)) { <input type="hidden" name="filterCol_prodid" value="@filterCol_prodid" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_prodidExpr)) { <input type="hidden" name="filterCol_prodidExpr" value="@filterCol_prodidExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customername)) { <input type="hidden" name="filterCol_customername" value="@filterCol_customername" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_price)) { <input type="hidden" name="filterCol_price" value="@filterCol_price" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_disc1)) { <input type="hidden" name="filterCol_disc1" value="@filterCol_disc1" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_disc1Expr)) { <input type="hidden" name="filterCol_disc1Expr" value="@filterCol_disc1Expr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_disc2)) { <input type="hidden" name="filterCol_disc2" value="@filterCol_disc2" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_disc2Expr)) { <input type="hidden" name="filterCol_disc2Expr" value="@filterCol_disc2Expr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_disc3)) { <input type="hidden" name="filterCol_disc3" value="@filterCol_disc3" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_disc3Expr)) { <input type="hidden" name="filterCol_disc3Expr" value="@filterCol_disc3Expr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_discval)) { <input type="hidden" name="filterCol_discval" value="@filterCol_discval" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_discvalExpr)) { <input type="hidden" name="filterCol_discvalExpr" value="@filterCol_discvalExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_total)) { <input type="hidden" name="filterCol_total" value="@filterCol_total" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_totalExpr)) { <input type="hidden" name="filterCol_totalExpr" value="@filterCol_totalExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_net)) { <input type="hidden" name="filterCol_net" value="@filterCol_net" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_netExpr)) { <input type="hidden" name="filterCol_netExpr" value="@filterCol_netExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_batch)) { <input type="hidden" name="filterCol_batch" value="@filterCol_batch" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_expiry)) { <input type="hidden" name="filterCol_expiry" value="@filterCol_expiry" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_region)) { <input type="hidden" name="filterCol_region" value="@filterCol_region" /> }
@@ -746,8 +812,10 @@
             </div>
         </div>
         <div class="erp-filter-section">
-            <label class="form-label small mb-1 fw-bold">الفلترة:</label>
-            <input type="text" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+            <div id="erpColumnFilterSearchRow">
+                <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+            </div>
             <div class="erp-column-filter-list">
                 <div class="text-muted text-center py-3">جاري التحميل...</div>
             </div>
@@ -791,7 +859,8 @@
             wrapperId: 'silTableScrollWrapper',
             getColumnValuesUrl: '@Url.Action("GetColumnValues", "SalesInvoiceLines")',
             defaultSort: 'LineNo',
-            defaultDir: 'asc'
+            defaultDir: 'asc',
+            numericColumns: ['siid','lineno','prodid','qty','price','disc1','disc2','disc3','discval','total','net']
         });
 
         // =========================

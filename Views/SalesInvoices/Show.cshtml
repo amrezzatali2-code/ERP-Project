@@ -177,21 +177,36 @@
             position: relative;
         }
 
-        /* العمود الرئيسي — بدون سكرول داخلي (سكرول الصفحة فقط) */
+        /* العمود الرئيسي — شفاف وبدون حد (مثل فاتورة المشتريات) */
+        .invoice-page .col-12.col-lg-10.order-2.order-lg-1,
         .invoice-page .col-lg-10.order-2 {
-            background: transparent;
+            background: transparent !important;
             padding: 0.5rem 1rem;
+            border: none !important;
+            box-shadow: none !important;
         }
 
-        /* حاوية المحتوى */
-        #PI_BodyHost {
-            display: block;
+        /* حاوية المحتوى — ليست كارت: بدون حد أو خلفية (مثل فاتورة المشتريات) */
+        #PI_BodyHost,
+        div#PI_BodyHost,
+        .invoice-page div#PI_BodyHost {
+            display: block !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            padding: 0 !important;
+        }
+
+        .invoice-page .container-fluid,
+        .invoice-page .row {
+            border: none !important;
+            box-shadow: none !important;
         }
 
         /* حاوية جدول السطور — حدود مطابقة لطلب الشراء (#6366f1) */
         .invoice-page .invoice-lines-container {
             display: block;
-            margin-top: 0;
             border: 1px solid #6366f1 !important;
             border-radius: 12px !important;
             box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
@@ -619,7 +634,7 @@
             overflow: auto;
         }
 
-        /* مسافة بين الكروت (أكبر قليلاً) */
+        /* مسافة واضحة بين كروت المحتوى الرئيسي */
         .invoice-page #PI_BodyHost .invoice-header-card,
         .invoice-page #PI_BodyHost .invoice-product-card,
         .invoice-page #PI_BodyHost .invoice-Add-card,
@@ -627,7 +642,6 @@
         .invoice-page #PI_BodyHost .invoice-totals-card {
             margin-bottom: 0.85rem !important;
         }
-        /* كارت فاتورة المبيعات بمحاذاة كارت الإجراءات (بدون margin-top) */
         .invoice-page #PI_BodyHost .invoice-header-card {
             margin-top: 0 !important;
         }
@@ -970,6 +984,16 @@
                             📊 حجم تعامل
                         </a>
 
+                        @if (Model?.SIId > 0)
+                        {
+                            @* زر وليس رابط — يمنع «فتح في تاب جديد» على href=# أو تنزيل يعرض تاباً أبيضاً داخل الـ iframe *@
+                            <button type="button" id="btnExportSalesInvoiceExcel" class="btn btn-erp btn-erp-success btn-erp-sm w-100"
+                                    data-export-url="@Url.Action("ExportShowExcel", "SalesInvoices", new { id = Model.SIId })"
+                                    data-default-filename="SalesInvoice_@(Model.SIId).xlsx"
+                                    data-keep-active-posted="1"
+                                    data-lock-posted="1">📥 تصدير Excel</button>
+                        }
+
                         <div class="dropdown w-100 si-print-dropdown">
                             <button type="button" id="btnPrintInvoiceDropdown"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle si-print-dropdown-btn"
@@ -1065,32 +1089,11 @@
                                             <div id="customerDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
                                         </div>
 
-                                        <datalist id="customersList" hidden aria-hidden="true">
-                                            @if (ViewBag.Customers != null)
-                                            {
-                                                foreach (var c in ViewBag.Customers)
-                                                {
-                                                    <option value="@c.Name"
-                                                            data-id="@c.Id"
-                                                            data-is-active="@(c.IsActive ? "1" : "0")"
-                                                            data-phone="@c.Phone"
-                                                            data-address="@c.Address"
-                                                            data-gov="@c.Gov"
-                                                            data-district="@c.District"
-                                                            data-area="@c.Area"
-                                                            data-credit="@c.Credit"
-                                                            data-balance="@(c.CurrentBalance.ToString("0.##"))"
-                                                            data-policy-id="@c.PolicyId"
-                                                            data-policy-name="@c.PolicyName">
-                                                    </option>
-                                                }
-                                            }
-                                        </datalist>
                                         <div id="customerSuspendedMsg" class="small text-danger mt-1 d-none">⚠️ العميل موقوف — لا يمكن حفظ الفاتورة.</div>
                                     </div>
                                     <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">رقم الفاتورة</label>
-                                        <input type="hidden" id="InvoiceId" value="@(Model?.SIId ?? 0)" />
+                                        @* رقم الفاتورة للسكربت: الحقل الوحيد id=InvoiceId في الشريط الجانبي؛ هنا العرض فقط *@
                                         <input id="InvoiceNumberDisplay"
                                                class="form-control form-control-sm text-center"
                                                value="@(Model != null && Model.SIId > 0 ? Model.SIId.ToString() : "")"
@@ -1296,24 +1299,6 @@
                                             </div>
                                             <div id="productDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
                                         </div>
-                                        <datalist id="productsList" hidden aria-hidden="true">
-                                            @if (ViewBag.ProductsAuto != null)
-                                            {
-                                                foreach (var p in ViewBag.ProductsAuto)
-                                                {
-                                                    <option value="@p.Name"
-                                                            data-id="@p.Id"
-                                                            data-code="@p.Id"
-                                                            data-generic="@p.GenericName"
-                                                            data-company="@p.Company"
-                                                            data-price="@p.PriceRetail"
-                                                            data-hasquota="@(p.HasQuota ? "true" : "false")"
-                                                            data-hasbonus="@(p.HasBonus ? "true" : "false")"
-                                                            data-bonusgroup="@(p.BonusGroupName ?? "")">
-                                                    </option>
-                                                }
-                                            }
-                                        </datalist>
                                         <input type="hidden" id="ProdId" />
                                     </div>
                                     <div class="col-lg-1 col-md-2">
@@ -1611,6 +1596,47 @@
                             </div>
                         </div>
 
+                    @* قوائم الأوتوكومبليت (آلاف الخيارات): في آخر الـ BodyHost حتى يكتمل رسم الكروت والصفوف دون تأخير *@
+                    <datalist id="customersList" hidden aria-hidden="true">
+                        @if (ViewBag.Customers != null)
+                        {
+                            foreach (var c in ViewBag.Customers)
+                            {
+                                <option value="@c.Name"
+                                        data-id="@c.Id"
+                                        data-is-active="@(c.IsActive ? "1" : "0")"
+                                        data-phone="@c.Phone"
+                                        data-address="@c.Address"
+                                        data-gov="@c.Gov"
+                                        data-district="@c.District"
+                                        data-area="@c.Area"
+                                        data-credit="@c.Credit"
+                                        data-balance="@(c.CurrentBalance.ToString("0.##"))"
+                                        data-policy-id="@c.PolicyId"
+                                        data-policy-name="@c.PolicyName">
+                                </option>
+                            }
+                        }
+                    </datalist>
+                    <datalist id="productsList" hidden aria-hidden="true">
+                        @if (ViewBag.ProductsAuto != null)
+                        {
+                            foreach (var p in ViewBag.ProductsAuto)
+                            {
+                                <option value="@p.Name"
+                                        data-id="@p.Id"
+                                        data-code="@p.Id"
+                                        data-generic="@p.GenericName"
+                                        data-company="@p.Company"
+                                        data-price="@p.PriceRetail"
+                                        data-hasquota="@(p.HasQuota ? "true" : "false")"
+                                        data-hasbonus="@(p.HasBonus ? "true" : "false")"
+                                        data-bonusgroup="@(p.BonusGroupName ?? "")">
+                                </option>
+                            }
+                        }
+                    </datalist>
+
                     </div> @* ✅ نهاية PI_BodyHost *@
 
                 </div> @* نهاية العمود الرئيسي *@
@@ -1725,6 +1751,92 @@
 
 @section Scripts {
         <script>
+            (function () {
+                function parseFilenameFromContentDisposition(header) {
+                    if (!header) return null;
+                    var mStar = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+                    if (mStar && mStar[1]) {
+                        try { return decodeURIComponent(mStar[1].trim()); } catch (e) { return mStar[1].trim(); }
+                    }
+                    var mQ = /filename\s*=\s*"([^"]+)"/i.exec(header);
+                    if (mQ && mQ[1]) return mQ[1].trim();
+                    var mPlain = /filename\s*=\s*([^;\s]+)/i.exec(header);
+                    if (mPlain && mPlain[1]) return mPlain[1].trim().replace(/^["']|["']$/g, '');
+                    return null;
+                }
+                if (window.__SI_EXCEL_EXPORT_DELEGATION__) return;
+                window.__SI_EXCEL_EXPORT_DELEGATION__ = true;
+                document.addEventListener('click', async function (e) {
+                    var btn = e.target && e.target.closest('#btnExportSalesInvoiceExcel');
+                    if (!btn) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    var exportUrl = btn.getAttribute('data-export-url') || '';
+                    var defaultFn = btn.getAttribute('data-default-filename') || 'SalesInvoice.xlsx';
+                    if (!exportUrl) return;
+                    try {
+                        var r = await fetch(exportUrl, {
+                            method: 'GET',
+                            credentials: 'same-origin',
+                            headers: {
+                                'Accept': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream;q=0.9, */*;q=0.8',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+                        var ct = (r.headers.get('content-type') || '').toLowerCase();
+                        var arrBuf = await r.arrayBuffer();
+
+                        if (r.status === 403 || r.status === 401) {
+                            var t1 = new TextDecoder('utf-8').decode(arrBuf);
+                            alert((t1 && t1.trim()) || 'لا توجد صلاحية للتصدير.');
+                            return;
+                        }
+                        if (r.status === 400 || r.status === 404 || r.status >= 500) {
+                            var t2 = new TextDecoder('utf-8').decode(arrBuf);
+                            alert((t2 && t2.trim()) || ('تعذر التصدير (' + r.status + ')'));
+                            return;
+                        }
+                        if (!r.ok) {
+                            var t3 = new TextDecoder('utf-8').decode(arrBuf);
+                            alert((t3 && t3.trim()) || ('تعذر التصدير (' + r.status + ')'));
+                            return;
+                        }
+
+                        var u8 = new Uint8Array(arrBuf);
+                        var startsJson = u8.length > 0 && u8[0] === 0x7B;
+                        if (startsJson || ct.indexOf('application/json') >= 0 || ct.indexOf('text/plain') >= 0) {
+                            var tj = new TextDecoder('utf-8').decode(arrBuf);
+                            try {
+                                var j = JSON.parse(tj);
+                                alert(j.message || j.Message || 'تعذر التصدير.');
+                            } catch (jx) {
+                                alert((tj && tj.trim().slice(0, 400)) || 'استجابة غير متوقعة من الخادم.');
+                            }
+                            return;
+                        }
+
+                        if (arrBuf.byteLength === 0) {
+                            alert('الملف المُرجَع فارغ.');
+                            return;
+                        }
+
+                        var mime = (ct && ct.split(';')[0].trim()) || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                        var blob = new Blob([arrBuf], { type: mime });
+                        var fname = parseFilenameFromContentDisposition(r.headers.get('content-disposition')) || defaultFn;
+                        if (!/\.xlsx$/i.test(fname)) fname = fname + '.xlsx';
+                        var a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = fname;
+                        document.body.appendChild(a);
+                        a.click();
+                        a.remove();
+                        setTimeout(function () { URL.revokeObjectURL(a.href); }, 120000);
+                    } catch (err) {
+                        console.error(err);
+                        alert('تعذر تنزيل ملف Excel.');
+                    }
+                }, true);
+            })();
                       // =========================================================
             // (0) دوال القفل عند الترحيل — يجب أن تكون في المستوى الأعلى لتعمل عند التحميل الأولي
             // =========================================================
@@ -5959,6 +6071,9 @@
                             }
                         }
 
+                        // قالب رابط تصدير Excel (يُستبدل رقم العنصر النائب بـ NavCurrentId)
+                        var SI_EXPORT_EXCEL_URL_TEMPLATE = '@Html.Raw(Url.Action("ExportShowExcel", "SalesInvoices", new { id = 987654321 }))';
+
                         // =========================
                         // تحديث أزرار السايد بار بعد تحميل body
                         // =========================
@@ -6043,6 +6158,19 @@
                                 const volumeUrl = customerId > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + customerId) : '#';
                                 btnVolume.setAttribute('href', volumeUrl);
                                 btnVolume.setAttribute('data-url', volumeUrl);
+                            }
+
+                            const btnExportSi = document.getElementById('btnExportSalesInvoiceExcel');
+                            if (btnExportSi && SI_EXPORT_EXCEL_URL_TEMPLATE) {
+                                if (currentId > 0) {
+                                    btnExportSi.setAttribute('data-export-url', SI_EXPORT_EXCEL_URL_TEMPLATE.replace(/987654321/g, String(currentId)));
+                                    btnExportSi.setAttribute('data-default-filename', 'SalesInvoice_' + currentId + '.xlsx');
+                                    btnExportSi.classList.remove('d-none');
+                                    btnExportSi.style.display = '';
+                                } else {
+                                    btnExportSi.classList.add('d-none');
+                                    btnExportSi.style.display = 'none';
+                                }
                             }
                         }
                         window.__refreshSideNavButtons = refreshSideNavButtons;

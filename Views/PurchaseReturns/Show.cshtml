@@ -675,6 +675,11 @@
                             🗑️ مسح كل أصناف المرتجع
                         </button>
 
+                        @if (Model.PRetId > 0)
+                        {
+                            <a href="@Url.Action("ExportShowExcel", "PurchaseReturns", new { id = Model.PRetId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
+                        }
+
                         <button type="button" id="btnPrintReturn" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" onclick="window.print()">
                             🖨️ طباعة المرتجع
                         </button>

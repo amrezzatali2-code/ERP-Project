@@ -510,7 +510,7 @@ namespace ERP.Controllers
 
                 var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytes = utf8.GetBytes(sb.ToString());
-                var name = $"Governorates_{DateTime.Now:yyyyMMdd_HHmm}_csv.csv";
+                var name = ExcelExportNaming.ArabicTimestampedFileName("المحافظات", ".csv");
                 var ctype = "text/csv; charset=utf-8";
 
                 return File(bytes, ctype, name);
@@ -518,7 +518,7 @@ namespace ERP.Controllers
 
             // ---------------- Excel (.xlsx) ----------------
             using var wb = new XLWorkbook();
-            var ws = wb.Worksheets.Add("المحافظات");
+            var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("المحافظات"));
 
             ws.Cell(1, 1).Value = "كود المحافظة";
             ws.Cell(1, 2).Value = "اسم المحافظة";
@@ -545,7 +545,7 @@ namespace ERP.Controllers
             wb.SaveAs(stream);
             stream.Position = 0;
             return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                $"Governorates_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+                ExcelExportNaming.ArabicTimestampedFileName("المحافظات", ".xlsx"));
         }
 
         // دالة مساعدة صغيرة لتجهيز نص الـ CSV

@@ -995,20 +995,20 @@ namespace ERP.Controllers
             {
                 // نستخدم ClosedXML لإنشاء ملف إكسل في الذاكرة
                 using var wb = new XLWorkbook();
-                var ws = wb.Worksheets.Add("PRLines");
+                var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أصناف طلبات الشراء"));
 
-                // عناوين الأعمدة
-                ws.Cell(1, 1).Value = "PRId";
-                ws.Cell(1, 2).Value = "LineNo";
-                ws.Cell(1, 3).Value = "ProdId";
-                ws.Cell(1, 4).Value = "QtyRequested";
-                ws.Cell(1, 5).Value = "PriceBasis";
-                ws.Cell(1, 6).Value = "PriceRetail";
-                ws.Cell(1, 7).Value = "PurchaseDiscountPct";
-                ws.Cell(1, 8).Value = "ExpectedCost";
-                ws.Cell(1, 9).Value = "PreferredBatchNo";
-                ws.Cell(1, 10).Value = "PreferredExpiry";
-                ws.Cell(1, 11).Value = "QtyConverted";
+                // عناوين الأعمدة (عربي كما في القائمة)
+                ws.Cell(1, 1).Value = "رقم طلب الشراء";
+                ws.Cell(1, 2).Value = "رقم السطر";
+                ws.Cell(1, 3).Value = "كود الصنف";
+                ws.Cell(1, 4).Value = "الكمية المطلوبة";
+                ws.Cell(1, 5).Value = "مرجع السعر";
+                ws.Cell(1, 6).Value = "سعر الجمهور المرجعي";
+                ws.Cell(1, 7).Value = "خصم الشراء %";
+                ws.Cell(1, 8).Value = "التكلفة المتوقعة";
+                ws.Cell(1, 9).Value = "التشغيلة المفضلة";
+                ws.Cell(1, 10).Value = "الصلاحية المفضلة";
+                ws.Cell(1, 11).Value = "الكمية المحوّلة";
 
                 int row = 2;
 
@@ -1034,7 +1034,7 @@ namespace ERP.Controllers
                 wb.SaveAs(stream);
                 var content = stream.ToArray();
 
-                var excelName = $"PRLines_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var excelName = ExcelExportNaming.ArabicTimestampedFileName("أصناف طلبات الشراء", ".xlsx");
                 const string excelContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
                 return File(content, excelContentType, excelName);
@@ -1045,7 +1045,7 @@ namespace ERP.Controllers
             // -----------------------------------
             var lines = new List<string>
             {
-                "PRId,LineNo,ProdId,QtyRequested,PriceBasis,PriceRetail,PurchaseDiscountPct,ExpectedCost,PreferredBatchNo,PreferredExpiry,QtyConverted"
+                "رقم طلب الشراء,رقم السطر,كود الصنف,الكمية المطلوبة,مرجع السعر,سعر الجمهور المرجعي,خصم الشراء %,التكلفة المتوقعة,التشغيلة المفضلة,الصلاحية المفضلة,الكمية المحوّلة"
             };
 
             foreach (var l in data)
@@ -1071,8 +1071,8 @@ namespace ERP.Controllers
             }
 
             var csv = string.Join(Environment.NewLine, lines);
-            var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
-            var fileName = $"PRLines_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            var bytes = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(csv);
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("أصناف طلبات الشراء", ".csv");
 
             return File(bytes, "text/csv", fileName);
         }

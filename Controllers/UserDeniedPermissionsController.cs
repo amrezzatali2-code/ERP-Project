@@ -1,4 +1,4 @@
-﻿using System;                                     // متغيرات التاريخ DateTime
+using System;                                     // متغيرات التاريخ DateTime
 using System.Collections.Generic;                 // القوائم List
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لتصدير CSV
@@ -647,7 +647,7 @@ namespace ERP.Controllers
                 // using ClosedXML.Excel;
                 // using System.IO;
                 using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("UserDeniedPermissions");
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("صلاحيات ممنوعة للمستخدم"));
 
                 int row = 1;
 
@@ -658,7 +658,7 @@ namespace ERP.Controllers
                 worksheet.Cell(row, 4).Value = "رقم الصلاحية";
                 worksheet.Cell(row, 5).Value = "كود الصلاحية";
                 worksheet.Cell(row, 6).Value = "اسم الصلاحية";
-                worksheet.Cell(row, 7).Value = "الحالة (Allow/Deny)";
+                worksheet.Cell(row, 7).Value = "الحالة";
                 worksheet.Cell(row, 8).Value = "تاريخ الإضافة";
 
                 var headerRange = worksheet.Range(row, 1, row, 8);
@@ -672,7 +672,7 @@ namespace ERP.Controllers
                     string userName = x.User?.UserName ?? string.Empty;         // اسم الدخول فقط
                     string permCode = x.Permission?.Code ?? string.Empty;
                     string permName = x.Permission?.NameAr ?? string.Empty;
-                    string allowed = x.IsAllowed ? "Allow" : "Deny";
+                    string allowed = x.IsAllowed ? "مسموح" : "ممنوع";
 
                     worksheet.Cell(row, 1).Value = x.Id;
                     worksheet.Cell(row, 2).Value = x.UserId;
@@ -690,7 +690,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameExcel = $"UserDeniedPermissions_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameExcel = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات ممنوعة للمستخدمين", ".xlsx");
                 const string excelContentType =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -699,7 +699,7 @@ namespace ERP.Controllers
 
             // ================= فرع CSV =================
             var sb = new StringBuilder();
-            sb.AppendLine("Id,UserId,UserName,PermissionId,PermissionCode,PermissionName,IsAllowed,CreatedAt");
+            sb.AppendLine("رقم السطر,رقم المستخدم,اسم الدخول,رقم الصلاحية,كود الصلاحية,اسم الصلاحية,الحالة,تاريخ الإضافة");
 
             foreach (var x in list)
             {
@@ -709,7 +709,7 @@ namespace ERP.Controllers
                     .Replace("\"", "\"\"");
                 string permName = (x.Permission?.NameAr ?? string.Empty)
                     .Replace("\"", "\"\"");
-                string allowed = x.IsAllowed ? "Allow" : "Deny";
+                string allowed = x.IsAllowed ? "مسموح" : "ممنوع";
                 string created = x.CreatedAt.ToString("yyyy-MM-dd HH:mm");
 
                 sb.AppendLine(
@@ -723,9 +723,8 @@ namespace ERP.Controllers
                     $"{created}");
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            string fileNameCsv = $"UserDeniedPermissions_{timeStamp}.csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            string fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("صلاحيات ممنوعة للمستخدمين", ".csv");
 
             return File(bytes, "text/csv", fileNameCsv);
         }

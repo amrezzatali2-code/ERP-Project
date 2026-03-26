@@ -583,7 +583,7 @@ namespace ERP.Controllers
                 var sb = new StringBuilder();
 
                 // عناوين الأعمدة في ملف CSV
-                sb.AppendLine("Id,StockTransferId,TransferDate,FromWarehouseId,ToWarehouseId,ProductId,Qty,Note");
+                sb.AppendLine("كود السطر,رقم التحويل,تاريخ التحويل,من مخزن,إلى مخزن,كود الصنف,الكمية,ملاحظات السطر");
 
                 foreach (var l in list)
                 {
@@ -609,7 +609,7 @@ namespace ERP.Controllers
 
                 var utf8Bom = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytesCsv = utf8Bom.GetBytes(sb.ToString());
-                var fileNameCsv = $"StockTransferLines_{DateTime.Now:yyyyMMdd_HHmm}.csv";
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("سطور تحويل المخزون", ".csv");
                 const string contentTypeCsv = "text/csv; charset=utf-8";
 
                 return File(bytesCsv, contentTypeCsv, fileNameCsv);
@@ -617,7 +617,7 @@ namespace ERP.Controllers
             else
             {
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("StockTransferLines");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("سطور تحويل المخزون"));
 
                 int r = 1;
                 ws.Cell(r, 1).Value = "كود السطر";
@@ -653,7 +653,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileNameXlsx = $"StockTransferLines_{DateTime.Now:yyyyMMdd_HHmm}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("سطور تحويل المخزون", ".xlsx");
                 const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
                 return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);

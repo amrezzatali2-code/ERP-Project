@@ -334,31 +334,32 @@ namespace ERP.Controllers
             var sb = new StringBuilder();
 
             // عناوين الأعمدة
-            sb.AppendLine("Id,AdjustmentDate,WarehouseId,ReferenceNo,Reason,CreatedAt");
+            sb.AppendLine("كود التسوية,تاريخ التسوية,كود المخزن,رقم مرجعي,السبب,تاريخ الإنشاء");
 
             // كل سطر = تسوية واحدة
             foreach (var x in list)
             {
                 string dateText = x.AdjustmentDate.ToString("yyyy-MM-dd");
                 string createdText = x.CreatedAt.ToString("yyyy-MM-dd HH:mm");
+                string Safe(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"").Replace(",", "،") + "\"";
 
                 var line = string.Join(",",
                     x.Id,
                     dateText,
                     x.WarehouseId,
-                    (x.ReferenceNo ?? "").Replace(",", " "),
-                    (x.Reason ?? "").Replace(",", " "),
+                    Safe(x.ReferenceNo),
+                    Safe(x.Reason),
                     createdText
                 );
 
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
             var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv";
-            var fileName = $"StockAdjustments_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("تسويات الجرد", "." + ext);
 
-            return File(bytes, "text/csv", fileName);
+            return File(bytes, "text/csv; charset=utf-8", fileName);
         }
 
         // =========================

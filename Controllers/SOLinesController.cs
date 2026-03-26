@@ -64,9 +64,12 @@ namespace ERP.Controllers
             int? fromCode,
             int? toCode)
         {
-            // 1) الاستعلام الأساسي: سطور أوامر البيع + الهيدر (SalesOrder)
+            // 1) الاستعلام الأساسي: سطور أوامر البيع + الصنف + الهيدر + العميل + المنطقة
             var q = _context.SOLines
-                            .Include(x => x.SalesOrder)      // علشان SODate + الحالة لو احتجناها
+                            .Include(x => x.Product)
+                            .Include(x => x.SalesOrder)
+                                .ThenInclude(so => so.Customer)
+                                    .ThenInclude(c => c.Area)
                             .AsNoTracking()
                             .AsQueryable();
 
@@ -103,8 +106,12 @@ namespace ERP.Controllers
             var stringFields =
                 new Dictionary<string, Expression<Func<SOLine, string?>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["pricebasis"] = x => x.PriceBasis ?? "",          // مرجع السعر
-                    ["batch"] = x => x.PreferredBatchNo ?? ""     // التشغيلة المفضّلة
+                    ["prodname"] = x => x.Product != null ? x.Product.ProdName ?? "" : "",
+                    ["writer"] = x => x.SalesOrder != null ? x.SalesOrder.CreatedBy : (x.CreatedBy ?? ""),
+                    ["region"] = x => x.SalesOrder != null && x.SalesOrder.Customer != null
+                        ? (x.SalesOrder.Customer.Area != null ? x.SalesOrder.Customer.Area.AreaName : x.SalesOrder.Customer.RegionName) ?? ""
+                        : "",
+                    ["batch"] = x => x.PreferredBatchNo ?? ""
                 };
 
             // 6) حقول رقمية int للبحث بالأرقام
@@ -124,15 +131,17 @@ namespace ERP.Controllers
                     ["SOId"] = x => x.SOId,
                     ["LineNo"] = x => x.LineNo,
                     ["ProdId"] = x => x.ProdId,
+                    ["ProdName"] = x => x.Product != null ? x.Product.ProdName ?? "" : "",
                     ["Qty"] = x => x.QtyRequested,
                     ["RequestedRetailPrice"] = x => x.RequestedRetailPrice,
                     ["SalesDiscountPct"] = x => x.SalesDiscountPct,
-                    ["ExpectedUnitPrice"] = x => x.ExpectedUnitPrice,
                     ["ExpectedLineTotal"] = x => x.ExpectedUnitPrice * x.QtyRequested,
+                    ["Writer"] = x => x.SalesOrder != null ? x.SalesOrder.CreatedBy : (x.CreatedBy ?? ""),
+                    ["Region"] = x => x.SalesOrder != null && x.SalesOrder.Customer != null
+                        ? (x.SalesOrder.Customer.Area != null ? x.SalesOrder.Customer.Area.AreaName : x.SalesOrder.Customer.RegionName) ?? ""
+                        : "",
                     ["Batch"] = x => x.PreferredBatchNo ?? "",
                     ["PreferredExpiry"] = x => x.PreferredExpiry ?? DateTime.MinValue,
-                    ["PriceBasis"] = x => x.PriceBasis ?? "",
-                    // لو حبيت ترتب بتاريخ الأمر نفسه:
                     ["SODate"] = x => x.SalesOrder != null ? x.SalesOrder.SODate : DateTime.MinValue
                 };
 
@@ -158,7 +167,7 @@ namespace ERP.Controllers
             string? sort = "SOId",
             string? dir = "asc",
             int page = 1,
-            int pageSize = 50,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
@@ -168,17 +177,25 @@ namespace ERP.Controllers
             string? filterCol_soid = null,
             string? filterCol_lineno = null,
             string? filterCol_prod = null,
+            string? filterCol_prodname = null,
             string? filterCol_qty = null,
             string? filterCol_reqretail = null,
             string? filterCol_disc = null,
-            string? filterCol_unitprice = null,
             string? filterCol_linetotal = null,
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
-            string? filterCol_pricebasis = null,
+            string? filterCol_writer = null,
+            string? filterCol_region = null,
             string? filterCol_date = null
         )
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psVal))
+                pageSize = psVal;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
             var q = BuildQuery(soId, search, searchBy, sort, dir, useDateRange, fromDate, toDate, fromCode, toCode);
 
             if (!string.IsNullOrWhiteSpace(filterCol_soid))
@@ -202,6 +219,12 @@ namespace ERP.Controllers
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.ProdId));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_prodname))
+            {
+                var vals = filterCol_prodname.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
+                if (vals.Count > 0) q = q.Where(x => x.Product != null && vals.Contains(x.Product.ProdName ?? ""));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_qty))
             {
                 var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -222,13 +245,6 @@ namespace ERP.Controllers
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
                     .Where(d => d.HasValue).Select(d => d!.Value).ToList();
                 if (vals.Count > 0) q = q.Where(x => vals.Contains(x.SalesDiscountPct));
-            }
-            if (!string.IsNullOrWhiteSpace(filterCol_unitprice))
-            {
-                var vals = filterCol_unitprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
-                    .Where(d => d.HasValue).Select(d => d!.Value).ToList();
-                if (vals.Count > 0) q = q.Where(x => vals.Contains(x.ExpectedUnitPrice));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_linetotal))
             {
@@ -264,11 +280,22 @@ namespace ERP.Controllers
                                      months.Contains((x.PreferredExpiry.Value.Year * 100) + x.PreferredExpiry.Value.Month));
                 }
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_pricebasis))
+            if (!string.IsNullOrWhiteSpace(filterCol_writer))
             {
-                var vals = filterCol_pricebasis.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                var vals = filterCol_writer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
-                if (vals.Count > 0) q = q.Where(x => x.PriceBasis != null && vals.Contains(x.PriceBasis));
+                if (vals.Count > 0)
+                    q = q.Where(x => x.SalesOrder != null && vals.Contains(x.SalesOrder.CreatedBy));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = filterCol_region.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => x.SalesOrder != null && x.SalesOrder.Customer != null &&
+                        vals.Contains(x.SalesOrder.Customer.Area != null
+                            ? x.SalesOrder.Customer.Area.AreaName
+                            : (x.SalesOrder.Customer.RegionName ?? "")));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_date))
             {
@@ -279,12 +306,44 @@ namespace ERP.Controllers
                     q = q.Where(x => x.SalesOrder != null && dates.Contains(x.SalesOrder.SODate.Date));
             }
 
-            var model = await PagedResult<SOLine>.CreateAsync(q, page, pageSize);
+            var dirNorm = (dir?.ToLower() == "desc") ? "desc" : "asc";
+            bool descending = dirNorm == "desc";
 
-            // تخزين إعدادات التاريخ فى الموديل علشان الواجهة تعرض القيم مرة أخرى
-            model.UseDateRange = useDateRange;
-            model.FromDate = fromDate;
-            model.ToDate = toDate;
+            var totalCount = await q.CountAsync();
+            int totalQtyFiltered = 0;
+            decimal totalValueFiltered = 0m;
+            if (totalCount > 0)
+            {
+                totalQtyFiltered = await q.SumAsync(x => x.QtyRequested);
+                totalValueFiltered = await q.SumAsync(x => x.ExpectedUnitPrice * x.QtyRequested);
+            }
+
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+            if (page < 1) page = 1;
+            var skip = (page - 1) * effectivePageSize;
+            if (totalCount > 0 && effectivePageSize > 0 && skip >= totalCount)
+            {
+                page = Math.Max(1, (int)Math.Ceiling((double)totalCount / effectivePageSize));
+                skip = (page - 1) * effectivePageSize;
+            }
+
+            var items = await q.Skip(skip).Take(effectivePageSize).ToListAsync();
+
+            var model = new PagedResult<SOLine>(items, page, pageSize, totalCount)
+            {
+                Search = search,
+                SearchBy = searchBy,
+                SortColumn = sort,
+                SortDescending = descending,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
 
             // فلتر SOId للواجهة
             ViewBag.FilterSOId = soId;
@@ -296,24 +355,28 @@ namespace ERP.Controllers
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
             ViewBag.Sort = sort ?? "SOId";
-            ViewBag.Dir = (dir?.ToLower() == "desc") ? "desc" : "asc";
+            ViewBag.Dir = dirNorm;
 
             ViewBag.Page = model.PageNumber;
-            ViewBag.PageSize = model.PageSize;
+            ViewBag.PageSize = pageSize;
             ViewBag.Total = model.TotalCount;
 
             ViewBag.FilterCol_soid = filterCol_soid ?? "";
             ViewBag.FilterCol_lineno = filterCol_lineno ?? "";
             ViewBag.FilterCol_prod = filterCol_prod ?? "";
+            ViewBag.FilterCol_prodname = filterCol_prodname ?? "";
             ViewBag.FilterCol_qty = filterCol_qty ?? "";
             ViewBag.FilterCol_reqretail = filterCol_reqretail ?? "";
             ViewBag.FilterCol_disc = filterCol_disc ?? "";
-            ViewBag.FilterCol_unitprice = filterCol_unitprice ?? "";
             ViewBag.FilterCol_linetotal = filterCol_linetotal ?? "";
             ViewBag.FilterCol_batch = filterCol_batch ?? "";
             ViewBag.FilterCol_expiry = filterCol_expiry ?? "";
-            ViewBag.FilterCol_pricebasis = filterCol_pricebasis ?? "";
+            ViewBag.FilterCol_writer = filterCol_writer ?? "";
+            ViewBag.FilterCol_region = filterCol_region ?? "";
             ViewBag.FilterCol_date = filterCol_date ?? "";
+
+            ViewBag.TotalQtyFiltered = totalQtyFiltered;
+            ViewBag.TotalValueFiltered = totalValueFiltered;
 
             // خيارات البحث للـ DropDown فى الواجهة
             ViewBag.SearchOptions = new List<SelectListItem>
@@ -349,9 +412,19 @@ namespace ERP.Controllers
                     Selected = string.Equals(searchBy, "batch", StringComparison.OrdinalIgnoreCase)
                 },
 
-                new("مرجع السعر",     "pricebasis")
+                new("اسم الصنف",      "prodname")
                 {
-                    Selected = string.Equals(searchBy, "pricebasis", StringComparison.OrdinalIgnoreCase)
+                    Selected = string.Equals(searchBy, "prodname", StringComparison.OrdinalIgnoreCase)
+                },
+
+                new("الكاتب",         "writer")
+                {
+                    Selected = string.Equals(searchBy, "writer", StringComparison.OrdinalIgnoreCase)
+                },
+
+                new("المنطقة",        "region")
+                {
+                    Selected = string.Equals(searchBy, "region", StringComparison.OrdinalIgnoreCase)
                 }
             };
 
@@ -373,9 +446,29 @@ namespace ERP.Controllers
                     Selected = string.Equals(sort, "ProdId", StringComparison.OrdinalIgnoreCase)
                 },
 
+                new("اسم الصنف",      "ProdName")
+                {
+                    Selected = string.Equals(sort, "ProdName", StringComparison.OrdinalIgnoreCase)
+                },
+
                 new("الكمية",         "Qty")
                 {
                     Selected = string.Equals(sort, "Qty", StringComparison.OrdinalIgnoreCase)
+                },
+
+                new("إجمالي الصنف",   "ExpectedLineTotal")
+                {
+                    Selected = string.Equals(sort, "ExpectedLineTotal", StringComparison.OrdinalIgnoreCase)
+                },
+
+                new("الكاتب",         "Writer")
+                {
+                    Selected = string.Equals(sort, "Writer", StringComparison.OrdinalIgnoreCase)
+                },
+
+                new("المنطقة",        "Region")
+                {
+                    Selected = string.Equals(sort, "Region", StringComparison.OrdinalIgnoreCase)
                 }
             };
 
@@ -392,7 +485,12 @@ namespace ERP.Controllers
                 return BadRequest();
 
             var line = await _context.SOLines
+                                     .Include(x => x.Product)
                                      .Include(x => x.SalesOrder)
+                                         .ThenInclude(so => so.Customer)
+                                             .ThenInclude(c => c!.Area)
+                                     .Include(x => x.SalesOrder)
+                                         .ThenInclude(so => so.Warehouse)
                                      .AsNoTracking()
                                      .FirstOrDefaultAsync(x =>
                                          x.SOId == soId &&
@@ -567,14 +665,15 @@ namespace ERP.Controllers
             string? filterCol_soid = null,
             string? filterCol_lineno = null,
             string? filterCol_prod = null,
+            string? filterCol_prodname = null,
             string? filterCol_qty = null,
             string? filterCol_reqretail = null,
             string? filterCol_disc = null,
-            string? filterCol_unitprice = null,
             string? filterCol_linetotal = null,
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
-            string? filterCol_pricebasis = null,
+            string? filterCol_writer = null,
+            string? filterCol_region = null,
             string? filterCol_date = null,
             string format = "excel"
         )
@@ -602,6 +701,12 @@ namespace ERP.Controllers
                     .Where(v => v.HasValue).Select(v => v!.Value).ToList();
                 if (ids.Count > 0) q = q.Where(x => ids.Contains(x.ProdId));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_prodname))
+            {
+                var vals = filterCol_prodname.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
+                if (vals.Count > 0) q = q.Where(x => x.Product != null && vals.Contains(x.Product.ProdName ?? ""));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_qty))
             {
                 var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -622,13 +727,6 @@ namespace ERP.Controllers
                     .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
                     .Where(d => d.HasValue).Select(d => d!.Value).ToList();
                 if (vals.Count > 0) q = q.Where(x => vals.Contains(x.SalesDiscountPct));
-            }
-            if (!string.IsNullOrWhiteSpace(filterCol_unitprice))
-            {
-                var vals = filterCol_unitprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(v => decimal.TryParse(v.Trim(), out var d) ? d : (decimal?)null)
-                    .Where(d => d.HasValue).Select(d => d!.Value).ToList();
-                if (vals.Count > 0) q = q.Where(x => vals.Contains(x.ExpectedUnitPrice));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_linetotal))
             {
@@ -664,11 +762,22 @@ namespace ERP.Controllers
                                      months.Contains((x.PreferredExpiry.Value.Year * 100) + x.PreferredExpiry.Value.Month));
                 }
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_pricebasis))
+            if (!string.IsNullOrWhiteSpace(filterCol_writer))
             {
-                var vals = filterCol_pricebasis.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                var vals = filterCol_writer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
-                if (vals.Count > 0) q = q.Where(x => x.PriceBasis != null && vals.Contains(x.PriceBasis));
+                if (vals.Count > 0)
+                    q = q.Where(x => x.SalesOrder != null && vals.Contains(x.SalesOrder.CreatedBy));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_region))
+            {
+                var vals = filterCol_region.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim()).Where(v => !string.IsNullOrEmpty(v)).ToList();
+                if (vals.Count > 0)
+                    q = q.Where(x => x.SalesOrder != null && x.SalesOrder.Customer != null &&
+                        vals.Contains(x.SalesOrder.Customer.Area != null
+                            ? x.SalesOrder.Customer.Area.AreaName
+                            : (x.SalesOrder.Customer.RegionName ?? "")));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_date))
             {
@@ -681,45 +790,50 @@ namespace ERP.Controllers
 
             var data = await q.ToListAsync();
 
-            var fileNameBase = $"SOLines_{DateTime.Now:yyyyMMdd_HHmmss}";
-
             if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
             {
                 // ===== تصدير إلى ملف Excel باستخدام ClosedXML =====
                 using var wb = new XLWorkbook();
-                var ws = wb.Worksheets.Add("SOLines");
+                var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أصناف أوامر البيع"));
 
-                // عناوين الأعمدة
+                // عناوين الأعمدة (عربي كما في القائمة)
                 int row = 1;
-                ws.Cell(row, 1).Value = "SOId";
-                ws.Cell(row, 2).Value = "LineNo";
-                ws.Cell(row, 3).Value = "ProdId";
-                ws.Cell(row, 4).Value = "QtyRequested";
-                ws.Cell(row, 5).Value = "RequestedRetailPrice";
-                ws.Cell(row, 6).Value = "SalesDiscountPct";
-                ws.Cell(row, 7).Value = "ExpectedUnitPrice";
-                ws.Cell(row, 8).Value = "ExpectedLineTotal";
-                ws.Cell(row, 9).Value = "PriceBasis";
-                ws.Cell(row, 10).Value = "PreferredBatchNo";
-                ws.Cell(row, 11).Value = "PreferredExpiry";
-                ws.Cell(row, 12).Value = "SODate";
+                ws.Cell(row, 1).Value = "رقم الأمر";
+                ws.Cell(row, 2).Value = "رقم السطر";
+                ws.Cell(row, 3).Value = "كود الصنف";
+                ws.Cell(row, 4).Value = "اسم الصنف";
+                ws.Cell(row, 5).Value = "الكمية المطلوبة";
+                ws.Cell(row, 6).Value = "سعر الجمهور المطلوب";
+                ws.Cell(row, 7).Value = "خصم المبيعات %";
+                ws.Cell(row, 8).Value = "إجمالي الصنف";
+                ws.Cell(row, 9).Value = "التشغيلة المفضّلة";
+                ws.Cell(row, 10).Value = "الصلاحية المفضّلة";
+                ws.Cell(row, 11).Value = "الكاتب";
+                ws.Cell(row, 12).Value = "المنطقة";
+                ws.Cell(row, 13).Value = "تاريخ الأمر";
 
                 // البيانات
                 row = 2;
                 foreach (var l in data)
                 {
+                    var regionText = l.SalesOrder?.Customer != null
+                        ? (l.SalesOrder.Customer.Area != null
+                            ? l.SalesOrder.Customer.Area.AreaName
+                            : (l.SalesOrder.Customer.RegionName ?? ""))
+                        : "";
                     ws.Cell(row, 1).Value = l.SOId;
                     ws.Cell(row, 2).Value = l.LineNo;
                     ws.Cell(row, 3).Value = l.ProdId;
-                    ws.Cell(row, 4).Value = l.QtyRequested;
-                    ws.Cell(row, 5).Value = l.RequestedRetailPrice;
-                    ws.Cell(row, 6).Value = l.SalesDiscountPct;
-                    ws.Cell(row, 7).Value = l.ExpectedUnitPrice;
+                    ws.Cell(row, 4).Value = l.Product?.ProdName ?? "";
+                    ws.Cell(row, 5).Value = l.QtyRequested;
+                    ws.Cell(row, 6).Value = l.RequestedRetailPrice;
+                    ws.Cell(row, 7).Value = l.SalesDiscountPct;
                     ws.Cell(row, 8).Value = l.ExpectedUnitPrice * l.QtyRequested;
-                    ws.Cell(row, 9).Value = l.PriceBasis ?? "";
-                    ws.Cell(row, 10).Value = l.PreferredBatchNo ?? "";
-                    ws.Cell(row, 11).Value = l.PreferredExpiry?.ToString("yyyy-MM-dd") ?? "";
-                    ws.Cell(row, 12).Value = l.SalesOrder?.SODate.ToString("yyyy-MM-dd") ?? "";
+                    ws.Cell(row, 9).Value = l.PreferredBatchNo ?? "";
+                    ws.Cell(row, 10).Value = l.PreferredExpiry?.ToString("yyyy-MM-dd") ?? "";
+                    ws.Cell(row, 11).Value = l.SalesOrder?.CreatedBy ?? "";
+                    ws.Cell(row, 12).Value = regionText;
+                    ws.Cell(row, 13).Value = l.SalesOrder?.SODate.ToString("yyyy-MM-dd") ?? "";
                     row++;
                 }
 
@@ -729,7 +843,7 @@ namespace ERP.Controllers
                 wb.SaveAs(stream);
                 var content = stream.ToArray();
 
-                var fileNameXlsx = fileNameBase + ".xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("أصناف أوامر البيع", ".xlsx");
                 const string contentTypeXlsx =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -741,34 +855,40 @@ namespace ERP.Controllers
                 var sb = new StringBuilder();
 
                 // عناوين الأعمدة
-                sb.AppendLine("SOId,LineNo,ProdId,QtyRequested,RequestedRetailPrice,SalesDiscountPct,ExpectedUnitPrice,ExpectedLineTotal,PriceBasis,PreferredBatchNo,PreferredExpiry,SODate");
+                sb.AppendLine("رقم الأمر,رقم السطر,كود الصنف,اسم الصنف,الكمية المطلوبة,سعر الجمهور المطلوب,خصم المبيعات %,إجمالي الصنف,التشغيلة المفضّلة,الصلاحية المفضّلة,الكاتب,المنطقة,تاريخ الأمر");
 
                 foreach (var l in data)
                 {
-                    string expectedLineTotal = (l.ExpectedUnitPrice * l.QtyRequested)
+                    string lineTotal = (l.ExpectedUnitPrice * l.QtyRequested)
                         .ToString("0.####", CultureInfo.InvariantCulture);
 
                     string preferredExpiry = l.PreferredExpiry?.ToString("yyyy-MM-dd") ?? "";
                     string soDate = l.SalesOrder?.SODate.ToString("yyyy-MM-dd") ?? "";
+                    var regionText = l.SalesOrder?.Customer != null
+                        ? (l.SalesOrder.Customer.Area != null
+                            ? l.SalesOrder.Customer.Area.AreaName
+                            : (l.SalesOrder.Customer.RegionName ?? ""))
+                        : "";
 
                     sb.AppendLine(string.Join(",",
                         l.SOId,
                         l.LineNo,
                         l.ProdId,
+                        EscapeCsv(l.Product?.ProdName),
                         l.QtyRequested,
                         l.RequestedRetailPrice.ToString("0.00", CultureInfo.InvariantCulture),
                         l.SalesDiscountPct.ToString("0.##", CultureInfo.InvariantCulture),
-                        l.ExpectedUnitPrice.ToString("0.####", CultureInfo.InvariantCulture),
-                        expectedLineTotal,
-                        EscapeCsv(l.PriceBasis),
+                        lineTotal,
                         EscapeCsv(l.PreferredBatchNo),
                         preferredExpiry,
+                        EscapeCsv(l.SalesOrder?.CreatedBy),
+                        EscapeCsv(regionText),
                         soDate
                     ));
                 }
 
-                var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-                var fileNameCsv = fileNameBase + ".csv";
+                var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("أصناف أوامر البيع", ".csv");
 
                 return File(bytes, "text/csv", fileNameCsv);
             }
@@ -793,7 +913,10 @@ namespace ERP.Controllers
 
             IQueryable<SOLine> q = _context.SOLines
                 .AsNoTracking()
-                .Include(x => x.SalesOrder);
+                .Include(x => x.Product)
+                .Include(x => x.SalesOrder)
+                    .ThenInclude(so => so.Customer)
+                        .ThenInclude(c => c.Area);
 
             if (column == "soid")
             {
@@ -816,6 +939,14 @@ namespace ERP.Controllers
                 var ids = await idsQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
                 return Json(ids);
             }
+            if (column == "prodname")
+            {
+                var pnQuery = q.Where(x => x.Product != null && x.Product.ProdName != null && x.Product.ProdName != "")
+                    .Select(x => x.Product!.ProdName!);
+                if (!string.IsNullOrEmpty(search)) pnQuery = pnQuery.Where(v => v.Contains(search));
+                var list = await pnQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
             if (column == "qty")
             {
                 var idsQuery = q.Select(x => x.QtyRequested.ToString());
@@ -833,12 +964,6 @@ namespace ERP.Controllers
             {
                 var raw = await q.Select(x => x.SalesDiscountPct).Distinct().OrderBy(v => v).Take(200).ToListAsync();
                 var list = raw.Select(v => v.ToString("0.00")).Where(v => string.IsNullOrEmpty(search) || v.Contains(search)).ToList();
-                return Json(list);
-            }
-            if (column == "unitprice")
-            {
-                var raw = await q.Select(x => x.ExpectedUnitPrice).Distinct().OrderBy(v => v).Take(200).ToListAsync();
-                var list = raw.Select(v => v.ToString("0.0000")).Where(v => string.IsNullOrEmpty(search) || v.Contains(search)).ToList();
                 return Json(list);
             }
             if (column == "linetotal")
@@ -873,12 +998,22 @@ namespace ERP.Controllers
 
                 return Json(list);
             }
-            if (column == "pricebasis")
+            if (column == "writer")
             {
-                var pbQuery = q.Where(x => x.PriceBasis != null && x.PriceBasis != "")
-                    .Select(x => x.PriceBasis!);
-                if (!string.IsNullOrEmpty(search)) pbQuery = pbQuery.Where(v => v.Contains(search));
-                var list = await pbQuery.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                var wq = q.Where(x => x.SalesOrder != null && x.SalesOrder.CreatedBy != "")
+                    .Select(x => x.SalesOrder!.CreatedBy);
+                if (!string.IsNullOrEmpty(search)) wq = wq.Where(v => v.Contains(search));
+                var list = await wq.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+            if (column == "region")
+            {
+                var rq = q.Where(x => x.SalesOrder != null && x.SalesOrder.Customer != null)
+                    .Select(x => x.SalesOrder!.Customer!.Area != null
+                        ? x.SalesOrder.Customer.Area!.AreaName
+                        : (x.SalesOrder.Customer.RegionName ?? ""));
+                if (!string.IsNullOrEmpty(search)) rq = rq.Where(v => v.Contains(search));
+                var list = await rq.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
                 return Json(list);
             }
             if (column == "date")

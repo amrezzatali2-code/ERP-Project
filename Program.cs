@@ -6,11 +6,15 @@ using ERP.Services;                  // خدمة DocumentTotalsService
 using ERP.Seed;
 using ERP.Seeders;
 using ERP.Infrastructure;           // IUserActivityLogger, UserActivityLogger, DecimalModelBinderProvider
+using ERP.Infrastructure.TechnicalLogging;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;            // سياسة التوثيق
 using Microsoft.AspNetCore.Mvc.Authorization;        // AuthorizeFilter العام
 using Microsoft.AspNetCore.Localization;             // خدمات التوطين
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Serilog;
+using Serilog.Events;
 using System.Globalization;
 using System.Threading.Tasks;
 
@@ -23,6 +27,18 @@ namespace ERP
         {
             // متغير: منشئ التطبيق
             var builder = WebApplication.CreateBuilder(args);
+
+            // تسجيل فني (Serilog): ملفات دوّارة + كونسول — منفصل عن سجل النشاط الإداري (UserActivityLog)
+            builder.Host.UseSerilog((context, services, configuration) =>
+            {
+                configuration
+                    .ReadFrom.Configuration(context.Configuration)
+                    .Enrich.FromLogContext();
+            });
+
+            // الإعدادات (IConfiguration): يُحمَّل تلقائياً بالترتيب
+            // appsettings.json ← appsettings.{Environment}.json ← متغيرات البيئة ← وسيطات سطر الأوامر (الأخيرة تتجاوز السابقة).
+            // مثال تجاوز سلسلة الاتصال في الإنتاج: ConnectionStrings__conString
 
             // =========================================================
             // 1) إعداد MVC + فلتر Authorize عام (كل الصفحات تحتاج Login)
@@ -37,6 +53,7 @@ namespace ERP
                 // إضافة الفلتر على مستوى كل الكنترولرات
                 options.Filters.Add(new AuthorizeFilter(policy));
                 options.Filters.Add<PopulateUserPermissionsFilter>();
+                options.Filters.Add<TechnicalPerformanceActionFilter>();
 
                 // ربط القيم العشرية (الحد الائتماني، سعر الجمهور، إلخ) بقبول الفاصلة والنقطة لتفادي "must be a number"
                 options.ModelBinderProviders.Insert(0, new DecimalModelBinderProvider());
@@ -86,102 +103,150 @@ namespace ERP
             // =========================================================
             builder.Services.AddScoped<IUserActivityLogger, UserActivityLogger>();
 
+            builder.Services.Configure<TechnicalLoggingOptions>(
+                builder.Configuration.GetSection(TechnicalLoggingOptions.SectionName));
+            builder.Services.AddScoped<TechnicalPerformanceActionFilter>();
+
             // =========================================================
             // 5) بناء التطبيق
             // =========================================================
             var app = builder.Build();
 
+            var httpSlowThresholdMs = builder.Configuration.GetValue<int>(
+                $"{TechnicalLoggingOptions.SectionName}:HttpRequestSlowThresholdMs", 2000);
+
             // =========================================================
-            // 6) تشغيل الميجراشن + Seed مرة واحدة عند بداية التشغيل
+            // 6) Migrations + Seed عند التشغيل — اختياري عبر appsettings (RunMigrationsOnStartup / RunSeedOnStartup)
+            //     في الإنتاج: عطّل الافتراضي (false) وشغّل الترحيل يدوياً أو عبر CI/CD عند الحاجة.
             // =========================================================
             using (var scope = app.Services.CreateScope())
             {
-                // متغير: موفّر الخدمات داخل الـ scope
                 var services = scope.ServiceProvider;
-                var db = services.GetRequiredService<AppDbContext>();   // سياق قاعدة البيانات
+                var db = services.GetRequiredService<AppDbContext>();
+                var logger = services.GetRequiredService<ILogger<Program>>();
+                var configuration = app.Configuration;
 
-                // تطبيق كل الـ Migrations لو ناقصة
-                db.Database.Migrate();
+                var runMigrations = configuration.GetValue("RunMigrationsOnStartup", false);
+                var runSeed = configuration.GetValue("RunSeedOnStartup", false);
 
-                // ========== مزامنة كتالوج الصلاحيات من الكود — دون مسح ربط الأدوار المحفوظ لدى العميل ==========
-                // لا نحذف RolePermissions بالجملة: تعديلات «صلاحيات الأدوار» وأدوار المستخدمين تبقى بعد التحديث أو إعادة التشغيل.
-                // يُحذف من الكتالوج فقط الأكواد التي لم تعد في PermissionCodes؛ روابطها في RolePermissions تُزال عبر Cascade.
-                var syncList = ERP.Security.PermissionCodes.GetAllForSync()
-                    .Where(x => !string.IsNullOrWhiteSpace(x.Code))
-                    .DistinctBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
-                    .ToList();
+                logger.LogInformation(
+                    "Startup database options: RunMigrationsOnStartup={RunMigrations}, RunSeedOnStartup={RunSeed}",
+                    runMigrations, runSeed);
 
-                var syncCodes = new HashSet<string>(syncList.Select(x => x.Code), StringComparer.OrdinalIgnoreCase);
-
-                // 1) إضافة/تحديث الصلاحيات من مصدر الكود
-                var existingPerms = await db.Permissions
-                    .Where(p => p.Code != null)
-                    .ToDictionaryAsync(p => p.Code!, p => p, StringComparer.OrdinalIgnoreCase);
-                var now = DateTime.UtcNow;
-                foreach (var (Code, NameAr, Module) in syncList)
+                if (runMigrations)
                 {
-                    if (existingPerms.TryGetValue(Code, out var p))
+                    try
                     {
-                        p.NameAr = NameAr;
-                        p.Module = Module;
-                        p.IsActive = true;
-                        p.UpdatedAt = now;
+                        await db.Database.MigrateAsync();
+                        logger.LogInformation("Database Migrate completed on startup.");
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        db.Permissions.Add(new Permission { Code = Code, NameAr = NameAr, Module = Module, IsActive = true, CreatedAt = now });
+                        logger.LogError(ex, "Database Migrate failed on startup.");
+                        throw;
                     }
                 }
-                await db.SaveChangesAsync();
-
-                // 2) حذف صلاحيات لم تعد في الكود (الروابط المرتبطة تُحذف تلقائياً مع الصلاحية)
-                var oldPerms = await db.Permissions.Where(p => p.Code != null && !syncCodes.Contains(p.Code)).ToListAsync();
-                if (oldPerms.Count > 0)
+                else
                 {
-                    db.Permissions.RemoveRange(oldPerms);
-                    await db.SaveChangesAsync();
+                    logger.LogInformation("Database Migrate skipped (RunMigrationsOnStartup=false).");
                 }
 
-                // 3) ضمان وجود الأدوار الأساسية (تحديث أو إدراج — بدون مسح أدوار مخصّصة)
-                await RoleSeeder.SeedAsync(db);
-
-                // 4) دور «مالك النظام»: إضافة أي صلاحية جديدة فقط (لا نلمس بقية الأدوار)
-                var ownerRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "مالك النظام");
-                if (ownerRole != null)
+                if (runSeed)
                 {
-                    var allPerms = await db.Permissions.AsNoTracking().ToListAsync();
-                    var existingOwnerLinks = (await db.RolePermissions
-                        .Where(rp => rp.RoleId == ownerRole.RoleId)
-                        .Select(rp => rp.PermissionId)
-                        .ToListAsync()).ToHashSet();
-                    var nowRp = DateTime.UtcNow;
-                    foreach (var perm in allPerms)
+                    try
                     {
-                        if (!existingOwnerLinks.Contains(perm.PermissionId))
+                        // ========== مزامنة كتالوج الصلاحيات من الكود — دون مسح ربط الأدوار المحفوظ لدى العميل ==========
+                        // لا نحذف RolePermissions بالجملة: تعديلات «صلاحيات الأدوار» وأدوار المستخدمين تبقى بعد التحديث أو إعادة التشغيل.
+                        // يُحذف من الكتالوج فقط الأكواد التي لم تعد في PermissionCodes؛ روابطها في RolePermissions تُزال عبر Cascade.
+                        var syncList = ERP.Security.PermissionCodes.GetAllForSync()
+                            .Where(x => !string.IsNullOrWhiteSpace(x.Code))
+                            .DistinctBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                            .ToList();
+
+                        var syncCodes = new HashSet<string>(syncList.Select(x => x.Code), StringComparer.OrdinalIgnoreCase);
+
+                        // 1) إضافة/تحديث الصلاحيات من مصدر الكود
+                        var existingPerms = await db.Permissions
+                            .Where(p => p.Code != null)
+                            .ToDictionaryAsync(p => p.Code!, p => p, StringComparer.OrdinalIgnoreCase);
+                        var now = DateTime.UtcNow;
+                        foreach (var (Code, NameAr, Module) in syncList)
                         {
-                            db.RolePermissions.Add(new RolePermission
+                            if (existingPerms.TryGetValue(Code, out var p))
                             {
-                                RoleId = ownerRole.RoleId,
-                                PermissionId = perm.PermissionId,
-                                IsAllowed = true,
-                                CreatedAt = nowRp
-                            });
+                                p.NameAr = NameAr;
+                                p.Module = Module;
+                                p.IsActive = true;
+                                p.UpdatedAt = now;
+                            }
+                            else
+                            {
+                                db.Permissions.Add(new Permission { Code = Code, NameAr = NameAr, Module = Module, IsActive = true, CreatedAt = now });
+                            }
                         }
+                        await db.SaveChangesAsync();
+
+                        // 2) حذف صلاحيات لم تعد في الكود (الروابط المرتبطة تُحذف تلقائياً مع الصلاحية)
+                        var oldPerms = await db.Permissions.Where(p => p.Code != null && !syncCodes.Contains(p.Code)).ToListAsync();
+                        if (oldPerms.Count > 0)
+                        {
+                            db.Permissions.RemoveRange(oldPerms);
+                            await db.SaveChangesAsync();
+                        }
+
+                        // 3) ضمان وجود الأدوار الأساسية (تحديث أو إدراج — بدون مسح أدوار مخصّصة)
+                        await RoleSeeder.SeedAsync(db);
+
+                        // 4) دور «مالك النظام»: إضافة أي صلاحية جديدة فقط (لا نلمس بقية الأدوار)
+                        var ownerRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "مالك النظام");
+                        if (ownerRole != null)
+                        {
+                            var allPerms = await db.Permissions.AsNoTracking().ToListAsync();
+                            var existingOwnerLinks = (await db.RolePermissions
+                                .Where(rp => rp.RoleId == ownerRole.RoleId)
+                                .Select(rp => rp.PermissionId)
+                                .ToListAsync()).ToHashSet();
+                            var nowRp = DateTime.UtcNow;
+                            foreach (var perm in allPerms)
+                            {
+                                if (!existingOwnerLinks.Contains(perm.PermissionId))
+                                {
+                                    db.RolePermissions.Add(new RolePermission
+                                    {
+                                        RoleId = ownerRole.RoleId,
+                                        PermissionId = perm.PermissionId,
+                                        IsAllowed = true,
+                                        CreatedAt = nowRp
+                                    });
+                                }
+                            }
+                            await db.SaveChangesAsync();
+                        }
+
+                        // 5) سياسات التسعير (لو موجودة)
+                        await PolicySeeder.SeedAsync(db);
+
+                        // 6) مجموعات الأصناف Group A..Z
+                        await ProductGroupSeeder.SeedAsync(db);
+
+                        // 7) مجموعات البونص للأصناف
+                        await ProductBonusGroupSeeder.SeedAsync(db);
+
+                        // 8) شجرة الحسابات (فقط إن كان الجدول فارغاً)
+                        await AccountsSeeder.SeedAsync(db);
+
+                        logger.LogInformation("Startup seed pipeline completed (RunSeedOnStartup=true).");
                     }
-                    await db.SaveChangesAsync();
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Startup seed pipeline failed.");
+                        throw;
+                    }
                 }
-
-                // 5) سياسات التسعير (لو موجودة)
-                await PolicySeeder.SeedAsync(db);
-
-                // 6) مجموعات الأصناف Group A..Z
-                await ProductGroupSeeder.SeedAsync(db);
-
-                // 7) مجموعات البونص للأصناف
-                await ProductBonusGroupSeeder.SeedAsync(db);
-
-                // 8) شجرة الحسابات (فقط إن كان الجدول فارغاً)
-                await AccountsSeeder.SeedAsync(db);
+                else
+                {
+                    logger.LogInformation("Startup seed skipped (RunSeedOnStartup=false).");
+                }
             }
 
             // =========================================================
@@ -208,7 +273,11 @@ namespace ERP
             // =========================================================
             // 8) الـ Middleware المعتادة
             // =========================================================
-            if (!app.Environment.IsDevelopment())
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseDeveloperExceptionPage();
+            }
+            else
             {
                 app.UseExceptionHandler("/Home/Error");  // صفحة الخطأ العامة
                 app.UseHsts();
@@ -218,6 +287,20 @@ namespace ERP
             app.UseStaticFiles();
 
             app.UseRouting();
+
+            app.UseSerilogRequestLogging(options =>
+            {
+                options.MessageTemplate =
+                    "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000} ms";
+                options.GetLevel = (httpContext, elapsed, ex) =>
+                {
+                    if (ex != null)
+                        return LogEventLevel.Error;
+                    return elapsed > httpSlowThresholdMs
+                        ? LogEventLevel.Warning
+                        : LogEventLevel.Information;
+                };
+            });
 
             // ترتيب مهم: التوثيق ثم الصلاحيات
             app.UseAuthentication();
@@ -230,7 +313,14 @@ namespace ERP
                 name: "default",
                 pattern: "{controller=Home}/{action=Index}/{id?}");
 
-            app.Run();
+            try
+            {
+                await app.RunAsync();
+            }
+            finally
+            {
+                Log.CloseAndFlush();
+            }
         }
     }
 }

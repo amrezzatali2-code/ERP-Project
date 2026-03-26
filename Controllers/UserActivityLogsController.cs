@@ -590,7 +590,7 @@ namespace ERP.Controllers
             if (string.Equals(format, "excel", StringComparison.OrdinalIgnoreCase))
             {
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("سجل النشاط");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("سجل النشاط"));
                 ws.RightToLeft = true;
 
                 string[] headers = { "المعرّف", "المستخدم", "نوع العملية", "اسم الكيان", "رقم السجل", "وقت العملية", "الوصف", "عنوان IP", "قبل", "بعد" };
@@ -615,24 +615,24 @@ namespace ERP.Controllers
 
                 using var stream = new System.IO.MemoryStream();
                 workbook.SaveAs(stream);
-                var fileName = $"UserActivityLog_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("سجل نشاط المستخدمين", ".xlsx");
                 return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", fileName);
             }
 
             // CSV
             var sb = new StringBuilder();
-            sb.AppendLine("Id,UserName,ActionType,EntityName,EntityId,ActionTime,Description,IpAddress,UserAgent,OldValues,NewValues");
+            sb.AppendLine("المعرّف,المستخدم,نوع العملية,اسم الكيان,رقم السجل,وقت العملية,الوصف,عنوان IP,المتصفح,قبل,بعد");
             foreach (var r in data)
             {
                 string Safe(string? s) => string.IsNullOrEmpty(s) ? "" : "\"" + s.Replace("\"", "\"\"") + "\"";
                 sb.AppendLine(string.Join(",",
                     r.Id,
                     Safe(r.User?.UserName),
-                    r.ActionType.ToString(),
-                    Safe(r.EntityName),
+                    Safe(r.ActionType.ToString()),
+                    Safe(EntityNameToArabic(r.EntityName)),
                     r.EntityId?.ToString() ?? "",
                     r.ActionTime.ToString("yyyy-MM-dd HH:mm:ss"),
-                    Safe(r.Description),
+                    Safe(DescriptionToArabic(r.Description)),
                     Safe(r.IpAddress),
                     Safe(r.UserAgent),
                     Safe(r.OldValues),
@@ -640,7 +640,7 @@ namespace ERP.Controllers
             }
             var utf8 = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
             var bytes = utf8.GetBytes(sb.ToString());
-            return File(bytes, "text/csv; charset=utf-8", $"UserActivityLog_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+            return File(bytes, "text/csv; charset=utf-8", ExcelExportNaming.ArabicTimestampedFileName("سجل نشاط المستخدمين", ".csv"));
         }
     }
 }

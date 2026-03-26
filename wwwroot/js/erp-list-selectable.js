@@ -67,14 +67,42 @@
             }
         }
 
+        function syncRowSelectCheckboxes() {
+            document.querySelectorAll(rowSelector).forEach(function (r) {
+                var c = r.querySelector('input.row-select[type="checkbox"]');
+                if (c) c.checked = (r === selectedRow);
+            });
+        }
+
         rows.forEach(function (row) {
             row.addEventListener('click', function (e) {
                 if (e.target.closest('button') || e.target.closest('input[type="checkbox"]')) return;
                 document.querySelectorAll(rowSelector).forEach(function (r) { r.classList.remove('selected'); });
                 row.classList.add('selected');
                 selectedRow = row;
+                syncRowSelectCheckboxes();
                 updateButtons();
             });
+
+            var rowCb = row.querySelector('input.row-select[type="checkbox"]');
+            if (rowCb) {
+                rowCb.addEventListener('change', function (e) {
+                    e.stopPropagation();
+                    if (rowCb.checked) {
+                        document.querySelectorAll(rowSelector).forEach(function (r) {
+                            r.classList.remove('selected');
+                            var oc = r.querySelector('input.row-select[type="checkbox"]');
+                            if (oc && r !== row) oc.checked = false;
+                        });
+                        row.classList.add('selected');
+                        selectedRow = row;
+                    } else {
+                        row.classList.remove('selected');
+                        if (selectedRow === row) selectedRow = null;
+                    }
+                    updateButtons();
+                });
+            }
         });
 
         if (btnShow) {

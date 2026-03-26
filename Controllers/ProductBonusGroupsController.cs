@@ -365,21 +365,21 @@ namespace ERP.Controllers
             var sb = new StringBuilder();
 
             // عناوين الأعمدة
-            sb.AppendLine("ProductBonusGroupId,Name,BonusAmount,IsActive,CreatedAt,UpdatedAt");
+            sb.AppendLine("كود المجموعة,اسم المجموعة,قيمة الحافز/علبة,مفعّلة؟,تاريخ الإنشاء,آخر تعديل");
 
-            // كل سطر = مجموعة حافز واحدة
             foreach (var x in list)
             {
                 string createdText = x.CreatedAt.ToString("yyyy-MM-dd HH:mm");
                 string updatedText = x.UpdatedAt.HasValue
                     ? x.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm")
                     : "";
+                string nm = "\"" + (x.Name ?? "").Replace("\"", "\"\"") + "\"";
 
                 var line = string.Join(",",
                     x.ProductBonusGroupId,
-                    x.Name.Replace(",", " "),         // إزالة الفواصل من الاسم
+                    nm,
                     x.BonusAmount.ToString("0.00"),
-                    x.IsActive ? "Yes" : "No",
+                    $"\"{(x.IsActive ? "مفعّلة" : "موقوفة")}\"",
                     createdText,
                     updatedText
                 );
@@ -387,11 +387,11 @@ namespace ERP.Controllers
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
             var ext = (format ?? "excel").ToLower() == "csv" ? "csv" : "csv";
-            var fileName = $"ProductBonusGroups_{DateTime.Now:yyyyMMdd_HHmmss}.{ext}";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("مجموعات الحوافز", "." + ext);
 
-            return File(bytes, "text/csv", fileName);
+            return File(bytes, "text/csv; charset=utf-8", fileName);
         }
 
         // =========================

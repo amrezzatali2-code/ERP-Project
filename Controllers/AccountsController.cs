@@ -932,7 +932,7 @@ namespace ERP.Controllers
             Buffer.BlockCopy(preamble, 0, bytes, 0, preamble.Length);
             Buffer.BlockCopy(body, 0, bytes, preamble.Length, body.Length);
 
-            return File(bytes, "text/csv; charset=utf-8", "Accounts.csv");
+            return File(bytes, "text/csv; charset=utf-8", ExcelExportNaming.ArabicTimestampedFileName("دليل الحسابات", ".csv"));
         }
 
         // دالة صغيرة للهروب من الفواصل في CSV

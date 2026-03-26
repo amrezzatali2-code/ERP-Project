@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -28,7 +28,10 @@ namespace ERP.Models
         // ========= ربط مرتجع الشراء بالمخزن (هنديره لاحقاً مع جدول المخازن) =========
 
         [Display(Name = "كود المخزن")]
-        public int WarehouseId { get; set; } 
+        public int WarehouseId { get; set; }
+
+        [Display(Name = "المخزن")]
+        public virtual Warehouse? Warehouse { get; set; }
 
         // ========= مرجع فاتورة الشراء (اختياري) =========
 

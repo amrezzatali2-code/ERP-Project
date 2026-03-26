@@ -1,0 +1,110 @@
+@model ERP.Models.SOLine
+
+@{
+    ViewData["Title"] = $"سطر أمر بيع — أمر {Model.SOId} / سطر {Model.LineNo}";
+    var so = Model.SalesOrder;
+    var cust = so?.Customer;
+    var regionCell = cust != null
+        ? (cust.Area != null ? cust.Area.AreaName : (cust.RegionName ?? ""))
+        : "";
+}
+
+<div class="container-fluid" dir="rtl">
+    <h2 class="mt-3 mb-3">تفاصيل سطر أمر البيع</h2>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <table class="table table-bordered">
+                <tr>
+                    <th style="width:220px;">رقم أمر البيع</th>
+                    <td>@Model.SOId</td>
+                </tr>
+                <tr>
+                    <th>رقم السطر</th>
+                    <td>@Model.LineNo</td>
+                </tr>
+                <tr>
+                    <th>تاريخ أمر البيع</th>
+                    <td>@(so != null ? so.SODate.ToString("yyyy-MM-dd") : "—")</td>
+                </tr>
+                <tr>
+                    <th>حالة الأمر</th>
+                    <td>@(so?.Status ?? "—")</td>
+                </tr>
+                <tr>
+                    <th>العميل</th>
+                    <td>@(cust?.CustomerName ?? "—")</td>
+                </tr>
+                <tr>
+                    <th>المنطقة</th>
+                    <td>@(string.IsNullOrWhiteSpace(regionCell) ? "—" : regionCell)</td>
+                </tr>
+                <tr>
+                    <th>المخزن</th>
+                    <td>@(so?.Warehouse?.WarehouseName ?? "—")</td>
+                </tr>
+                <tr>
+                    <th>كود الصنف</th>
+                    <td>@Model.ProdId</td>
+                </tr>
+                <tr>
+                    <th>اسم الصنف</th>
+                    <td>@(Model.Product?.ProdName ?? "—")</td>
+                </tr>
+                <tr>
+                    <th>الكمية المطلوبة</th>
+                    <td>@Model.QtyRequested</td>
+                </tr>
+                <tr>
+                    <th>الكمية المحوّلة</th>
+                    <td>@Model.QtyConverted</td>
+                </tr>
+                <tr>
+                    <th>سعر الجمهور المطلوب</th>
+                    <td>@Model.RequestedRetailPrice.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>خصم المبيعات %</th>
+                    <td>@Model.SalesDiscountPct.ToString("0.##")</td>
+                </tr>
+                <tr>
+                    <th>السعر/التكلفة المتوقعة للوحدة</th>
+                    <td>@Model.ExpectedUnitPrice.ToString("0.####")</td>
+                </tr>
+                <tr>
+                    <th>إجمالي الصنف (متوقع)</th>
+                    <td>@Model.ExpectedLineTotal.ToString("0.00")</td>
+                </tr>
+                <tr>
+                    <th>التشغيلة المفضّلة</th>
+                    <td>@(string.IsNullOrWhiteSpace(Model.PreferredBatchNo) ? "—" : Model.PreferredBatchNo)</td>
+                </tr>
+                <tr>
+                    <th>الصلاحية المفضّلة</th>
+                    <td>@(Model.PreferredExpiry.HasValue ? Model.PreferredExpiry.Value.ToString("yyyy-MM") : "—")</td>
+                </tr>
+                <tr>
+                    <th>أنشأ السطر</th>
+                    <td>@(Model.CreatedBy ?? "—")</td>
+                </tr>
+                <tr>
+                    <th>تاريخ إنشاء السطر</th>
+                    <td>@Model.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm")</td>
+                </tr>
+            </table>
+
+            <div class="d-flex flex-wrap gap-2 mt-3">
+                <a asp-controller="SOLines"
+                   asp-action="Index"
+                   asp-route-soId="@Model.SOId"
+                   class="btn btn-erp btn-erp-secondary">
+                    رجوع لسطور الأمر
+                </a>
+                <a href="@Url.Action("Show", "SalesOrders", new { id = Model.SOId, frame = 1 })"
+                   class="btn btn-erp btn-erp-primary">
+                    فتح أمر البيع @Model.SOId
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

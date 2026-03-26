@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;                    // القوائم List / Dictionary
 using System.Globalization;                          // CultureInfo لتنسيق الأرقام فى التصدير
 using System.Linq;                                   // أوامر LINQ مثل Where / OrderBy
-using System.Linq.Expressions;                       // Expression<Func<...>>
+using System.Linq.Expressions;                       // Expression<Func<...>> لـ ApplySearchSort
 using System.Text;                                   // StringBuilder + Encoding
 using System.Threading.Tasks;                        // async / await
 using ClosedXML.Excel;                               // علشان نصدر Excel فعلي
@@ -59,9 +59,12 @@ namespace ERP.Controllers
             int? fromCode,
             int? toCode)
         {
-            // 1) الاستعلام الأساسي: سطور المرتجع + الهيدر (لأجل الحالة والتاريخ)
+            // 1) الاستعلام الأساسي: سطور المرتجع + الهيدر + الصنف + عميل + منطقة (للعرض والبحث)
             IQueryable<SalesReturnLine> q = _context.SalesReturnLines
-                .Include(l => l.SalesReturn)           // نحتاج حالة المرتجع / التاريخ
+                .Include(l => l.Product)
+                .Include(l => l.SalesReturn)
+                    .ThenInclude(sr => sr.Customer)
+                        .ThenInclude(c => c.Area)
                 .AsNoTracking();
 
             // 2) فلترة برقم مرتجع معيّن (لو جاي من شاشة الهيدر)
@@ -99,10 +102,18 @@ namespace ERP.Controllers
                 new Dictionary<string, Expression<Func<SalesReturnLine, string?>>>(
                     StringComparer.OrdinalIgnoreCase)
                 {
-                    ["batch"] = x => x.BatchNo ?? "",    // رقم التشغيلة
+                    ["batch"] = x => x.BatchNo ?? "",
                     ["expiry"] = x => x.Expiry.HasValue
                                      ? x.Expiry.Value.ToString("yyyy-MM-dd")
-                                     : ""
+                                     : "",
+                    ["prodname"] = x => x.Product != null ? x.Product.ProdName : "",
+                    ["customer"] = x => x.SalesReturn != null && x.SalesReturn.Customer != null
+                        ? x.SalesReturn.Customer.CustomerName
+                        : "",
+                    ["createdby"] = x => x.SalesReturn != null ? x.SalesReturn.CreatedBy : "",
+                    ["area"] = x => x.SalesReturn != null && x.SalesReturn.Customer != null && x.SalesReturn.Customer.Area != null
+                        ? x.SalesReturn.Customer.Area.AreaName
+                        : ""
                 };
 
             // الحقول الرقمية
@@ -130,7 +141,15 @@ namespace ERP.Controllers
                     ["LineNetTotal"] = x => x.LineNetTotal,
                     ["BatchNo"] = x => x.BatchNo ?? "",
                     ["Expiry"] = x => x.Expiry ?? DateTime.MinValue,
-                    ["Status"] = x => x.SalesReturn != null ? x.SalesReturn.Status ?? "" : ""
+                    ["Status"] = x => x.SalesReturn != null ? x.SalesReturn.Status ?? "" : "",
+                    ["ProdName"] = x => x.Product != null ? x.Product.ProdName ?? "" : "",
+                    ["CustomerName"] = x => x.SalesReturn != null && x.SalesReturn.Customer != null
+                        ? x.SalesReturn.Customer.CustomerName ?? ""
+                        : "",
+                    ["CreatedBy"] = x => x.SalesReturn != null ? x.SalesReturn.CreatedBy : "",
+                    ["AreaName"] = x => x.SalesReturn != null && x.SalesReturn.Customer != null && x.SalesReturn.Customer.Area != null
+                        ? x.SalesReturn.Customer.Area.AreaName ?? ""
+                        : ""
                 };
 
             // 6) تطبيق دالة البحث/الترتيب الموحدة
@@ -148,122 +167,377 @@ namespace ERP.Controllers
             return q;
         }
 
-        // =========================
-        // INDEX: قائمة سطور مرتجعات البيع
-        // =========================
-        public async Task<IActionResult> Index(
-            int? srId,                      // رقم مرتجع معين (لو جاي من شاشة الهيدر)
-            string? search,                 // نص البحث
-            string? searchBy = "all",       // اسم الحقل الذي نبحث فيه
-            string? sort = "SRId",          // عمود الترتيب
-            string? dir = "asc",            // اتجاه الترتيب asc/desc
-            bool useDateRange = false,      // هل نفعّل فلتر التاريخ؟
-            DateTime? fromDate = null,      // من تاريخ (SRDate للهيدر)
-            DateTime? toDate = null,        // إلى تاريخ
-            int? fromCode = null,           // من رقم سطر
-            int? toCode = null,             // إلى رقم سطر
-            string? filterCol_srid = null,
-            string? filterCol_siid = null,
-            string? filterCol_lineno = null,
-            string? filterCol_prod = null,
-            string? filterCol_qty = null,
-            string? filterCol_priceretail = null,
-            string? filterCol_unitprice = null,
-            string? filterCol_net = null,
-            string? filterCol_batch = null,
-            string? filterCol_expiry = null,
-            string? filterCol_status = null,
-            int page = 1,                   // رقم الصفحة
-            int pageSize = 50               // حجم الصفحة
-        )
+        /// <summary>
+        /// فلتر رقمي بنمط قائمة الأصناف (filterCol_*Expr): رقم مطابق أو &lt;= &gt;= &lt; &gt; أو نطاق min:max — نفس منطق ProductsController للـ id/price.
+        /// </summary>
+        private static IQueryable<SalesReturnLine> ApplyProductsStyleIntExpr(
+            IQueryable<SalesReturnLine> q, string? raw, string column)
         {
-            // تجهيز الاستعلام الموحد (بحث + ترتيب + فلاتر أساسية)
-            var q = BuildQuery(
-                srId,
-                search, searchBy,
-                sort, dir,
-                useDateRange, fromDate, toDate,
-                fromCode, toCode);
+            if (string.IsNullOrWhiteSpace(raw)) return q;
+            var expr = raw.Trim();
 
-            // تطبيق فلاتر الأعمدة بنمط Excel
-            if (!string.IsNullOrWhiteSpace(filterCol_srid))
+            // —— رقم المرتجع ——
+            if (string.Equals(column, "srid", StringComparison.OrdinalIgnoreCase))
             {
-                var ids = filterCol_srid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (ids.Count > 0)
-                    q = q.Where(l => ids.Contains(l.SRId));
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.SRId <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.SRId >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.SRId < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.SRId > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.SRId >= a && l.SRId <= b);
+                    }
+                }
+                if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.SRId == ex);
+                return q;
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_siid))
+            // —— رقم فاتورة الصنف (nullable) ——
+            if (string.Equals(column, "siid", StringComparison.OrdinalIgnoreCase))
             {
-                var ids = filterCol_siid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (ids.Count > 0)
-                    q = q.Where(l => l.SalesInvoiceId.HasValue && ids.Contains(l.SalesInvoiceId.Value));
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value >= a && l.SalesInvoiceId.Value <= b);
+                    }
+                }
+                if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.SalesInvoiceId == ex);
+                return q;
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            // —— رقم السطر، كود الصنف، الكمية ——
+            if (string.Equals(column, "lineno", StringComparison.OrdinalIgnoreCase))
             {
-                var lines = filterCol_lineno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (lines.Count > 0)
-                    q = q.Where(l => lines.Contains(l.LineNo));
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.LineNo <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.LineNo >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.LineNo < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.LineNo > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.LineNo >= a && l.LineNo <= b);
+                    }
+                }
+                if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.LineNo == ex);
+                return q;
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            if (string.Equals(column, "prod", StringComparison.OrdinalIgnoreCase))
             {
-                var prods = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (prods.Count > 0)
-                    q = q.Where(l => prods.Contains(l.ProdId));
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.ProdId <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.ProdId >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.ProdId < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.ProdId > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.ProdId >= a && l.ProdId <= b);
+                    }
+                }
+                if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.ProdId == ex);
+                return q;
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            if (string.Equals(column, "qty", StringComparison.OrdinalIgnoreCase))
             {
-                var qtys = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (qtys.Count > 0)
-                    q = q.Where(l => qtys.Contains(l.Qty));
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.Qty <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.Qty >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.Qty < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.Qty > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.Qty >= a && l.Qty <= b);
+                    }
+                }
+                if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.Qty == ex);
+                return q;
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_priceretail))
+            return q;
+        }
+
+        private static IQueryable<SalesReturnLine> ApplyProductsStyleDecimalExpr(
+            IQueryable<SalesReturnLine> q, string? raw, string column)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return q;
+            var expr = raw.Trim();
+
+            if (string.Equals(column, "priceretail", StringComparison.OrdinalIgnoreCase))
             {
-                var vals = filterCol_priceretail.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => vals.Contains(l.PriceRetail));
+                if (expr.StartsWith("<=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.PriceRetail <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.PriceRetail >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.PriceRetail < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.PriceRetail > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.PriceRetail >= a && l.PriceRetail <= b);
+                    }
+                }
+                if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.PriceRetail == ex);
+                return q;
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_unitprice))
+            if (string.Equals(column, "unitprice", StringComparison.OrdinalIgnoreCase))
             {
-                var vals = filterCol_unitprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => vals.Contains(l.UnitSalePrice));
+                if (expr.StartsWith("<=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.UnitSalePrice <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.UnitSalePrice >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.UnitSalePrice < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.UnitSalePrice > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.UnitSalePrice >= a && l.UnitSalePrice <= b);
+                    }
+                }
+                if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.UnitSalePrice == ex);
+                return q;
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            if (string.Equals(column, "net", StringComparison.OrdinalIgnoreCase))
             {
-                var vals = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => vals.Contains(l.LineNetTotal));
+                if (expr.StartsWith("<=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax))
+                    return q.Where(l => l.LineNetTotal <= smax);
+                if (expr.StartsWith(">=") && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin))
+                    return q.Where(l => l.LineNetTotal >= smin);
+                if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smax2))
+                    return q.Where(l => l.LineNetTotal < smax2);
+                if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var smin2))
+                    return q.Where(l => l.LineNetTotal > smin2);
+                if ((expr.Contains(':') || (expr.Contains('-') && expr.IndexOf('-', StringComparison.Ordinal) > 0)) && !expr.StartsWith("-"))
+                {
+                    var separator = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2
+                        && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                        && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                    {
+                        if (a > b) (a, b) = (b, a);
+                        return q.Where(l => l.LineNetTotal >= a && l.LineNetTotal <= b);
+                    }
+                }
+                if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var ex))
+                    return q.Where(l => l.LineNetTotal == ex);
+                return q;
+            }
+
+            return q;
+        }
+
+        /// <summary>
+        /// فلاتر أعمدة: قيم متعددة بـ | أو صيغة رقمية G:≥ L:≤ R:من،إلى
+        /// </summary>
+        private IQueryable<SalesReturnLine> ApplyColumnFilters(
+            IQueryable<SalesReturnLine> q,
+            string? filterCol_srid,
+            string? filterCol_siid,
+            string? filterCol_lineno,
+            string? filterCol_prod,
+            string? filterCol_qty,
+            string? filterCol_priceretail,
+            string? filterCol_unitprice,
+            string? filterCol_net,
+            string? filterCol_batch,
+            string? filterCol_expiry,
+            string? filterCol_status,
+            string? filterCol_prodname,
+            string? filterCol_customer,
+            string? filterCol_createdby,
+            string? filterCol_area,
+            string? filterCol_sridExpr = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_linenoExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_priceretailExpr = null,
+            string? filterCol_unitpriceExpr = null,
+            string? filterCol_netExpr = null)
+        {
+            if (!string.IsNullOrWhiteSpace(filterCol_sridExpr))
+                q = ApplyProductsStyleIntExpr(q, filterCol_sridExpr, "srid");
+            else if (!string.IsNullOrWhiteSpace(filterCol_srid))
+            {
+                if (TryParseIntAdvanced(filterCol_srid, out var intVals, out var ig, out var il, out var ir1, out var ir2))
+                {
+                    if (ig.HasValue) q = q.Where(l => l.SRId >= ig.Value);
+                    else if (il.HasValue) q = q.Where(l => l.SRId <= il.Value);
+                    else if (ir1.HasValue && ir2.HasValue) q = q.Where(l => l.SRId >= ir1.Value && l.SRId <= ir2.Value);
+                    else if (intVals.Count > 0) q = q.Where(l => intVals.Contains(l.SRId));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_siidExpr))
+                q = ApplyProductsStyleIntExpr(q, filterCol_siidExpr, "siid");
+            else if (!string.IsNullOrWhiteSpace(filterCol_siid))
+            {
+                if (TryParseIntAdvanced(filterCol_siid, out var intVals, out var ig, out var il, out var ir1, out var ir2))
+                {
+                    if (ig.HasValue) q = q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value >= ig.Value);
+                    else if (il.HasValue) q = q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value <= il.Value);
+                    else if (ir1.HasValue && ir2.HasValue) q = q.Where(l => l.SalesInvoiceId.HasValue && l.SalesInvoiceId.Value >= ir1.Value && l.SalesInvoiceId.Value <= ir2.Value);
+                    else if (intVals.Count > 0) q = q.Where(l => l.SalesInvoiceId.HasValue && intVals.Contains(l.SalesInvoiceId.Value));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr))
+                q = ApplyProductsStyleIntExpr(q, filterCol_linenoExpr, "lineno");
+            else if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            {
+                if (TryParseIntAdvanced(filterCol_lineno, out var intVals, out var ig, out var il, out var ir1, out var ir2))
+                {
+                    if (ig.HasValue) q = q.Where(l => l.LineNo >= ig.Value);
+                    else if (il.HasValue) q = q.Where(l => l.LineNo <= il.Value);
+                    else if (ir1.HasValue && ir2.HasValue) q = q.Where(l => l.LineNo >= ir1.Value && l.LineNo <= ir2.Value);
+                    else if (intVals.Count > 0) q = q.Where(l => intVals.Contains(l.LineNo));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_prodExpr))
+                q = ApplyProductsStyleIntExpr(q, filterCol_prodExpr, "prod");
+            else if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            {
+                if (TryParseIntAdvanced(filterCol_prod, out var intVals, out var ig, out var il, out var ir1, out var ir2))
+                {
+                    if (ig.HasValue) q = q.Where(l => l.ProdId >= ig.Value);
+                    else if (il.HasValue) q = q.Where(l => l.ProdId <= il.Value);
+                    else if (ir1.HasValue && ir2.HasValue) q = q.Where(l => l.ProdId >= ir1.Value && l.ProdId <= ir2.Value);
+                    else if (intVals.Count > 0) q = q.Where(l => intVals.Contains(l.ProdId));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr))
+                q = ApplyProductsStyleIntExpr(q, filterCol_qtyExpr, "qty");
+            else if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            {
+                if (TryParseIntAdvanced(filterCol_qty, out var intVals, out var ig, out var il, out var ir1, out var ir2))
+                {
+                    if (ig.HasValue) q = q.Where(l => l.Qty >= ig.Value);
+                    else if (il.HasValue) q = q.Where(l => l.Qty <= il.Value);
+                    else if (ir1.HasValue && ir2.HasValue) q = q.Where(l => l.Qty >= ir1.Value && l.Qty <= ir2.Value);
+                    else if (intVals.Count > 0) q = q.Where(l => intVals.Contains(l.Qty));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_priceretailExpr))
+                q = ApplyProductsStyleDecimalExpr(q, filterCol_priceretailExpr, "priceretail");
+            else if (!string.IsNullOrWhiteSpace(filterCol_priceretail))
+            {
+                if (TryParseDecimalAdvanced(filterCol_priceretail, out var decVals, out var dg, out var dl, out var dr1, out var dr2))
+                {
+                    if (dg.HasValue) q = q.Where(l => l.PriceRetail >= dg.Value);
+                    else if (dl.HasValue) q = q.Where(l => l.PriceRetail <= dl.Value);
+                    else if (dr1.HasValue && dr2.HasValue) q = q.Where(l => l.PriceRetail >= dr1.Value && l.PriceRetail <= dr2.Value);
+                    else if (decVals.Count > 0) q = q.Where(l => decVals.Contains(l.PriceRetail));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_unitpriceExpr))
+                q = ApplyProductsStyleDecimalExpr(q, filterCol_unitpriceExpr, "unitprice");
+            else if (!string.IsNullOrWhiteSpace(filterCol_unitprice))
+            {
+                if (TryParseDecimalAdvanced(filterCol_unitprice, out var decVals, out var dg, out var dl, out var dr1, out var dr2))
+                {
+                    if (dg.HasValue) q = q.Where(l => l.UnitSalePrice >= dg.Value);
+                    else if (dl.HasValue) q = q.Where(l => l.UnitSalePrice <= dl.Value);
+                    else if (dr1.HasValue && dr2.HasValue) q = q.Where(l => l.UnitSalePrice >= dr1.Value && l.UnitSalePrice <= dr2.Value);
+                    else if (decVals.Count > 0) q = q.Where(l => decVals.Contains(l.UnitSalePrice));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_netExpr))
+                q = ApplyProductsStyleDecimalExpr(q, filterCol_netExpr, "net");
+            else if (!string.IsNullOrWhiteSpace(filterCol_net))
+            {
+                if (TryParseDecimalAdvanced(filterCol_net, out var decVals, out var dg, out var dl, out var dr1, out var dr2))
+                {
+                    if (dg.HasValue) q = q.Where(l => l.LineNetTotal >= dg.Value);
+                    else if (dl.HasValue) q = q.Where(l => l.LineNetTotal <= dl.Value);
+                    else if (dr1.HasValue && dr2.HasValue) q = q.Where(l => l.LineNetTotal >= dr1.Value && l.LineNetTotal <= dr2.Value);
+                    else if (decVals.Count > 0) q = q.Where(l => decVals.Contains(l.LineNetTotal));
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(filterCol_batch))
@@ -296,27 +570,242 @@ namespace ERP.Controllers
                     q = q.Where(l => l.SalesReturn != null && l.SalesReturn.Status != null && vals.Contains(l.SalesReturn.Status));
             }
 
-            // تطبيع اتجاه الترتيب
+            if (!string.IsNullOrWhiteSpace(filterCol_prodname))
+            {
+                var vals = filterCol_prodname.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => l.Product != null && vals.Contains(l.Product.ProdName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_customer))
+            {
+                var vals = filterCol_customer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => l.SalesReturn != null && l.SalesReturn.Customer != null && vals.Contains(l.SalesReturn.Customer.CustomerName));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_createdby))
+            {
+                var vals = filterCol_createdby.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => l.SalesReturn != null && vals.Contains(l.SalesReturn.CreatedBy));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_area))
+            {
+                var vals = filterCol_area.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => v.Trim())
+                    .Where(v => v.Length > 0)
+                    .ToList();
+                if (vals.Count > 0)
+                    q = q.Where(l => l.SalesReturn != null && l.SalesReturn.Customer != null && l.SalesReturn.Customer.Area != null && vals.Contains(l.SalesReturn.Customer.Area.AreaName));
+            }
+
+            return q;
+        }
+
+        private static bool TryParseDecimalAdvanced(string raw, out List<decimal> inList, out decimal? gte, out decimal? lte, out decimal? r1, out decimal? r2)
+        {
+            inList = new List<decimal>();
+            gte = lte = r1 = r2 = null;
+            raw = (raw ?? "").Trim();
+            if (raw.StartsWith("G:", StringComparison.OrdinalIgnoreCase) && decimal.TryParse(raw.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var gv))
+            {
+                gte = gv;
+                return true;
+            }
+            if (raw.StartsWith("L:", StringComparison.OrdinalIgnoreCase) && decimal.TryParse(raw.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var lv))
+            {
+                lte = lv;
+                return true;
+            }
+            if (raw.StartsWith("R:", StringComparison.OrdinalIgnoreCase))
+            {
+                var tail = raw.Substring(2);
+                var parts = tail.Split(new[] { ',', ';' }, 2, StringSplitOptions.None);
+                if (parts.Length == 2
+                    && decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    r1 = Math.Min(a, b);
+                    r2 = Math.Max(a, b);
+                    return true;
+                }
+            }
+            foreach (var seg in raw.Split(new[] { '|', ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (decimal.TryParse(seg.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                    inList.Add(d);
+            }
+            return true;
+        }
+
+        private static bool TryParseIntAdvanced(string raw, out List<int> inList, out int? gte, out int? lte, out int? r1, out int? r2)
+        {
+            inList = new List<int>();
+            gte = lte = r1 = r2 = null;
+            raw = (raw ?? "").Trim();
+            if (raw.StartsWith("G:", StringComparison.OrdinalIgnoreCase) && int.TryParse(raw.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var gv))
+            {
+                gte = gv;
+                return true;
+            }
+            if (raw.StartsWith("L:", StringComparison.OrdinalIgnoreCase) && int.TryParse(raw.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var lv))
+            {
+                lte = lv;
+                return true;
+            }
+            if (raw.StartsWith("R:", StringComparison.OrdinalIgnoreCase))
+            {
+                var tail = raw.Substring(2);
+                var parts = tail.Split(new[] { ',', ';' }, 2, StringSplitOptions.None);
+                if (parts.Length == 2
+                    && int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var a)
+                    && int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var b))
+                {
+                    r1 = Math.Min(a, b);
+                    r2 = Math.Max(a, b);
+                    return true;
+                }
+            }
+            foreach (var seg in raw.Split(new[] { '|', ',', ';' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (int.TryParse(seg.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var d))
+                    inList.Add(d);
+            }
+            return true;
+        }
+
+        // =========================
+        // INDEX: قائمة سطور مرتجعات البيع
+        // =========================
+        public async Task<IActionResult> Index(
+            int? srId,                      // رقم مرتجع معين (لو جاي من شاشة الهيدر)
+            string? search,                 // نص البحث
+            string? searchBy = "all",       // اسم الحقل الذي نبحث فيه
+            string? sort = "SRId",          // عمود الترتيب
+            string? dir = "asc",            // اتجاه الترتيب asc/desc
+            bool useDateRange = false,      // هل نفعّل فلتر التاريخ؟
+            DateTime? fromDate = null,      // من تاريخ (SRDate للهيدر)
+            DateTime? toDate = null,        // إلى تاريخ
+            int? fromCode = null,           // من رقم سطر
+            int? toCode = null,             // إلى رقم سطر
+            string? filterCol_srid = null,
+            string? filterCol_siid = null,
+            string? filterCol_lineno = null,
+            string? filterCol_prod = null,
+            string? filterCol_qty = null,
+            string? filterCol_priceretail = null,
+            string? filterCol_unitprice = null,
+            string? filterCol_net = null,
+            string? filterCol_batch = null,
+            string? filterCol_expiry = null,
+            string? filterCol_status = null,
+            string? filterCol_prodname = null,
+            string? filterCol_customer = null,
+            string? filterCol_createdby = null,
+            string? filterCol_area = null,
+            string? filterCol_sridExpr = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_linenoExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_priceretailExpr = null,
+            string? filterCol_unitpriceExpr = null,
+            string? filterCol_netExpr = null,
+            int page = 1,
+            int pageSize = 10
+        )
+        {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
+            var q = BuildQuery(
+                srId,
+                search, searchBy,
+                sort, dir,
+                useDateRange, fromDate, toDate,
+                fromCode, toCode);
+
+            q = ApplyColumnFilters(
+                q,
+                filterCol_srid,
+                filterCol_siid,
+                filterCol_lineno,
+                filterCol_prod,
+                filterCol_qty,
+                filterCol_priceretail,
+                filterCol_unitprice,
+                filterCol_net,
+                filterCol_batch,
+                filterCol_expiry,
+                filterCol_status,
+                filterCol_prodname,
+                filterCol_customer,
+                filterCol_createdby,
+                filterCol_area,
+                filterCol_sridExpr,
+                filterCol_siidExpr,
+                filterCol_linenoExpr,
+                filterCol_prodExpr,
+                filterCol_qtyExpr,
+                filterCol_priceretailExpr,
+                filterCol_unitpriceExpr,
+                filterCol_netExpr);
+
             var dirNorm = (dir?.ToLower() == "asc") ? "asc" : "desc";
             bool descending = dirNorm == "desc";
 
-            // إنشاء PagedResult بالنظام الموحد
-            var model = await PagedResult<SalesReturnLine>.CreateAsync(
-                q,
-                page,
-                pageSize,
-                search,
-                descending,
-                sort,
-                searchBy
-            );
+            var totalCount = await q.CountAsync();
+            int totalQtyFiltered = 0;
+            decimal totalRetailGrossFiltered = 0m;
+            decimal totalNetFiltered = 0m;
+            if (totalCount > 0)
+            {
+                totalQtyFiltered = await q.SumAsync(l => l.Qty);
+                totalRetailGrossFiltered = await q.SumAsync(l => l.Qty * l.PriceRetail);
+                totalNetFiltered = await q.SumAsync(l => l.LineNetTotal);
+            }
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+            if (page < 1) page = 1;
+            var skip = (page - 1) * effectivePageSize;
+            if (totalCount > 0 && effectivePageSize > 0 && skip >= totalCount)
+            {
+                page = Math.Max(1, (int)Math.Ceiling((double)totalCount / effectivePageSize));
+                skip = (page - 1) * effectivePageSize;
+            }
 
-            // تعبئة قيم إضافية داخل PagedResult (للاستخدام في الواجهة)
-            model.UseDateRange = useDateRange;
-            model.FromDate = fromDate;
-            model.ToDate = toDate;
+            var items = await q.Skip(skip).Take(effectivePageSize).ToListAsync();
 
-            // تمرير قيم الفلاتر للواجهة
+            var model = new PagedResult<SalesReturnLine>(items, page, pageSize, totalCount)
+            {
+                Search = search,
+                SearchBy = searchBy,
+                SortColumn = sort,
+                SortDescending = descending,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
+
             ViewBag.FilterSRId = srId;
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
@@ -327,7 +816,6 @@ namespace ERP.Controllers
             ViewBag.Sort = sort ?? "SRId";
             ViewBag.Dir = dirNorm;
 
-            // فلاتر الأعمدة الحالية
             ViewBag.FilterCol_srid = filterCol_srid ?? string.Empty;
             ViewBag.FilterCol_siid = filterCol_siid ?? string.Empty;
             ViewBag.FilterCol_lineno = filterCol_lineno ?? string.Empty;
@@ -339,10 +827,26 @@ namespace ERP.Controllers
             ViewBag.FilterCol_batch = filterCol_batch ?? string.Empty;
             ViewBag.FilterCol_expiry = filterCol_expiry ?? string.Empty;
             ViewBag.FilterCol_status = filterCol_status ?? string.Empty;
+            ViewBag.FilterCol_prodname = filterCol_prodname ?? string.Empty;
+            ViewBag.FilterCol_customer = filterCol_customer ?? string.Empty;
+            ViewBag.FilterCol_createdby = filterCol_createdby ?? string.Empty;
+            ViewBag.FilterCol_area = filterCol_area ?? string.Empty;
+
+            ViewBag.FilterCol_sridExpr = filterCol_sridExpr ?? string.Empty;
+            ViewBag.FilterCol_siidExpr = filterCol_siidExpr ?? string.Empty;
+            ViewBag.FilterCol_linenoExpr = filterCol_linenoExpr ?? string.Empty;
+            ViewBag.FilterCol_prodExpr = filterCol_prodExpr ?? string.Empty;
+            ViewBag.FilterCol_qtyExpr = filterCol_qtyExpr ?? string.Empty;
+            ViewBag.FilterCol_priceretailExpr = filterCol_priceretailExpr ?? string.Empty;
+            ViewBag.FilterCol_unitpriceExpr = filterCol_unitpriceExpr ?? string.Empty;
+            ViewBag.FilterCol_netExpr = filterCol_netExpr ?? string.Empty;
 
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
             ViewBag.TotalCount = model.TotalCount;
+            ViewBag.TotalQtyFiltered = totalQtyFiltered;
+            ViewBag.TotalRetailGrossFiltered = totalRetailGrossFiltered;
+            ViewBag.TotalNetFiltered = totalNetFiltered;
 
             return View(model);
         }
@@ -567,6 +1071,18 @@ namespace ERP.Controllers
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
             string? filterCol_status = null,
+            string? filterCol_prodname = null,
+            string? filterCol_customer = null,
+            string? filterCol_createdby = null,
+            string? filterCol_area = null,
+            string? filterCol_sridExpr = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_linenoExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_priceretailExpr = null,
+            string? filterCol_unitpriceExpr = null,
+            string? filterCol_netExpr = null,
             string format = "excel"
         )
         {
@@ -577,116 +1093,31 @@ namespace ERP.Controllers
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
 
-            // نفس منطق فلاتر الأعمدة المستخدم فى Index
-            if (!string.IsNullOrWhiteSpace(filterCol_srid))
-            {
-                var ids = filterCol_srid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (ids.Count > 0)
-                    q = q.Where(l => ids.Contains(l.SRId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_siid))
-            {
-                var ids = filterCol_siid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (ids.Count > 0)
-                    q = q.Where(l => l.SalesInvoiceId.HasValue && ids.Contains(l.SalesInvoiceId.Value));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
-            {
-                var lines = filterCol_lineno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (lines.Count > 0)
-                    q = q.Where(l => lines.Contains(l.LineNo));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_prod))
-            {
-                var prods = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (prods.Count > 0)
-                    q = q.Where(l => prods.Contains(l.ProdId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
-            {
-                var qtys = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (qtys.Count > 0)
-                    q = q.Where(l => qtys.Contains(l.Qty));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_priceretail))
-            {
-                var vals = filterCol_priceretail.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => vals.Contains(l.PriceRetail));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_unitprice))
-            {
-                var vals = filterCol_unitprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => vals.Contains(l.UnitSalePrice));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
-            {
-                var vals = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
-                    .Where(v => v.HasValue).Select(v => v!.Value)
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => vals.Contains(l.LineNetTotal));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_batch))
-            {
-                var vals = filterCol_batch.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(v => v.Trim())
-                    .Where(v => !string.IsNullOrEmpty(v))
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => vals.Contains(l.BatchNo ?? ""));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_expiry))
-            {
-                var dates = filterCol_expiry.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(v => DateTime.TryParse(v.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(d => d.HasValue).Select(d => d!.Value)
-                    .ToList();
-                if (dates.Count > 0)
-                    q = q.Where(l => l.Expiry.HasValue && dates.Contains(l.Expiry.Value.Date));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_status))
-            {
-                var vals = filterCol_status.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(v => v.Trim())
-                    .Where(v => !string.IsNullOrEmpty(v))
-                    .ToList();
-                if (vals.Count > 0)
-                    q = q.Where(l => l.SalesReturn != null && l.SalesReturn.Status != null && vals.Contains(l.SalesReturn.Status));
-            }
+            q = ApplyColumnFilters(
+                q,
+                filterCol_srid,
+                filterCol_siid,
+                filterCol_lineno,
+                filterCol_prod,
+                filterCol_qty,
+                filterCol_priceretail,
+                filterCol_unitprice,
+                filterCol_net,
+                filterCol_batch,
+                filterCol_expiry,
+                filterCol_status,
+                filterCol_prodname,
+                filterCol_customer,
+                filterCol_createdby,
+                filterCol_area,
+                filterCol_sridExpr,
+                filterCol_siidExpr,
+                filterCol_linenoExpr,
+                filterCol_prodExpr,
+                filterCol_qtyExpr,
+                filterCol_priceretailExpr,
+                filterCol_unitpriceExpr,
+                filterCol_netExpr);
 
             var data = await q
                 .OrderBy(l => l.SRId)
@@ -700,7 +1131,7 @@ namespace ERP.Controllers
                 // ====== تصدير CSV بسيط ======
                 var lines = new List<string>
                 {
-                    "SRId,SalesInvoiceId,LineNo,ProdId,Qty,PriceRetail,UnitSalePrice,LineNetTotal,BatchNo,Expiry,Status"
+                    "رقم المرتجع,رقم فاتورة البيع,رقم السطر,كود الصنف,اسم الصنف,العميل,الكاتب,المنطقة,الكمية,سعر الجمهور,سعر بيع الوحدة,صافي السطر,التشغيلة,الصلاحية,حالة المرتجع"
                 };
 
                 foreach (var l in data)
@@ -709,12 +1140,20 @@ namespace ERP.Controllers
                         ? l.Expiry.Value.ToString("yyyy-MM-dd")
                         : "";
                     string status = l.SalesReturn?.Status ?? "";
+                    var pn = l.Product?.ProdName ?? "";
+                    var cn = l.SalesReturn?.Customer?.CustomerName ?? "";
+                    var cb = l.SalesReturn?.CreatedBy ?? "";
+                    var an = l.SalesReturn?.Customer?.Area?.AreaName ?? "";
 
                     lines.Add(string.Join(",",
                         l.SRId,
                         l.SalesInvoiceId.HasValue ? l.SalesInvoiceId.Value.ToString() : "",
                         l.LineNo,
                         l.ProdId,
+                        EscapeCsv(pn),
+                        EscapeCsv(cn),
+                        EscapeCsv(cb),
+                        EscapeCsv(an),
                         l.Qty,
                         l.PriceRetail.ToString("0.00", CultureInfo.InvariantCulture),
                         l.UnitSalePrice.ToString("0.00", CultureInfo.InvariantCulture),
@@ -725,8 +1164,8 @@ namespace ERP.Controllers
                     ));
                 }
 
-                var bytesCsv = Encoding.UTF8.GetBytes(string.Join(Environment.NewLine, lines));
-                var fileNameCsv = $"SalesReturnLines_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                var bytesCsv = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(string.Join(Environment.NewLine, lines));
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("أصناف مرتجع البيع", ".csv");
 
                 return File(bytesCsv, "text/csv", fileNameCsv);
             }
@@ -734,26 +1173,29 @@ namespace ERP.Controllers
             {
                 // ====== تصدير Excel حقيقي باستخدام ClosedXML ======
                 using var workbook = new XLWorkbook();
-                var ws = workbook.Worksheets.Add("SalesReturnLines");
+                var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أصناف مرتجع البيع"));
 
                 int row = 1;
 
-                // عناوين الأعمدة
-                ws.Cell(row, 1).Value = "SRId";
-                ws.Cell(row, 2).Value = "SalesInvoiceId";
-                ws.Cell(row, 3).Value = "LineNo";
-                ws.Cell(row, 4).Value = "ProdId";
-                ws.Cell(row, 5).Value = "Qty";
-                ws.Cell(row, 6).Value = "PriceRetail";
-                ws.Cell(row, 7).Value = "UnitSalePrice";
-                ws.Cell(row, 8).Value = "LineNetTotal";
-                ws.Cell(row, 9).Value = "BatchNo";
-                ws.Cell(row, 10).Value = "Expiry";
-                ws.Cell(row, 11).Value = "Status";
+                // عناوين الأعمدة (عربي)
+                ws.Cell(row, 1).Value = "رقم المرتجع";
+                ws.Cell(row, 2).Value = "رقم فاتورة البيع";
+                ws.Cell(row, 3).Value = "رقم السطر";
+                ws.Cell(row, 4).Value = "كود الصنف";
+                ws.Cell(row, 5).Value = "اسم الصنف";
+                ws.Cell(row, 6).Value = "العميل";
+                ws.Cell(row, 7).Value = "الكاتب";
+                ws.Cell(row, 8).Value = "المنطقة";
+                ws.Cell(row, 9).Value = "الكمية";
+                ws.Cell(row, 10).Value = "سعر الجمهور";
+                ws.Cell(row, 11).Value = "سعر بيع الوحدة";
+                ws.Cell(row, 12).Value = "صافي السطر";
+                ws.Cell(row, 13).Value = "التشغيلة";
+                ws.Cell(row, 14).Value = "الصلاحية";
+                ws.Cell(row, 15).Value = "حالة المرتجع";
 
-                ws.Range(row, 1, row, 11).Style.Font.Bold = true;
+                ws.Range(row, 1, row, 15).Style.Font.Bold = true;
 
-                // البيانات
                 foreach (var l in data)
                 {
                     row++;
@@ -762,13 +1204,17 @@ namespace ERP.Controllers
                     ws.Cell(row, 2).Value = l.SalesInvoiceId.HasValue ? l.SalesInvoiceId.Value.ToString() : "";
                     ws.Cell(row, 3).Value = l.LineNo;
                     ws.Cell(row, 4).Value = l.ProdId;
-                    ws.Cell(row, 5).Value = l.Qty;
-                    ws.Cell(row, 6).Value = l.PriceRetail;
-                    ws.Cell(row, 7).Value = l.UnitSalePrice;
-                    ws.Cell(row, 8).Value = l.LineNetTotal;
-                    ws.Cell(row, 9).Value = l.BatchNo ?? "";
-                    ws.Cell(row, 10).Value = l.Expiry?.ToString("yyyy-MM-dd") ?? "";
-                    ws.Cell(row, 11).Value = l.SalesReturn?.Status ?? "";
+                    ws.Cell(row, 5).Value = l.Product?.ProdName ?? "";
+                    ws.Cell(row, 6).Value = l.SalesReturn?.Customer?.CustomerName ?? "";
+                    ws.Cell(row, 7).Value = l.SalesReturn?.CreatedBy ?? "";
+                    ws.Cell(row, 8).Value = l.SalesReturn?.Customer?.Area?.AreaName ?? "";
+                    ws.Cell(row, 9).Value = l.Qty;
+                    ws.Cell(row, 10).Value = l.PriceRetail;
+                    ws.Cell(row, 11).Value = l.UnitSalePrice;
+                    ws.Cell(row, 12).Value = l.LineNetTotal;
+                    ws.Cell(row, 13).Value = l.BatchNo ?? "";
+                    ws.Cell(row, 14).Value = l.Expiry?.ToString("yyyy-MM-dd") ?? "";
+                    ws.Cell(row, 15).Value = l.SalesReturn?.Status ?? "";
                 }
 
                 ws.Columns().AdjustToContents();
@@ -777,7 +1223,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 var bytesXlsx = stream.ToArray();
 
-                var fileNameXlsx = $"SalesReturnLines_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("أصناف مرتجع البيع", ".xlsx");
                 const string contentTypeXlsx =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -813,7 +1259,10 @@ namespace ERP.Controllers
 
             IQueryable<SalesReturnLine> q = _context.SalesReturnLines
                 .AsNoTracking()
-                .Include(l => l.SalesReturn);
+                .Include(l => l.Product)
+                .Include(l => l.SalesReturn)
+                    .ThenInclude(sr => sr!.Customer)
+                        .ThenInclude(c => c!.Area);
 
             if (column == "srid")
             {
@@ -863,28 +1312,34 @@ namespace ERP.Controllers
 
             if (column == "priceretail")
             {
-                var query = q.Select(l => l.PriceRetail.ToString("0.00"));
+                var raw = await q.Select(l => l.PriceRetail).Distinct().OrderBy(v => v).Take(500).ToListAsync();
+                var list = raw.Select(v => v.ToString("0.00", CultureInfo.InvariantCulture)).ToList();
                 if (!string.IsNullOrEmpty(search))
-                    query = query.Where(v => v.Contains(search));
-                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else
+                    list = list.Take(200).ToList();
                 return Json(list);
             }
 
             if (column == "unitprice")
             {
-                var query = q.Select(l => l.UnitSalePrice.ToString("0.00"));
+                var raw = await q.Select(l => l.UnitSalePrice).Distinct().OrderBy(v => v).Take(500).ToListAsync();
+                var list = raw.Select(v => v.ToString("0.00", CultureInfo.InvariantCulture)).ToList();
                 if (!string.IsNullOrEmpty(search))
-                    query = query.Where(v => v.Contains(search));
-                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else
+                    list = list.Take(200).ToList();
                 return Json(list);
             }
 
             if (column == "net")
             {
-                var query = q.Select(l => l.LineNetTotal.ToString("0.00"));
+                var raw = await q.Select(l => l.LineNetTotal).Distinct().OrderBy(v => v).Take(500).ToListAsync();
+                var list = raw.Select(v => v.ToString("0.00", CultureInfo.InvariantCulture)).ToList();
                 if (!string.IsNullOrEmpty(search))
-                    query = query.Where(v => v.Contains(search));
-                var list = await query.Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                    list = list.Where(v => v.Contains(search, StringComparison.OrdinalIgnoreCase)).Take(200).ToList();
+                else
+                    list = list.Take(200).ToList();
                 return Json(list);
             }
 
@@ -909,6 +1364,46 @@ namespace ERP.Controllers
             if (column == "status")
             {
                 var query = q.Select(l => l.SalesReturn != null ? (l.SalesReturn.Status ?? "") : "");
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "prodname")
+            {
+                var query = q.Select(l => l.Product != null ? (l.Product.ProdName ?? "") : "");
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "customer")
+            {
+                var query = q.Select(l => l.SalesReturn != null && l.SalesReturn.Customer != null
+                    ? (l.SalesReturn.Customer.CustomerName ?? "")
+                    : "");
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "createdby")
+            {
+                var query = q.Select(l => l.SalesReturn != null ? (l.SalesReturn.CreatedBy ?? "") : "");
+                if (!string.IsNullOrEmpty(search))
+                    query = query.Where(v => v.Contains(search));
+                var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();
+                return Json(list);
+            }
+
+            if (column == "area")
+            {
+                var query = q.Select(l => l.SalesReturn != null && l.SalesReturn.Customer != null && l.SalesReturn.Customer.Area != null
+                    ? (l.SalesReturn.Customer.Area.AreaName ?? "")
+                    : "");
                 if (!string.IsNullOrEmpty(search))
                     query = query.Where(v => v.Contains(search));
                 var list = await query.Where(v => v != "").Distinct().OrderBy(v => v).Take(200).ToListAsync();

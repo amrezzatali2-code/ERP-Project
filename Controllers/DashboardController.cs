@@ -5,6 +5,7 @@ using ERP.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Linq;
 
 namespace ERP.Controllers
 {
@@ -53,13 +54,7 @@ namespace ERP.Controllers
             var displayName = User.FindFirst("DisplayName")?.Value ?? "";
             var creatorNames = new[] { currentUserName, displayName }.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
             if (!userId.HasValue && creatorNames.Count == 0)
-                return View("Index", vm);
-
-            // عملاء المندوب + عدد الأصناف (للعرض)
-            vm.CustomersCount = await _context.Customers
-                .Where(c => c.IsActive && c.UserId == userId)
-                .CountAsync();
-            vm.ProductsCount = await _context.Products.CountAsync(p => p.IsActive);
+                return View(vm);
 
             // فواتير البيع: إما لعملاء المندوب أو التي أنشأها بنفسه — بدون كاش، دائماً من قاعدة البيانات
             var myCustomerIds = userId.HasValue
@@ -71,6 +66,75 @@ namespace ERP.Controllers
                     (myCustomerIds.Contains(si.CustomerId) || (creatorNames.Any() && creatorNames.Contains(si.CreatedBy))));
 
             var periodEnd = to.AddDays(1);
+
+            // عملاء مربوطون بالمستخدم + إحصائياتهم في الفترة (نافذة العرض)
+            if (userId.HasValue)
+            {
+                var linked = await _context.Customers.AsNoTracking()
+                    .Where(c => c.IsActive && c.UserId == userId)
+                    .OrderBy(c => c.CustomerName)
+                    .Select(c => new { c.CustomerId, c.CustomerName, c.Phone1 })
+                    .ToListAsync();
+
+                var statsList = await salesBase
+                    .Where(si => si.SIDate >= from && si.SIDate < periodEnd)
+                    .GroupBy(si => si.CustomerId)
+                    .Select(g => new { CustomerId = g.Key, Cnt = g.Count(), Sum = g.Sum(x => x.NetTotal) })
+                    .ToListAsync();
+                var statsByCustomer = statsList.ToDictionary(x => x.CustomerId, x => (x.Cnt, x.Sum));
+
+                vm.LinkedCustomersDetail = linked.Select(c =>
+                {
+                    var has = statsByCustomer.TryGetValue(c.CustomerId, out var st);
+                    return new DashboardLinkedCustomerRow
+                    {
+                        CustomerId = c.CustomerId,
+                        CustomerName = c.CustomerName,
+                        Phone = c.Phone1,
+                        InvoicesInPeriod = has ? st.Cnt : 0,
+                        SalesTotalInPeriod = has ? st.Sum : 0m
+                    };
+                }).ToList();
+
+                vm.CustomersCount = vm.LinkedCustomersDetail.Count(x => x.InvoicesInPeriod > 0);
+            }
+
+            // مبيعات الفترة حسب المنطقة (من جدول المناطق أو حقل المنطقة كنص)
+            var periodInvoices = await salesBase
+                .Where(si => si.SIDate >= from && si.SIDate < periodEnd)
+                .Select(si => new { si.SIId, si.NetTotal, si.CustomerId })
+                .ToListAsync();
+
+            if (periodInvoices.Count > 0)
+            {
+                var custIds = periodInvoices.Select(x => x.CustomerId).Distinct().ToList();
+                var custRows = await _context.Customers.AsNoTracking()
+                    .Where(c => custIds.Contains(c.CustomerId))
+                    .Select(c => new { c.CustomerId, c.AreaId, c.RegionName, AreaName = c.Area != null ? c.Area.AreaName : null })
+                    .ToListAsync();
+                var cmap = custRows.ToDictionary(x => x.CustomerId, x => x);
+
+                vm.RegionSalesRows = periodInvoices
+                    .GroupBy(i =>
+                    {
+                        cmap.TryGetValue(i.CustomerId, out var c);
+                        var label = !string.IsNullOrWhiteSpace(c?.AreaName)
+                            ? c!.AreaName!.Trim()
+                            : (!string.IsNullOrWhiteSpace(c?.RegionName) ? c.RegionName!.Trim() : "بدون منطقة");
+                        return (Name: label, AreaId: c?.AreaId);
+                    })
+                    .Select(g => new DashboardRegionSalesRow
+                    {
+                        AreaId = g.Key.AreaId,
+                        AreaName = g.Key.Name,
+                        InvoiceCount = g.Select(x => x.SIId).Distinct().Count(),
+                        SalesTotal = g.Sum(x => x.NetTotal)
+                    })
+                    .OrderByDescending(r => r.SalesTotal)
+                    .ThenBy(r => r.AreaName)
+                    .ToList();
+                vm.RegionsCount = vm.RegionSalesRows.Count;
+            }
             vm.SalesInvoicesTodayCount = await salesBase
                 .Where(si => si.SIDate.Date == today)
                 .CountAsync();
@@ -119,7 +183,7 @@ namespace ERP.Controllers
                 })
                 .ToListAsync();
 
-            return View("Index", vm);
+            return View(vm);
         }
 
         /// <summary>

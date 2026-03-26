@@ -478,4 +478,4 @@ _logger.LogError(ex, "Error creating invoice");
 
 ---
 
-**آخر تحديث**: يناير 2025
+**آخر تحديث**: مارس 2026

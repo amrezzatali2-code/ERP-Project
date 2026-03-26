@@ -147,7 +147,18 @@ namespace ERP.Controllers
             string? filterCol_batch,
             string? filterCol_expiry,
             string? filterCol_region = null,
-            string? filterCol_createdby = null)
+            string? filterCol_createdby = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_linenoExpr = null,
+            string? filterCol_prodidExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_priceExpr = null,
+            string? filterCol_disc1Expr = null,
+            string? filterCol_disc2Expr = null,
+            string? filterCol_disc3Expr = null,
+            string? filterCol_discvalExpr = null,
+            string? filterCol_totalExpr = null,
+            string? filterCol_netExpr = null)
         {
             if (fromCode.HasValue)
                 q = q.Where(x => x.SIId >= fromCode.Value);
@@ -161,7 +172,9 @@ namespace ERP.Controllers
 
             var inv = CultureInfo.InvariantCulture;
 
-            if (!string.IsNullOrWhiteSpace(filterCol_siid))
+            if (!string.IsNullOrWhiteSpace(filterCol_siidExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "siid", filterCol_siidExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_siid))
             {
                 var ids = SplitFilterVals(filterCol_siid)
                     .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
@@ -170,7 +183,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ids.Contains(x.SIId));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "lineno", filterCol_linenoExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_lineno))
             {
                 var lines = SplitFilterVals(filterCol_lineno)
                     .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
@@ -179,7 +194,9 @@ namespace ERP.Controllers
                     q = q.Where(x => lines.Contains(x.LineNo));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_prodid))
+            if (!string.IsNullOrWhiteSpace(filterCol_prodidExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "prodid", filterCol_prodidExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_prodid))
             {
                 var pids = SplitFilterVals(filterCol_prodid)
                     .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
@@ -205,7 +222,9 @@ namespace ERP.Controllers
                         vals.Contains(x.SalesInvoice.Customer.CustomerName ?? ""));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "qty", filterCol_qtyExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_qty))
             {
                 var qtys = SplitFilterVals(filterCol_qty)
                     .Select(s => int.TryParse(s, System.Globalization.NumberStyles.Integer, inv, out var v) ? v : (int?)null)
@@ -214,7 +233,9 @@ namespace ERP.Controllers
                     q = q.Where(x => qtys.Contains(x.Qty));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_price))
+            if (!string.IsNullOrWhiteSpace(filterCol_priceExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "price", filterCol_priceExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_price))
             {
                 var prices = SplitFilterVals(filterCol_price)
                     .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
@@ -223,7 +244,9 @@ namespace ERP.Controllers
                     q = q.Where(x => prices.Contains(x.PriceRetail));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_disc1))
+            if (!string.IsNullOrWhiteSpace(filterCol_disc1Expr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "disc1", filterCol_disc1Expr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_disc1))
             {
                 var ds = SplitFilterVals(filterCol_disc1)
                     .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
@@ -232,7 +255,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ds.Contains(x.Disc1Percent));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_disc2))
+            if (!string.IsNullOrWhiteSpace(filterCol_disc2Expr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "disc2", filterCol_disc2Expr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_disc2))
             {
                 var ds = SplitFilterVals(filterCol_disc2)
                     .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
@@ -241,7 +266,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ds.Contains(x.Disc2Percent));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_disc3))
+            if (!string.IsNullOrWhiteSpace(filterCol_disc3Expr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "disc3", filterCol_disc3Expr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_disc3))
             {
                 var ds = SplitFilterVals(filterCol_disc3)
                     .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
@@ -250,7 +277,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ds.Contains(x.Disc3Percent));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_discval))
+            if (!string.IsNullOrWhiteSpace(filterCol_discvalExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "discval", filterCol_discvalExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_discval))
             {
                 var ds = SplitFilterVals(filterCol_discval)
                     .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
@@ -259,7 +288,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ds.Contains(x.DiscountValue));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_total))
+            if (!string.IsNullOrWhiteSpace(filterCol_totalExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "total", filterCol_totalExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_total))
             {
                 var ds = SplitFilterVals(filterCol_total)
                     .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
@@ -268,7 +299,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ds.Contains(x.LineTotalAfterDiscount));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            if (!string.IsNullOrWhiteSpace(filterCol_netExpr))
+                q = SalesInvoiceLineListNumericExpr.ApplyForColumn(q, "net", filterCol_netExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_net))
             {
                 var ds = SplitFilterVals(filterCol_net)
                     .Select(s => decimal.TryParse(s, inv, out var v) ? v : (decimal?)null)
@@ -356,7 +389,18 @@ namespace ERP.Controllers
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
             string? filterCol_region = null,
-            string? filterCol_createdby = null)
+            string? filterCol_createdby = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_linenoExpr = null,
+            string? filterCol_prodidExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_priceExpr = null,
+            string? filterCol_disc1Expr = null,
+            string? filterCol_disc2Expr = null,
+            string? filterCol_disc3Expr = null,
+            string? filterCol_discvalExpr = null,
+            string? filterCol_totalExpr = null,
+            string? filterCol_netExpr = null)
         {
             // (1) الاستعلام الأساسي مع تضمين العلاقات (Product و SalesInvoice.Customer)
             IQueryable<SalesInvoiceLine> q =
@@ -376,7 +420,10 @@ namespace ERP.Controllers
                 filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
                 filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
                 filterCol_total, filterCol_net, filterCol_batch, filterCol_expiry,
-                filterCol_region, filterCol_createdby);
+                filterCol_region, filterCol_createdby,
+                filterCol_siidExpr, filterCol_linenoExpr, filterCol_prodidExpr, filterCol_qtyExpr, filterCol_priceExpr,
+                filterCol_disc1Expr, filterCol_disc2Expr, filterCol_disc3Expr, filterCol_discvalExpr,
+                filterCol_totalExpr, filterCol_netExpr);
 
             // (3) خرائط الحقول للبحث (Strings + Ints) والفرز
 
@@ -483,7 +530,18 @@ namespace ERP.Controllers
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
             string? filterCol_region = null,
-            string? filterCol_createdby = null)
+            string? filterCol_createdby = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_linenoExpr = null,
+            string? filterCol_prodidExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_priceExpr = null,
+            string? filterCol_disc1Expr = null,
+            string? filterCol_disc2Expr = null,
+            string? filterCol_disc3Expr = null,
+            string? filterCol_discvalExpr = null,
+            string? filterCol_totalExpr = null,
+            string? filterCol_netExpr = null)
         {
             var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
             if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
@@ -515,7 +573,10 @@ namespace ERP.Controllers
                 filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
                 filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
                 filterCol_total, filterCol_net, filterCol_batch, filterCol_expiry,
-                filterCol_region, filterCol_createdby);
+                filterCol_region, filterCol_createdby,
+                filterCol_siidExpr, filterCol_linenoExpr, filterCol_prodidExpr, filterCol_qtyExpr, filterCol_priceExpr,
+                filterCol_disc1Expr, filterCol_disc2Expr, filterCol_disc3Expr, filterCol_discvalExpr,
+                filterCol_totalExpr, filterCol_netExpr);
 
             int totalQty = await q.SumAsync(line => (int?)line.Qty) ?? 0;
             decimal totalDiscountValue = await q.SumAsync(line => (decimal?)line.DiscountValue) ?? 0m;
@@ -550,6 +611,17 @@ namespace ERP.Controllers
                 ViewBag.FilterCol_Expiry = filterCol_expiry;
                 ViewBag.FilterCol_Region = filterCol_region;
                 ViewBag.FilterCol_Createdby = filterCol_createdby;
+                ViewBag.FilterCol_SiidExpr = filterCol_siidExpr;
+                ViewBag.FilterCol_LinenoExpr = filterCol_linenoExpr;
+                ViewBag.FilterCol_ProdidExpr = filterCol_prodidExpr;
+                ViewBag.FilterCol_QtyExpr = filterCol_qtyExpr;
+                ViewBag.FilterCol_PriceExpr = filterCol_priceExpr;
+                ViewBag.FilterCol_Disc1Expr = filterCol_disc1Expr;
+                ViewBag.FilterCol_Disc2Expr = filterCol_disc2Expr;
+                ViewBag.FilterCol_Disc3Expr = filterCol_disc3Expr;
+                ViewBag.FilterCol_DiscvalExpr = filterCol_discvalExpr;
+                ViewBag.FilterCol_TotalExpr = filterCol_totalExpr;
+                ViewBag.FilterCol_NetExpr = filterCol_netExpr;
             }
 
             void BagSearchSortLists(string sortForList)
@@ -1042,6 +1114,17 @@ namespace ERP.Controllers
             string? filterCol_expiry = null,
             string? filterCol_region = null,
             string? filterCol_createdby = null,
+            string? filterCol_siidExpr = null,
+            string? filterCol_linenoExpr = null,
+            string? filterCol_prodidExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_priceExpr = null,
+            string? filterCol_disc1Expr = null,
+            string? filterCol_disc2Expr = null,
+            string? filterCol_disc3Expr = null,
+            string? filterCol_discvalExpr = null,
+            string? filterCol_totalExpr = null,
+            string? filterCol_netExpr = null,
             string format = "excel")
         {
             int? codeFromQ = Request.Query.ContainsKey("codeFrom")
@@ -1059,7 +1142,10 @@ namespace ERP.Controllers
                 filterCol_siid, filterCol_lineno, filterCol_prodid, filterCol_prodname, filterCol_customername,
                 filterCol_qty, filterCol_price, filterCol_disc1, filterCol_disc2, filterCol_disc3, filterCol_discval,
                 filterCol_total, filterCol_net, filterCol_batch, filterCol_expiry,
-                filterCol_region, filterCol_createdby);
+                filterCol_region, filterCol_createdby,
+                filterCol_siidExpr, filterCol_linenoExpr, filterCol_prodidExpr, filterCol_qtyExpr, filterCol_priceExpr,
+                filterCol_disc1Expr, filterCol_disc2Expr, filterCol_disc3Expr, filterCol_discvalExpr,
+                filterCol_totalExpr, filterCol_netExpr);
 
             var list = await q
                 .OrderBy(l => l.SIId)
@@ -1073,8 +1159,8 @@ namespace ERP.Controllers
                 // ===== تصدير CSV يفتح فى Excel =====
                 var sb = new StringBuilder();
 
-                // عناوين الأعمدة
-                sb.AppendLine("SIId,LineNo,ProdId,Qty,PriceRetail,Disc1Percent,Disc2Percent,Disc3Percent,DiscountValue,UnitSalePrice,LineTotalAfterDiscount,TaxPercent,TaxValue,LineNetTotal,BatchNo,Expiry");
+                // عناوين الأعمدة (عربي كما في القائمة)
+                sb.AppendLine("رقم الفاتورة,رقم السطر,كود الصنف,الكمية,سعر الجمهور,خصم البيع 1 %,خصم البيع 2 %,خصم البيع 3 %,قيمة الخصم,سعر بيع الوحدة,إجمالي السطر بعد الخصم,نسبة الضريبة %,قيمة الضريبة,صافي السطر,التشغيلة,الصلاحية");
 
                 // كل سطر فى CSV
                 foreach (var l in list)
@@ -1101,8 +1187,8 @@ namespace ERP.Controllers
                     sb.AppendLine(line);
                 }
 
-                var bytesCsv = Encoding.UTF8.GetBytes(sb.ToString());
-                var fileNameCsv = $"SalesInvoiceLines_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                var bytesCsv = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("أصناف فاتورة المبيعات", ".csv");
                 const string contentTypeCsv = "text/csv";
 
                 return File(bytesCsv, contentTypeCsv, fileNameCsv);
@@ -1111,27 +1197,27 @@ namespace ERP.Controllers
             {
                 // ===== تصدير Excel فعلي (.xlsx) باستخدام ClosedXML =====
                 using var workbook = new XLWorkbook();  // متغير: مصنف Excel
-                var worksheet = workbook.Worksheets.Add("SalesInvoiceLines");   // متغير: ورقة العمل
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أصناف فاتورة المبيعات"));
 
                 int row = 1;   // متغير: رقم الصف الحالي فى الشيت
 
-                // عناوين الأعمدة
-                worksheet.Cell(row, 1).Value = "SIId";
-                worksheet.Cell(row, 2).Value = "LineNo";
-                worksheet.Cell(row, 3).Value = "ProdId";
-                worksheet.Cell(row, 4).Value = "Qty";
-                worksheet.Cell(row, 5).Value = "PriceRetail";
-                worksheet.Cell(row, 6).Value = "Disc1Percent";
-                worksheet.Cell(row, 7).Value = "Disc2Percent";
-                worksheet.Cell(row, 8).Value = "Disc3Percent";
-                worksheet.Cell(row, 9).Value = "DiscountValue";
-                worksheet.Cell(row, 10).Value = "UnitSalePrice";
-                worksheet.Cell(row, 11).Value = "LineTotalAfterDiscount";
-                worksheet.Cell(row, 12).Value = "TaxPercent";
-                worksheet.Cell(row, 13).Value = "TaxValue";
-                worksheet.Cell(row, 14).Value = "LineNetTotal";
-                worksheet.Cell(row, 15).Value = "BatchNo";
-                worksheet.Cell(row, 16).Value = "Expiry";
+                // عناوين الأعمدة (عربي كما في القائمة)
+                worksheet.Cell(row, 1).Value = "رقم الفاتورة";
+                worksheet.Cell(row, 2).Value = "رقم السطر";
+                worksheet.Cell(row, 3).Value = "كود الصنف";
+                worksheet.Cell(row, 4).Value = "الكمية";
+                worksheet.Cell(row, 5).Value = "سعر الجمهور";
+                worksheet.Cell(row, 6).Value = "خصم البيع 1 %";
+                worksheet.Cell(row, 7).Value = "خصم البيع 2 %";
+                worksheet.Cell(row, 8).Value = "خصم البيع 3 %";
+                worksheet.Cell(row, 9).Value = "قيمة الخصم";
+                worksheet.Cell(row, 10).Value = "سعر بيع الوحدة";
+                worksheet.Cell(row, 11).Value = "إجمالي السطر بعد الخصم";
+                worksheet.Cell(row, 12).Value = "نسبة الضريبة %";
+                worksheet.Cell(row, 13).Value = "قيمة الضريبة";
+                worksheet.Cell(row, 14).Value = "صافي السطر";
+                worksheet.Cell(row, 15).Value = "التشغيلة";
+                worksheet.Cell(row, 16).Value = "الصلاحية";
 
                 var headerRange = worksheet.Range(row, 1, row, 16);
                 headerRange.Style.Font.Bold = true;
@@ -1166,7 +1252,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 var bytesXlsx = stream.ToArray();
 
-                var fileNameXlsx = $"SalesInvoiceLines_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("أصناف فاتورة المبيعات", ".xlsx");
                 const string contentTypeXlsx =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 

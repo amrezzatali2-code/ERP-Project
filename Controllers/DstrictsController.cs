@@ -640,7 +640,7 @@ namespace ERP.Controllers
                 }
 
                 var sb = new StringBuilder();
-                sb.AppendLine("DistrictId,DistrictName,GovernorateName,DistrictType,IsActive,CreatedAt,UpdatedAt");
+                sb.AppendLine("كود الحي/المركز,اسم الحي/المركز,المحافظة,النوع,الحالة,تاريخ الإنشاء,آخر تعديل");
 
                 foreach (var d in list)
                 {
@@ -663,12 +663,12 @@ namespace ERP.Controllers
 
                 var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytes = encoding.GetBytes(sb.ToString());
-                return File(bytes, "text/csv; charset=utf-8", $"Districts_{DateTime.Now:yyyyMMdd_HHmm}.csv");
+                return File(bytes, "text/csv; charset=utf-8", ExcelExportNaming.ArabicTimestampedFileName("الأحياء والمراكز", ".csv"));
             }
 
             // -------- Excel (.xlsx) --------
             using var wb = new XLWorkbook();
-            var ws = wb.Worksheets.Add("الأحياء والمراكز");
+            var ws = wb.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("الأحياء والمراكز"));
 
             ws.Cell(1, 1).Value = "كود الحي/المركز";
             ws.Cell(1, 2).Value = "اسم الحي/المركز";
@@ -702,7 +702,7 @@ namespace ERP.Controllers
             wb.SaveAs(stream);
             stream.Position = 0;
             return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                $"Districts_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+                ExcelExportNaming.ArabicTimestampedFileName("الأحياء والمراكز", ".xlsx"));
         }
 
 

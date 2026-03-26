@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;          // علشان [Precision]
+using Microsoft.EntityFrameworkCore;          // علشان [Precision]
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;  // علشان [Display] و [Range]
@@ -39,6 +39,10 @@ namespace ERP.Models
         [Display(Name = "كود الصنف")]                  // تعليق: كود الصنف (FK على Products)
         [Required]
         public int ProdId { get; set; }                // متغير: كود الصنف المرتجع
+
+        [ForeignKey(nameof(ProdId))]
+        [Display(Name = "الصنف")]
+        public virtual Product? Product { get; set; }
 
         [Display(Name = "الكمية المرتجعة")]            // تعليق: عدد العلب المرتجعة
         [Range(1, int.MaxValue, ErrorMessage = "الكمية يجب أن تكون أكبر من صفر")]

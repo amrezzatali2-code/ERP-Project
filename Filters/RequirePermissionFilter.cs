@@ -32,6 +32,16 @@ namespace ERP.Filters
                 return;
 
             const string message = "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
+
+            // طلبات fetch / AJAX: إرجاع JSON بدلاً من إعادة توجيه (تجنباً لتحليل HTML كـ JSON في الواجهة)
+            var req = context.HttpContext.Request;
+            if (string.Equals(req.Headers["X-Requested-With"], "XMLHttpRequest", StringComparison.OrdinalIgnoreCase)
+                || (req.Headers.TryGetValue("Accept", out var accept) && accept.ToString().Contains("application/json", StringComparison.OrdinalIgnoreCase)))
+            {
+                context.Result = new JsonResult(new { ok = false, message });
+                return;
+            }
+
             var tempData = _tempDataFactory.GetTempData(context.HttpContext);
             tempData["PermissionDeniedMessage"] = message;
             tempData.Save();

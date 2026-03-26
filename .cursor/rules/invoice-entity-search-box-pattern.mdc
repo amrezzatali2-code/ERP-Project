@@ -1,0 +1,99 @@
+---
+description: النظام المعتمد لبوكسات البحث عن طرف/صنف (مثل فاتورة المبيعات) — تعميمها على باقي الشاشات
+alwaysApply: true
+---
+
+# نمط بوكس البحث عن اسم (عميل / صنف / طرف) — المرجع المعتمد
+
+**المرجع التطبيقي الأساسي:** `Views/SalesInvoices/Show.cshtml`
+
+- **قسم العميل:** التعليق `(A) أوتوكومبليت العميل` — عناصر `CustomerNameInput` + `customersList`.
+- **قسم الصنف:** التعليق `(B) أوتوكومبليت الصنف` — عناصر `ProdNameInput` + `productsList`.
+
+أي بوكس بحث جديد يشبه «اكتب للفلترة ثم اختر من قائمة» يجب أن **يطابق هذا النمط** (هيكل HTML + سلوك JS + مصدر البيانات)، مع تعديل أسماء المعرفات والـ `data-*` حسب الكيان.
+
+## 1) الفكرة المعمارية
+
+| عنصر | الدور |
+|------|--------|
+| **`<datalist hidden>`** | المصدر الوحيد للبيانات في الصفحة: كل سجل = `<option value="الاسم المعروض">` + `data-*` للحقول المطلوبة بعد الاختيار. |
+| **قائمة منسدلة مخصصة** | `<div class="product-dropdown-list">` تُملأ ديناميكياً — **لا** الاعتماد على قائمة المتصفح المدمجة للـ `datalist` كتجربة أساسية (البحث متعدد الكلمات والحد الأقصى للعرض يتطلبان JS). |
+| **مصفوفة مشتقة** (للعميل) | `Array.from(datalist.options).map(...)` لبناء كائنات `{ id, name, ... }` للفلترة السريعة. |
+| **مسح مباشر من الخيارات** (للصنف) | يمكن التكرار على `prodDataList.options` مع نفس دوال التطبيع إن لم تُبنَ مصفوفة. |
+
+## 2) هيكل HTML الموحّد
+
+```html
+<div class="position-relative" id="{prefix}DropdownWrap">
+  <div class="product-dropdown-onebox" id="{prefix}DropdownInputGroup">
+    <span class="product-dropdown-arrow-inside" id="{prefix}DropdownArrow" title="افتح القائمة">▼</span>
+    <input id="{Name}Input" type="text" class="form-control form-control-sm product-dropdown-input"
+           placeholder="..." autocomplete="off" />
+  </div>
+  <div id="{prefix}DropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
+</div>
+<datalist id="{entity}List" hidden aria-hidden="true">
+  <option value="الاسم" data-id="..." data-...="..."></option>
+</datalist>
+```
+
+- **السهم ▼:** يفتح القائمة (مع `focus` على حقل الاسم) — لا يفتح القائمة بمجرد `click` داخل البوكس بدون سهم/كتابة (نفس سلوك الفاتورة).
+- **تنسيقات الكارت:** غالباً مُعرّفة في نفس الـ View تحت محددات `#PI_BodyHost` أو كروت الفاتورة — عند نسخ النمط لشاشة أخرى انسخ الأصناف ذات الصلة أو ضعها في CSS مشترك إن تكررت.
+
+## 3) قواعد البحث (إلزامية للاتساق)
+
+تُطبَّق عبر دوال مشتركة المفهوم (موجودة في الفاتورة للعميل وللصنف):
+
+1. **`normalizeDigits`:** الأرقام العربية ٠–٩ → لاتينية قبل المقارنة.
+2. **`normalizeWord` / `normalizeText`:** تطبيع الألف (إأآ→أ) في **بداية كل كلمة** + lowercase + تقسيم كلمات.
+3. **تطابق عدة كلمات (AND):** كل كلمات نص البحث يجب أن تطابق **كلمة ما** في اسم السجل (`wordMatchesQueryWord`: تساوي أو بادئة).
+4. **ترتيب النتائج (`*SearchRank`):** تطابق كامل الاسم ← بادئة الاسم ← بادئة أول كلمة ← تطبيع أول كلمة ← باقي المطابقات؛ ثم `localeCompare` عربي.
+5. **بحث بالكود:** إن وُجد `data-id` أو `data-code` — السماح بمطابقة جزء من النص أو كلمات البحث ضد الكود (كما في العميل والصنف).
+6. **حد أقصى لعناصر القائمة:** يُعرض فقط أول **N** نتيجة بعد الفرز — في الفاتورة: **`CUSTOMER_LIST_MAX = 80`**، **`PRODUCT_LIST_MAX = 15`**. عند تعميم النمط اختر رقماً مناسباً للكيان (قوائم ضخمة → حد أعلى معقول + نص توضيحي في القائمة الفارغة).
+
+## 4) سلوك الواجهة
+
+- **`input`:** على `input` → فتح/تحديث القائمة المفلترة.
+- **الأسهم ↑↓:** تنقّل بين `.product-dropdown-item`، مع تمييز `.product-dropdown-item-active`.
+- **Enter:** إن كانت القائمة مفتوحة مع عنصر مميز → اختياره؛ وإلا سلوك الشاشة (مثل الانتقال لزر الحفظ في العميل).
+- **إغلاق:** نقرة خارج `#...DropdownWrap`، أو بعد اختيار عنصر.
+- **وضع القائمة:** `positionCustomerDropdownList` / ما يعادلها: عرض = عرض البوكس، `top/left` من `getBoundingClientRect` (قائمة «عائمة» تحت الحقل).
+
+## 5) بعد الاختيار
+
+- تعبئة الحقول المرتبطة من `data-*` (هاتف، سياسة، سعر، إلخ) في دالة مركزية مثل `fillFromOption` / معالج اختيار الصنف.
+- للعميل: التحقق من **الموقوف** (`data-is-active`) ورسالة واضحة + تعطيل حفظ إن لزم.
+
+## 6) خصائص إضافية للصنف (عند الحاجة)
+
+- **`data-generic`:** تجميع/توسيع نتائج ذات صلة (نفس المادة بتركيزات مختلفة) — انظر `getProductGroupKey` و`getProductDropdownFilterQuery`.
+- **تثبيت عرض (`pinDisplayName`):** إبقاء صنف مختار ظاهراً في أعلى القائمة عند إعادة الفتح.
+
+## 7) الخادم (Controller + ViewBag)
+
+- تجهيز القائمة في الـ action (مثل `PopulateDropDownsAsync` / `LoadProductsForAutoCompleteAsync`) مع **نفس** أسماء الخصائص التي يقرأها الـ `datalist`.
+- احترام **ظهور الحسابات/العملاء** عبر `IUserAccountVisibilityService` حيث ينطبق المشروع (لا تسرّب أطرافاً مخفية في القائمة).
+
+## 8) إعادة التهيئة بعد تحميل جزئي (SPA-like)
+
+إذا استُبدل `innerHTML` لجزء يحتوي البوكس (مثل `#PI_BodyHost`):
+
+- يجب إعادة ربط الأحداث أو إعادة تنفيذ IIFE — في الفاتورة يُستدعى `window.__ERP_INIT__()` بعد استبدال الجسم. أي شاشة تستخدم نفس النمط يجب أن تحافظ على خطاف مماثل.
+
+## 9) تدقيق قبل الدمج (عند إضافة بوكس بحث جديد)
+
+- [ ] `datalist` مخفي + `autocomplete="off"` على حقل النص.
+- [ ] بحث **متعدد الكلمات AND** + تطبيع أرقام عربية وألف.
+- [ ] حد أقصى للعرض + رسالة عند «لا توجد نتائج».
+- [ ] أسهم + Enter + إغلاق عند النقر خارج البوكس.
+- [ ] عدم الاعتماد على `datalist` كواجهة المستخدم الوحيدة للاختيار.
+
+## 10) مراجع سريعة أخرى في المشروع
+
+نفس فكرة العميل/المورد تظهر بشكل مشابه في:
+
+- `Views/PurchaseInvoices/Show.cshtml` (مورد + صنف)
+- `Views/PurchaseRequests/Show.cshtml` (طلب شراء)
+- `Views/SalesReturns/Show.cshtml` — **اسم العميل** في الهيدر (`CustomerNameInput` + `customersList` + `srCustomerDropdownWrap` / `srCustomerDropdownList`)؛ **اسم الصنف** في وضع **مرتجع بدون فاتورة** (`srStandaloneProdNameInput` + `srStandaloneProductsList` + `srStandaloneProductDropdownWrap`) مع تحديث الداتاليست من `GetProductsForReturnDatalist` عند تغيير المخزن.
+
+عند التعارض بين ملفين، **أولوية توحيد السلوك مع `SalesInvoices/Show.cshtml`** ما لم يُقرر صراحة خلاف ذلك.

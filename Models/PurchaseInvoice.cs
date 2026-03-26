@@ -32,6 +32,9 @@ namespace ERP.Models
         [Display(Name = "كود المخزن")]
         public int WarehouseId { get; set; }            // كود المخزن
 
+        [Display(Name = "المخزن")]
+        public virtual Warehouse? Warehouse { get; set; }
+
         // ===== مرجع طلب الشراء (اختياري) =====
 
         [Display(Name = "طلب الشراء المرجعي")]

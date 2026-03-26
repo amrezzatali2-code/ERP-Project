@@ -19,7 +19,7 @@
 
 ### Backend
 - **ASP.NET Core 8.0** - إطار العمل الأساسي
-- **Entity Framework Core 9.0** - ORM لإدارة قاعدة البيانات
+- **Entity Framework Core 8.0** (حزم المشروع 8.0.x) - ORM لإدارة قاعدة البيانات
 - **SQL Server** - قاعدة البيانات الرئيسية
 - **C#** - لغة البرمجة
 
@@ -600,6 +600,8 @@ var query = _context.SalesInvoices
 - [Bootstrap Documentation](https://getbootstrap.com/docs)
 
 ### ملفات التوثيق الداخلية
+- `docs/INDEX.md` - فهرس كل ملفات التوثيق في `docs/` والجذر
+- `docs/ERP_Documentation_Full.md` - نسخة مجمّعة لنفس المحتوى التعريفي تقريباً (مناسبة للتصدير إلى Word)
 - `project_state_2025-12-22_tabs_UPDATED_v15_SALES_DONE (1).md` - حالة المشروع التفصيلية
 - `PERFORMANCE_ANALYSIS.md` - تحليل الأداء
 - `PurchaseInvoice_Full_Reference_UPDATED_2026-01-08.md` - مرجع فاتورة المشتريات
@@ -639,6 +641,6 @@ var query = _context.SalesInvoices
 
 ---
 
-**آخر تحديث**: يناير 2025
+**آخر تحديث**: مارس 2026
 
 **الإصدار**: 1.0.0

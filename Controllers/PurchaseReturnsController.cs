@@ -126,6 +126,29 @@ namespace ERP.Controllers
             return View("Show", model);
         }
 
+        [HttpGet]
+        [RequirePermission("PurchaseReturns.Edit")]
+        public async Task<IActionResult> ExportShowExcel(int id)
+        {
+            if (id <= 0)
+                return BadRequest();
+
+            var pr = await _context.PurchaseReturns
+                .Include(x => x.Customer)
+                .Include(x => x.Warehouse)
+                .Include(x => x.Lines)
+                    .ThenInclude(l => l.Product)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.PRetId == id);
+
+            if (pr == null)
+                return NotFound();
+
+            var bytes = ShowDocumentExcelExport.PurchaseReturn(pr);
+            return File(bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ExcelExportNaming.ArabicTimestampedFileName($"مرتجع مشتريات {id}", ".xlsx"));
+        }
+
         // =========================
         // Edit POST: حفظ تعديل بيانات الهيدر
         // =========================
@@ -757,23 +780,24 @@ namespace ERP.Controllers
             var sb = new StringBuilder();
 
             // عنوان الأعمدة
-            sb.AppendLine("PRetId,PRetDate,CustomerId,CustomerName,WarehouseId,RefPIId,NetTotal,Status,IsPosted,PostedAt,CreatedBy,CreatedAt,UpdatedAt");
+            sb.AppendLine("رقم المرتجع,تاريخ المرتجع,كود الجهة,اسم الجهة,كود المخزن,فاتورة الشراء المرجعية,قيمة المرتجع,الحالة,مرحّل؟,تاريخ الترحيل,أنشأه,تاريخ الإنشاء,آخر تعديل");
 
-            // كل سطر مرتجع في CSV
             foreach (var pr in list)
             {
+                string Q(string? s) => "\"" + (s ?? "").Replace("\"", "\"\"") + "\"";
+
                 string line = string.Join(",",
                     pr.PRetId,
                     pr.PRetDate.ToString("yyyy-MM-dd"),
                     pr.CustomerId,
-                    (pr.Customer?.CustomerName ?? "").Replace(",", " "),
+                    Q(pr.Customer?.CustomerName),
                     pr.WarehouseId,
                     pr.RefPIId?.ToString() ?? "",
                     pr.NetTotal.ToString("0.00"),
-                    (pr.Status ?? "").Replace(",", " "),
-                    pr.IsPosted ? "1" : "0",
+                    Q(pr.Status),
+                    pr.IsPosted ? "نعم" : "لا",
                     pr.PostedAt.HasValue ? pr.PostedAt.Value.ToString("yyyy-MM-dd HH:mm") : "",
-                    (pr.CreatedBy ?? "").Replace(",", " "),
+                    Q(pr.CreatedBy),
                     pr.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
                     pr.UpdatedAt.HasValue ? pr.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : ""
                 );
@@ -781,9 +805,9 @@ namespace ERP.Controllers
                 sb.AppendLine(line);
             }
 
-            var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-            var fileName = "PurchaseReturns.csv";   // يكفي CSV — يفتح في Excel عادي
-            const string contentType = "text/csv";
+            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("مرتجعات المشتريات", ".csv");
+            const string contentType = "text/csv; charset=utf-8";
 
             return File(bytes, contentType, fileName);
         }

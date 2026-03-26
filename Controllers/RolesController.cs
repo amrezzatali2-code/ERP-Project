@@ -622,7 +622,7 @@ namespace ERP.Controllers
             // إنشاء ملف Excel بـ ClosedXML
             // =========================
             using var workbook = new XLWorkbook();              // مصنف جديد
-            var worksheet = workbook.Worksheets.Add("Roles"); // شيت باسم Roles
+            var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("أدوار المستخدمين"));
 
             int row = 1;
 
@@ -661,7 +661,7 @@ namespace ERP.Controllers
             workbook.SaveAs(stream);
             stream.Position = 0;
 
-            var fileName = $"Roles_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            var fileName = ExcelExportNaming.ArabicTimestampedFileName("أدوار المستخدمين", ".xlsx");
             const string contentType =
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 

@@ -43,6 +43,49 @@
         .invoice-page .invoice-totals-card .form-control,
         .invoice-page .invoice-totals-card .form-select { border-color: #94a3b8 !important; }
         .return-line-field { max-width: 5.5rem; }
+        /* بوكس بحث عميل/صنف — نفس نمط فاتورة المبيعات (قائمة عائمة + سهم ▼) */
+        .invoice-page .product-dropdown-onebox {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+            border: 1px solid #94a3b8;
+            border-radius: 0.375rem;
+            background: #fff;
+        }
+        .invoice-page .product-dropdown-arrow-inside {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 0.45rem;
+            cursor: pointer;
+            user-select: none;
+            color: #64748b;
+            font-size: 0.65rem;
+            border-inline-end: 1px solid #e2e8f0;
+        }
+        .invoice-page .product-dropdown-arrow-inside:hover { color: #0f172a; background: #f8fafc; }
+        .invoice-page .product-dropdown-onebox .product-dropdown-input {
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            flex: 1;
+            min-width: 0;
+        }
+        .invoice-page .product-dropdown-list {
+            position: fixed;
+            z-index: 3060;
+            max-height: 260px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #94a3b8;
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+        }
+        .invoice-page .product-dropdown-list[data-open="false"] { display: none !important; }
+        .invoice-page .product-dropdown-list[data-open="true"] { display: block !important; }
+        .invoice-page .product-dropdown-item { cursor: pointer; font-size: 0.875rem; text-align: right; }
+        .invoice-page .product-dropdown-item:hover { background: #f1f5f9; }
+        .invoice-page .product-dropdown-item-active { background: #e0f2fe !important; }
         .badge-status-draft { background-color: #6f42c1; }
         .badge-status-notposted { background-color: #343a40; }
 
@@ -150,6 +193,43 @@
         }
         .invoice-page .invoice-lines-container .erp-table-wrapper .erp-table > thead.sr-return-lines-thead > tr > th:first-child {
             border-inline-start: 1px solid #e2e8f0 !important;
+        }
+
+        /* وميض نجاح مسح السطر: وسط الشاشة، أخضر + صح */
+        .sr-line-deleted-flash {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10060;
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.9rem 1.35rem;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+            border-radius: 14px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            box-shadow: 0 10px 38px rgba(6, 95, 70, 0.18);
+            pointer-events: none;
+            opacity: 1;
+            transition: opacity 0.28s ease;
+        }
+        .sr-line-deleted-flash .sr-line-deleted-flash__icon {
+            width: 1.75rem;
+            height: 1.75rem;
+            border-radius: 50%;
+            background: #059669;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            line-height: 1;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(5, 150, 105, 0.35);
         }
     </style>
 }
@@ -268,6 +348,12 @@
                            data-url="@Url.Action("Create", "SalesReturns", new { frame = 1 })">
                             ➕ مرتجع جديد
                         </a>
+                        <a class="btn btn-erp btn-erp-outline-success btn-erp-sm open-same-tab w-100 mt-1"
+                           data-tab-id="sr-show-tab"
+                           data-tab-title="مرتجع بدون فاتورة"
+                           data-url="@Url.Action("Create", "SalesReturns", new { frame = 1, standalone = true })">
+                            ➕ مرتجع بدون فاتورة
+                        </a>
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100"
@@ -305,7 +391,10 @@
                             🗑️ مسح كل أصناف المرتجع
                         </button>
 
-
+                        @if (Model?.SRId > 0)
+                        {
+                            <a href="@Url.Action("ExportShowExcel", "SalesReturns", new { id = Model.SRId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
+                        }
 
                         <button type="button"
                                 id="btnPrintReturn"
@@ -332,9 +421,13 @@
 
                     @{
                         // لو SRId = 0 يبقى لسه مرتجع جديد (لسه ما اتسجلش في الداتا)
-                        bool isNewReturn = Model == null || Model.SRId == 0;
+                        bool isNewReturn = Model.SRId == 0;
 
                         bool hasReturn = Model.SRId > 0;
+
+                        // مرتجع بدون فاتورة: مسموح فقط إن لم يُربَط بهيدر بفاتورة ولم يُرحَّل
+                        bool allowStandaloneMode = !Model.IsPosted && !Model.SalesInvoiceId.HasValue;
+                        bool initialStandalone = (ViewBag.StandaloneReturn as bool?) == true;
 
                         // نص تاريخ/وقت المرتجع المعروضين في الكروت
                         string returnDateText = hasReturn
@@ -358,7 +451,7 @@
                                 <label for="SalesInvoiceIdInput" class="form-label form-label-sm">رقم فاتورة البيع</label>
                                 <input type="number" id="SalesInvoiceIdInput" class="form-control form-control-sm text-center"
                                        value="@(Model.SalesInvoiceId?.ToString() ?? "")" placeholder="رقم" data-lock-posted="1"
-                                       @(isNewReturn ? Html.Raw("autofocus") : Html.Raw("")) />
+                                       @(isNewReturn && !initialStandalone ? Html.Raw("autofocus") : Html.Raw("")) />
                                 <input type="hidden" asp-for="SalesInvoiceId" id="SalesInvoiceId" />
                             </div>
                             <div class="col-auto" style="max-width: 5.5rem;">
@@ -371,12 +464,19 @@
                             </div>
                             <div class="col-lg-5 col-md-6 min-w-0">
                                 <label for="CustomerNameInput" class="form-label form-label-sm">اسم العميل</label>
-                                <input id="CustomerNameInput"
-                                       class="form-control form-control-sm"
-                                       placeholder="اكتب اسم العميل أو جزء منه للبحث..."
-                                       list="customersList"
-                                       autocomplete="off"
-                                       data-lock-posted="1" />
+                                <div class="position-relative" id="srCustomerDropdownWrap">
+                                    <div class="product-dropdown-onebox" id="srCustomerDropdownInputGroup">
+                                        <span class="product-dropdown-arrow-inside" id="srCustomerDropdownArrow" title="افتح القائمة">▼</span>
+                                        <input id="CustomerNameInput"
+                                               type="text"
+                                               class="form-control form-control-sm product-dropdown-input"
+                                               placeholder="اكتب اسم العميل"
+                                               autocomplete="off"
+                                               data-lock-posted="1" />
+                                    </div>
+                                    <div id="srCustomerDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
+                                </div>
+                                <div id="customerSuspendedMsg" class="small text-danger mt-1 d-none">⚠️ العميل موقوف — لا يمكن حفظ المرتجع.</div>
                             </div>
                             <div class="col-auto" style="max-width: 5.5rem;">
                                 <label class="form-label form-label-sm">رقم المرتجع</label>
@@ -422,6 +522,13 @@
                                 </select>
                             </div>
                         </div>
+                        @if (allowStandaloneMode)
+                        {
+                            <div class="form-check form-switch mt-2 mb-0" dir="rtl">
+                                <input class="form-check-input" type="checkbox" id="srChkStandalone" data-lock-posted="1" @(initialStandalone ? "checked=\"checked\"" : "") />
+                                <label class="form-check-label" for="srChkStandalone">مرتجع بدون فاتورة</label>
+                            </div>
+                        }
                     </div>
                 </div>
 
@@ -430,60 +537,108 @@
                    ===================================================== *@
                 <div class="card shadow-sm mb-3 invoice-Add-card">
                     <div class="card-body">
-                        <div class="row g-2 align-items-end">
-                            <div class="col-lg-5 col-md-4">
-                                <label class="form-label form-label-sm">اختر صنف من فاتورة البيع</label>
-                                <select id="InvoiceItemSelect"
-                                        class="form-select form-select-sm sr-invoice-item-select"
-                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
-                                    <option value="">-- اختر صنف من الفاتورة --</option>
-                                </select>
-                            </div>
+                        @* وضع: من فاتورة بيع *@
+                        <div id="srInvoiceAddPanel" class="@(initialStandalone && allowStandaloneMode ? "d-none" : "")">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-lg-5 col-md-4">
+                                    <label class="form-label form-label-sm">اختر صنف من فاتورة البيع</label>
+                                    <select id="InvoiceItemSelect"
+                                            class="form-select form-select-sm sr-invoice-item-select"
+                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                        <option value="">-- اختر صنف من الفاتورة --</option>
+                                    </select>
+                                </div>
 
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">الكمية المرتجعة</label>
-                                <input type="number"
-                                       id="ReturnQtyInput"
-                                       class="form-control form-control-sm text-center return-line-field"
-                                       placeholder="0"
-                                       min="1"
-                                       data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
-                            </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">الكمية المرتجعة</label>
+                                    <input type="number"
+                                           id="ReturnQtyInput"
+                                           class="form-control form-control-sm text-center return-line-field"
+                                           placeholder="0"
+                                           min="1"
+                                           data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
+                                </div>
 
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">الكمية في الفاتورة</label>
-                                <input type="number"
-                                       id="InvoiceQtyDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">الكمية في الفاتورة</label>
+                                    <input type="number"
+                                           id="InvoiceQtyDisplay"
+                                           class="form-control form-control-sm text-center bg-light return-line-field"
+                                           readonly />
+                                </div>
 
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">التشغيلة</label>
-                                <input type="text"
-                                       id="ReturnBatchDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">التشغيلة</label>
+                                    <input type="text"
+                                           id="ReturnBatchDisplay"
+                                           class="form-control form-control-sm text-center bg-light return-line-field"
+                                           readonly />
+                                </div>
 
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
-                                <input type="text"
-                                       id="ReturnExpiryDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                    <input type="text"
+                                           id="ReturnExpiryDisplay"
+                                           class="form-control form-control-sm text-center bg-light return-line-field"
+                                           readonly />
+                                </div>
 
-                            <div class="col-lg-2 col-md-4 d-grid">
-                                <label class="form-label form-label-sm">&nbsp;</label>
-                                <button type="button"
-                                        id="btnAddReturnLine"
-                                        class="btn btn-primary btn-sm w-100"
-                                        data-lock-posted="@(Model.IsPosted ? "1" : "0")">
-                                    إضافة
-                                </button>
+                                <div class="col-lg-2 col-md-4 d-grid">
+                                    <label class="form-label form-label-sm">&nbsp;</label>
+                                    <button type="button"
+                                            id="btnAddReturnLine"
+                                            class="btn btn-primary btn-sm w-100"
+                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                        إضافة
+                                    </button>
+                                </div>
                             </div>
                         </div>
+
+                        @* وضع: بدون فاتورة *@
+                        @if (allowStandaloneMode)
+                        {
+                            <div id="srStandaloneAddPanel" class="@(initialStandalone ? "" : "d-none")">
+                                <p class="small text-muted mb-2">ابحث عن الصنف بالاسم أو الكود أو الباركود (متعدد الكلمات)، ثم عيّن الكمية والتشغيلة والصلاحية وسعر الجمهور — نفس نمط فاتورة المبيعات.</p>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-lg-4 col-md-6 position-relative">
+                                        <label class="form-label form-label-sm" for="srStandaloneProdNameInput">اسم الصنف</label>
+                                        <div class="position-relative" id="srStandaloneProductDropdownWrap">
+                                            <div class="product-dropdown-onebox" id="srStandaloneProductDropdownInputGroup">
+                                                <span class="product-dropdown-arrow-inside" id="srStandaloneProductDropdownArrow" title="افتح القائمة">▼</span>
+                                                <input type="text" id="srStandaloneProdNameInput" class="form-control form-control-sm product-dropdown-input" placeholder="اختر صنفاً..." autocomplete="off" data-lock-posted="1" />
+                                            </div>
+                                            <div id="srStandaloneProductDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
+                                        </div>
+                                        <input type="hidden" id="srStandaloneProdId" value="" />
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label form-label-sm">سعر الجمهور</label>
+                                        <input type="number" step="0.01" min="0" id="srStandalonePriceRetail" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label form-label-sm">خصم %</label>
+                                        <input type="number" step="0.01" min="0" max="100" id="srStandaloneDisc1" class="form-control form-control-sm text-center" value="0" data-lock-posted="1" />
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label form-label-sm">الكمية</label>
+                                        <input type="number" id="srStandaloneQtyInput" class="form-control form-control-sm text-center" placeholder="0" min="1" data-lock-posted="1" />
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label form-label-sm">التشغيلة</label>
+                                        <input type="text" id="srStandaloneBatchInput" class="form-control form-control-sm text-center" data-lock-posted="1" />
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label form-label-sm">الصلاحية</label>
+                                        <input type="text" id="srStandaloneExpiryInput" class="form-control form-control-sm text-center" placeholder="yyyy-MM-dd" data-lock-posted="1" />
+                                    </div>
+                                    <div class="col-lg-2 col-md-4 d-grid">
+                                        <label class="form-label form-label-sm">&nbsp;</label>
+                                        <button type="button" id="btnAddStandaloneLine" class="btn btn-primary btn-sm w-100" data-lock-posted="1">إضافة</button>
+                                    </div>
+                                </div>
+                            </div>
+                        }
                     </div>
                 </div>
 
@@ -545,40 +700,23 @@
                 </div>
 
                 @* ====================================
-                   6) ملخص إجماليات المرتجع (بنفس تنسيق فاتورة المبيعات)
+                   6) ملخص إجماليات المرتجع — ثلاثة كروت: قبل الضريبة / الضريبة / بعد الضريبة
                    ==================================== *@
                 <div class="card shadow-sm invoice-totals-card mb-2">
                     <div class="card-body">
-                        <div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row mb-3">
+                        <div class="d-flex flex-wrap align-items-stretch justify-content-between gap-2 invoice-summary-row">
                             <div class="invoice-summary-item invoice-summary-box">
-                                <span class="invoice-summary-label">إجمالي قبل الخصم</span>
-                                <span id="TotalBeforeDiscountBadge" class="invoice-summary-value">@Model.TotalBeforeDiscount.ToString("0.00")</span>
-                            </div>
-                            <div class="invoice-summary-item invoice-summary-box">
-                                <span class="invoice-summary-label">خصم الهيدر (قيمة)</span>
-                                <span id="HeaderDiscountSummary" class="invoice-summary-value">@Model.HeaderDiscountValue.ToString("0.00") <span class="small text-muted">(@Model.HeaderDiscountPercent.ToString("0.##") %)</span></span>
-                            </div>
-                            <div class="invoice-summary-item invoice-summary-box">
-                                <span class="invoice-summary-label">بعد الخصم وقبل الضريبة</span>
-                                <span id="TotalAfterDiscountBeforeTaxBadge" class="invoice-summary-value">@Model.TotalAfterDiscountBeforeTax.ToString("0.00")</span>
+                                <span class="invoice-summary-label">الإجمالي قبل الضريبة</span>
+                                <span id="TotalBeforeTaxBadge" class="invoice-summary-value">@Model.TotalAfterDiscountBeforeTax.ToString("0.00")</span>
                             </div>
                             <div class="invoice-summary-item invoice-summary-box">
                                 <span class="invoice-summary-label">قيمة الضريبة</span>
                                 <span id="TaxAmountBadge" class="invoice-summary-value">@Model.TaxAmount.ToString("0.00")</span>
                             </div>
-                        </div>
-                        <div class="d-flex flex-wrap align-items-stretch justify-content-between gap-2 invoice-summary-row">
                             <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main">
-                                <span class="invoice-summary-label">الصافي النهائي للمرتجع</span>
+                                <span class="invoice-summary-label">الإجمالي بعد الضريبة</span>
                                 <span id="NetTotalBadge" class="invoice-summary-value invoice-summary-value-main fw-bold">@Model.NetTotal.ToString("0.00")</span>
                             </div>
-                            @if (Model.UpdatedAt.HasValue)
-                            {
-                                <div class="invoice-summary-item invoice-summary-box align-self-center">
-                                    <span class="invoice-summary-label">آخر تعديل</span>
-                                    <span class="invoice-summary-value small">@Model.UpdatedAt.Value.ToString("d/M/yyyy HH:mm")</span>
-                                </div>
-                            }
                         </div>
                     </div>
                 </div>
@@ -591,6 +729,7 @@
                         {
                             <option value="@c.Name"
                                     data-id="@c.Id"
+                                    data-is-active="1"
                                     data-policy="@c.PolicyName"
                                     data-user="@c.UserName"
                                     data-phone="@c.Phone"
@@ -600,6 +739,10 @@
                         }
                     }
                 </datalist>
+                @if (allowStandaloneMode)
+                {
+                    <datalist id="srStandaloneProductsList" hidden aria-hidden="true"></datalist>
+                }
 
             </div>
 
@@ -610,38 +753,43 @@
 
 @section Scripts {
     <script>
-        // دالة مساعدة: تملأ الحقول من option معين في الـ datalist
-        function fillCustomerFromOption(opt) {
-            var idInput = document.getElementById('CustomerId');              // كود العميل (للحفظ في المرتجع)
-            var codeDisplay = document.getElementById('CustomerCodeDisplay'); // كود العميل المعروض
-            var policyInput = document.getElementById('PolicyName');          // اسم السياسة (مش موجود على الشاشة هنا، لكن ممكن تضيفه بعدين)
-            var userInput = document.getElementById('LinkedUserName');        // المستخدم المربوط (لو أضفته)
+        // تعبئة بيانات العميل — من سجل مشتق من الـ datalist (نفس نمط فاتورة المبيعات)
+        function fillCustomerFromRecord(rec) {
+            var idInput = document.getElementById('CustomerId');
+            var codeDisplay = document.getElementById('CustomerCodeDisplay');
+            var policyInput = document.getElementById('PolicyName');
+            var userInput = document.getElementById('LinkedUserName');
             var phoneInput = document.getElementById('CustomerPhone');
             var addressInput = document.getElementById('CustomerAddress');
             var creditInput = document.getElementById('CustomerCreditLimit');
             var summary = document.getElementById('CustomerSummaryText');
+            var suspendedMsg = document.getElementById('customerSuspendedMsg');
+            var saveBtn = document.getElementById('btnSaveReturnHeader');
 
-            if (!opt) {
-                idInput.value = '';
-                codeDisplay.value = '';
+            if (!rec) {
+                if (idInput) idInput.value = '';
+                if (codeDisplay) codeDisplay.value = '';
                 if (policyInput) policyInput.value = '';
                 if (userInput) userInput.value = '';
                 if (phoneInput) phoneInput.value = '';
                 if (addressInput) addressInput.value = '';
                 if (creditInput) creditInput.value = '';
                 if (summary) summary.textContent = '';
+                if (suspendedMsg) suspendedMsg.classList.add('d-none');
+                if (saveBtn) saveBtn.disabled = false;
                 return;
             }
 
-            var id = opt.getAttribute('data-id') || '';
-            var policy = opt.getAttribute('data-policy') || '';
-            var user = opt.getAttribute('data-user') || '';
-            var phone = opt.getAttribute('data-phone') || '';
-            var address = opt.getAttribute('data-address') || '';
-            var credit = opt.getAttribute('data-credit') || '';
+            var id = (rec.id || '').toString();
+            var policy = (rec.policy || '').toString();
+            var user = (rec.user || '').toString();
+            var phone = (rec.phone || '').toString();
+            var address = (rec.address || '').toString();
+            var credit = (rec.credit || '').toString();
+            var isActive = ((rec.isActive || '1') === '1');
 
-            idInput.value = id;
-            codeDisplay.value = id;
+            if (idInput) idInput.value = id;
+            if (codeDisplay) codeDisplay.value = id;
             if (policyInput) policyInput.value = policy;
             if (userInput) userInput.value = user;
             if (phoneInput) phoneInput.value = phone;
@@ -654,6 +802,36 @@
                 if (credit) parts.push('حد ائتماني: ' + credit);
                 summary.textContent = parts.join(' — ');
             }
+            if (suspendedMsg) suspendedMsg.classList.toggle('d-none', isActive);
+            if (saveBtn) saveBtn.disabled = !isActive;
+        }
+
+        function fillCustomerFromOption(opt) {
+            if (!opt) {
+                fillCustomerFromRecord(null);
+                return;
+            }
+            fillCustomerFromRecord({
+                id: opt.getAttribute('data-id') || '',
+                policy: opt.getAttribute('data-policy') || '',
+                user: opt.getAttribute('data-user') || '',
+                phone: opt.getAttribute('data-phone') || '',
+                address: opt.getAttribute('data-address') || '',
+                credit: opt.getAttribute('data-credit') || '',
+                isActive: (opt.getAttribute('data-is-active') || '1').toString()
+            });
+        }
+
+        /** بحث عن خيار العميل في datalist العملاء — خارج IIFE الأوتوكومبليت ليُستدعى من loadInvoiceByNumber */
+        function findCustomerDatalistOptionById(id) {
+            if (!id) return null;
+            var dl = document.getElementById('customersList');
+            if (!dl || !dl.options) return null;
+            var options = dl.options;
+            for (var i = 0; i < options.length; i++) {
+                if (options[i].getAttribute('data-id') == id) return options[i];
+            }
+            return null;
         }
 
         document.addEventListener('DOMContentLoaded', function () {
@@ -679,6 +857,23 @@
                         if (el.parentNode) el.parentNode.removeChild(el);
                     }, 250);
                 }, ms);
+            }
+
+            /** رسالة نجاح مسح السطر: وسط الشاشة، خلفية خضراء + ✓ لمدة ثانية واحدة */
+            function showLineDeletedSuccessFlash() {
+                var el = document.createElement('div');
+                el.className = 'sr-line-deleted-flash';
+                el.setAttribute('role', 'status');
+                el.innerHTML = '<span class="sr-line-deleted-flash__icon" aria-hidden="true">✓</span><span class="sr-line-deleted-flash__text"></span>';
+                var textEl = el.querySelector('.sr-line-deleted-flash__text');
+                if (textEl) textEl.textContent = 'تم مسح السطر بنجاح';
+                document.body.appendChild(el);
+                setTimeout(function () {
+                    el.style.opacity = '0';
+                    setTimeout(function () {
+                        if (el.parentNode) el.parentNode.removeChild(el);
+                    }, 280);
+                }, 1000);
             }
 
             function syncDeleteSelectedReturnLineButton() {
@@ -763,48 +958,303 @@
                 }
             })();
 
-            var customerInput = document.getElementById('CustomerNameInput');
-            var dataList = document.getElementById('customersList');
+            // =========================================================
+            // أوتوكومبليت العميل — نفس منطق فاتورة المبيعات (قائمة مخصصة + كلمات متعددة + تطبيع)
+            // =========================================================
+            (function () {
+                var custNameInput = document.getElementById('CustomerNameInput');
+                var custDataList = document.getElementById('customersList');
+                if (!custNameInput || !custDataList) return;
 
-            function findOptionByName(name) {
-                if (!name) return null;
-                var options = dataList.options;
-                for (var i = 0; i < options.length; i++) {
-                    if (options[i].value === name) return options[i];
+                var CUSTOMER_LIST_MAX = 80;
+
+                var allCustomers = Array.from(custDataList.options || []).map(function (opt) {
+                    return {
+                        id: (opt.getAttribute('data-id') || '').toString(),
+                        name: (opt.value || '').toString(),
+                        isActive: (opt.getAttribute('data-is-active') || '1').toString(),
+                        phone: (opt.getAttribute('data-phone') || '').toString(),
+                        address: (opt.getAttribute('data-address') || '').toString(),
+                        credit: (opt.getAttribute('data-credit') || '').toString(),
+                        policy: (opt.getAttribute('data-policy') || '').toString(),
+                        user: (opt.getAttribute('data-user') || '').toString()
+                    };
+                });
+
+                function normalizeDigits(s) {
+                    if (!s) return '';
+                    var map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                        '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                    var out = '';
+                    for (var i = 0; i < s.length; i++) {
+                        var c = s[i];
+                        out += map[c] !== undefined ? map[c] : c;
+                    }
+                    return out;
                 }
-                return null;
-            }
+                function normalizeWord(w) {
+                    return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+                }
+                function normalizeText(txt) {
+                    return (txt || '')
+                        .trim()
+                        .toLowerCase()
+                        .split(/\s+/)
+                        .filter(Boolean)
+                        .map(function (w) { return normalizeWord(w); })
+                        .filter(Boolean)
+                        .join(' ')
+                        .replace(/\s+/g, ' ');
+                }
+                function wordMatchesQueryWord(nameWord, queryWord) {
+                    var nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                    var qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                    var nw = nw0.replace(/^[اأإآ]/u, '');
+                    var qw = qw0.replace(/^[اأإآ]/u, '');
+                    if (!qw) return true;
+                    return nw === qw || nw.indexOf(qw) === 0;
+                }
+                function customerNameMatchesSearch(customerName, rawSearch) {
+                    var raw = (rawSearch || '').trim();
+                    if (!raw) return true;
+                    var qWords = raw.split(/\s+/).filter(Boolean);
+                    var nWords = (customerName || '').trim().split(/\s+/).filter(Boolean);
+                    if (qWords.length === 0) return true;
+                    return qWords.every(function (qw) {
+                        return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                    });
+                }
+                function customerSearchRank(name, rawSearch) {
+                    var raw = (rawSearch || '').trim();
+                    var nm = (name || '').trim();
+                    if (!raw) return 50;
+                    if (nm === raw) return 0;
+                    if (nm.indexOf(raw) === 0) return 1;
+                    var rawWords = raw.split(/\s+/).filter(Boolean);
+                    var firstQ = rawWords[0] || '';
+                    var nmWords = nm.split(/\s+/).filter(Boolean);
+                    if (firstQ && nmWords.length) {
+                        if (nmWords[0].indexOf(firstQ) === 0) return 2;
+                        var nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                        var qw0 = normalizeDigits(firstQ.toLowerCase());
+                        var nw = nw0.replace(/^[اأإآ]/u, '');
+                        var qw = qw0.replace(/^[اأإآ]/u, '');
+                        if (qw && (nw === qw || nw.indexOf(qw) === 0)) return 3;
+                    }
+                    return 4;
+                }
+                function findByName(name) {
+                    var raw = (name || '').trim();
+                    var search = normalizeText(raw);
+                    if (!search) return null;
+                    for (var i = 0; i < allCustomers.length; i++) {
+                        if (normalizeText(allCustomers[i].name) === search) return allCustomers[i];
+                    }
+                    for (var j = 0; j < allCustomers.length; j++) {
+                        if ((allCustomers[j].name || '').trim() === raw) return allCustomers[j];
+                    }
+                    return null;
+                }
+                function findByCode(code) {
+                    var search = (code || '').toString().trim();
+                    if (!search) return null;
+                    for (var i = 0; i < allCustomers.length; i++) {
+                        if ((allCustomers[i].id || '').toString() === search) return allCustomers[i];
+                    }
+                    return null;
+                }
+                function getFilteredCustomerOptions(search, max) {
+                    if (!allCustomers || !allCustomers.length) return [];
+                    var limit = max || CUSTOMER_LIST_MAX;
+                    var rawTrim = (search || '').trim();
+                    if (!rawTrim) return allCustomers.slice(0, limit);
+                    var qNorm = normalizeText(rawTrim);
+                    var words = rawTrim.split(/\s+/).filter(Boolean);
+                    var matched = [];
+                    for (var i = 0; i < allCustomers.length; i++) {
+                        var c = allCustomers[i];
+                        var idStr = (c.id || '').toString().trim();
+                        var nameOk = qNorm ? customerNameMatchesSearch(c.name || '', rawTrim) : true;
+                        var idOk = words.length > 0 && words.some(function (w) { return idStr.indexOf(w) !== -1; });
+                        var codeRawOk = idStr && idStr.indexOf(rawTrim) !== -1;
+                        if (nameOk || idOk || codeRawOk) matched.push(c);
+                    }
+                    matched.sort(function (a, b) {
+                        var ra = customerSearchRank(a.name || '', rawTrim);
+                        var rb = customerSearchRank(b.name || '', rawTrim);
+                        if (ra !== rb) return ra - rb;
+                        return (a.name || '').localeCompare(b.name || '', 'ar');
+                    });
+                    return matched.slice(0, limit);
+                }
 
-            function findOptionById(id) {
-                if (!id) return null;
-                var options = dataList.options;
-                for (var i = 0; i < options.length; i++) {
-                    if (options[i].getAttribute('data-id') == id) {
-                        return options[i];
+                var customerDropdownWrap = document.getElementById('srCustomerDropdownWrap');
+                var customerDropdownList = document.getElementById('srCustomerDropdownList');
+                var customerDropdownArrow = document.getElementById('srCustomerDropdownArrow');
+                var customerDropdownHighlightedIndex = -1;
+                var customerDropdownSelectableCustomers = [];
+
+                function positionCustomerDropdownList() {
+                    if (!customerDropdownList || !customerDropdownWrap) return;
+                    if (customerDropdownList.getAttribute('data-open') !== 'true') return;
+                    var r = customerDropdownWrap.getBoundingClientRect();
+                    customerDropdownList.style.width = r.width + 'px';
+                    customerDropdownList.style.top = r.bottom + 'px';
+                    customerDropdownList.style.left = r.left + 'px';
+                }
+                function closeCustomerDropdown() {
+                    if (customerDropdownList) {
+                        customerDropdownList.setAttribute('data-open', 'false');
+                        customerDropdownList.innerHTML = '';
+                    }
+                    customerDropdownHighlightedIndex = -1;
+                    customerDropdownSelectableCustomers = [];
+                }
+                function setCustomerDropdownHighlight(idx) {
+                    if (!customerDropdownList) return;
+                    if (idx < 0 || idx >= customerDropdownSelectableCustomers.length) return;
+                    var children = customerDropdownList.querySelectorAll('.product-dropdown-item');
+                    children.forEach(function (el, i) {
+                        el.classList.toggle('product-dropdown-item-active', i === idx);
+                    });
+                    customerDropdownHighlightedIndex = idx;
+                    try { children[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { }
+                }
+                function openCustomerDropdown() {
+                    if (!customerDropdownList || !customerDropdownWrap || !custNameInput) return;
+                    var searchTermRaw = (custNameInput.value || '').trim();
+                    var list = getFilteredCustomerOptions(searchTermRaw, CUSTOMER_LIST_MAX);
+                    customerDropdownList.innerHTML = '';
+                    customerDropdownSelectableCustomers = [];
+                    var highlightIdx = 0;
+                    var currentVal = (custNameInput.value || '').trim();
+                    if (list.length > 0) {
+                        for (var i = 0; i < list.length; i++) {
+                            if (normalizeText(list[i].name || '').trim() === normalizeText(currentVal)) {
+                                highlightIdx = i;
+                                break;
+                            }
+                        }
+                    }
+                    if (list.length === 0) {
+                        var empty = document.createElement('div');
+                        empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
+                        empty.textContent = searchTermRaw ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + CUSTOMER_LIST_MAX + ' كحد أقصى)');
+                        customerDropdownList.appendChild(empty);
+                        customerDropdownHighlightedIndex = -1;
+                    } else {
+                        list.forEach(function (c, idx) {
+                            var it = document.createElement('div');
+                            it.className = 'product-dropdown-item py-2 px-3' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
+                            it.setAttribute('role', 'option');
+                            it.textContent = (c.name || '').trim();
+                            it.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                fillCustomerFromRecord(c);
+                                custNameInput.value = (c.name || '').trim();
+                                closeCustomerDropdown();
+                            });
+                            customerDropdownList.appendChild(it);
+                            customerDropdownSelectableCustomers.push(c);
+                        });
+                        customerDropdownHighlightedIndex = highlightIdx;
+                    }
+                    customerDropdownList.setAttribute('data-open', 'true');
+                    positionCustomerDropdownList();
+                }
+                function selectHighlightedCustomer(keepOpen) {
+                    if (customerDropdownHighlightedIndex < 0 || customerDropdownHighlightedIndex >= customerDropdownSelectableCustomers.length) return false;
+                    var selected = customerDropdownSelectableCustomers[customerDropdownHighlightedIndex];
+                    if (!selected) return false;
+                    fillCustomerFromRecord(selected);
+                    custNameInput.value = (selected.name || '').trim();
+                    if (!keepOpen) closeCustomerDropdown();
+                    return true;
+                }
+
+                custNameInput.addEventListener('change', function () {
+                    fillCustomerFromRecord(findByName(custNameInput.value));
+                });
+                custNameInput.addEventListener('input', function () { openCustomerDropdown(); });
+                if (customerDropdownWrap && !customerDropdownWrap.dataset.boundSrCustomerDropdownClick) {
+                    customerDropdownWrap.dataset.boundSrCustomerDropdownClick = '1';
+                    customerDropdownWrap.addEventListener('click', function (ev) {
+                        if (ev.target && ev.target.closest('#srCustomerDropdownList')) return;
+                    });
+                }
+                document.body.addEventListener('click', function (ev) {
+                    if (!customerDropdownWrap) return;
+                    if (!customerDropdownWrap.contains(ev.target)) closeCustomerDropdown();
+                });
+                if (customerDropdownArrow) {
+                    customerDropdownArrow.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        if (custNameInput) custNameInput.focus();
+                        openCustomerDropdown();
+                    });
+                }
+                custNameInput.addEventListener('keydown', function (e) {
+                    var isOpen = customerDropdownList && customerDropdownList.getAttribute('data-open') === 'true';
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!isOpen) openCustomerDropdown();
+                        if (isOpen && customerDropdownSelectableCustomers.length > 0) {
+                            var next = Math.min(customerDropdownHighlightedIndex + 1, customerDropdownSelectableCustomers.length - 1);
+                            setCustomerDropdownHighlight(next);
+                        } else if (customerDropdownSelectableCustomers.length > 0) {
+                            setCustomerDropdownHighlight(0);
+                        }
+                        return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (!isOpen) openCustomerDropdown();
+                        if (isOpen && customerDropdownSelectableCustomers.length > 0) {
+                            var prev = Math.max(customerDropdownHighlightedIndex - 1, 0);
+                            setCustomerDropdownHighlight(prev);
+                        } else if (customerDropdownSelectableCustomers.length > 0) {
+                            setCustomerDropdownHighlight(0);
+                        }
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (isOpen && customerDropdownHighlightedIndex >= 0 && customerDropdownSelectableCustomers.length > 0) {
+                            selectHighlightedCustomer(false);
+                            return;
+                        }
+                        fillCustomerFromRecord(findByName(custNameInput.value));
+                    }
+                });
+                custNameInput.addEventListener('blur', function () {
+                    try {
+                        closeCustomerDropdown();
+                        fillCustomerFromRecord(findByName(custNameInput.value));
+                    } catch (ex) { }
+                });
+
+                function findOptionById(id) {
+                    if (!id) return null;
+                    var options = custDataList.options;
+                    for (var i = 0; i < options.length; i++) {
+                        if (options[i].getAttribute('data-id') == id) return options[i];
+                    }
+                    return null;
+                }
+                var initialCustomerId = parseInt('@Model.CustomerId', 10);
+                if (!isNaN(initialCustomerId) && initialCustomerId > 0) {
+                    var opt0 = findOptionById(String(initialCustomerId));
+                    if (opt0) {
+                        custNameInput.value = opt0.value;
+                        fillCustomerFromOption(opt0);
                     }
                 }
-                return null;
-            }
-
-            // عند اختيار اسم عميل من الأوتوكومبليت
-            customerInput.addEventListener('change', function () {
-                var opt = findOptionByName(customerInput.value);
-                fillCustomerFromOption(opt);
-            });
-
-            // تهيئة الشاشة عند الفتح – لو في كود عميل محفوظ في المرتجع
-            var initialCustomerId = '@Model.CustomerId';
-            if (initialCustomerId) {
-                var opt = findOptionById(initialCustomerId);
-                if (opt) {
-                    customerInput.value = opt.value;
-                    fillCustomerFromOption(opt);
-                }
-            }
+            })();
 
             // =========================================================
             // جلب أصناف فاتورة البيع + بيانات العميل عند إدخال رقم الفاتورة (Enter أو تغيير الحقل)
             // =========================================================
+            var srGetInvoiceItemsUrl = '@Url.Action("GetInvoiceItems", "SalesReturns")';
             var invoiceIdInput = document.getElementById('SalesInvoiceIdInput');
             var invoiceIdHidden = document.getElementById('SalesInvoiceId');
             var itemSelect = document.getElementById('InvoiceItemSelect');
@@ -816,6 +1266,428 @@
 
             var invoiceItems = []; // متغير: قائمة أصناف الفاتورة
 
+            var srAllowStandalone = @(allowStandaloneMode ? "true" : "false");
+            function isStandaloneMode() {
+                var ch = document.getElementById('srChkStandalone');
+                return srAllowStandalone === 'true' && ch && ch.checked;
+            }
+
+            // داتاليست + أوتوكومبليت أصناف «مرتجع بدون فاتورة» — نمط فاتورة المبيعات
+            if (srAllowStandalone === 'true') {
+                (function () {
+                    var prodDataList = document.getElementById('srStandaloneProductsList');
+                    if (!prodDataList) return;
+
+                    function refreshSrStandaloneProductsDatalist() {
+                        prodDataList.innerHTML = '';
+                        var whEl = document.getElementById('WarehouseId');
+                        var warehouseId = whEl ? (parseInt(whEl.value || '0', 10) || 0) : 0;
+                        var url = '@Url.Action("GetProductsForReturnDatalist", "SalesReturns")' + '?warehouseId=' + (warehouseId || '');
+                        return fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } })
+                            .then(function (r) { return r.ok ? r.json() : []; })
+                            .then(function (products) {
+                                prodDataList.innerHTML = '';
+                                var ids = [];
+                                (products || []).forEach(function (p) {
+                                    var idStr = (p.id != null ? String(p.id) : '');
+                                    ids.push(idStr);
+                                    var opt = document.createElement('option');
+                                    opt.value = p.name || '';
+                                    opt.setAttribute('data-id', idStr);
+                                    opt.setAttribute('data-code', idStr);
+                                    opt.setAttribute('data-generic', p.genericName || '');
+                                    opt.setAttribute('data-company', p.company || '');
+                                    opt.setAttribute('data-barcode', p.barcode || '');
+                                    var pr = (p.priceRetail != null && p.priceRetail !== undefined) ? p.priceRetail : 0;
+                                    opt.setAttribute('data-price', String(pr));
+                                    opt.setAttribute('data-hasquota', p.hasQuota ? 'true' : 'false');
+                                    opt.setAttribute('data-hasbonus', p.hasBonus ? 'true' : 'false');
+                                    opt.setAttribute('data-bonusgroup', p.bonusGroupName || '');
+                                    prodDataList.appendChild(opt);
+                                });
+                                if (typeof isStandaloneMode === 'function' && !isStandaloneMode()) return;
+                                var hid = document.getElementById('srStandaloneProdId');
+                                var nameInp = document.getElementById('srStandaloneProdNameInput');
+                                var prEl = document.getElementById('srStandalonePriceRetail');
+                                var curId = (hid && hid.value) ? String(hid.value) : '';
+                                if (curId && ids.indexOf(curId) < 0) {
+                                    if (hid) hid.value = '';
+                                    if (nameInp) nameInp.value = '';
+                                    if (prEl) prEl.value = '0';
+                                }
+                            })
+                            .catch(function (e) { console.warn('refreshSrStandaloneProductsDatalist', e); });
+                    }
+                    window.__srRefreshStandaloneProducts = refreshSrStandaloneProductsDatalist;
+
+                    var prodNameInput = document.getElementById('srStandaloneProdNameInput');
+                    var prodHiddenId = document.getElementById('srStandaloneProdId');
+                    var prodPriceEl = document.getElementById('srStandalonePriceRetail');
+                    var productDropdownWrap = document.getElementById('srStandaloneProductDropdownWrap');
+                    var productDropdownList = document.getElementById('srStandaloneProductDropdownList');
+                    var productDropdownArrow = document.getElementById('srStandaloneProductDropdownArrow');
+                    if (!prodNameInput || !productDropdownList || !productDropdownWrap) return;
+
+                    var PRODUCT_LIST_MAX = 15;
+
+                    function normalizeDigits(txt) {
+                        if (!txt) return '';
+                        var map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                            '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                        var out = '';
+                        for (var i = 0; i < txt.length; i++) {
+                            var c = txt[i];
+                            out += map[c] !== undefined ? map[c] : c;
+                        }
+                        return out;
+                    }
+                    function normalizeWord(w) {
+                        return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+                    }
+                    function normalizeText(txt) {
+                        return (txt || '')
+                            .trim()
+                            .toLowerCase()
+                            .split(/\s+/)
+                            .filter(Boolean)
+                            .map(function (w) { return normalizeWord(w); })
+                            .filter(Boolean)
+                            .join(' ')
+                            .replace(/\s+/g, ' ');
+                    }
+                    function wordMatchesQueryWord(nameWord, queryWord) {
+                        var nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                        var qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                        var nw = nw0.replace(/^[اأإآ]/u, '');
+                        var qw = qw0.replace(/^[اأإآ]/u, '');
+                        if (!qw) return true;
+                        return nw === qw || nw.indexOf(qw) === 0;
+                    }
+                    function productNameMatchesSearch(productName, rawSearch) {
+                        var raw = (rawSearch || '').trim();
+                        if (!raw) return true;
+                        var qWords = raw.split(/\s+/).filter(Boolean);
+                        var nWords = (productName || '').trim().split(/\s+/).filter(Boolean);
+                        if (qWords.length === 0) return true;
+                        return qWords.every(function (qw) {
+                            return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                        });
+                    }
+                    function productSearchRank(name, rawSearch) {
+                        var raw = (rawSearch || '').trim();
+                        var nm = (name || '').trim();
+                        if (!raw) return 50;
+                        if (nm === raw) return 0;
+                        if (nm.indexOf(raw) === 0) return 1;
+                        var rawWords = raw.split(/\s+/).filter(Boolean);
+                        var firstQ = rawWords[0] || '';
+                        var nmWords = nm.split(/\s+/).filter(Boolean);
+                        if (firstQ && nmWords.length) {
+                            if (nmWords[0].indexOf(firstQ) === 0) return 2;
+                            var nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                            var qw0 = normalizeDigits(firstQ.toLowerCase());
+                            var nw = nw0.replace(/^[اأإآ]/u, '');
+                            var qw = qw0.replace(/^[اأإآ]/u, '');
+                            if (qw && (nw === qw || nw.indexOf(qw) === 0)) return 3;
+                        }
+                        return 4;
+                    }
+                    function findProductByName(name) {
+                        var raw = (name || '').trim();
+                        var search = normalizeText(raw);
+                        if (!search) return null;
+                        var opts = prodDataList.options;
+                        for (var i = 0; i < opts.length; i++) {
+                            if (normalizeText(opts[i].value) === search) return opts[i];
+                        }
+                        for (var j = 0; j < opts.length; j++) {
+                            if ((opts[j].value || '').trim() === raw) return opts[j];
+                        }
+                        return null;
+                    }
+                    function findProductByCode(code) {
+                        var search = (code || '').toString().trim();
+                        if (!search) return null;
+                        var opts = prodDataList.options;
+                        for (var i = 0; i < opts.length; i++) {
+                            var idAttr = (opts[i].getAttribute('data-id') || '').toString();
+                            var codeAttr = (opts[i].getAttribute('data-code') || '').toString();
+                            if (idAttr === search || codeAttr === search) return opts[i];
+                        }
+                        return null;
+                    }
+                    function getProductDropdownFilterQuery(rawTrim) {
+                        var raw = (rawTrim || '').trim();
+                        if (!raw || !prodDataList || !prodDataList.options) return raw;
+                        var nRaw = normalizeText(raw);
+                        var canonical = '';
+                        var opts = prodDataList.options;
+                        for (var i = 0; i < opts.length; i++) {
+                            var v = (opts[i].value || '').trim();
+                            if (!v) continue;
+                            if (v === raw) { canonical = v; break; }
+                            if (nRaw && normalizeText(v) === nRaw) { canonical = v; break; }
+                        }
+                        if (!canonical) return raw;
+                        var parts = canonical.split(/\s+/).filter(Boolean);
+                        return parts[0] || raw;
+                    }
+                    function getFilteredProductOptions(search, max, pinDisplayName) {
+                        if (!prodDataList || !prodDataList.options) return [];
+                        var limit = max || PRODUCT_LIST_MAX;
+                        var opts = prodDataList.options;
+                        var rawTrim = (search || '').trim();
+                        if (!rawTrim) {
+                            var out0 = [];
+                            for (var a = 0; a < opts.length && out0.length < limit; a++) out0.push(opts[a]);
+                            return out0;
+                        }
+                        var qNorm = normalizeText(rawTrim);
+                        var words = rawTrim.split(/\s+/).filter(Boolean);
+                        var matched = [];
+                        for (var i = 0; i < opts.length; i++) {
+                            var opt = opts[i];
+                            var nameVal = (opt.value || '').trim();
+                            var code = (opt.getAttribute('data-code') || '').toString().trim();
+                            var idAttr = (opt.getAttribute('data-id') || '').toString().trim();
+                            var barcode = normalizeDigits((opt.getAttribute('data-barcode') || '').toString().trim());
+                            var codeOrId = code || idAttr;
+                            var nameOk = qNorm ? productNameMatchesSearch(nameVal, rawTrim) : true;
+                            var idOk = words.length > 0 && words.some(function (w) {
+                                var wn = normalizeDigits(w);
+                                return codeOrId.indexOf(wn) !== -1 || barcode.indexOf(wn) !== -1;
+                            });
+                            var codeRawOk = codeOrId && codeOrId.indexOf(rawTrim) !== -1;
+                            var barRaw = barcode && (barcode.indexOf(normalizeDigits(rawTrim)) !== -1);
+                            if (nameOk || idOk || codeRawOk || barRaw) matched.push(opt);
+                        }
+                        matched.sort(function (a, b) {
+                            var ra = productSearchRank((a.value || '').trim(), rawTrim);
+                            var rb = productSearchRank((b.value || '').trim(), rawTrim);
+                            if (ra !== rb) return ra - rb;
+                            return (a.value || '').localeCompare(b.value || '', 'ar');
+                        });
+                        var result = matched.slice(0, limit);
+                        var pinRaw = (pinDisplayName || '').trim();
+                        if (pinRaw) {
+                            var nPin = normalizeText(pinRaw);
+                            var pinOpt = null;
+                            for (var j = 0; j < opts.length; j++) {
+                                var v2 = (opts[j].value || '').trim();
+                                if (v2 === pinRaw || (nPin && normalizeText(v2) === nPin)) { pinOpt = opts[j]; break; }
+                            }
+                            if (pinOpt && matched.indexOf(pinOpt) >= 0) {
+                                var inResult = result.some(function (o) { return o === pinOpt; });
+                                if (!inResult) {
+                                    result = matched.slice(0, limit - 1);
+                                    result.push(pinOpt);
+                                }
+                            }
+                        }
+                        return result;
+                    }
+
+                    function fillStandaloneProductFromOption(opt) {
+                        if (!opt) {
+                            if (prodHiddenId) prodHiddenId.value = '';
+                            prodNameInput.value = '';
+                            if (prodPriceEl) prodPriceEl.value = '0';
+                            return;
+                        }
+                        var id = (opt.getAttribute('data-id') || '').toString();
+                        var price = opt.getAttribute('data-price');
+                        if (prodHiddenId) prodHiddenId.value = id;
+                        prodNameInput.value = (opt.value || '').trim();
+                        if (prodPriceEl) {
+                            var n = parseFloat((price || '0').toString().replace(',', '.'));
+                            prodPriceEl.value = (isNaN(n) ? 0 : n).toFixed(2);
+                        }
+                    }
+
+                    var productDropdownHighlightedIndex = -1;
+                    var productDropdownSelectableItems = [];
+
+                    function positionStandaloneProductDropdownList() {
+                        if (!productDropdownList || !productDropdownWrap) return;
+                        if (productDropdownList.getAttribute('data-open') !== 'true') return;
+                        var r = productDropdownWrap.getBoundingClientRect();
+                        productDropdownList.style.width = r.width + 'px';
+                        productDropdownList.style.top = r.bottom + 'px';
+                        productDropdownList.style.left = r.left + 'px';
+                    }
+                    function closeStandaloneProductDropdown() {
+                        if (productDropdownList) {
+                            productDropdownList.setAttribute('data-open', 'false');
+                            productDropdownList.innerHTML = '';
+                        }
+                        productDropdownHighlightedIndex = -1;
+                        productDropdownSelectableItems = [];
+                    }
+                    function setStandaloneProductDropdownHighlight(idx) {
+                        if (idx < 0 || idx >= productDropdownSelectableItems.length) return;
+                        productDropdownSelectableItems.forEach(function (el, i) {
+                            el.classList.toggle('product-dropdown-item-active', i === idx);
+                        });
+                        productDropdownHighlightedIndex = idx;
+                        try { productDropdownSelectableItems[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e2) { }
+                    }
+                    function openStandaloneProductDropdown() {
+                        if (!productDropdownList || !productDropdownWrap || !prodNameInput) return;
+                        var searchTerm = (prodNameInput.value || '').trim();
+                        var filterQuery = getProductDropdownFilterQuery(searchTerm);
+                        var list = getFilteredProductOptions(filterQuery, PRODUCT_LIST_MAX, searchTerm);
+                        productDropdownList.innerHTML = '';
+                        productDropdownSelectableItems = [];
+                        var currentVal = (prodNameInput.value || '').trim();
+                        var highlightIdx = 0;
+                        if (list.length > 0) {
+                            for (var h = 0; h < list.length; h++) {
+                                if (normalizeText((list[h].value || '').trim()) === normalizeText(currentVal)) { highlightIdx = h; break; }
+                            }
+                        }
+                        if (list.length === 0) {
+                            var empty = document.createElement('div');
+                            empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
+                            empty.textContent = prodNameInput.value ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + PRODUCT_LIST_MAX + ' كحد أقصى)');
+                            productDropdownList.appendChild(empty);
+                        } else {
+                            list.forEach(function (opt, idx) {
+                                var id = (opt.getAttribute('data-id') || '').toString();
+                                var name = (opt.value || '').trim();
+                                var it = document.createElement('div');
+                                it.className = 'product-dropdown-item py-2 px-3' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
+                                it.setAttribute('role', 'option');
+                                it.setAttribute('data-id', id);
+                                it.textContent = name;
+                                it.addEventListener('click', function (e) {
+                                    e.preventDefault();
+                                    var o = findProductByCode(id);
+                                    if (o) fillStandaloneProductFromOption(o);
+                                    closeStandaloneProductDropdown();
+                                    var qEl = document.getElementById('srStandaloneQtyInput');
+                                    if (qEl) qEl.focus();
+                                });
+                                productDropdownList.appendChild(it);
+                                productDropdownSelectableItems.push(it);
+                            });
+                            productDropdownHighlightedIndex = highlightIdx;
+                        }
+                        productDropdownList.setAttribute('data-open', 'true');
+                        positionStandaloneProductDropdownList();
+                    }
+                    function selectHighlightedStandaloneProduct() {
+                        if (productDropdownHighlightedIndex < 0 || productDropdownHighlightedIndex >= productDropdownSelectableItems.length) return false;
+                        var el = productDropdownSelectableItems[productDropdownHighlightedIndex];
+                        var id = el.getAttribute('data-id');
+                        var o = findProductByCode(id);
+                        if (o) fillStandaloneProductFromOption(o);
+                        closeStandaloneProductDropdown();
+                        var qEl2 = document.getElementById('srStandaloneQtyInput');
+                        if (qEl2) qEl2.focus();
+                        return true;
+                    }
+
+                    prodNameInput.addEventListener('input', function () { openStandaloneProductDropdown(); });
+                    if (productDropdownWrap && !productDropdownWrap.dataset.boundSrProdDropdownClick) {
+                        productDropdownWrap.dataset.boundSrProdDropdownClick = '1';
+                        productDropdownWrap.addEventListener('click', function (ev) {
+                            if (ev.target && ev.target.closest('#srStandaloneProductDropdownList')) return;
+                        });
+                    }
+                    document.body.addEventListener('click', function (ev) {
+                        if (!productDropdownWrap) return;
+                        if (!productDropdownWrap.contains(ev.target)) closeStandaloneProductDropdown();
+                    });
+                    if (productDropdownArrow) {
+                        productDropdownArrow.addEventListener('click', function (ev) {
+                            ev.preventDefault();
+                            prodNameInput.focus();
+                            openStandaloneProductDropdown();
+                        });
+                    }
+                    prodNameInput.addEventListener('keydown', function (e) {
+                        var isOpen = productDropdownList && productDropdownList.getAttribute('data-open') === 'true';
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            if (!isOpen) openStandaloneProductDropdown();
+                            if (productDropdownSelectableItems.length > 0) {
+                                var next = Math.min(productDropdownHighlightedIndex + 1, productDropdownSelectableItems.length - 1);
+                                setStandaloneProductDropdownHighlight(next < 0 ? 0 : next);
+                            }
+                            return;
+                        }
+                        if (e.key === 'ArrowUp') {
+                            e.preventDefault();
+                            if (!isOpen) openStandaloneProductDropdown();
+                            if (productDropdownSelectableItems.length > 0) {
+                                var prev = Math.max(productDropdownHighlightedIndex - 1, 0);
+                                setStandaloneProductDropdownHighlight(prev);
+                            }
+                            return;
+                        }
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (isOpen && productDropdownHighlightedIndex >= 0 && productDropdownSelectableItems.length > 0) {
+                                selectHighlightedStandaloneProduct();
+                                return;
+                            }
+                            var fo = findProductByName(prodNameInput.value);
+                            fillStandaloneProductFromOption(fo);
+                        }
+                    });
+                    prodNameInput.addEventListener('blur', function () {
+                        setTimeout(function () {
+                            try {
+                                closeStandaloneProductDropdown();
+                                var fo2 = findProductByName(prodNameInput.value);
+                                fillStandaloneProductFromOption(fo2);
+                            } catch (ex2) { }
+                        }, 150);
+                    });
+
+                    document.body.addEventListener('change', function (ev) {
+                        var t = ev.target;
+                        if (t && t.id === 'WarehouseId' && typeof window.__srRefreshStandaloneProducts === 'function') {
+                            window.__srRefreshStandaloneProducts();
+                        }
+                    });
+
+                    refreshSrStandaloneProductsDatalist();
+                })();
+            }
+
+            function applySrModeUi() {
+                if (srAllowStandalone !== 'true') return;
+                var st = isStandaloneMode();
+                var invPanel = document.getElementById('srInvoiceAddPanel');
+                var stPanel = document.getElementById('srStandaloneAddPanel');
+                var invInput = document.getElementById('SalesInvoiceIdInput');
+                var invHid = document.getElementById('SalesInvoiceId');
+                if (invPanel) invPanel.classList.toggle('d-none', st);
+                if (stPanel) stPanel.classList.toggle('d-none', !st);
+                if (invInput) {
+                    invInput.disabled = !!st;
+                    if (st) {
+                        invInput.value = '';
+                        if (invHid) invHid.value = '';
+                    }
+                }
+                if (st && itemSelect) {
+                    itemSelect.innerHTML = '<option value="">-- اختر صنف من الفاتورة --</option>';
+                    invoiceItems = [];
+                }
+                if (st && returnQtyInput) returnQtyInput.removeAttribute('max');
+                if (st && typeof window.__srRefreshStandaloneProducts === 'function') {
+                    window.__srRefreshStandaloneProducts();
+                }
+            }
+
+            var chkStandalone = document.getElementById('srChkStandalone');
+            if (chkStandalone) {
+                chkStandalone.addEventListener('change', function () { applySrModeUi(); });
+                applySrModeUi();
+            }
+
             function invoiceItemDisplayCode(item) {
                 if (!item) return '';
                 var ext = item.externalCode != null ? String(item.externalCode).trim() : '';
@@ -824,6 +1696,10 @@
             }
 
             async function loadInvoiceByNumber() {
+                if (isStandaloneMode()) {
+                    return false;
+                }
+
                 var invoiceId = parseInt(invoiceIdInput.value || '0', 10);
 
                 if (invoiceId <= 0) {
@@ -836,34 +1712,64 @@
                 }
 
                 try {
-                    var response = await fetch(`/SalesReturns/GetInvoiceItems?invoiceId=${invoiceId}`);
-                    var data = await response.json();
+                    var url = srGetInvoiceItemsUrl + '?invoiceId=' + encodeURIComponent(String(invoiceId));
+                    var response = await fetch(url, { method: 'GET', credentials: 'same-origin', headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+                    var ct = (response.headers.get('content-type') || '').toLowerCase();
+                    var raw = await response.text();
+                    var data = null;
+                    try {
+                        data = raw ? JSON.parse(raw) : null;
+                    } catch (parseErr) {
+                        console.error('GetInvoiceItems: non-JSON response', parseErr, raw ? raw.substring(0, 200) : '');
+                        alert('تعذر قراءة بيانات الفاتورة (الاستجابة ليست بصيغة متوقعة). تأكد من الصلاحيات أو حدّث الصفحة.');
+                        return false;
+                    }
 
-                    if (!data.ok) {
-                        alert(data.message || 'حدث خطأ في جلب بيانات الفاتورة.');
+                    // الخادم يُرجع PascalCase (Program.cs: PropertyNamingPolicy = null)
+                    var apiOk = data && (data.ok === true || data.Ok === true);
+                    var apiMsg = (data && (data.message || data.Message)) ? String(data.message || data.Message) : '';
+
+                    if (!response.ok || !data) {
+                        alert(apiMsg || ('طلب الفاتورة فشل (' + response.status + ').'));
+                        return false;
+                    }
+
+                    if (!apiOk) {
+                        alert(apiMsg || 'حدث خطأ في جلب بيانات الفاتورة.');
                         return false;
                     }
 
                     // حفظ رقم الفاتورة
                     invoiceIdHidden.value = invoiceId.toString();
 
+                    var custId = data.customerId != null ? data.customerId : data.CustomerId;
+                    var whId = data.warehouseId != null ? data.warehouseId : data.WarehouseId;
+                    var itemsPayload = data.items != null ? data.items : (data.Items != null ? data.Items : []);
+
                     // تحديث بيانات العميل بالكامل حسب الفاتورة (الاسم، الهاتف، العنوان، إلخ)
-                    if (data.customerId) {
-                        document.getElementById('CustomerId').value = data.customerId;
-                        document.getElementById('CustomerCodeDisplay').value = data.customerId;
-                        var opt = findOptionById(data.customerId.toString());
-                        if (opt) {
-                            customerInput.value = opt.value;
+                    if (custId) {
+                        var idEl = document.getElementById('CustomerId');
+                        var codeEl = document.getElementById('CustomerCodeDisplay');
+                        if (idEl) idEl.value = custId;
+                        if (codeEl) codeEl.value = custId;
+                        var opt = findCustomerDatalistOptionById(String(custId));
+                        var nameInput = document.getElementById('CustomerNameInput');
+                        if (opt && nameInput) {
+                            nameInput.value = opt.value;
                             fillCustomerFromOption(opt);
                         }
                     }
 
-                    if (data.warehouseId) {
-                        document.getElementById('WarehouseId').value = data.warehouseId;
+                    if (whId) {
+                        document.getElementById('WarehouseId').value = whId;
                     }
 
                     // تحديث قائمة الأصناف
-                    invoiceItems = data.items || [];
+                    invoiceItems = itemsPayload || [];
+                    if (!itemSelect) {
+                        console.error('loadInvoiceByNumber: InvoiceItemSelect غير موجود');
+                        return false;
+                    }
                     itemSelect.innerHTML = '<option value="">-- اختر صنف من الفاتورة --</option>';
 
                     invoiceItems.forEach(function(item, index) {
@@ -1012,9 +1918,7 @@
                         tbody.appendChild(tr);
                     });
                 }
-                var bid = document.getElementById('TotalBeforeDiscountBadge');
-                if (bid && totals.totalBeforeDiscount != null) bid.textContent = Number(totals.totalBeforeDiscount).toFixed(2);
-                bid = document.getElementById('TotalAfterDiscountBeforeTaxBadge');
+                var bid = document.getElementById('TotalBeforeTaxBadge');
                 if (bid && totals.totalAfterDiscountBeforeTax != null) bid.textContent = Number(totals.totalAfterDiscountBeforeTax).toFixed(2);
                 bid = document.getElementById('TaxAmountBadge');
                 if (bid && totals.taxAmount != null) bid.textContent = Number(totals.taxAmount).toFixed(2);
@@ -1023,8 +1927,11 @@
                 syncDeleteSelectedReturnLineButton();
             }
 
-            // عند إضافة سطر للمرتجع
-            btnAddReturnLine.addEventListener('click', async function () {
+            // عند إضافة سطر للمرتجع (من فاتورة)
+            if (btnAddReturnLine) btnAddReturnLine.addEventListener('click', async function () {
+                if (isStandaloneMode()) {
+                    return;
+                }
                 var selectedIndex = parseInt(itemSelect.value || '-1', 10);
                 var returnQty = parseInt(returnQtyInput.value || '0', 10);
                 var returnId = parseInt(document.getElementById('SRId').value || '0', 10);
@@ -1084,6 +1991,72 @@
                     btnAddReturnLine.disabled = false;
                 }
             });
+
+            var btnAddStandaloneLine = document.getElementById('btnAddStandaloneLine');
+
+            if (btnAddStandaloneLine) {
+                btnAddStandaloneLine.addEventListener('click', async function () {
+                    if (!isStandaloneMode()) return;
+                    var prodId = parseInt(document.getElementById('srStandaloneProdId').value || '0', 10);
+                    var returnQty = parseInt(document.getElementById('srStandaloneQtyInput').value || '0', 10);
+                    var returnId = parseInt(document.getElementById('SRId').value || '0', 10);
+                    var priceRetail = parseFloat(document.getElementById('srStandalonePriceRetail').value || '0') || 0;
+                    var disc1 = parseFloat(document.getElementById('srStandaloneDisc1').value || '0') || 0;
+                    if (disc1 < 0) disc1 = 0;
+                    if (disc1 > 100) disc1 = 100;
+                    var batchNo = (document.getElementById('srStandaloneBatchInput').value || '').trim();
+                    var expText = (document.getElementById('srStandaloneExpiryInput').value || '').trim();
+
+                    if (prodId <= 0) {
+                        alert('اختر صنفاً من القائمة (اسم الصنف) أولاً.');
+                        return;
+                    }
+                    if (returnQty <= 0) {
+                        alert('الكمية يجب أن تكون أكبر من صفر.');
+                        return;
+                    }
+                    if (returnId <= 0) {
+                        alert('يجب حفظ المرتجع أولاً قبل إضافة الأصناف.');
+                        return;
+                    }
+
+                    var dto = {
+                        SRId: returnId,
+                        ProdId: prodId,
+                        Qty: returnQty,
+                        BatchNo: batchNo || null,
+                        ExpiryText: expText || null,
+                        PriceRetail: priceRetail,
+                        Disc1Percent: disc1,
+                        SalesInvoiceId: null,
+                        SalesInvoiceLineNo: null
+                    };
+                    btnAddStandaloneLine.disabled = true;
+                    try {
+                        var res = await fetch('@Url.Action("AddLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(dto) });
+                        var txt = await res.text();
+                        var data = null;
+                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                        if (!res.ok || !data || !data.ok) {
+                            alert((data && data.message) ? data.message : 'فشل إضافة السطر.');
+                            return;
+                        }
+                        refreshReturnLinesAndTotals(data);
+                        document.getElementById('srStandaloneProdId').value = '';
+                        var sn = document.getElementById('srStandaloneProdNameInput');
+                        if (sn) sn.value = '';
+                        document.getElementById('srStandaloneQtyInput').value = '';
+                        document.getElementById('srStandaloneBatchInput').value = '';
+                        document.getElementById('srStandaloneExpiryInput').value = '';
+                        if (sn) sn.focus();
+                    } catch (e) {
+                        console.error(e);
+                        alert('حدث خطأ أثناء إضافة السطر.');
+                    } finally {
+                        btnAddStandaloneLine.disabled = false;
+                    }
+                });
+            }
 
             // تهيئة رقم الفاتورة إذا كان موجوداً
             var initialInvoiceId = '@(Model.SalesInvoiceId?.ToString() ?? "")';
@@ -1147,11 +2120,16 @@
                         if (statusEl && data.status !== undefined) {
                             statusEl.value = getReturnStatusDisplay(data.status);
                         }
-                        // مثل فاتورة المبيعات: بدون رسالة تنبيه، فوكس على حقل الصنف مباشرة
-                        var prodSelect = document.getElementById('InvoiceItemSelect');
-                        if (prodSelect) {
-                            prodSelect.focus();
-                            prodSelect.click();
+                        // فوكس على إدخال الأصناف حسب الوضع
+                        if (typeof isStandaloneMode === 'function' && isStandaloneMode()) {
+                            var se = document.getElementById('srStandaloneProdNameInput');
+                            if (se) se.focus();
+                        } else {
+                            var prodSelect = document.getElementById('InvoiceItemSelect');
+                            if (prodSelect) {
+                                prodSelect.focus();
+                                prodSelect.click();
+                            }
                         }
                     } catch (err) {
                         console.error(err);
@@ -1174,6 +2152,36 @@
             }
 
             var btnDeleteSelectedLine = document.getElementById('btnDeleteSelectedReturnLine');
+
+            async function executeRemoveReturnLine(srId, lineNo) {
+                var delBtn = document.getElementById('btnDeleteSelectedReturnLine');
+                if (delBtn) delBtn.disabled = true;
+                try {
+                    var res = await fetch('@Url.Action("RemoveLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ SRId: srId, LineNo: lineNo }) });
+                    var txt = await res.text();
+                    var data = null;
+                    if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
+                    if (!res.ok || !data || !data.ok) {
+                        alert((data && data.message) ? data.message : 'فشل مسح السطر.');
+                        return;
+                    }
+                    refreshReturnLinesAndTotals(data);
+                    showLineDeletedSuccessFlash();
+                    // إعادة جلب أصناف الفاتورة من الخادم حتى تُحدَّث alreadyReturned / المتبقي في الواجهة
+                    try {
+                        if (typeof loadInvoiceByNumber === 'function' && typeof isStandaloneMode === 'function' && !isStandaloneMode()) {
+                            await loadInvoiceByNumber();
+                        }
+                    } catch (reSyncEx) { console.warn(reSyncEx); }
+                } catch (e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء مسح السطر.');
+                } finally {
+                    syncDeleteSelectedReturnLineButton();
+                }
+            }
+
+            // تأكيد المسح: نفس ERP.showConfirmModal المستخدم في فاتورة المبيعات (erp-ui-feedback.js)
             if (btnDeleteSelectedLine) {
                 btnDeleteSelectedLine.addEventListener('click', async function () {
                     if (btnDeleteSelectedLine.disabled) return;
@@ -1189,19 +2197,20 @@
                         alert('المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً.');
                         return;
                     }
-                    if (!confirm('هل تريد مسح هذا السطر؟ (مسح سطر المرتجع يقلّل المخزون — عكس البيع)')) return;
-                    btnDeleteSelectedLine.disabled = true;
-                    try {
-                        var res = await fetch('@Url.Action("RemoveLineJson", "SalesReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ SRId: srId, LineNo: lineNo }) });
-                        var txt = await res.text();
-                        var data = null;
-                        if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
-                        if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح السطر.'); return; }
-                        refreshReturnLinesAndTotals(data);
-                    } catch (e) { console.error(e); alert('حدث خطأ أثناء مسح السطر.'); }
-                    finally {
-                        syncDeleteSelectedReturnLineButton();
+                    var okDelete = false;
+                    var msg = 'هل تريد مسح السطر رقم (' + lineNo + ')؟\n\nمسح سطر المرتجع يقلّل المخزون — عكس البيع';
+                    if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                        okDelete = await ERP.showConfirmModal({
+                            title: 'مسح سطر من المرتجع',
+                            message: msg,
+                            confirmText: 'مسح',
+                            cancelText: 'إلغاء'
+                        });
+                    } else {
+                        okDelete = confirm(msg.replace(/\n\n/g, ' '));
                     }
+                    if (!okDelete) return;
+                    await executeRemoveReturnLine(srId, lineNo);
                 });
             }
 
@@ -1224,6 +2233,11 @@
                         if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
                         if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح الأصناف.'); return; }
                         refreshReturnLinesAndTotals(data);
+                        try {
+                            if (typeof loadInvoiceByNumber === 'function' && typeof isStandaloneMode === 'function' && !isStandaloneMode()) {
+                                await loadInvoiceByNumber();
+                            }
+                        } catch (reSyncEx) { console.warn(reSyncEx); }
                     } catch (e) { console.error(e); alert('حدث خطأ.'); }
                     finally { btnClear.disabled = false; }
                 });

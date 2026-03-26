@@ -362,7 +362,7 @@ namespace ERP.Controllers
             {
                 // إنشاء ملف Excel في الذاكرة باستخدام ClosedXML
                 using var workbook = new XLWorkbook();                 // متغير: مصنف Excel
-                var worksheet = workbook.Worksheets.Add("Policies");   // متغير: شيت باسم Policies
+                var worksheet = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("سياسات العملاء"));
 
                 int row = 1; // متغير: رقم الصف الحالي
 
@@ -401,7 +401,7 @@ namespace ERP.Controllers
                 workbook.SaveAs(stream);
                 stream.Position = 0;
 
-                var fileName = $"Policies_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+                var fileName = ExcelExportNaming.ArabicTimestampedFileName("سياسات العملاء", ".xlsx");
                 const string contentType =
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
@@ -412,8 +412,7 @@ namespace ERP.Controllers
                 // 4) حالة CSV (لو المستخدم اختار CSV من الواجهة)
                 var sb = new StringBuilder();   // متغير: يبني نص ملف CSV
 
-                // عناوين الأعمدة بالإنجليزي عشان تتفتح كويس في Excel
-                sb.AppendLine("PolicyId,Name,Description,IsActive,DefaultProfitPercent,CreatedAt,UpdatedAt");
+                sb.AppendLine("كود السياسة,اسم السياسة,الوصف,مفعّلة؟,نسبة الربح الافتراضية %,تاريخ الإنشاء,آخر تعديل");
 
                 foreach (var p in list)
                 {
@@ -428,15 +427,14 @@ namespace ERP.Controllers
                         $"{p.PolicyId}," +
                         $"\"{name}\"," +
                         $"\"{desc}\"," +
-                        $"{(p.IsActive ? 1 : 0)}," +
+                        $"\"{(p.IsActive ? "مفعّلة" : "موقوفة")}\"," +
                         $"{p.DefaultProfitPercent}," +
                         $"{created}," +
                         $"{updated}");
                 }
 
-                byte[] bytes = Encoding.UTF8.GetBytes(sb.ToString());   // متغير: محتوى الملف كـ بايتات
-                string timeStamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-                string fileName = $"Policies_{timeStamp}.csv";
+                byte[] bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
+                string fileName = ExcelExportNaming.ArabicTimestampedFileName("سياسات العملاء", ".csv");
 
                 return File(bytes, "text/csv", fileName);
             }
