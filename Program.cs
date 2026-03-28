@@ -7,6 +7,7 @@ using ERP.Seed;
 using ERP.Seeders;
 using ERP.Infrastructure;           // IUserActivityLogger, UserActivityLogger, DecimalModelBinderProvider
 using ERP.Infrastructure.TechnicalLogging;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;            // سياسة التوثيق
 using Microsoft.AspNetCore.Mvc.Authorization;        // AuthorizeFilter العام
@@ -73,6 +74,14 @@ namespace ERP
 
             // متغير: إتاحة HttpContext داخل الخدمات والـ DbContext
             builder.Services.AddHttpContextAccessor();
+
+            // كاش في الذاكرة (IMemoryCache) — خدمات القراءة شبه الثابتة فقط؛ لا يُستخدم للفواتير/المخزون الحي
+            builder.Services.AddMemoryCache();
+
+            // خدمات كاش مستقلة (Scoped مع DbContext)
+            builder.Services.AddScoped<IProductCacheService, ProductCacheService>();
+            builder.Services.AddScoped<ICustomerCacheService, CustomerCacheService>();
+            builder.Services.AddScoped<ILookupCacheService, LookupCacheService>();
 
             // متغير: تسجيل خدمة حساب إجماليات المستندات (الفواتير)
             builder.Services.AddScoped<DocumentTotalsService>();

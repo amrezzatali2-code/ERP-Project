@@ -712,17 +712,36 @@
             const bulkForm          = document.getElementById("bulkDeleteForm");
             const selectedInput     = document.getElementById("selectedIdsInput");
 
-            btnDeleteSelected?.addEventListener("click", function () {
+            btnDeleteSelected?.addEventListener("click", async function () {
                 const ids = Array.from(rowsChk())
                     .filter(cb => cb.checked)
                     .map(cb => cb.value);
 
                 if (ids.length === 0) {
-                    alert("من فضلك اختر على الأقل فاتورة واحدة للحذف.");
+                    if (typeof ERP !== "undefined" && ERP.showAlertModal) {
+                        await ERP.showAlertModal({
+                            title: "حذف فواتير",
+                            message: "من فضلك اختر على الأقل فاتورة واحدة للحذف.",
+                            okText: "حسناً"
+                        });
+                    } else {
+                        alert("من فضلك اختر على الأقل فاتورة واحدة للحذف.");
+                    }
                     return;
                 }
 
-                if (!confirm("هل أنت متأكد من حذف الفواتير المحددة؟ سيتم حذف السطور التابعة لها أيضاً.")) return;
+                let ok = true;
+                if (typeof ERP !== "undefined" && ERP.showConfirmModal) {
+                    ok = await ERP.showConfirmModal({
+                        title: "حذف فواتير المبيعات",
+                        message: "هل أنت متأكد من حذف الفواتير المحددة؟ سيتم حذف السطور التابعة لها أيضاً.",
+                        confirmText: "حذف",
+                        cancelText: "إلغاء"
+                    });
+                } else {
+                    ok = confirm("هل أنت متأكد من حذف الفواتير المحددة؟ سيتم حذف السطور التابعة لها أيضاً.");
+                }
+                if (!ok) return;
 
                 selectedInput.value = ids.join(",");
                 bulkForm.submit();
@@ -731,8 +750,19 @@
             const btnDeleteAll  = document.getElementById("btnDeleteAll");
             const deleteAllForm = document.getElementById("deleteAllForm");
 
-            btnDeleteAll?.addEventListener("click", function () {
-                if (!confirm("تحذير: سيتم حذف جميع فواتير المبيعات وسطورها. هل أنت متأكد؟")) return;
+            btnDeleteAll?.addEventListener("click", async function () {
+                let ok = true;
+                if (typeof ERP !== "undefined" && ERP.showConfirmModal) {
+                    ok = await ERP.showConfirmModal({
+                        title: "حذف كل فواتير المبيعات",
+                        message: "تحذير: سيتم حذف جميع فواتير المبيعات وسطورها. هل أنت متأكد؟",
+                        confirmText: "حذف الكل",
+                        cancelText: "إلغاء"
+                    });
+                } else {
+                    ok = confirm("تحذير: سيتم حذف جميع فواتير المبيعات وسطورها. هل أنت متأكد؟");
+                }
+                if (!ok) return;
                 deleteAllForm.submit();
             });
 

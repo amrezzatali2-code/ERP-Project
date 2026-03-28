@@ -23,8 +23,6 @@
 
     int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
     int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
-    int totalUnfiltered = (int)(ViewBag.TotalProductsUnfiltered ?? 0);
-
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
     int next = Math.Min(last, page + 1);
@@ -310,7 +308,7 @@
                 </div>
             </div>
 
-            @* --- القسم الثالث: أزرار التحكم --- *@
+            @* --- القسم الثالث: أزرار التحكم (نفس هيكل قائمة العملاء: صف واحد مع flex-wrap) --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
@@ -327,6 +325,14 @@
                                 <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
                             </ul>
                         </div>
+                        @if (ViewBag.CanEdit == true)
+                        {
+                            <button type="button" id="btnShowProduct" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض الصنف">عرض</button>
+                        }
+                        @if (ViewBag.CanShow == true)
+                        {
+                            <button type="button" id="btnProductMovement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حركة الصنف">حركة الصنف</button>
+                        }
                         <form method="get" asp-action="Export" asp-controller="Products" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -341,7 +347,6 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_productGroup)) { <input type="hidden" name="filterCol_productGroup" value="@filterCol_productGroup" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_bonusGroup)) { <input type="hidden" name="filterCol_bonusGroup" value="@filterCol_bonusGroup" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_company)) { <input type="hidden" name="filterCol_company" value="@filterCol_company" /> }
-        @if (!string.IsNullOrWhiteSpace(filterCol_location)) { <input type="hidden" name="filterCol_location" value="@filterCol_location" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_location)) { <input type="hidden" name="filterCol_location" value="@filterCol_location" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_imported)) { <input type="hidden" name="filterCol_imported" value="@filterCol_imported" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_isactive)) { <input type="hidden" name="filterCol_isactive" value="@filterCol_isactive" /> }
@@ -383,21 +388,12 @@
         </div>
     </div>
 
-    @* ===== كروت الإجماليات (بين شريط الفلاتر والجدول) ===== *@
+    @* ===== كارت إجمالي الأصناف (بعد الفلترة) ===== *@
     <div class="row g-2 g-md-3 mb-2 no-print">
-        <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-            <div class="card h-100 erp-products-summary-card" style="border: 1px solid #6366f1; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
-                <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
-                    <div class="small text-muted mb-1">إجمالي الأصناف</div>
-                    <div class="h4 mb-0 text-primary fw-bold">@totalUnfiltered</div>
-                    <div class="small text-muted mt-1">كل الأصناف في النظام</div>
-                </div>
-            </div>
-        </div>
         <div class="col-12 col-sm-6 col-md-4 col-lg-3">
             <div class="card h-100 erp-products-summary-card" style="border: 1px solid #0d6efd; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden;">
                 <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">
-                    <div class="small text-muted mb-1">بعد الفلترة</div>
+                    <div class="small text-muted mb-1">إجمالي الأصناف</div>
                     <div class="h4 mb-0 text-info fw-bold">@total</div>
                     <div class="small text-muted mt-1">عدد النتائج المطابقة للفلاتر الحالية</div>
                 </div>
@@ -485,20 +481,14 @@
                     <th data-col="quotaQuantity">@filterableCol("quotaQuantity", "quotaquantity", "كمية الكوتة")</th>
 
                     <th data-col="descShort">@filterableCol("descShort", "descshort", "الوصف المختصر")</th>
-
-                    <th class="text-nowrap no-print"
-                        style="width:220px;"
-                        data-col="actions"
-                        data-col-fixed="true">
-                    </th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        @* عدد الأعمدة = 21 (تحديد + كود + اسم + ... + التصنيف + إجراءات) *@
-                        <td colspan="22" class="text-center text-muted py-4">
+                        @* عدد الأعمدة = 21 (تحديد + كود + اسم + … + الوصف المختصر) *@
+                        <td colspan="21" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -511,8 +501,14 @@
                         var descShort = desc.Length > 120 ? desc.Substring(0, 120) + "…" : desc; // متغير: وصف مختصر
                         var groupName = p.ProductGroup?.Name ?? "";                      // متغير: اسم مجموعة الصنف
                         var bonusName = p.ProductBonusGroup?.Name ?? "";                 // متغير: اسم مجموعة البونص
+                        var editUrl = Url.Action("Edit", "Products", new { id = p.ProdId }) + "?frame=1";
+                        var movementUrl = Url.Action("Show", "Products", new { id = p.ProdId }) + "?frame=1";
 
-                        <tr>
+                        <tr class="erp-list-selectable-row"
+                            data-prod-id="@p.ProdId"
+                            @if (ViewBag.CanEdit == true) { <text>data-show-url="@editUrl"</text> }
+                            @if (ViewBag.CanShow == true) { <text>data-movement-url="@movementUrl"</text> }
+                            data-tab-title="صنف @p.ProdId">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select"
@@ -555,30 +551,6 @@
                             </td>
 
                             <td data-col="descShort" title="@desc">@descShort</td>
-
-                            <td class="text-nowrap no-print" data-col="actions">
-                                @* زر حركة الصنف يفتح شاشة حركة الصنف الموحدة (نفس التاب دائماً) *@
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"
-                                   asp-action="Show"
-                                   asp-route-id="@p.ProdId"
-                                   data-tab-id="product-movement-tab"
-                                   data-tab-title="حركة الصنف">
-                                    حركة الصنف
-                                </a>
-                                @* تعديل الصنف: فتح في نفس التاب (product-edit-tab) دائماً *@
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm app-menu-link"
-                                   asp-action="Edit"
-                                   asp-route-id="@p.ProdId"
-                                   data-tab-id="product-edit-tab"
-                                   data-tab-title="تعديل الصنف">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@p.ProdId">
-                                    حذف
-                                </a>
-                            </td>
                         </tr>
                     }
 
@@ -875,6 +847,7 @@
 
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         // جعل الشريط الأفقي يفتح من جهة اليمين (بداية الجدول في RTL)
         (function () {
@@ -883,35 +856,6 @@
             var wrapper = table.closest(".erp-table-wrapper");
             if (!wrapper) return;
             wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
-        })();
-
-        // =========================
-        // حركة الصنف / تعديل الصنف: فتح في نفس التاب — عند النقر من داخل iframe نرسل postMessage للوالد
-        // =========================
-        (function () {
-            document.addEventListener("click", function (e) {
-                var link = e.target.closest('a.app-menu-link[data-tab-id]');
-                if (!link) return;
-                e.preventDefault();
-                e.stopPropagation();
-                var url = (link.getAttribute("href") || link.href || "").trim();
-                if (!url) return;
-                var sep = url.indexOf("?") >= 0 ? "&" : "?";
-                url = url + sep + "frame=1";
-                var tabId = (link.getAttribute("data-tab-id") || "").trim();
-                var title = (link.getAttribute("data-tab-title") || "تبويب").trim();
-                try {
-                    if (window.top && window.top !== window) {
-                        window.top.postMessage({ type: "erp-open-tab", tabId: tabId, title: title, url: url }, "*");
-                        return;
-                    }
-                } catch (err) { console.error("app-menu-link postMessage:", err); }
-                if (window.erpTabs && typeof window.erpTabs.openTab === "function") {
-                    window.erpTabs.openTab(tabId, url, title);
-                } else {
-                    window.location.href = url;
-                }
-            });
         })();
 
         // =========================
@@ -984,6 +928,52 @@
                 deleteAllForm.submit();
             });
         })();
+
+        @if (ViewBag.CanEdit == true && ViewBag.CanShow == true)
+        {
+            <text>
+        ERP.initListSelection({
+            showButtonId: 'btnShowProduct',
+            showTabId: 'product-edit-tab',
+            movementButtonId: 'btnProductMovement',
+            movementUrlAttribute: 'data-movement-url',
+            movementTabTitle: 'حركة الصنف',
+            movementTabId: 'product-movement-tab',
+            idAttribute: 'data-prod-id',
+            showUrlAttribute: 'data-show-url',
+            tabTitleAttribute: 'data-tab-title'
+        });
+            </text>
+        }
+        else if (ViewBag.CanEdit == true)
+        {
+            <text>
+        ERP.initListSelection({
+            showButtonId: 'btnShowProduct',
+            showTabId: 'product-edit-tab',
+            movementUrlAttribute: 'data-movement-url',
+            movementTabTitle: 'حركة الصنف',
+            movementTabId: 'product-movement-tab',
+            idAttribute: 'data-prod-id',
+            showUrlAttribute: 'data-show-url',
+            tabTitleAttribute: 'data-tab-title'
+        });
+            </text>
+        }
+        else if (ViewBag.CanShow == true)
+        {
+            <text>
+        ERP.initListSelection({
+            movementButtonId: 'btnProductMovement',
+            movementUrlAttribute: 'data-movement-url',
+            movementTabTitle: 'حركة الصنف',
+            movementTabId: 'product-movement-tab',
+            idAttribute: 'data-prod-id',
+            showUrlAttribute: 'data-show-url',
+            tabTitleAttribute: 'data-tab-title'
+        });
+            </text>
+        }
 
         // =========================
         // اختيار الأعمدة + حفظها في localStorage

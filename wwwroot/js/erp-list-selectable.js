@@ -26,10 +26,11 @@
     }
 
     function init(options) {
-        if (!options || !options.showButtonId) return;
+        if (!options) return;
+        if (!options.showButtonId && !options.movementButtonId) return;
 
         var rowSelector = options.rowSelector || '.erp-list-selectable-row';
-        var showButtonId = options.showButtonId;
+        var showButtonId = options.showButtonId || '';
         var deleteButtonId = options.deleteButtonId || '';
         var deleteFormId = options.deleteFormId || '';
         var movementButtonId = options.movementButtonId || '';
@@ -38,12 +39,13 @@
         var idAttribute = options.idAttribute || 'data-row-id';
         var showUrlAttribute = options.showUrlAttribute || 'data-show-url';
         var tabTitleAttribute = options.tabTitleAttribute || 'data-tab-title';
+        var tabIdAttribute = (options.tabIdAttribute && String(options.tabIdAttribute).trim()) ? String(options.tabIdAttribute).trim() : '';
         var showTabIdFixed = (options.showTabId && String(options.showTabId).trim()) ? String(options.showTabId).trim() : '';
         var movementTabIdFixed = (options.movementTabId && String(options.movementTabId).trim()) ? String(options.movementTabId).trim() : '';
         var deleteConfirmMessage = options.deleteConfirmMessage;
         var openInTab = typeof options.openInTab === 'function' ? options.openInTab : openInTabDefault;
 
-        var btnShow = document.getElementById(showButtonId);
+        var btnShow = showButtonId ? document.getElementById(showButtonId) : null;
         var btnDelete = deleteButtonId ? document.getElementById(deleteButtonId) : null;
         var btnMovement = movementButtonId ? document.getElementById(movementButtonId) : null;
         var deleteForm = deleteFormId ? document.getElementById(deleteFormId) : null;
@@ -51,15 +53,16 @@
         var selectedRow = null;
 
         function updateButtons() {
-            if (!btnShow) return;
             if (!selectedRow) {
-                btnShow.disabled = true;
+                if (btnShow) btnShow.disabled = true;
                 if (btnDelete) btnDelete.disabled = true;
                 if (btnMovement) btnMovement.disabled = true;
                 return;
             }
-            var showUrl = selectedRow.getAttribute(showUrlAttribute);
-            btnShow.disabled = !showUrl;
+            if (btnShow) {
+                var showUrl = selectedRow.getAttribute(showUrlAttribute);
+                btnShow.disabled = !showUrl;
+            }
             if (btnDelete) btnDelete.disabled = false;
             if (btnMovement) {
                 var movUrl = selectedRow.getAttribute(movementUrlAttribute);
@@ -77,6 +80,7 @@
         rows.forEach(function (row) {
             row.addEventListener('click', function (e) {
                 if (e.target.closest('button') || e.target.closest('input[type="checkbox"]')) return;
+                if (e.target.closest('input:not(.row-select)') || e.target.closest('textarea') || e.target.closest('select')) return;
                 document.querySelectorAll(rowSelector).forEach(function (r) { r.classList.remove('selected'); });
                 row.classList.add('selected');
                 selectedRow = row;
@@ -113,7 +117,11 @@
                 if (!url) return;
                 var id = selectedRow.getAttribute(idAttribute) || '';
                 var title = selectedRow.getAttribute(tabTitleAttribute) || '';
-                var tabId = showTabIdFixed || ('list-show-' + id);
+                var tabId = showTabIdFixed;
+                if (!tabId && tabIdAttribute) {
+                    tabId = selectedRow.getAttribute(tabIdAttribute) || '';
+                }
+                if (!tabId) tabId = 'list-show-' + id;
                 openInTab(tabId, url, title);
             });
         }

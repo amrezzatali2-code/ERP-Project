@@ -297,6 +297,36 @@ if (window.__ERP_TABS_INITED__) {
             }
         }
 
+        /** حفظ موضع التمرير داخل iframe التاب قبل إخفائه (نفس الأصل) */
+        function saveFrameScroll(frame) {
+            try {
+                var w = frame.contentWindow;
+                if (!w || !w.document) return;
+                var docEl = w.document.documentElement;
+                var body = w.document.body;
+                var y = Math.max(docEl ? docEl.scrollTop : 0, body ? body.scrollTop : 0);
+                var x = Math.max(docEl ? docEl.scrollLeft : 0, body ? body.scrollLeft : 0);
+                frame.setAttribute('data-erp-scroll-y', String(y));
+                frame.setAttribute('data-erp-scroll-x', String(x));
+            } catch (e) { /* cross-origin */ }
+        }
+
+        /** استعادة التمرير بعد إظهار التاب (بعد إزالة d-none) */
+        function restoreFrameScroll(frame) {
+            try {
+                var y = parseInt(frame.getAttribute('data-erp-scroll-y') || '0', 10) || 0;
+                var x = parseInt(frame.getAttribute('data-erp-scroll-x') || '0', 10) || 0;
+                var w = frame.contentWindow;
+                if (!w) return;
+                var apply = function () {
+                    w.scrollTo(x, y);
+                };
+                apply();
+                requestAnimationFrame(apply);
+                setTimeout(apply, 50);
+            } catch (e) { /* cross-origin */ }
+        }
+
         // ===============================
         // فتح / تحديث تاب
         // ===============================
@@ -374,18 +404,15 @@ if (window.__ERP_TABS_INITED__) {
 
                 if (existingFrame) {
 
-                    // ✅ مهم: كل مرة نحدّث src نربط onload ثم ننادي __ERP_INIT__
-                    existingFrame.onload = function () {
-                        tryCallErpInitFromFrame(existingFrame);
-                    };
-
                     var currentSrc = normalizeUrl(existingFrame.getAttribute('src') || existingFrame.src);
                     if (currentSrc !== url) {
+                        // ✅ عند تغيير الرابط فقط: تحميل + __ERP_INIT__
+                        existingFrame.onload = function () {
+                            tryCallErpInitFromFrame(existingFrame);
+                        };
                         existingFrame.src = url;
-                    } else {
-                        // لو نفس الرابط: نجبر no-cache خفيف
-                        existingFrame.src = addNoCache(url);
                     }
+                    // نفس الرابط: لا نعيد تعيين src (كان addNoCache يعيد تحميل الصفحة ويعيد التمرير لأعلى)
                 }
 
                 // ✅ تحديث عنوان التاب (مثلاً فاتورة مشتريات vs طلب شراء) لئلا يبقى العنوان القديم
@@ -431,6 +458,11 @@ if (window.__ERP_TABS_INITED__) {
         function activateTab(tabId) {
             tabId = normalizeTabId(tabId);
 
+            var prevActive = tabsContainer.querySelector('.app-tab-frame:not(.d-none)');
+            if (prevActive && normalizeTabId(prevActive.getAttribute('data-tab-id')) !== tabId) {
+                saveFrameScroll(prevActive);
+            }
+
             var allTabs = tabsBar.querySelectorAll('.app-tab');
             allTabs.forEach(function (tab) {
                 tab.classList.toggle('active', normalizeTabId(tab.getAttribute('data-tab-id')) === tabId);
@@ -440,6 +472,13 @@ if (window.__ERP_TABS_INITED__) {
             allFrames.forEach(function (frame) {
                 frame.classList.toggle('d-none', normalizeTabId(frame.getAttribute('data-tab-id')) !== tabId);
             });
+
+            var targetFrame = tabsContainer.querySelector('.app-tab-frame[data-tab-id="' + tabId + '"]');
+            if (targetFrame) {
+                setTimeout(function () {
+                    restoreFrameScroll(targetFrame);
+                }, 0);
+            }
         }
 
         function closeTab(tabId) {

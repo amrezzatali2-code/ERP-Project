@@ -308,6 +308,12 @@ namespace ERP.Data
                 entity.Property(e => e.CostPerUnit)
                       .HasPrecision(18, 4);                             // تكلفة الوحدة
 
+                entity.Property(e => e.PriceRetail)
+                      .HasPrecision(18, 2);
+
+                entity.Property(e => e.WeightedDiscountPct)
+                      .HasPrecision(5, 2);
+
                 entity.Property(e => e.CostDiff)
                       .HasPrecision(18, 2);                             // فرق التكلفة
 
@@ -2235,6 +2241,12 @@ namespace ERP.Data
                 .WithMany()
                 .HasForeignKey(sl => sl.WarehouseId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            mb.Entity<StockLedger>()
+                .HasOne(sl => sl.User)
+                .WithMany()
+                .HasForeignKey(sl => sl.UserId)
+                .OnDelete(DeleteBehavior.NoAction);
 
             // علاقة StockLedger ← Batch (اختيارية)
             mb.Entity<StockLedger>()

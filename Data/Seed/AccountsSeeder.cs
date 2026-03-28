@@ -314,7 +314,7 @@ namespace ERP.Seeders
             var capital = new Account
             {
                 AccountCode = "3101",
-                AccountName = "رأس المال",
+                AccountName = "حساب المستثمرين",
                 AccountType = AccountType.Equity,
                 ParentAccount = equityRootLevel2,
                 Level = 3,

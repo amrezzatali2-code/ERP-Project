@@ -3,7 +3,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                          // StockAdjustment, UserActionType...
 using ERP.Security;
-using ERP.Services;                        // ILedgerPostingService
+using ERP.Services;                        // ILedgerPostingService, StockAnalysisService
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;  // SelectList
 using Microsoft.EntityFrameworkCore;
@@ -26,13 +26,15 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly StockAnalysisService _stockAnalysisService;
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        public StockAdjustmentsController(AppDbContext context, IUserActivityLogger activityLogger)
+        public StockAdjustmentsController(AppDbContext context, IUserActivityLogger activityLogger, StockAnalysisService stockAnalysisService)
         {
             _context = context;
             _activityLogger = activityLogger;
+            _stockAnalysisService = stockAnalysisService;
         }
 
         // =========================
@@ -1057,12 +1059,35 @@ namespace ERP.Controllers
 
             int totalQty = batches.Sum(x => x.qty);
 
+            decimal priceRetailOut = product.PriceRetail;
+            int? firstBatchIdForDiscount = null;
+            if (!string.IsNullOrWhiteSpace(firstBatchNo) && !string.IsNullOrWhiteSpace(firstExpiry)
+                && DateTime.TryParse(firstExpiry, out var firstExpiryDt))
+            {
+                var batchRow = await _context.Batches
+                    .AsNoTracking()
+                    .Where(b => b.ProdId == prodId
+                        && b.BatchNo.Trim() == firstBatchNo.Trim()
+                        && b.Expiry.Date == firstExpiryDt.Date)
+                    .Select(b => new { b.BatchId, b.PriceRetailBatch })
+                    .FirstOrDefaultAsync();
+                if (batchRow != null)
+                {
+                    firstBatchIdForDiscount = batchRow.BatchId;
+                    if (batchRow.PriceRetailBatch.HasValue && batchRow.PriceRetailBatch.Value > 0m)
+                        priceRetailOut = batchRow.PriceRetailBatch.Value;
+                }
+            }
+
+            decimal weightedDiscount = await _stockAnalysisService.GetEffectivePurchaseDiscountAsync(prodId, warehouseId, firstBatchIdForDiscount);
+
             return Json(new
             {
                 ok = true,
                 prodId = product.ProdId,
                 prodName = product.ProdName,
-                priceRetail = product.PriceRetail,
+                priceRetail = priceRetailOut,
+                weightedDiscount,
                 qtyBefore,
                 totalQty,
                 costPerUnit,
@@ -1168,6 +1193,8 @@ namespace ERP.Controllers
                 existingLine.CostPerUnit = dto.CostPerUnit;
                 existingLine.CostDiff = costDiff;
                 existingLine.Note = dto.Note;
+                existingLine.PriceRetail = dto.PriceRetail;
+                existingLine.WeightedDiscountPct = dto.WeightedDiscountPct;
                 line = existingLine;
                 await _context.SaveChangesAsync();
             }
@@ -1183,7 +1210,9 @@ namespace ERP.Controllers
                     QtyDiff = qtyDiff,
                     CostPerUnit = dto.CostPerUnit,
                     CostDiff = costDiff,
-                    Note = dto.Note
+                    Note = dto.Note,
+                    PriceRetail = dto.PriceRetail,
+                    WeightedDiscountPct = dto.WeightedDiscountPct
                 };
                 _context.StockAdjustmentLines.Add(line);
                 await _context.SaveChangesAsync();
@@ -1196,6 +1225,7 @@ namespace ERP.Controllers
                 ok = true,
                 lineId = line.Id,
                 isUpdate,
+                productId = dto.ProductId,
                 productName = product?.ProdName ?? $"صنف #{dto.ProductId}",
                 batchNo = batchEntity?.BatchNo ?? "-",
                 expiryDisplay = batchEntity?.Expiry.ToString("yyyy-MM-dd") ?? "-",
@@ -1203,7 +1233,9 @@ namespace ERP.Controllers
                 qtyAfter = line.QtyAfter,
                 qtyDiff = line.QtyDiff,
                 costPerUnit = line.CostPerUnit,
-                costDiff = line.CostDiff
+                costDiff = line.CostDiff,
+                priceRetail = line.PriceRetail,
+                weightedDiscountPct = line.WeightedDiscountPct
             });
         }
 
@@ -1284,9 +1316,19 @@ namespace ERP.Controllers
                 return BadRequest(new { ok = false, message = "لا يمكن ترحيل تسوية بدون سطور." });
             }
 
-            // استدعاء خدمة الترحيل
             var ledgerPostingService = HttpContext.RequestServices.GetRequiredService<ILedgerPostingService>();
-            await ledgerPostingService.PostStockAdjustmentAsync(id, User?.Identity?.Name ?? "SYSTEM");
+            try
+            {
+                await ledgerPostingService.PostStockAdjustmentAsync(id, User?.Identity?.Name ?? "SYSTEM");
+            }
+            catch (Exception ex)
+            {
+                var detail = ex.InnerException?.Message ?? ex.Message;
+                var friendly = "تعذر ترحيل التسوية. تأكد من صحة السطور (التشغيلة والصلاحية والكميات) ثم أعد المحاولة.";
+                if (detail.Contains("NULL", StringComparison.OrdinalIgnoreCase) && (detail.Contains("Expiry", StringComparison.OrdinalIgnoreCase) || detail.Contains("ExpiryDate", StringComparison.OrdinalIgnoreCase)))
+                    friendly = "تعذر الترحيل: تاريخ صلاحية التشغيلة مطلوب في المخزون. راجع السطور أو أعد حفظها.";
+                return BadRequest(new { ok = false, message = friendly });
+            }
 
             return Json(new { ok = true, message = "تم الترحيل بنجاح." });
         }
@@ -1336,6 +1378,7 @@ namespace ERP.Controllers
         public string? BatchNo { get; set; }
         public string? Expiry { get; set; }  // yyyy-MM-dd
         public decimal? PriceRetail { get; set; }
+        public decimal? WeightedDiscountPct { get; set; }
         public int? BatchId { get; set; }
         public int QtyBefore { get; set; }
         public int QtyAfter { get; set; }

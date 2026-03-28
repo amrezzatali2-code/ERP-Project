@@ -15,12 +15,15 @@ namespace ERP.Services
     /// يقرر الحسابات المخفية عن المستخدم (مصدر واحد لجميع الشاشات: القوائم، الفواتير، حجم التعامل، التقارير):
     /// - من لديه قائمة مسموح بها: اتحاد <c>UserAccountVisibilityOverride</c> (مستوى مستخدم — توافق مع قديم) + <c>RoleAccountVisibilityOverride</c> لكل أدواره → يرى المسموح فقط؛ المُخفى = الباقي (لها أولوية حتى مع SeeAll).
     /// - من لديه صلاحية UserAccountVisibility.SeeAll وبدون قائمة مسموح بها → يرى كل الحسابات.
-    /// - من لم يختر أي حسابات (لا قائمة مسموح بها) → لا تقييد؛ يرى كل الحسابات.
+    /// - من لم يختر أي حسابات صراحة وليس لديه SeeAll وليس مسؤول نظام: الافتراضي ذمم العملاء <c>1103</c> فقط (وما تحتها بعد التوسيع).
     /// <para><b>توسيع المسموح:</b> أبناء الشجرة، بادئة الكود، آباء الشجرة (لـ Asset/Liability/Equity فقط — لا صعود من مصروف/إيراد حتى لا يظهر 5200 عند اختيار 5202 فقط)، وأقران <b>Equity</b> تحت نفس الأب (3101 مع 3102/3103…).
     /// <b>قيود:</b> <c>LedgerEntries</c> لعميل/مورد؛ مستثمر بـ <c>AccountId == null</c> عبر القيود فقط.</para>
     /// </summary>
     public class UserAccountVisibilityService : IUserAccountVisibilityService
     {
+        /// <summary>حساب التحكم بذمم العملاء — البذرة الافتراضية لصلاحيات الحسابات عند عدم اختيار أي حساب.</summary>
+        private const string DefaultCustomerAccountsControlAccountCode = "1103";
+
         private readonly AppDbContext _context;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private readonly IPermissionService _permissionService;
@@ -85,13 +88,22 @@ namespace ERP.Services
             if (await _permissionService.HasPermissionAsync(userId.Value, "UserAccountVisibility.SeeAll"))
                 return new HashSet<int>();
 
-            // عدم اختيار أي حسابات = لا تقييد (مطابق لنص الشاشة: «إذا لم تختر أي حساب فلن يُطبّق تقييد»)
-            return new HashSet<int>();
+            // مسؤول النظام / مالك النظام: بدون قيد افتراضي (يرى الدليل كاملاً)
+            if (IsSystemAdmin())
+                return new HashSet<int>();
+
+            // لم يُختر أي حساب صراحة: الافتراضي ذمم العملاء 1103 فقط (وما تحتها)
+            return await GetHiddenAccountIdsForDefaultCustomerAccountsOnlyAsync();
         }
 
         public async Task<HashSet<int>> GetHiddenAccountIdsForUserAsync(int userId)
         {
             var allowedExpanded = await BuildExpandedAllowedAccountIdsForUserAsync(userId);
+            return await HiddenFromExpandedAllowedAsync(allowedExpanded);
+        }
+
+        private async Task<HashSet<int>> HiddenFromExpandedAllowedAsync(HashSet<int> allowedExpanded)
+        {
             if (allowedExpanded.Count == 0)
                 return new HashSet<int>();
 
@@ -99,6 +111,20 @@ namespace ERP.Services
                 .Select(a => a.AccountId)
                 .ToListAsync();
             return new HashSet<int>(allAccountIds.Where(id => !allowedExpanded.Contains(id)));
+        }
+
+        /// <summary>عند عدم اختيار حسابات: المخفي = كل الحسابات ما عدا شجرة 1103 (بعد التوسيع).</summary>
+        private async Task<HashSet<int>> GetHiddenAccountIdsForDefaultCustomerAccountsOnlyAsync()
+        {
+            var seedId = await _context.Accounts.AsNoTracking()
+                .Where(a => a.AccountCode == DefaultCustomerAccountsControlAccountCode)
+                .Select(a => (int?)a.AccountId)
+                .FirstOrDefaultAsync();
+            if (!seedId.HasValue)
+                return new HashSet<int>();
+
+            var expanded = await BuildExpandedAllowedAccountIdsFromSeedsAsync(new HashSet<int> { seedId.Value });
+            return await HiddenFromExpandedAllowedAsync(expanded);
         }
 
         /// <summary>هل يوجد أي حساب مسموح صراحة (مستخدم أو أحد أدواره)؟</summary>
@@ -158,7 +184,15 @@ namespace ERP.Services
             if (allowedIds.Count == 0)
                 return new HashSet<int>();
 
-            var expanded = await ExpandAllowedAccountIdsWithDescendantsAsync(new HashSet<int>(allowedIds));
+            return await BuildExpandedAllowedAccountIdsFromSeedsAsync(new HashSet<int>(allowedIds));
+        }
+
+        private async Task<HashSet<int>> BuildExpandedAllowedAccountIdsFromSeedsAsync(HashSet<int> seedAllowed)
+        {
+            if (seedAllowed.Count == 0)
+                return new HashSet<int>();
+
+            var expanded = await ExpandAllowedAccountIdsWithDescendantsAsync(new HashSet<int>(seedAllowed));
             expanded = await ExpandAllowedByAccountCodePrefixesAsync(expanded);
             expanded = await ExpandAllowedWithAncestorsAsync(expanded);
             expanded = await ExpandEquityPeersUnderSameParentAsync(expanded);
@@ -265,7 +299,7 @@ namespace ERP.Services
 
         /// <summary>
         /// إن وُجد في المسموح أي حساب من نوع حقوق ملكية (Equity)، يُضاف كل حساب Equity آخر يشترك معه في نفس الأب المباشر.
-        /// يحل ارتباط بعض المستثمرين بـ 3102/3103 بدل 3101 مع بقاء المستخدم مختاراً «3101 — رأس المال» فقط.
+        /// يحل ارتباط بعض المستثمرين بـ 3102/3103 بدل 3101 مع بقاء المستخدم مختاراً «3101 — حساب المستثمرين» فقط.
         /// </summary>
         private async Task<HashSet<int>> ExpandEquityPeersUnderSameParentAsync(HashSet<int> seedIds)
         {
@@ -306,7 +340,10 @@ namespace ERP.Services
                 return true;
             if (await _permissionService.HasPermissionAsync(userId.Value, "UserAccountVisibility.SeeAll"))
                 return false;
-            return false;
+            if (IsSystemAdmin())
+                return false;
+            // افتراضي 1103: مقيد بقائمة مسموح مكافئة
+            return true;
         }
 
         /// <inheritdoc />
@@ -363,6 +400,40 @@ namespace ERP.Services
 
             var hiddenList = hiddenAccountIds.ToList();
             return query.Where(c => c.AccountId == null || !hiddenList.Contains(c.AccountId.Value));
+        }
+
+        private const string InvestorAccountCode3101 = "3101";
+
+        /// <inheritdoc />
+        public async Task<IQueryable<LedgerEntry>> ApplyLedgerEntryListVisibilityFilterAsync(IQueryable<LedgerEntry> query, bool canViewInvestorAccount3101 = true)
+        {
+            if (!canViewInvestorAccount3101)
+                query = query.Where(e => e.Account != null && e.Account.AccountCode != InvestorAccountCode3101);
+
+            var (hiddenAccountIds, restrictedOnly) = await GetVisibilityStateForCurrentUserAsync();
+            var hiddenList = hiddenAccountIds.ToList();
+            if (hiddenList.Count == 0)
+                return query;
+
+            if (restrictedOnly)
+            {
+                // (أ) قيد على حساب مسموح — يشمل مستثمراً بدون AccountId على الطرف بينما القيد على 3101/غيره المسموح
+                // (ب) حساب الطرف الرئيسي للعميل/المورد/المستثمر مسموح
+                // (ج) عميل/مورد + أي قيد على حساب مسموح (نفس منطق ApplyCustomerVisibilityFilterAsync)
+                return query.Where(e =>
+                    !hiddenList.Contains(e.AccountId)
+                    || (e.Customer != null && e.Customer.AccountId != null && !hiddenList.Contains(e.Customer.AccountId.Value))
+                    || (e.Customer != null
+                        && (e.Customer.PartyCategory == "Customer" || e.Customer.PartyCategory == "Supplier")
+                        && e.CustomerId != null
+                        && _context.LedgerEntries.Any(le => le.CustomerId == e.CustomerId && !hiddenList.Contains(le.AccountId))));
+            }
+
+            return query.Where(e =>
+                e.Customer == null || e.Customer.AccountId == null || !hiddenList.Contains(e.Customer.AccountId.Value)
+                || !hiddenList.Contains(e.AccountId)
+                || (e.Customer != null && (e.Customer.PartyCategory == "Customer" || e.Customer.PartyCategory == "Supplier")
+                    && e.CustomerId != null && _context.LedgerEntries.Any(le => le.CustomerId == e.CustomerId && !hiddenList.Contains(le.AccountId))));
         }
     }
 }

@@ -23,7 +23,8 @@
     decimal totalDebit = ViewBag.TotalDebit != null ? (decimal)ViewBag.TotalDebit : 0m;   // متغير: إجمالي المدين بعد الفلاتر
     decimal totalCredit = ViewBag.TotalCredit != null ? (decimal)ViewBag.TotalCredit : 0m; // متغير: إجمالي الدائن بعد الفلاتر
     decimal netBalance = ViewBag.NetBalance != null ? (decimal)ViewBag.NetBalance : (totalDebit - totalCredit); // متغير: الصافي
-
+    decimal treasuryNetBalance = ViewBag.TreasuryNetBalance != null ? (decimal)ViewBag.TreasuryNetBalance : 0m;
+    int distinctCustomerCount = ViewBag.DistinctCustomerCount != null ? (int)ViewBag.DistinctCustomerCount : 0;
 
     // بيانات الترقيم
     int ps = Model.PageSize;
@@ -138,10 +139,14 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @* العنوان + إجمالي القيود *@
-    <div class="d-flex justify-content-between align-items-center mb-2">
+    @* العنوان + إجمالي أسطر الدفتر (كل سطر = قيد واحد؛ قد يتكرر نفس العميل) *@
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
         <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">إجمالي القيود: @total</small>
+        <small class="text-muted d-none d-md-inline text-end">
+            أسطر القيود: <strong>@total.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</strong>
+            <span class="mx-1">|</span>
+            عملاء مميزون (بعد الفلتر): <strong>@distinctCustomerCount.ToString("N0", System.Globalization.CultureInfo.InvariantCulture)</strong>
+        </small>
     </div>
 
     @* ===== شريط الفلاتر الموحد (نمط القوائم) ===== *@
@@ -243,6 +248,68 @@
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ===== كروت إجماليات — نفس الفلاتر الحالية (كل النتائج وليس الصفحة الحالية فقط) ===== *@
+    @{
+        var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    }
+    <div class="no-print mb-3" dir="rtl">
+        <div class="card border-0" style="border: 1px solid #6366f1 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25) !important; overflow: hidden;">
+            <div class="card-body py-3 px-3">
+                <div class="small text-muted mb-2">إجماليات بعد الفلترة (للمطابقة مع التقارير) — <span class="text-body">كل <strong>سطر</strong> في الجدول = قيد واحد؛ تكرار اسم العميل طبيعي (عدة فواتير/حركات).</span></div>
+                <div class="row g-2 g-md-3 justify-content-start flex-wrap">
+                    <div class="col-6 col-md-auto">
+                        <div class="card h-100 border-0" style="border: 1px solid #c7d2fe !important; border-radius: 10px; min-width: 160px;">
+                            <div class="card-body py-2 px-3">
+                                <div class="small text-muted mb-1" title="عدد سجلات القيود في الدفتر بعد الفلتر، وليس عدد العملاء">عدد أسطر القيود</div>
+                                <div class="h5 mb-0 fw-bold text-primary">@total.ToString("N0", n2)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-auto">
+                        <div class="card h-100 border-0" style="border: 1px solid #ddd6fe !important; border-radius: 10px; min-width: 160px;">
+                            <div class="card-body py-2 px-3">
+                                <div class="small text-muted mb-1" title="عدد العملاء/الأطراف المختلفة التي لها سطر في النتائج">عملاء مميزون</div>
+                                <div class="h5 mb-0 fw-bold" style="color: #5b21b6;">@distinctCustomerCount.ToString("N0", n2)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-auto">
+                        <div class="card h-100 border-0" style="border: 1px solid #fed7aa !important; border-radius: 10px; min-width: 140px;">
+                            <div class="card-body py-2 px-3">
+                                <div class="small text-muted mb-1">إجمالي المدين</div>
+                                <div class="h5 mb-0 fw-bold" style="color: #c2410c;">@totalDebit.ToString("N2", n2)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-auto">
+                        <div class="card h-100 border-0" style="border: 1px solid #bae6fd !important; border-radius: 10px; min-width: 140px;">
+                            <div class="card-body py-2 px-3">
+                                <div class="small text-muted mb-1">إجمالي الدائن</div>
+                                <div class="h5 mb-0 fw-bold" style="color: #0369a1;">@totalCredit.ToString("N2", n2)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-auto">
+                        <div class="card h-100 border-0" style="border: 1px solid #bbf7d0 !important; border-radius: 10px; min-width: 140px;">
+                            <div class="card-body py-2 px-3">
+                                <div class="small text-muted mb-1">الصافي (مدين − دائن)</div>
+                                <div class="h5 mb-0 fw-bold" style="color: #15803d;">@netBalance.ToString("N2", n2)</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-auto">
+                        <div class="card h-100 border-0" style="border: 1px solid #e9d5ff !important; border-radius: 10px; min-width: 160px;">
+                            <div class="card-body py-2 px-3">
+                                <div class="small text-muted mb-1" title="حسابات أصل: اسم يحتوي خزينة/بنك/صندوق أو كود يبدأ 1101 أو 1102 — بعد نفس الفلاتر">صافي الخزينة / النقد</div>
+                                <div class="h5 mb-0 fw-bold" style="color: #6d28d9;">@treasuryNetBalance.ToString("N2", n2)</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

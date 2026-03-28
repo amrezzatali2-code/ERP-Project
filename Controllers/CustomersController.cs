@@ -6,6 +6,7 @@ using ERP.Infrastructure;                         // PagedResult + UserActivityL
 using ERP.Models;                                 // Customer, UserActionType
 using ERP.Security;                               // PermissionCodes
 using ERP.Services;                               // IPermissionService
+using ERP.Services.Caching;                       // إبطال كاش بحث الأطراف بعد الحفظ
 using ERP.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -30,6 +31,7 @@ namespace ERP.Controllers
         private readonly IUserActivityLogger _activityLogger;
         private readonly IPermissionService _permissionService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
+        private readonly ICustomerCacheService _customerCache;
 
 
         // قائمة ثابتة لأنواع الأطراف (عميل / مورد / موظف / مستثمر / بنك / مصروف / مالك)
@@ -44,34 +46,18 @@ namespace ERP.Controllers
             "Owner"       // صاحب / شريك (مالك المنشأة أو الشريك الرئيسي)
         };
 
-        /// <summary>ترجمة نوع الطرف للإظهار في القوائم (القيمة المخزنة بالإنجليزي، العرض بالعربي).</summary>
-        private static readonly IReadOnlyDictionary<string, string> PartyCategoryDisplayNames = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            { "Customer", "عميل" },
-            { "Supplier", "مورد" },
-            { "Employee", "موظف" },
-            { "Investor", "مستثمر" },
-            { "Bank", "بنك" },
-            { "Expense", "مصروف" },
-            { "Owner", "مالك / شريك" }
-        };
-
-        private static string GetPartyCategoryDisplayName(string? partyCategory)
-        {
-            if (string.IsNullOrWhiteSpace(partyCategory)) return "";
-            return PartyCategoryDisplayNames.TryGetValue(partyCategory.Trim(), out var name) ? name : partyCategory;
-        }
-
         public CustomersController(
             AppDbContext context,
             IUserActivityLogger activityLogger,
             IPermissionService permissionService,
-            IUserAccountVisibilityService accountVisibilityService)
+            IUserAccountVisibilityService accountVisibilityService,
+            ICustomerCacheService customerCache)
         {
             _context = context;
             _activityLogger = activityLogger;
             _permissionService = permissionService;
             _accountVisibilityService = accountVisibilityService;
+            _customerCache = customerCache;
         }
 
         /// <summary>
@@ -165,7 +151,7 @@ namespace ERP.Controllers
 
                 case "Investor":
                 case "Owner":
-                    return FindByCode("3101");   // رأس المال / حقوق الملكية (الظهور يتحكم به «الحسابات المسموح رؤيتها»)
+                    return FindByCode("3101");   // حساب المستثمرين 3101 (الظهور يتحكم به «الحسابات المسموح رؤيتها»)
 
                 case "Bank":
                     return FindByCode("1102");   // البنوك
@@ -362,6 +348,7 @@ namespace ERP.Controllers
                         c.AccountId = employeeAccountId > 0 ? employeeAccountId : c.AccountId;
                     }
                     await _context.SaveChangesAsync();
+                    _customerCache.ClearCustomersCache(); // تعديل أطراف من الإكسل — إبطال كاش البحث
                     updatedEmployees = toUpdate.Count;
                 }
                 catch (Exception ex) { errors.Add("ملف الموظفين: " + (ex.InnerException?.Message ?? ex.Message)); }
@@ -390,6 +377,7 @@ namespace ERP.Controllers
                         c.AccountId = investorAccountId > 0 ? investorAccountId : c.AccountId;
                     }
                     await _context.SaveChangesAsync();
+                    _customerCache.ClearCustomersCache();
                     updatedInvestors = toUpdate.Count;
                 }
                 catch (Exception ex) { errors.Add("ملف المستثمرين: " + (ex.InnerException?.Message ?? ex.Message)); }
@@ -1019,7 +1007,7 @@ namespace ERP.Controllers
             ViewBag.FilterCol_RecordNumber = filterCol_recordnumber;
             ViewBag.FilterCol_LicenseNumber = filterCol_licensenumber;
             ViewBag.FilterCol_Segment = filterCol_segment;
-            ViewBag.PartyCategoryDisplayNames = PartyCategoryDisplayNames;
+            ViewBag.PartyCategoryDisplayNames = PartyCategoryDisplay.ArabicByKey;
 
             return View(model);
         }
@@ -1615,6 +1603,7 @@ namespace ERP.Controllers
 
                 _context.Add(customer);
                 await _context.SaveChangesAsync();
+                _customerCache.ClearCustomersCache();
 
                 await _activityLogger.LogAsync(
                     UserActionType.Create,
@@ -1794,6 +1783,7 @@ namespace ERP.Controllers
                 existing.UpdatedAt = DateTime.Now;
 
                 await _context.SaveChangesAsync();
+                _customerCache.ClearCustomersCache();
 
                 var newValues = System.Text.Json.JsonSerializer.Serialize(new
                 {
@@ -1891,6 +1881,7 @@ namespace ERP.Controllers
                 });
                 _context.Customers.Remove(customer);
                 await _context.SaveChangesAsync();
+                _customerCache.ClearCustomersCache();
 
                 await _activityLogger.LogAsync(
                     UserActionType.Delete,
@@ -1923,6 +1914,7 @@ namespace ERP.Controllers
             {
                 _context.Customers.RemoveRange(allCustomers);
                 await _context.SaveChangesAsync();
+                _customerCache.ClearCustomersCache();
 
                 TempData["Success"] = $"تم حذف جميع العملاء بنجاح (عددهم {allCustomers.Count}).";
             }
@@ -1973,6 +1965,7 @@ namespace ERP.Controllers
             {
                 _context.Customers.RemoveRange(customers);
                 await _context.SaveChangesAsync();
+                _customerCache.ClearCustomersCache();
 
                 TempData["Success"] = $"تم حذف {customers.Count} عميل/عملاء بنجاح.";
             }

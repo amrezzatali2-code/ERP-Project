@@ -198,6 +198,16 @@
 
                                 <li>
                                     <a class="dropdown-item app-menu-link"
+                                       asp-controller="Products"
+                                       asp-action="Import"
+                                       data-tab-id="products-import"
+                                       data-tab-title="استيراد الأصناف">
+                                        استيراد الأصناف من إكسل
+                                    </a>
+                                </li>
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
                                        asp-controller="UserActivityLogs"
                                        asp-action="Index"
                                        data-tab-id="user-activity-logs"
@@ -438,7 +448,7 @@
                                        asp-action="Index"
                                        data-tab-id="customer-ledger"
                                        data-tab-title="كشف حساب عميل">
-                                        📊 كشف حساب عميل
+                                        📊 كشف حساب تفصيلي لعميل
                                     </a>
                                 </li>
                                 <li>
@@ -446,8 +456,8 @@
                                        asp-controller="Reports"
                                        asp-action="CustomerBalances"
                                        data-tab-id="customer-balances-report"
-                                       data-tab-title="تقرير: أرصدة العملاء">
-                                        📊 تقرير أرصدة العملاء
+                                       data-tab-title="كشف حساب العملاء">
+                                        📊 كشف حساب العملاء العملاء
                                     </a>
                                 </li>
                             
@@ -463,15 +473,7 @@
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="stockMenu">
 
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Products"
-                                       asp-action="Import"
-                                       data-tab-id="products-import"
-                                       data-tab-title="استيراد الأصناف">
-                                        استيراد الأصناف من إكسل
-                                    </a>
-                                </li>
+                                
 
                                 <li>
                                     <a class="dropdown-item app-menu-link"
@@ -554,8 +556,8 @@
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="Reports" asp-action="ProductBalances"
                                        data-tab-id="product-balances-report"
-                                       data-tab-title="تقرير: أرصدة الأصناف">
-                                        📊 تقرير أرصدة الأصناف
+                                       data-tab-title=" أرصدة الأصناف">
+                                        📊  أرصدة الأصناف
                                     </a>
                                 </li>
                             
@@ -588,7 +590,7 @@
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="StockAdjustments" asp-action="Index"
                                        data-tab-id="Stock-Adjustment"
-                                       data-tab-title="التسويات الجردية">
+                                       data-tab-title="قائمة التسويات الجردية">
                                         قائمة التسويات الجردية
                                     </a>
                                 </li>
@@ -597,7 +599,7 @@
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="StockAdjustmentLines" asp-action="Index"
                                        data-tab-id="Stock-Adjustment-Line"
-                                       data-tab-title="تفاصيل التسويات الجردية">
+                                       data-tab-title="قائمة أصناف التسويات الجردية">
                                         قائمة أصناف التسويات الجردية
                                     </a>
                                 </li>
@@ -605,7 +607,7 @@
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="StockTransfers" asp-action="Index"
                                        data-tab-id="Stock-Transfer"
-                                       data-tab-title="التحويل بين المخازن">
+                                       data-tab-title="قائمة التحويلات بين المخازن">
                                         قائمة التحويلات بين المخازن
                                     </a>
                                 </li>
@@ -614,7 +616,7 @@
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="StockTransferLines" asp-action="Index"
                                        data-tab-id="Stock-Transfer-Line"
-                                       data-tab-title="تفاصيل التحويل بين المخازن">
+                                       data-tab-title="قائمة أصناف التحويل بين المخازن">
                                         قائمة أصناف التحويلات بين المخازن
                                     </a>
                                 </li>
@@ -844,7 +846,7 @@
                         </li>
 
                         @* ===== برنامج المشتريات (قائمة منسدلة + فتح بالتابات) ===== *@
-                        <li class="nav-item dropdown">
+                  @*       <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle" href="#" id="purchasingProgramMenu" role="button"
                                data-bs-toggle="dropdown" aria-expanded="false">
                                 برنامج المشتريات
@@ -924,7 +926,7 @@
                                     </a>
                                 </li>
                             </ul>
-                        </li>
+                        </li> *@
 
                         @* ===== الحسابات ===== *@
                         <li class="nav-item dropdown">
@@ -933,6 +935,52 @@
                                 الحسابات
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end text-end" aria-labelledby="accountsMenu2">
+
+                                 <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Treasury" asp-action="Index"
+                                       data-tab-id="treasury"
+                                       data-tab-title="الخزينة الرئيسية">
+                                        💰 الخزينة الرئيسية
+                                    </a>
+                                </li>
+
+                                  <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CashReceipts" asp-action="Create"
+                                       data-tab-id="cash-receipt-create"
+                                       data-tab-title="إذن استلام نقدية">
+                                        إذن استلام نقدية 
+                                    </a>
+                                </li>
+
+                                 <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CashPayments" asp-action="Create"
+                                       data-tab-id="cash-payment-create"
+                                       data-tab-title="إذن دفع نقدية">
+                                        إذن دفع نقدية
+                                    </a>
+                                </li>
+
+                                 <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="DebitNotes" asp-action="Create"
+                                       data-tab-id="debit-note-create"
+                                       data-tab-title="إشعار خصم">
+                                        إشعار خصم 
+                                    </a>
+                                </li>
+
+                                 <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="CreditNotes" asp-action="Create"
+                                       data-tab-id="credit-note-create"
+                                       data-tab-title="إشعار إضافة">
+                                        إشعار إضافة 
+                                    </a>
+                                </li>
+
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="Accounts" asp-action="Index"
@@ -949,14 +997,7 @@
                                         دفتر الأستاذ (قيود اليومية)
                                     </a>
                                 </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="Treasury" asp-action="Index"
-                                       data-tab-id="treasury"
-                                       data-tab-title="الخزينة الرئيسية">
-                                        💰 الخزينة الرئيسية
-                                    </a>
-                                </li>
+                               
 
                              
 
@@ -968,14 +1009,7 @@
                                         قائمة أذون استلام نقدية
                                     </a>
                                 </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="CashReceipts" asp-action="Create"
-                                       data-tab-id="cash-receipt-create"
-                                       data-tab-title="أذن استلام">
-                                        أذن استلام (شاشة)
-                                    </a>
-                                </li>
+                              
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="CashPayments" asp-action="Index"
@@ -984,14 +1018,7 @@
                                         قائمة أذون دفع نقدية
                                     </a>
                                 </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="CashPayments" asp-action="Create"
-                                       data-tab-id="cash-payment-create"
-                                       data-tab-title="أذن دفع">
-                                        أذن دفع (شاشة)
-                                    </a>
-                                </li>
+                            
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="DebitNotes" asp-action="Index"
@@ -1000,14 +1027,7 @@
                                         قائمة إشعارات الخصم
                                     </a>
                                 </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="DebitNotes" asp-action="Create"
-                                       data-tab-id="debit-note-create"
-                                       data-tab-title="إشعار خصم">
-                                        إشعار خصم (شاشة)
-                                    </a>
-                                </li>
+                               
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="CreditNotes" asp-action="Index"
@@ -1016,14 +1036,7 @@
                                         قائمة إشعارات الإضافة
                                     </a>
                                 </li>
-                                <li>
-                                    <a class="dropdown-item app-menu-link"
-                                       asp-controller="CreditNotes" asp-action="Create"
-                                       data-tab-id="credit-note-create"
-                                       data-tab-title="إشعار إضافة">
-                                        إشعار إضافة (شاشة)
-                                    </a>
-                                </li>
+                               
                             </ul>
                         </li>
 

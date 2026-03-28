@@ -8,6 +8,7 @@ using ERP.Infrastructure;               // PagedResult + UserActivityLogger
 using ERP.Models;                       // Product, Category, UserActionType...
 using ERP.Security;                     // PermissionCodes
 using ERP.Services;                     // StockAnalysisService, IPermissionService, ILedgerPostingService
+using ERP.Services.Caching;             // كاش البحث عن الأصناف/الأطراف (lookup آمن)
 using ERP.ViewModels;                   // ViewModels الخاصة بحركة الصنف
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -34,19 +35,25 @@ namespace ERP.Controllers
         private readonly IUserActivityLogger _activityLogger;
         private readonly IPermissionService _permissionService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
+        private readonly IProductCacheService _productCache;
+        private readonly ICustomerCacheService _customerCache;
 
         public ProductsController(
             AppDbContext db,
             StockAnalysisService stockAnalysisService,
             IUserActivityLogger activityLogger,
             IPermissionService permissionService,
-            IUserAccountVisibilityService accountVisibilityService)
+            IUserAccountVisibilityService accountVisibilityService,
+            IProductCacheService productCache,
+            ICustomerCacheService customerCache)
         {
             _db = db;
             _stockAnalysisService = stockAnalysisService;
             _activityLogger = activityLogger;
             _permissionService = permissionService;
             _accountVisibilityService = accountVisibilityService;
+            _productCache = productCache;
+            _customerCache = customerCache;
         }
 
 
@@ -892,6 +899,7 @@ namespace ERP.Controllers
 
             ViewBag.CanCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Create"));
             ViewBag.CanEdit = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Edit"));
+            ViewBag.CanShow = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Show"));
             ViewBag.CanDelete = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Delete"));
             ViewBag.CanExport = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Export"));
 
@@ -1167,6 +1175,8 @@ namespace ERP.Controllers
 
             _db.Products.Add(model);
             await _db.SaveChangesAsync();
+            // إبطال كاش بحث الأصناف — لا إعادة بناء هنا؛ أول طلب بحث يحمّل من قاعدة البيانات.
+            _productCache.ClearProductsCache();
 
             await _activityLogger.LogAsync(
                 UserActionType.Create,
@@ -1331,6 +1341,7 @@ namespace ERP.Controllers
             }
 
             await _db.SaveChangesAsync();
+            _productCache.ClearProductsCache();
 
             var newValues = System.Text.Json.JsonSerializer.Serialize(new
             {
@@ -1391,6 +1402,7 @@ namespace ERP.Controllers
                 });
                 _db.Products.Remove(m);
                 await _db.SaveChangesAsync();
+                _productCache.ClearProductsCache();
 
                 await _activityLogger.LogAsync(
                     UserActionType.Delete,
@@ -1452,6 +1464,7 @@ namespace ERP.Controllers
 
             _db.Products.RemoveRange(products);
             await _db.SaveChangesAsync();
+            _productCache.ClearProductsCache();
 
             TempData["Msg"] = $"تم حذف {products.Count} صنف/أصناف بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -1484,6 +1497,7 @@ namespace ERP.Controllers
 
             _db.Products.RemoveRange(allProducts);
             await _db.SaveChangesAsync();
+            _productCache.ClearProductsCache();
 
             TempData["Msg"] = $"تم حذف جميع الأصناف ({allProducts.Count}) بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -2125,22 +2139,21 @@ namespace ERP.Controllers
 
             term = term.Trim();
 
-            // نجيب أول 20 صنف فيهم النص المكتوب في الاسم
-            var results = await _db.Products
-                .AsNoTracking()
-                .Where(p => p.ProdName.Contains(term))
+            // نفس منطق البحث السابق: لكن القائمة من كاش lookup خفيف (يُبنى من DB بعد المسح أو انتهاء المدة).
+            var all = await _productCache.GetProductsLookupAsync(HttpContext.RequestAborted);
+            var results = all
+                .Where(p => p.ProdName != null && p.ProdName.Contains(term))
                 .OrderBy(p => p.ProdName)
+                .Take(20)
                 .Select(p => new
                 {
-                    id = p.ProdId,          // كود الصنف
-                    name = p.ProdName,      // اسم الصنف
-                    company = p.Company,    // الشركة (اختيارى للعرض)
-                    barcode = p.Barcode     // الباركود (اختيارى للعرض)
+                    id = p.ProdId,
+                    name = p.ProdName,
+                    company = p.Company,
+                    barcode = p.Barcode
                 })
-                .Take(20)
-                .ToListAsync();
+                .ToList();
 
-            // نرجّع النتيجة كـ JSON علشان الجافاسكربت تستخدمها
             return Json(results);
         }
 
@@ -2163,15 +2176,13 @@ namespace ERP.Controllers
 
             term = term.Trim();
 
-            // بحث بالكود (ProdId) أو الباركود كنص
-            var query = _db.Products
-                .AsNoTracking()
+            var all = await _productCache.GetProductsLookupAsync(HttpContext.RequestAborted);
+            var results = all
                 .Where(p =>
                     p.ProdId.ToString().Contains(term) ||
-                    (p.Barcode != null && p.Barcode.Contains(term)));
-
-            var results = await query
+                    (p.Barcode != null && p.Barcode.Contains(term)))
                 .OrderBy(p => p.ProdId)
+                .Take(20)
                 .Select(p => new
                 {
                     id = p.ProdId,
@@ -2179,8 +2190,7 @@ namespace ERP.Controllers
                     company = p.Company,
                     barcode = p.Barcode
                 })
-                .Take(20)
-                .ToListAsync();
+                .ToList();
 
             return Json(results);
         }
@@ -2199,25 +2209,10 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> SearchParties(string term)
         {
-            if (string.IsNullOrWhiteSpace(term))
-                return Json(Array.Empty<object>());
-
-            term = term.Trim();
-
-            // هنا نفترض أن كل العملاء والموردين فى جدول Customers
-            var searchQuery = _db.Customers.AsNoTracking().Where(c => c.CustomerName.Contains(term));
-            searchQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(searchQuery);
-            var results = await searchQuery
-                .OrderBy(c => c.CustomerName)
-                .Select(c => new
-                {
-                    id = c.CustomerId,
-                    name = c.CustomerName
-                })
-                .Take(20)
-                .ToListAsync();
-
-            return Json(results);
+            // البحث في خدمة الكاش (مع استبعاد كاش القائمة عند التقييد بقائمة مسموح — انظر CustomerCacheService).
+            // نفس شكل SearchProducts: خصائص id/name صريحة حتى يتطابق JSON مع الواجهة (AddJsonOptions بدون camelCase).
+            var results = await _customerCache.SearchPartiesAutocompleteAsync(term, HttpContext.RequestAborted);
+            return Json(results.Select(r => new { id = r.Id, name = r.Name }).ToList());
         }
 
         /// <summary>
@@ -2710,6 +2705,7 @@ namespace ERP.Controllers
                 if (allProds.Count > 0) _db.Products.RemoveRange(allProds);
                 if (allStock.Count > 0 || allPriceHist.Count > 0 || allDiscountOverrides.Count > 0 || allProds.Count > 0)
                     await _db.SaveChangesAsync();
+                _productCache.ClearProductsCache(); // بعد حذف الأصناف القديمة قبل إعادة الاستيراد
 
                 // ===== 2) قراءة ملف الإكسل فى الذاكرة =====
                 using var stream = new MemoryStream();                 // متغيّر: stream يحمل بيانات الملف
@@ -2970,6 +2966,7 @@ namespace ERP.Controllers
                 // عندما يكون عدد الصفوط (ذات الاسم) أكبر من ما نُحصيه (إضافة + تحديث من القاعدة) فالفارق بسبب تكرار الاسم في الملف
                 if (totalRowsWithName > totalInserted + totalUpdated)
                     msg += " ملاحظة: عدد الصفوط المعالجة في الملف أكبر من العدد الظاهر لأن نفس اسم الصنف قد تكرر في أكثر من صف — البرنامج يحتفظ بسجل واحد لكل اسم (آخر ظهور في الملف).";
+                _productCache.ClearProductsCache(); // إبطال كاش البحث بعد الاستيراد/التحديث الجماعي
                 TempData["Success"] = msg;
                 return RedirectToAction(nameof(Import));       // رجوع لنفس الصفحة مع رسالة نجاح
             }

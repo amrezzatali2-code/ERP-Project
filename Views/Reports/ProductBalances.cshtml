@@ -14,7 +14,7 @@
 
     // Pagination
     var page = ViewBag.Page as int? ?? 1;
-    var pageSize = ViewBag.PageSize as int? ?? 200;
+    var pageSize = ViewBag.PageSize as int? ?? 10;
     var totalPages = ViewBag.TotalPages as int? ?? 1;
     var totalCount = ViewBag.TotalCount as int? ?? 0;
 
@@ -33,6 +33,8 @@
     var includeBatches = ViewBag.IncludeBatches as bool? ?? true;
     var sortBy = ViewBag.SortBy as string ?? "name";
     var sortDir = ViewBag.SortDir as string ?? "asc";
+    var searchMode = ViewBag.SearchMode as string ?? "contains";
+    var pbQtyGtZeroChecked = !(ViewBag.IncludeZeroQty as bool? ?? false);
 
     // القوائم المنسدلة
     var categories = ViewBag.Categories as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
@@ -45,13 +47,14 @@
         return Url.Action("ProductBalances", "Reports", new
         {
             search,
+            searchMode,
             categoryId,
             productGroupId,
             hasBonus,
             warehouseId,
             fromDate,
             toDate,
-            includeZeroQty,
+            pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false",
             includeBatches,
             sortBy = col,
             sortDir = direction,
@@ -67,13 +70,14 @@
         return Url.Action("ProductBalances", "Reports", new
         {
             search,
+            searchMode,
             categoryId,
             productGroupId,
             hasBonus,
             warehouseId,
             fromDate,
             toDate,
-            includeZeroQty,
+            pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false",
             includeBatches,
             sortBy,
             sortDir,
@@ -88,19 +92,28 @@
     @* توكن مكافحة التزوير لطلبات AJAX (حفظ الخصم اليدوي) *@
     <form id="__AntiForgeryFormProductBalances" method="post" style="display:none">@Html.AntiForgeryToken()</form>
     @* ===== شريط الفلاتر الموحد (هادئ للعين) ===== *@
-    <div class="erp-list-filter-bar d-print-none mt-2 product-balances-report">
+    <div class="erp-list-filter-bar d-print-none mt-2 product-balances-report erp-pb-filter-dark-borders">
         <form method="get" asp-action="ProductBalances" asp-controller="Reports" id="filtersForm">
-            <div class="row g-3 align-items-end">
-                <input type="hidden" name="loadReport" value="true" />
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">بحث</label>
-                    <input type="text"
-                           name="search"
-                           list="productsList"
-                           class="form-control erp-filter-input"
-                           placeholder="اكتب اسم الصنف أو جزء منه..."
-                           autocomplete="off"
-                           value="@search" />
+            <input type="hidden" name="loadReport" value="true" />
+            <input type="hidden" name="includeBatches" value="true" />
+            @* —— صف 1: بحث مضغوط + فئة + مجموعة + مخزن + كمية أكبر من صفر + إعادة تعيين —— *@
+            <div class="row g-3 g-lg-3 align-items-end erp-pb-filter-row1">
+                <div class="col-12 col-md-6 col-xl-4 col-lg-3 erp-filter-section erp-pb-col-search">
+                    <label class="form-label small mb-1">بحث</label>
+                    <div class="d-flex flex-wrap gap-2 align-items-stretch">
+                        <select name="searchMode" class="form-select form-select-sm erp-filter-input erp-pb-search-mode" title="نوع البحث في اسم الصنف والباركود">
+                            <option value="starts" @(searchMode == "starts" ? "selected" : null)>يبدأ بـ</option>
+                            <option value="contains" @(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? "selected" : null)>يحتوي</option>
+                            <option value="ends" @(searchMode == "ends" ? "selected" : null)>ينتهي بـ</option>
+                        </select>
+                        <input type="text"
+                               name="search"
+                               list="productsList"
+                               class="form-control form-control-sm erp-filter-input flex-grow-1 erp-pb-search-text"
+                               placeholder="نص البحث…"
+                               autocomplete="off"
+                               value="@search" />
+                    </div>
                     <datalist id="productsList">
                         @if (ViewBag.ProductsAuto != null)
                         {
@@ -111,9 +124,9 @@
                         }
                     </datalist>
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">الفئة</label>
-                    <select name="categoryId" class="form-select erp-filter-input">
+                <div class="col-6 col-md-4 col-lg-2 col-xl-2 erp-filter-section erp-pb-col-dd">
+                    <label class="form-label small mb-1">الفئة</label>
+                    <select name="categoryId" class="form-select form-select-sm erp-filter-input">
                         <option value="">الكل</option>
                         @foreach (var cat in categories)
                         {
@@ -121,9 +134,9 @@
                         }
                     </select>
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">مجموعة الصنف</label>
-                    <select name="productGroupId" class="form-select erp-filter-input">
+                <div class="col-6 col-md-4 col-lg-2 col-xl-2 erp-filter-section erp-pb-col-dd">
+                    <label class="form-label small mb-1">مجموعة الصنف</label>
+                    <select name="productGroupId" class="form-select form-select-sm erp-filter-input">
                         <option value="">الكل</option>
                         @foreach (var pg in productGroups)
                         {
@@ -131,9 +144,9 @@
                         }
                     </select>
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">المخزن</label>
-                    <select name="warehouseId" id="warehouseIdSelect" class="form-select erp-filter-input">
+                <div class="col-6 col-md-4 col-lg-2 col-xl-2 erp-filter-section erp-pb-col-dd">
+                    <label class="form-label small mb-1">المخزن</label>
+                    <select name="warehouseId" id="warehouseIdSelect" class="form-select form-select-sm erp-filter-input">
                         <option value="">الكل</option>
                         @foreach (var wh in warehouses)
                         {
@@ -143,54 +156,57 @@
                         }
                     </select>
                 </div>
-                @* من تاريخ+وقت إلى تاريخ+وقت — فلتر الأصناف (شراء في المدة) والمبيعات (في المدة). الرصيد يبقى الحالي الكلي. *@
-                <div class="col-12 col-lg-auto erp-filter-section">
-                    <div class="d-flex flex-nowrap align-items-end gap-2">
-                        <div class="erp-pb-date-from-wrap">
-                            <label class="form-label small mb-0">من (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
-                            <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="بداية المدة (يوم/شهر/سنة ووقت)" />
-                        </div>
-                        <div class="erp-pb-date-to-wrap ms-2">
-                            <label class="form-label small mb-0">إلى (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
-                            <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="نهاية المدة (يوم/شهر/سنة ووقت)" />
-                        </div>
+                <div class="col-12 col-sm-auto erp-filter-section erp-pb-col-qty">
+                    <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
+                    <div class="d-flex align-items-center gap-2 erp-pb-qty-checkbox-wrap mb-0 px-2" dir="rtl">
+                        <label class="form-check-label small mb-0" for="pbQtyGtZero">الكمية أكبر من صفر</label>
+                        <input class="form-check-input erp-pb-qty-checkbox m-0 flex-shrink-0" type="checkbox" name="pbQtyGtZero" value="true" id="pbQtyGtZero" @(pbQtyGtZeroChecked ? "checked" : "") />
                     </div>
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label d-none d-md-block" style="visibility:hidden">—</label>
-                    <input type="hidden" name="includeBatches" value="true" />
-                    <div class="form-check mb-1">
-                        <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
-                        <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
-                    </div>
+                <div class="col-12 col-sm-auto erp-filter-section erp-pb-col-reset d-flex align-items-end">
+                    <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
+                    <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none">
+                        <span>🔄</span> إعادة تعيين
+                    </a>
                 </div>
-                <div class="col-12 col-lg-auto erp-filter-section ms-lg-auto">
-                    <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
-                    <div class="d-flex flex-wrap gap-2 justify-content-start">
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
-                            <span>📊</span> تجميع التقرير
-                        </button>
-                        <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none">
-                            <span>🔄</span> إعادة تعيين
-                        </a>
-                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" data-bs-toggle="modal" data-bs-target="#columnsModalProductBalances" title="إظهار/إخفاء أعمدة التقرير">
-                            اختيار الأعمدة
-                        </button>
-                        @if (reportData.Any())
-                        {
-                            <input type="hidden" name="pageSize" value="@pageSize" />
-                            <a href="@Url.Action("ExportProductBalances", "Reports", new { search, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, includeZeroQty, includeBatches, sortBy, sortDir })"
-                               class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none">
-                                <span>📥</span> تصدير Excel
-                            </a>
-                            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع (يشمل الخصومات في صفوف التشغيلات)">
-                                <span>💾</span> حفظ الخصم اليدوي
+            </div>
+            @* —— صف 2: التواريخ + تجميع التقرير + (عند وجود بيانات) تصدير وحفظ وحركة وأعمدة ونقل المرجّح —— *@
+            <div class="row g-0 align-items-end mt-3 erp-pb-filter-row2">
+                <div class="col-12 erp-filter-section erp-pb-filter-row2-inner">
+                    <div class="d-flex flex-wrap align-items-end gap-3 justify-content-between" dir="rtl">
+                        <div class="d-flex flex-wrap flex-lg-nowrap align-items-end gap-3 erp-pb-dates-group">
+                            <div class="erp-pb-date-from-wrap">
+                                <label class="form-label small mb-0">من (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
+                                <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="بداية المدة (يوم/شهر/سنة ووقت)" />
+                            </div>
+                            <div class="erp-pb-date-to-wrap">
+                                <label class="form-label small mb-0">إلى (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
+                                <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="نهاية المدة (يوم/شهر/سنة ووقت)" />
+                            </div>
+                        </div>
+                        <div class="d-flex flex-wrap gap-3 justify-content-start align-items-center erp-pb-actions-row" dir="rtl">
+                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
+                                <span>📊</span> تجميع التقرير
                             </button>
-                            <span id="erpPbSaveSuccessMessage" class="d-none text-success fw-bold me-2 small align-middle" style="vertical-align: middle;">تم الحفظ</span>
-                            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbCopyWeightedToManual" title="ينقل الخصم المرجّح (بعد التقريب لأقرب عدد صحيح) إلى خانة الخصم اليدوي لكل صف ظاهر ثم يحفظ">
-                                <span>📋</span> نقل المرجّح → يدوي (بعد التقريب)
-                            </button>
-                        }
+                            @if (reportData.Any())
+                            {
+                                <input type="hidden" name="pageSize" value="@pageSize" />
+                                <a href="@Url.Action("ExportProductBalances", "Reports", new { search, searchMode, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false", includeBatches, sortBy, sortDir })"
+                                   class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none">
+                                    <span>📥</span> تصدير Excel
+                                </a>
+                                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm d-print-none" id="erpPbSaveAllManualDiscount" title="حفظ كل تعديلات الخصم اليدوي للبيع (يشمل الخصومات في صفوف التشغيلات)">
+                                    <span>💾</span> حفظ الخصم اليدوي
+                                </button>
+                                <span id="erpPbSaveSuccessMessage" class="d-none text-success fw-bold me-2 small align-middle" style="vertical-align: middle;">تم الحفظ</span>
+                                @* ترتيب DOM: في RTL يظهر «نقل المرجّح» يمين الحزمة، ثم «حركة» و«الأعمدة» إلى يساره *@
+                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbCopyWeightedToManual" title="ينقل الخصم المرجّح (بعد التقريب لأقرب عدد صحيح) إلى خانة الخصم اليدوي لكل صف ظاهر ثم يحفظ">
+                                    <span>📋</span> نقل المرجّح → يدوي (بعد التقريب)
+                                </button>
+                                <button type="button" id="erpPbToolbarMovement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر صفاً في الجدول أولاً">حركة الصنف</button>
+                                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" data-bs-toggle="modal" data-bs-target="#columnsModalProductBalances" title="إظهار/إخفاء أعمدة التقرير">اختيار الأعمدة</button>
+                            }
+                        </div>
                     </div>
                 </div>
             </div>
@@ -276,6 +292,7 @@
             <table class="table table-striped table-hover mb-0 erp-table erp-table-sortable" id="productBalancesTable" data-pb-total-count="@totalCount">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                     <tr>
+                        <th style="width: 44px; min-width: 44px;" data-col="select" data-col-fixed="true" class="text-center no-print" title="تحديد الصف"></th>
                         <th style="min-width: 80px;" data-col="code">
                             <div class="d-flex align-items-center gap-1">
                                 <span>الكود</span>
@@ -332,14 +349,13 @@
                                 <button type="button" class="btn btn-sm p-0 erp-pb-col-filter-btn" data-col="cost" data-sort-key="cost" data-col-title="التكلفة الإجمالية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
                             </div>
                         </th>
-                        <th class="text-nowrap no-print" style="width:200px;min-width:200px;" data-col="actions" data-col-fixed="true">أوامر</th>
                     </tr>
                 </thead>
                 <tbody>
                     @if (!reportData.Any())
                     {
                         <tr>
-                            <td colspan="15" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                            <td colspan="18" class="text-center text-muted py-4">لا توجد بيانات.</td>
                         </tr>
                     }
                     else
@@ -347,7 +363,11 @@
                         @foreach (var item in reportData)
                         {
                             var hasBatches = item.Batches != null && item.Batches.Count >= 2;
-                            <tr data-pb-row data-prod-id="@item.ProdId" data-qty="@item.CurrentQty" data-has-batches="@(hasBatches ? "1" : "0")" data-weighted-discount="@(hasBatches ? "" : item.WeightedDiscount.ToString("G29", System.Globalization.CultureInfo.InvariantCulture))">
+                            var movementUrlPb = Url.Action("Show", "Products", new { id = item.ProdId }) + "?frame=1";
+                            <tr class="erp-list-selectable-row" data-pb-row data-prod-id="@item.ProdId" data-row-id="@item.ProdId" data-movement-url="@movementUrlPb" data-tab-title="حركة الصنف — @item.ProdCode" data-qty="@item.CurrentQty" data-has-batches="@(hasBatches ? "1" : "0")" data-weighted-discount="@(hasBatches ? "" : item.WeightedDiscount.ToString("G29", System.Globalization.CultureInfo.InvariantCulture))">
+                                <td class="text-center align-middle no-print" data-col="select">
+                                    <input type="checkbox" class="row-select" value="@item.ProdId" title="تحديد الصف" />
+                                </td>
                                 <td data-col="code" class="align-middle">
                                     @if (hasBatches)
                                     {
@@ -386,16 +406,13 @@
                                 <td data-col="priceRetail" class="text-end">@item.PriceRetail.ToString("N2")</td>
                                 <td data-col="unitCost" class="text-end">@item.UnitCost.ToString("N2")</td>
                                 <td data-col="cost" class="text-end">@item.TotalCost.ToString("N2")</td>
-                                <td class="text-nowrap no-print d-print-none" data-col="actions">
-                                    <a class="btn btn-erp btn-erp-secondary btn-erp-sm erp-pb-open-tab" href="@Url.Action("Show", "Products", new { id = item.ProdId })" data-tab-id="product-movement-tab" data-tab-title="حركة الصنف">حركة الصنف</a>
-                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm erp-pb-open-tab" href="@Url.Action("Edit", "Products", new { id = item.ProdId })" data-tab-id="product-edit-tab" data-tab-title="تعديل الصنف">تعديل</a>
-                                </td>
                             </tr>
                             @if (hasBatches)
                             {
                                 @foreach (var batch in item.Batches!)
                                 {
                                     <tr class="erp-pb-batch-row erp-pb-batches-for" data-pb-batch-row data-prod-id="@item.ProdId" data-batch-id="@(batch.BatchId ?? 0)" data-qty="@batch.CurrentQty" data-pb-batches-for="@item.ProdId" data-weighted-discount="@batch.WeightedDiscount.ToString("G29", System.Globalization.CultureInfo.InvariantCulture)" style="display: none;">
+                                        <td data-col="select" class="no-print"></td>
                                         <td data-col="code"></td>
                                         <td data-col="name" class="text-secondary" style="padding-right: 1.5rem;"><small>└ @(batch.BatchNo ?? "-")</small></td>
                                         <td data-col="batch"><small class="text-muted">@(batch.BatchNo ?? "—")</small></td>
@@ -415,7 +432,6 @@
                                         <td data-col="priceRetail" class="text-end">@batch.PriceRetail.ToString("N2")</td>
                                         <td data-col="unitCost" class="text-end">@batch.UnitCost.ToString("N2")</td>
                                         <td data-col="cost" class="text-end">@batch.TotalCost.ToString("N2")</td>
-                                        <td data-col="actions" class="d-print-none"></td>
                                     </tr>
                                 }
                             }
@@ -426,6 +442,7 @@
                 {
                     <tfoot class="table-secondary fw-bold" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
                         <tr>
+                            <td data-col="select" class="no-print"></td>
                             <td data-col="code" class="text-end"><strong>المجموع الإجمالي</strong></td>
                             <td data-col="name"></td>
                             <td data-col="batch"></td>
@@ -443,7 +460,6 @@
                             <td data-col="priceRetail" id="productBalancesFooterPriceRetail" class="text-end"><strong>@totalPriceRetail.ToString("N2")</strong></td>
                             <td data-col="unitCost" id="productBalancesFooterUnitCost" class="text-end"><strong>@totalUnitCost.ToString("N2")</strong></td>
                             <td data-col="cost" id="productBalancesFooterCost" class="text-end"><strong class="product-balances-total-value">@totalCost.ToString("N2")</strong></td>
-                            <td data-col="actions" class="no-print"></td>
                         </tr>
                     </tfoot>
                 }
@@ -454,8 +470,9 @@
     @* ===== شريط الترقيم تحت الجدول (حجم الصفحة + عرض من-إلى + تنقل) — محاذاة لليمين ===== *@
     @if (reportData.Any())
     {
-        var startRow = (page - 1) * pageSize + 1;
-        var endRow = Math.Min(page * pageSize, totalCount);
+        var ps = pageSize;
+        var startRow = totalCount == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+        var endRow = (ps == 0 || totalCount == 0) ? totalCount : Math.Min(totalCount, page * ps);
         <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" id="productBalancesPaginationBar" dir="rtl">
             <small class="text-muted" id="productBalancesPaginationText">
                 عرض @startRow - @endRow من @totalCount
@@ -463,27 +480,26 @@
             <form method="get" asp-action="ProductBalances" asp-controller="Reports" class="d-flex align-items-center gap-2">
                 <input type="hidden" name="loadReport" value="true" />
                 <input type="hidden" name="search" value="@search" />
+                <input type="hidden" name="searchMode" value="@searchMode" />
                 <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
                 <input type="hidden" name="productGroupId" value="@(productGroupId?.ToString() ?? "")" />
                 <input type="hidden" name="hasBonus" value="@(hasBonus == true ? "true" : "false")" />
                 <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
                 <input type="hidden" name="fromDate" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
                 <input type="hidden" name="toDate" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
-                <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
+                <input type="hidden" name="pbQtyGtZero" value="@(pbQtyGtZeroChecked ? "true" : "false")" />
                 <input type="hidden" name="includeBatches" value="true" />
                 <input type="hidden" name="sortBy" value="@(sortBy ?? "name")" />
                 <input type="hidden" name="sortDir" value="@(sortDir ?? "asc")" />
                 <input type="hidden" name="page" value="1" />
                 <label class="form-label m-0 nowrap">حجم الصفحة</label>
                 <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
-                    <option value="25" @(pageSize == 25 ? "selected" : "")>25</option>
-                    <option value="50" @(pageSize == 50 ? "selected" : "")>50</option>
-                    <option value="100" @(pageSize == 100 ? "selected" : "")>100</option>
-                    <option value="200" @(pageSize == 200 ? "selected" : "")>200</option>
-                    <option value="500" @(pageSize == 500 ? "selected" : "")>500</option>
-                    <option value="1000" @(pageSize == 1000 ? "selected" : "")>1000</option>
-                    <option value="5000" @(pageSize == 5000 ? "selected" : "")>5000</option>
-                    <option value="0" @(pageSize == 0 || (totalCount > 0 && pageSize >= totalCount) ? "selected" : "")>الكل</option>
+                    <option value="10" @(pageSize == 10 ? "selected" : null)>10</option>
+                    <option value="25" @(pageSize == 25 ? "selected" : null)>25</option>
+                    <option value="50" @(pageSize == 50 ? "selected" : null)>50</option>
+                    <option value="100" @(pageSize == 100 ? "selected" : null)>100</option>
+                    <option value="200" @(pageSize == 200 ? "selected" : null)>200</option>
+                    <option value="0" @(pageSize == 0 ? "selected" : null)>الكل</option>
                 </select>
             </form>
             <nav aria-label="pagination">
@@ -513,9 +529,9 @@
 <div class="modal fade no-print" id="columnsModalProductBalances" tabindex="-1" aria-labelledby="columnsModalProductBalancesLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content" dir="rtl">
-            <div class="modal-header">
+            <div class="modal-header text-white" style="background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%); border-bottom: none;">
                 <h5 class="modal-title flex-grow-1" id="columnsModalProductBalancesLabel">اختيار الأعمدة الظاهرة في تقرير أرصدة الأصناف</h5>
-                <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                <button type="button" class="btn-close btn-close-white ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
             <div class="modal-body">
                 <div class="small text-muted mb-2">ضع علامة ✓ أمام الأعمدة التي تريد ظهورها في الجدول.</div>
@@ -560,6 +576,59 @@
 @section Styles {
     <style>
         datalist { display: none; }
+        /* حدود أوضح لشريط الفلاتر والحقول (تقرير أرصدة الأصناف) */
+        .erp-pb-filter-dark-borders.erp-list-filter-bar {
+            border: 1px solid #94a3b8 !important;
+            border-radius: 12px;
+            padding: 1rem 1.25rem !important;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+        }
+        .erp-pb-filter-dark-borders .erp-filter-input,
+        .erp-pb-filter-dark-borders .form-select {
+            border-color: #94a3b8 !important;
+        }
+        .erp-pb-qty-checkbox {
+            width: 1.15rem;
+            height: 1.15rem;
+            border: 2px solid #64748b !important;
+            cursor: pointer;
+        }
+        .erp-pb-qty-checkbox-wrap {
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 0.35rem 0.5rem;
+            background: #fff;
+        }
+        /* صف الفلاتر العلوي: حقول أضيق + صف ثانٍ للأزرار */
+        .erp-pb-filter-row1 .erp-pb-col-dd {
+            max-width: 11rem;
+        }
+        .erp-pb-filter-row1 .erp-pb-col-dd .form-select {
+            max-width: 100%;
+        }
+        .erp-pb-filter-row1 .erp-pb-col-search .erp-pb-search-mode {
+            max-width: 5.75rem;
+            min-width: 4.75rem;
+            flex: 0 0 auto;
+        }
+        .erp-pb-filter-row1 .erp-pb-col-search .erp-pb-search-text {
+            min-width: 0;
+            max-width: 240px;
+        }
+        @@media (min-width: 1200px) {
+            .erp-pb-filter-row1 .erp-pb-col-search {
+                max-width: 28rem;
+            }
+        }
+        .erp-pb-actions-row {
+            flex-wrap: wrap;
+        }
+        #productBalancesTable tbody tr.erp-list-selectable-row.selected > td {
+            background-color: rgba(99, 102, 241, 0.12) !important;
+        }
+        #productBalancesTable tbody tr.erp-list-selectable-row {
+            cursor: pointer;
+        }
         /* حقول التاريخ والوقت أصغر حجماً ومنع التداخل */
         .erp-datetime-input {
             min-width: 165px;
@@ -705,7 +774,7 @@
             }
 
             const form = document.getElementById('filtersForm');
-            const includeZeroCb = document.getElementById('includeZeroQty');
+            const pbQtyChk = document.getElementById('pbQtyGtZero');
             var warehouseSelect = document.getElementById('warehouseIdSelect');
             if (warehouseSelect) {
                 var url = new URL(window.location.href);
@@ -715,13 +784,13 @@
                 }
             }
             if (form) {
-                form.addEventListener('submit', function (e) {
-                    var existingHidden = form.querySelector('input[name="includeZeroQty"][type="hidden"]');
-                    if (existingHidden) existingHidden.remove();
-                    if (includeZeroCb && !includeZeroCb.checked) {
+                form.addEventListener('submit', function () {
+                    var oldH = form.querySelector('input[name="pbQtyGtZero"][type="hidden"]');
+                    if (oldH) oldH.remove();
+                    if (pbQtyChk && !pbQtyChk.checked) {
                         var hidden = document.createElement('input');
                         hidden.type = 'hidden';
-                        hidden.name = 'includeZeroQty';
+                        hidden.name = 'pbQtyGtZero';
                         hidden.value = 'false';
                         form.appendChild(hidden);
                     }
@@ -1270,5 +1339,20 @@
                 });
             }
         })();
+    </script>
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.ERP && typeof ERP.initListSelection === 'function') {
+                ERP.initListSelection({
+                    rowSelector: 'tr[data-pb-row].erp-list-selectable-row',
+                    movementButtonId: 'erpPbToolbarMovement',
+                    movementUrlAttribute: 'data-movement-url',
+                    movementTabId: 'product-movement-tab',
+                    movementTabTitle: 'حركة الصنف',
+                    idAttribute: 'data-row-id'
+                });
+            }
+        });
     </script>
 }

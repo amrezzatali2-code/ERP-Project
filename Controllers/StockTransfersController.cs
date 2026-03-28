@@ -1149,6 +1149,8 @@ namespace ERP.Controllers
                 .ThenBy(sb => sb.BatchNo)
                 .ToListAsync();
 
+            int ledgerQty = await _stockAnalysisService.GetCurrentQtyAsync(prodId, fromWarehouseId);
+
             var batchInfos = new List<TransferBatchInfo>();
             foreach (var sb in stockBatches)
             {
@@ -1156,24 +1158,33 @@ namespace ERP.Controllers
                     .AsNoTracking()
                     .Where(b => b.ProdId == prodId && b.BatchNo == sb.BatchNo &&
                         (sb.Expiry == null || b.Expiry.Date == sb.Expiry.Value.Date))
-                    .Select(b => new { b.BatchId, b.PriceRetailBatch, b.UnitCostDefault })
                     .FirstOrDefaultAsync();
+
+                // لا نُرجع BatchId وهمياً (0) — يكسر FK عند الحفظ. إن لم يُطابق جدول Batches نتخطى السطر.
+                if (batch == null)
+                    continue;
+
+                // تشغيلات وهمية / صلاحية احتياطية (مثل 2099) لا تُعرض كتشغيلة حقيقية
+                if (batch.Expiry.Date >= new DateTime(2099, 1, 1))
+                    continue;
+
                 batchInfos.Add(new TransferBatchInfo
                 {
-                    BatchId = batch?.BatchId ?? 0,
+                    BatchId = batch.BatchId,
                     BatchNo = sb.BatchNo ?? "",
                     ExpiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("yyyy-MM-dd") : "",
                     Qty = sb.QtyOnHand,
-                    PriceRetailBatch = batch?.PriceRetailBatch ?? product.PriceRetail,
-                    UnitCost = batch?.UnitCostDefault ?? 0m
+                    PriceRetailBatch = batch.PriceRetailBatch ?? 0m,
+                    UnitCost = batch.UnitCostDefault ?? 0m
                 });
             }
 
-            int? firstBatchId = null;
-            if (batchInfos.Count > 0)
-                firstBatchId = batchInfos[0].BatchId;
-            // الخصم الفعّال = خصم يدوي من ProductDiscountOverrides إن وُجد، وإلا المرجّح من StockLedger
+            int? firstBatchId = batchInfos.Count > 0 ? batchInfos[0].BatchId : (int?)null;
             decimal weightedDiscount = await _stockAnalysisService.GetEffectivePurchaseDiscountAsync(prodId, fromWarehouseId, firstBatchId);
+
+            // الكمية المعروضة: مجموع التشغيلات الظاهرة في القائمة؛ إن لم يُعرض أي تشغيل نستخدم رصيد دفتر المخزون
+            decimal sumListedBatches = batchInfos.Sum(b => b.Qty);
+            decimal totalQtyOnHand = batchInfos.Count > 0 ? sumListedBatches : ledgerQty;
 
             decimal priceRetail = product.PriceRetail;
             decimal unitCost = 0m;
@@ -1197,6 +1208,7 @@ namespace ERP.Controllers
                 priceRetail,
                 unitCost,
                 weightedDiscount,
+                totalQtyOnHand,
                 firstBatchNo = firstBatchNo ?? "",
                 firstExpiry = firstExpiry ?? "",
                 firstBatchId,
@@ -1240,12 +1252,20 @@ namespace ERP.Controllers
             }
 
             int? batchId = dto.BatchId;
+            if (batchId.HasValue && batchId.Value <= 0)
+                batchId = null;
             if (!batchId.HasValue && !string.IsNullOrWhiteSpace(dto.BatchNo))
             {
                 var batch = await _context.Batches
                     .FirstOrDefaultAsync(b => b.BatchNo.Trim() == dto.BatchNo.Trim() && b.ProdId == dto.ProductId);
                 if (batch != null)
                     batchId = batch.BatchId;
+            }
+            if (batchId.HasValue)
+            {
+                var batchExists = await _context.Batches.AnyAsync(b => b.BatchId == batchId.Value);
+                if (!batchExists)
+                    batchId = null;
             }
 
             decimal unitCost = dto.UnitCost;
@@ -1255,6 +1275,9 @@ namespace ERP.Controllers
                 if (batch != null)
                     unitCost = batch.UnitCostDefault ?? 0m;
             }
+            // بدون تشغيلة: إن لم تُحسب تكلفة، نستخدم سعر الجمهور المعروض حتى لا يظهر إجمالي السطر صفراً
+            if (unitCost <= 0 && dto.PriceRetail.HasValue && dto.PriceRetail.Value > 0m)
+                unitCost = dto.PriceRetail.Value;
 
             int nextLineNo = transfer.Lines.Any() ? transfer.Lines.Max(l => l.LineNo) + 1 : 1;
 
@@ -1277,14 +1300,26 @@ namespace ERP.Controllers
 
             var product = await _context.Products.FindAsync(dto.ProductId);
             var batchEntity = batchId.HasValue ? await _context.Batches.FindAsync(batchId.Value) : null;
+            string batchNoDisp = "";
+            string expiryDisp = "";
+            if (batchEntity != null && batchEntity.Expiry.Date < new DateTime(2099, 1, 1))
+            {
+                batchNoDisp = batchEntity.BatchNo ?? "";
+                expiryDisp = batchEntity.Expiry.ToString("yyyy-MM-dd");
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.BatchNo))
+                batchNoDisp = dto.BatchNo!;
             return Json(new
             {
                 ok = true,
                 lineId = line.Id,
                 isUpdate = false,
+                batchId = line.BatchId,
+                productId = dto.ProductId,
                 productName = product?.ProdName ?? $"صنف #{dto.ProductId}",
-                batchNo = batchEntity?.BatchNo ?? dto.BatchNo ?? "-",
-                expiryDisplay = batchEntity?.Expiry.ToString("yyyy-MM-dd") ?? "-",
+                productLocation = string.IsNullOrWhiteSpace(product?.Location) ? "—" : product!.Location!,
+                batchNo = batchNoDisp,
+                expiryDisplay = expiryDisp,
                 qty = line.Qty,
                 priceRetail = line.PriceRetail,
                 weightedDiscountPct = line.WeightedDiscountPct,

@@ -37,6 +37,91 @@ namespace ERP.Controllers
             _accountVisibilityService = accountVisibilityService;
         }
 
+        /// <summary>عملاء نشطون + فلترة ظهور الحسابات — نفس بذرة أرصدة العملاء وربح الميزانية.</summary>
+        private async Task<HashSet<int>> GetEligibleActiveCustomerIdsForBalanceSheetAsync()
+        {
+            var q = _context.Customers.AsNoTracking().AsQueryable();
+            q = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(q);
+            q = q.Where(c => c.IsActive == true);
+            var list = await q.Select(c => c.CustomerId).ToListAsync();
+            return list.Count > 0 ? list.ToHashSet() : new HashSet<int>();
+        }
+
+        /// <summary>
+        /// مصدر واحد لمجموع المدين/الدائن للعملاء (نفس القيود + تاريخ اختياري) لربح الميزانية وإجماليات أرصدة العملاء.
+        /// </summary>
+        private async Task<(decimal DebitSum, decimal CreditSum)> ComputeBalanceSheetCustomerDebitCreditFromCustomerIdsAsync(
+            HashSet<int> customerIds,
+            DateTime? asOfDate)
+        {
+            if (customerIds == null || customerIds.Count == 0)
+                return (0m, 0m);
+
+            var q = _context.LedgerEntries
+                .AsNoTracking()
+                .Include(e => e.Account)
+                .Include(e => e.Customer)
+                .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value));
+            if (asOfDate.HasValue)
+                q = q.Where(e => e.EntryDate < asOfDate.Value.Date.AddDays(1));
+            q = await _accountVisibilityService.ApplyLedgerEntryListVisibilityFilterAsync(q);
+
+            var rows = await q
+                .GroupBy(e => e.CustomerId!.Value)
+                .Select(g => new { Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
+                .ToListAsync();
+
+            decimal debit = 0m, credit = 0m;
+            foreach (var r in rows)
+            {
+                if (r.Balance > 0) debit += r.Balance;
+                else if (r.Balance < 0) credit += Math.Abs(r.Balance);
+            }
+            return (debit, credit);
+        }
+
+        /// <summary>فلتر بحث أصناف تقرير أرصدة الأصناف (يبدأ بـ / يحتوي / ينتهي بـ).</summary>
+        private static IQueryable<Product> ApplyProductBalancesSearchFilter(
+            IQueryable<Product> productsQuery,
+            string? search,
+            string? searchMode)
+        {
+            if (string.IsNullOrWhiteSpace(search)) return productsQuery;
+            var s = search.Trim();
+            var mode = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            return mode switch
+            {
+                "starts" => productsQuery.Where(p =>
+                    (p.ProdName != null && p.ProdName.StartsWith(s)) ||
+                    (p.Barcode != null && p.Barcode.StartsWith(s)) ||
+                    (p.ProdId.ToString() == s)),
+                "ends" => productsQuery.Where(p =>
+                    (p.ProdName != null && p.ProdName.EndsWith(s)) ||
+                    (p.Barcode != null && p.Barcode.EndsWith(s)) ||
+                    (p.ProdId.ToString() == s)),
+                _ => productsQuery.Where(p =>
+                    (p.ProdName != null && p.ProdName.Contains(s)) ||
+                    (p.Barcode != null && p.Barcode.Contains(s)) ||
+                    (p.ProdId.ToString() == s)),
+            };
+        }
+
+        /// <summary>تكلفة المخزون من StockLedger — مصدر واحد لربح الميزانية وكارت إجمالي التكلفة في أرصدة الأصناف.</summary>
+        private async Task<decimal> ComputeBalanceSheetInventoryCostAsync(int? warehouseId)
+        {
+            var invBaseQuery = _context.StockLedger.AsNoTracking()
+                .Where(sl => sl.QtyIn > 0 || (sl.RemainingQty ?? 0) > 0);
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+                invBaseQuery = invBaseQuery.Where(sl => sl.WarehouseId == warehouseId.Value);
+            decimal invFromTotalCost = await invBaseQuery
+                .Where(sl => sl.TotalCost != null && sl.TotalCost.Value != 0)
+                .SumAsync(sl => sl.TotalCost!.Value);
+            decimal invFromQtyUnit = await invBaseQuery
+                .Where(sl => sl.TotalCost == null || sl.TotalCost.Value == 0)
+                .SumAsync(sl => (decimal)(sl.RemainingQty ?? (sl.QtyIn > 0 && sl.QtyOut == 0 ? sl.QtyIn : 0)) * sl.UnitCost);
+            return invFromTotalCost + invFromQtyUnit;
+        }
+
         /// <summary>
         /// إصلاح القيود المتبقية من مستندات محذوفة (أذون استلام/دفع، إشعارات) دون عكس، ثم إعادة حساب أرصدة العملاء.
         /// </summary>
@@ -389,7 +474,8 @@ namespace ERP.Controllers
             string? sortDir = "asc",
             bool loadReport = false,
             int page = 1,
-            int pageSize = 200)
+            int pageSize = 10,
+            string? searchMode = "contains")
         {
             // =========================================================
             // 1) تجهيز القوائم المنسدلة (Categories, Warehouses)
@@ -465,6 +551,7 @@ namespace ERP.Controllers
             ViewBag.IncludeBatches = includeBatches;
             ViewBag.SortBy = sortBy;
             ViewBag.SortDir = sortDir;
+            ViewBag.SearchMode = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode!.Trim();
 
             // =========================================================
             // 3) تحميل البيانات فقط عند الضغط على "تجميع التقرير"
@@ -476,17 +563,40 @@ namespace ERP.Controllers
                 ViewBag.IncludeBatches = true;
                 ViewBag.ReportData = new List<ProductBalanceReportDto>();
                 ViewBag.TotalCost = 0m;
+                ViewBag.Page = 1;
+                ViewBag.PageSize = 10;
+                ViewBag.TotalPages = 1;
+                ViewBag.TotalCount = 0;
                 return View();
             }
 
-            // عند تحميل التقرير: إذا لم يتم تحديد includeZeroQty في الـ query، اجعله false افتراضياً
-            // (لأن checkbox غير المُفعّل لا يُرسل في الـ form GET)
-            string? includeZeroQtyStr = Request.Query["includeZeroQty"].FirstOrDefault();
-            if (string.IsNullOrEmpty(includeZeroQtyStr))
+            // حجم الصفحة (نمط القوائم): آخر قيمة في الـ query، وقيم مسموحة 10/25/50/100/200 أو 0 = الكل
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (pageSize < 0) pageSize = 10;
+            var allowedPageSizes = new[] { 0, 10, 25, 50, 100, 200 };
+            if (pageSize > 0 && !allowedPageSizes.Contains(pageSize))
+                pageSize = 10;
+
+            var pageQuery = Request.Query["page"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageQuery) && int.TryParse(pageQuery, out var pageParsed))
+                page = pageParsed;
+
+            // «الكمية أكبر من صفر» (pbQtyGtZero): عند التفعيل يُستبعد رصيد صفر — يعادل includeZeroQty=false
+            // توافق قديم: includeZeroQty=true في الـ query يعني عرض أصناف برصيد صفر
+            var pbQtyGtZero = Request.Query["pbQtyGtZero"].FirstOrDefault();
+            if (pbQtyGtZero != null)
+                includeZeroQty = !string.Equals(pbQtyGtZero, "true", StringComparison.OrdinalIgnoreCase);
+            else
             {
-                includeZeroQty = false; // الافتراضي: عدم عرض الصفر
-                ViewBag.IncludeZeroQty = false;
+                var legacyInc = Request.Query["includeZeroQty"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(legacyInc))
+                    includeZeroQty = string.Equals(legacyInc, "true", StringComparison.OrdinalIgnoreCase);
+                else
+                    includeZeroQty = false;
             }
+            ViewBag.IncludeZeroQty = includeZeroQty;
 
             // عند عدم تحديد تاريخ: لا نطبّق فلتر "أصناف تم شراؤها في الفترة" (نعرض الكل حسب الفلاتر الأخرى)
             // عند التحديد: نقتصر على أصناف لها حركة شراء (StockLedger SourceType=Purchase) في المدى [fromDate, toDate]
@@ -517,15 +627,8 @@ namespace ERP.Controllers
                 .Include(p => p.ProductBonusGroup)
                 .AsQueryable();
 
-            // فلتر البحث (اسم الصنف أو الكود)
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var s = search.Trim();
-                productsQuery = productsQuery.Where(p =>
-                    p.ProdName.Contains(s) ||
-                    (p.Barcode != null && p.Barcode.Contains(s)) ||
-                    (p.ProdId.ToString() == s));
-            }
+            // فلتر البحث (اسم الصنف أو الكود) — يبدأ بـ / يحتوي / ينتهي بـ
+            productsQuery = ApplyProductBalancesSearchFilter(productsQuery, search, searchMode);
 
             // فلتر الفئة
             if (categoryId.HasValue && categoryId.Value > 0)
@@ -571,6 +674,17 @@ namespace ERP.Controllers
             {
                 ViewBag.ReportData = new List<ProductBalanceReportDto>();
                 ViewBag.TotalCost = 0m;
+                ViewBag.TotalQty = 0;
+                ViewBag.TotalPriceRetail = 0m;
+                ViewBag.TotalSalesQty = 0m;
+                ViewBag.TotalUnitCost = 0m;
+                ViewBag.WeightedAvgDiscount = 0m;
+                ViewBag.AveragePriceRetail = 0m;
+                ViewBag.AverageUnitCost = 0m;
+                ViewBag.Page = 1;
+                ViewBag.PageSize = pageSize;
+                ViewBag.TotalPages = 1;
+                ViewBag.TotalCount = 0;
                 return View();
             }
 
@@ -921,12 +1035,13 @@ namespace ERP.Controllers
 
             // =========================================================
             // 8) حساب المجاميع الإجمالية (من كل البيانات - قبل Pagination)
+            // إجمالي التكلفة: مصدر واحد مع «ربح الميزانية» (StockLedger) وليس مجموع صفوف التقرير.
             // =========================================================
             int totalQty = reportData.Sum(r => r.CurrentQty);
             decimal totalPriceRetail = reportData.Sum(r => r.PriceRetail);
             decimal totalSalesQty = reportData.Sum(r => r.SalesQty);
             decimal totalUnitCost = reportData.Sum(r => r.UnitCost);
-            decimal totalCostSum = reportData.Sum(r => r.TotalCost);
+            decimal totalCostSum = await ComputeBalanceSheetInventoryCostAsync(warehouseId);
 
             int totalCount = reportData.Count; // إجمالي عدد الأصناف (قبل Pagination)
             // متوسط الخصم المرجح (موزون بالكمية)، متوسط سعر الجمهور، متوسط تكلفة العلبة — للكروت
@@ -937,30 +1052,39 @@ namespace ERP.Controllers
             decimal averageUnitCost = totalCount > 0 ? totalUnitCost / totalCount : 0m;
 
             // =========================================================
-            // 9) Pagination (اختياري: 200, 500, 1000, 5000, أو الكل)
+            // 9) Pagination (نمط القوائم: 10، 25، 50، 100، 200، أو الكل)
             // =========================================================
-            if (pageSize > 0 && pageSize < totalCount)
+            ViewBag.TotalCount = totalCount;
+            if (totalCount == 0)
             {
-                // تطبيق Pagination
+                ViewBag.Page = 1;
+                ViewBag.PageSize = pageSize;
+                ViewBag.TotalPages = 1;
+            }
+            else if (pageSize == 0)
+            {
+                int effectiveAll = Math.Min(totalCount, 100_000);
+                reportData = reportData.Take(effectiveAll).ToList();
+                ViewBag.Page = 1;
+                ViewBag.PageSize = 0;
+                ViewBag.TotalPages = 1;
+            }
+            else if (pageSize < totalCount)
+            {
                 if (page < 1) page = 1;
                 int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
                 if (page > totalPages) page = totalPages;
-
                 int skip = (page - 1) * pageSize;
                 reportData = reportData.Skip(skip).Take(pageSize).ToList();
-
                 ViewBag.Page = page;
                 ViewBag.PageSize = pageSize;
                 ViewBag.TotalPages = totalPages;
-                ViewBag.TotalCount = totalCount;
             }
             else
             {
-                // عرض الكل (لا Pagination)
                 ViewBag.Page = 1;
-                ViewBag.PageSize = totalCount;
+                ViewBag.PageSize = pageSize;
                 ViewBag.TotalPages = 1;
-                ViewBag.TotalCount = totalCount;
             }
 
             ViewBag.ReportData = reportData;
@@ -1815,6 +1939,7 @@ namespace ERP.Controllers
             string? filterCol_name = null,
             string? filterCol_category = null,
             string? filterCol_phone = null,
+            string? filterCol_account = null,
             string? filterCol_debit = null,
             string? filterCol_credit = null,
             string? filterCol_creditlimit = null,
@@ -1879,6 +2004,7 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Category = filterCol_category;
             ViewBag.FilterCol_Phone = filterCol_phone;
+            ViewBag.FilterCol_Account = filterCol_account;
             ViewBag.FilterCol_Debit = filterCol_debit;
             ViewBag.FilterCol_Credit = filterCol_credit;
             ViewBag.FilterCol_CreditLimit = filterCol_creditlimit;
@@ -1982,14 +2108,21 @@ namespace ERP.Controllers
                     c.PartyCategory,
                     c.Phone1,
                     c.CreditLimit,
-                    c.ExternalCode
+                    c.ExternalCode,
+                    c.AccountId,
+                    AccountCode = c.Account != null ? c.Account.AccountCode : null,
+                    AccountName = c.Account != null ? c.Account.AccountName : null
                 })
                 .ToDictionaryAsync(c => c.CustomerId);
 
-            // 6.1.1) حساب الرصيد الحالي من LedgerEntries (مصدر الحقيقة)
-            var balanceByCustomer = await _context.LedgerEntries
+            // 6.1.1) حساب الرصيد الحالي من LedgerEntries (مصدر الحقيقة) — نفس قيود دفتر الأستاذ الظاهرة للمستخدم
+            var ledgerForBalance = _context.LedgerEntries
                 .AsNoTracking()
-                .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value))
+                .Include(e => e.Account)
+                .Include(e => e.Customer)
+                .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value));
+            ledgerForBalance = await _accountVisibilityService.ApplyLedgerEntryListVisibilityFilterAsync(ledgerForBalance);
+            var balanceByCustomer = await ledgerForBalance
                 .GroupBy(e => e.CustomerId!.Value)
                 .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
                 .ToDictionaryAsync(x => x.CustomerId, x => x.Balance);
@@ -2158,6 +2291,9 @@ namespace ERP.Controllers
                     CustomerCode = customerId.ToString(),
                     ExternalCode = customer.ExternalCode,
                     CustomerName = customer.CustomerName ?? "",
+                    AccountId = customer.AccountId,
+                    AccountCode = customer.AccountCode,
+                    AccountName = customer.AccountName,
                     PartyCategory = customer.PartyCategory ?? "",
                     Phone1 = customer.Phone1 ?? "",
                     CurrentBalance = currentBalance,
@@ -2198,6 +2334,12 @@ namespace ERP.Controllers
                 var vals = filterCol_phone.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (vals.Count > 0)
                     reportData = reportData.Where(r => vals.Any(v => (r.Phone1 ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_account))
+            {
+                var vals = filterCol_account.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.AccountDisplay ?? "").Contains(v))).ToList();
             }
             if (!string.IsNullOrWhiteSpace(filterCol_debit))
             {
@@ -2291,6 +2433,11 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.Phone1 ?? "").ToList()
                         : reportData.OrderBy(r => r.Phone1 ?? "").ToList();
                     break;
+                case "account":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.AccountDisplay ?? "").ToList()
+                        : reportData.OrderBy(r => r.AccountDisplay ?? "").ToList();
+                    break;
                 case "debit":
                     // عمود المدين: الترتيب حسب قيمة المدين المعروضة (الرصيد إن كان موجباً، وإلا صفر)
                     decimal DebitDisplayValue(CustomerBalanceReportDto r) => r.CurrentBalance > 0 ? r.CurrentBalance : 0m;
@@ -2340,10 +2487,11 @@ namespace ERP.Controllers
 
             // =========================================================
             // 8) حساب المجاميع الإجمالية (من كل البيانات - قبل Pagination)
+            // المدين/الدائن/صافي الرصيد: مصدر واحد مع «ربح الميزانية» (نفس نطاق customerIds + قيود الدفتر).
             // =========================================================
-            decimal totalBalance = reportData.Sum(r => r.CurrentBalance);
-            decimal totalDebitSum = reportData.Sum(r => r.CurrentBalance > 0 ? r.CurrentBalance : 0m);
-            decimal totalCreditSum = reportData.Sum(r => r.CurrentBalance < 0 ? Math.Abs(r.CurrentBalance) : 0m);
+            var customerIdSetForTotals = customerIds.ToHashSet();
+            var (totalDebitSum, totalCreditSum) = await ComputeBalanceSheetCustomerDebitCreditFromCustomerIdsAsync(customerIdSetForTotals, null);
+            decimal totalBalance = totalDebitSum - totalCreditSum;
             decimal totalSalesSum = reportData.Sum(r => r.TotalSales);
             decimal totalPurchasesSum = reportData.Sum(r => r.TotalPurchases);
             decimal totalReturnsSum = reportData.Sum(r => r.TotalReturns);
@@ -2391,6 +2539,7 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Category = filterCol_category;
             ViewBag.FilterCol_Phone = filterCol_phone;
+            ViewBag.FilterCol_Account = filterCol_account;
             ViewBag.FilterCol_Debit = filterCol_debit;
             ViewBag.FilterCol_Credit = filterCol_credit;
             ViewBag.FilterCol_CreditLimit = filterCol_creditlimit;
@@ -2412,13 +2561,9 @@ namespace ERP.Controllers
             string column,
             string? searchTerm = null)
         {
-            var (hiddenAccountIdsCol, restrictedCol) = await _accountVisibilityService.GetVisibilityStateForCurrentUserAsync();
-            var hiddenListCol = hiddenAccountIdsCol.ToList();
+            // نفس منطق تقرير أرصدة العملاء (CustomerBalances) — لا فلترة يدوية مخفّفة تُسبب عكس التجميعة/البحث
             var q = _context.Customers.AsNoTracking().Where(c => c.IsActive == true);
-            if (hiddenListCol.Count > 0)
-                q = restrictedCol
-                    ? q.Where(c => c.AccountId != null && !hiddenListCol.Contains(c.AccountId.Value))
-                    : q.Where(c => c.AccountId == null || !hiddenListCol.Contains(c.AccountId.Value));
+            q = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(q);
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var s = search.Trim();
@@ -2429,7 +2574,8 @@ namespace ERP.Controllers
             if (governorateId.HasValue && governorateId.Value > 0)
                 q = q.Where(c => c.GovernorateId == governorateId.Value);
 
-            var term = (searchTerm ?? "").Trim().ToLowerInvariant();
+            var rawTerm = (searchTerm ?? "").Trim();
+            var term = rawTerm.ToLowerInvariant();
             List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
             {
                 "code" => (await q.Select(c => c.CustomerId.ToString()).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList(),
@@ -2440,6 +2586,10 @@ namespace ERP.Controllers
                 "phone" => string.IsNullOrEmpty(term)
                     ? (await q.Where(c => c.Phone1 != null).Select(c => c.Phone1!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList()
                     : (await q.Where(c => c.Phone1 != null && EF.Functions.Like(c.Phone1, "%" + term + "%")).Select(c => c.Phone1!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v ?? "", v ?? "")).ToList(),
+                "account" => string.IsNullOrEmpty(rawTerm)
+                    ? (await q.Where(c => c.Account != null).Select(c => (c.Account!.AccountCode ?? "") + " — " + (c.Account.AccountName ?? "")).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
+                    : (await q.Where(c => c.Account != null && ((c.Account!.AccountCode != null && c.Account.AccountCode.Contains(rawTerm)) || (c.Account.AccountName != null && c.Account.AccountName.Contains(rawTerm))))
+                        .Select(c => (c.Account!.AccountCode ?? "") + " — " + (c.Account.AccountName ?? "")).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList(),
                 _ => new List<(string, string)>()
             };
             return Json(items.Select(x => new { value = x.Value, display = x.Display }));
@@ -2462,6 +2612,7 @@ namespace ERP.Controllers
             string? filterCol_name = null,
             string? filterCol_category = null,
             string? filterCol_phone = null,
+            string? filterCol_account = null,
             string? filterCol_debit = null,
             string? filterCol_credit = null,
             string? filterCol_creditlimit = null,
@@ -2517,13 +2668,20 @@ namespace ERP.Controllers
                     c.PartyCategory,
                     c.Phone1,
                     c.CreditLimit,
-                    c.ExternalCode
+                    c.ExternalCode,
+                    c.AccountId,
+                    AccountCode = c.Account != null ? c.Account.AccountCode : null,
+                    AccountName = c.Account != null ? c.Account.AccountName : null
                 })
                 .ToDictionaryAsync(c => c.CustomerId);
 
-            var balanceByCustomer = await _context.LedgerEntries
+            var ledgerForBalanceExport = _context.LedgerEntries
                 .AsNoTracking()
-                .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value))
+                .Include(e => e.Account)
+                .Include(e => e.Customer)
+                .Where(e => e.CustomerId.HasValue && customerIds.Contains(e.CustomerId.Value));
+            ledgerForBalanceExport = await _accountVisibilityService.ApplyLedgerEntryListVisibilityFilterAsync(ledgerForBalanceExport);
+            var balanceByCustomer = await ledgerForBalanceExport
                 .GroupBy(e => e.CustomerId!.Value)
                 .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
                 .ToDictionaryAsync(x => x.CustomerId, x => x.Balance);
@@ -2675,6 +2833,9 @@ namespace ERP.Controllers
                     CustomerCode = customerId.ToString(),
                     ExternalCode = customer.ExternalCode,
                     CustomerName = customer.CustomerName ?? "",
+                    AccountId = customer.AccountId,
+                    AccountCode = customer.AccountCode,
+                    AccountName = customer.AccountName,
                     PartyCategory = customer.PartyCategory ?? "",
                     Phone1 = customer.Phone1 ?? "",
                     CurrentBalance = currentBalance,
@@ -2711,6 +2872,12 @@ namespace ERP.Controllers
                 var vals = filterCol_phone.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (vals.Count > 0)
                     reportData = reportData.Where(r => vals.Any(v => (r.Phone1 ?? "").Contains(v))).ToList();
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_account))
+            {
+                var vals = filterCol_account.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+                if (vals.Count > 0)
+                    reportData = reportData.Where(r => vals.Any(v => (r.AccountDisplay ?? "").Contains(v))).ToList();
             }
             if (!string.IsNullOrWhiteSpace(filterCol_debit))
             {
@@ -2802,6 +2969,11 @@ namespace ERP.Controllers
                         ? reportData.OrderByDescending(r => r.Phone1 ?? "").ToList()
                         : reportData.OrderBy(r => r.Phone1 ?? "").ToList();
                     break;
+                case "account":
+                    reportData = isDesc
+                        ? reportData.OrderByDescending(r => r.AccountDisplay ?? "").ToList()
+                        : reportData.OrderBy(r => r.AccountDisplay ?? "").ToList();
+                    break;
                 case "debit":
                     decimal DebitDisplayValueExport(CustomerBalanceReportDto r) => r.CurrentBalance > 0 ? r.CurrentBalance : 0m;
                     reportData = isDesc
@@ -2857,17 +3029,18 @@ namespace ERP.Controllers
             worksheet.Cell(row, 1).Value = "الكود";
             worksheet.Cell(row, 2).Value = "كود الاكسل";
             worksheet.Cell(row, 3).Value = "اسم العميل";
-            worksheet.Cell(row, 4).Value = "فئة العميل";
-            worksheet.Cell(row, 5).Value = "الهاتف";
-            worksheet.Cell(row, 6).Value = "مدين";
-            worksheet.Cell(row, 7).Value = "دائن";
-            worksheet.Cell(row, 8).Value = "الحد الائتماني";
-            worksheet.Cell(row, 9).Value = "المبيعات";
-            worksheet.Cell(row, 10).Value = "المشتريات";
-            worksheet.Cell(row, 11).Value = "المرتجعات";
-            worksheet.Cell(row, 12).Value = "الائتمان المتاح";
+            worksheet.Cell(row, 4).Value = "حساب العميل";
+            worksheet.Cell(row, 5).Value = "فئة العميل";
+            worksheet.Cell(row, 6).Value = "الهاتف";
+            worksheet.Cell(row, 7).Value = "مدين";
+            worksheet.Cell(row, 8).Value = "دائن";
+            worksheet.Cell(row, 9).Value = "الحد الائتماني";
+            worksheet.Cell(row, 10).Value = "المبيعات";
+            worksheet.Cell(row, 11).Value = "المشتريات";
+            worksheet.Cell(row, 12).Value = "المرتجعات";
+            worksheet.Cell(row, 13).Value = "الائتمان المتاح";
 
-            worksheet.Range(row, 1, row, 12).Style.Font.Bold = true;
+            worksheet.Range(row, 1, row, 13).Style.Font.Bold = true;
 
             // البيانات
             row = 2;
@@ -2878,15 +3051,16 @@ namespace ERP.Controllers
                 worksheet.Cell(row, 1).Value = item.CustomerCode;
                 worksheet.Cell(row, 2).Value = item.ExternalCode ?? "";
                 worksheet.Cell(row, 3).Value = item.CustomerName;
-                worksheet.Cell(row, 4).Value = item.PartyCategory;
-                worksheet.Cell(row, 5).Value = item.Phone1;
-                worksheet.Cell(row, 6).Value = debitVal;
-                worksheet.Cell(row, 7).Value = creditVal;
-                worksheet.Cell(row, 8).Value = item.CreditLimit;
-                worksheet.Cell(row, 9).Value = item.TotalSales;
-                worksheet.Cell(row, 10).Value = item.TotalPurchases;
-                worksheet.Cell(row, 11).Value = item.TotalReturns;
-                worksheet.Cell(row, 12).Value = item.AvailableCredit;
+                worksheet.Cell(row, 4).Value = string.IsNullOrEmpty(item.AccountDisplay) ? "—" : item.AccountDisplay;
+                worksheet.Cell(row, 5).Value = item.PartyCategory;
+                worksheet.Cell(row, 6).Value = item.Phone1;
+                worksheet.Cell(row, 7).Value = debitVal;
+                worksheet.Cell(row, 8).Value = creditVal;
+                worksheet.Cell(row, 9).Value = item.CreditLimit;
+                worksheet.Cell(row, 10).Value = item.TotalSales;
+                worksheet.Cell(row, 11).Value = item.TotalPurchases;
+                worksheet.Cell(row, 12).Value = item.TotalReturns;
+                worksheet.Cell(row, 13).Value = item.AvailableCredit;
                 row++;
             }
 
@@ -2915,13 +3089,19 @@ namespace ERP.Controllers
             bool includeZeroQty = false,
             bool includeBatches = true,
             string? sortBy = "name",
-            string? sortDir = "asc")
+            string? sortDir = "asc",
+            string? searchMode = "contains")
         {
-            // عند التصدير: إذا لم يتم تحديد includeZeroQty، اجعله false افتراضياً
-            string? includeZeroQtyStr = Request.Query["includeZeroQty"].FirstOrDefault();
-            if (string.IsNullOrEmpty(includeZeroQtyStr))
+            var pbQtyGtZeroExp = Request.Query["pbQtyGtZero"].FirstOrDefault();
+            if (pbQtyGtZeroExp != null)
+                includeZeroQty = !string.Equals(pbQtyGtZeroExp, "true", StringComparison.OrdinalIgnoreCase);
+            else
             {
-                includeZeroQty = false;
+                var legacyInc = Request.Query["includeZeroQty"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(legacyInc))
+                    includeZeroQty = string.Equals(legacyInc, "true", StringComparison.OrdinalIgnoreCase);
+                else
+                    includeZeroQty = false;
             }
 
             // عند عدم تحديد تاريخ: لا نطبّق فلتر "أصناف تم شراؤها في الفترة"
@@ -2934,14 +3114,7 @@ namespace ERP.Controllers
                 .Include(p => p.ProductBonusGroup)
                 .AsQueryable();
 
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var s = search.Trim();
-                productsQuery = productsQuery.Where(p =>
-                    p.ProdName.Contains(s) ||
-                    (p.Barcode != null && p.Barcode.Contains(s)) ||
-                    (p.ProdId.ToString() == s));
-            }
+            productsQuery = ApplyProductBalancesSearchFilter(productsQuery, search, searchMode);
 
             if (categoryId.HasValue && categoryId.Value > 0)
             {
@@ -3443,31 +3616,12 @@ namespace ERP.Controllers
 
             // =========================================================
             // 3.1) حساب ربح الميزانية مرة واحدة (لا يعتمد على قائمة الأصناف) — لضمان ظهور تكلفة المخزون حتى مع فلتر تاريخ يفرغ القائمة
+            // عملاء المدين/الدائن + تكلفة المخزون: دوال مشتركة مع تقرير أرصدة العملاء / أرصدة الأصناف (مصدر واحد).
             // =========================================================
-            decimal customersDebitSum = 0m;
-            decimal customersCreditSum = 0m;
+            var eligibleSetBs = await GetEligibleActiveCustomerIdsForBalanceSheetAsync();
+            var (customersDebitSum, customersCreditSum) = await ComputeBalanceSheetCustomerDebitCreditFromCustomerIdsAsync(eligibleSetBs, toDate);
             decimal treasuryBalance = 0m;
-            decimal inventoryCostTotal = 0m;
-
-            var activeCustomerIdsForBs = await _context.Customers
-                .AsNoTracking()
-                .Where(c => c.IsActive == true)
-                .Select(c => c.CustomerId)
-                .ToListAsync();
-            var customerLedgerQueryBs = _context.LedgerEntries
-                .AsNoTracking()
-                .Where(e => e.CustomerId.HasValue && activeCustomerIdsForBs.Contains(e.CustomerId.Value));
-            if (toDate.HasValue)
-                customerLedgerQueryBs = customerLedgerQueryBs.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
-            var customerBalancesFromLedgerBs = await customerLedgerQueryBs
-                .GroupBy(e => e.CustomerId!.Value)
-                .Select(g => new { CustomerId = g.Key, Balance = g.Sum(e => (decimal?)(e.Debit - e.Credit)) ?? 0m })
-                .ToListAsync();
-            foreach (var c in customerBalancesFromLedgerBs)
-            {
-                if (c.Balance > 0) customersDebitSum += c.Balance;
-                else if (c.Balance < 0) customersCreditSum += Math.Abs(c.Balance);
-            }
+            decimal inventoryCostTotal = await ComputeBalanceSheetInventoryCostAsync(warehouseId);
 
             var cashAccountIdsBs = await _context.Accounts
                 .AsNoTracking()
@@ -3485,19 +3639,6 @@ namespace ERP.Controllers
                     treasuryQueryBs = treasuryQueryBs.Where(e => e.EntryDate < toDate.Value.Date.AddDays(1));
                 treasuryBalance = await treasuryQueryBs.SumAsync(e => (decimal?)(e.Debit - e.Credit)) ?? 0m;
             }
-
-            // تكلفة البضاعة في المخزن — من StockLedger (نفس منطق أرصدة الأصناف): جملتين منفصلتين لضمان ترجمة EF صحيحة
-            var invBaseQuery = _context.StockLedger.AsNoTracking()
-                .Where(sl => sl.QtyIn > 0 || (sl.RemainingQty ?? 0) > 0);
-            if (warehouseId.HasValue && warehouseId.Value > 0)
-                invBaseQuery = invBaseQuery.Where(sl => sl.WarehouseId == warehouseId.Value);
-            decimal invFromTotalCost = await invBaseQuery
-                .Where(sl => sl.TotalCost != null && sl.TotalCost.Value != 0)
-                .SumAsync(sl => sl.TotalCost!.Value);
-            decimal invFromQtyUnit = await invBaseQuery
-                .Where(sl => sl.TotalCost == null || sl.TotalCost.Value == 0)
-                .SumAsync(sl => (decimal)(sl.RemainingQty ?? (sl.QtyIn > 0 && sl.QtyOut == 0 ? sl.QtyIn : 0)) * sl.UnitCost);
-            inventoryCostTotal = invFromTotalCost + invFromQtyUnit;
 
             decimal balanceSheetProfit = customersDebitSum + treasuryBalance + inventoryCostTotal - customersCreditSum;
 

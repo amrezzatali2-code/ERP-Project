@@ -516,6 +516,14 @@
             <div class="col-auto customer-stat-card">
                 <div class="card compact-card text-center shadow-sm">
                     <div class="card-body p-1">
+                        <div class="compact-label text-muted" style="font-size: 0.65rem;">سعر الجمهور</div>
+                        <div class="compact-stat" style="font-size: 0.95rem; color: #6366f1;">@(((decimal)priceRetail).ToString("N2"))</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto customer-stat-card">
+                <div class="card compact-card text-center shadow-sm">
+                    <div class="card-body p-1">
                         <div class="compact-label text-muted" style="font-size: 0.65rem;">الخصم المرجّح</div>
                         <div class="compact-stat text-info" style="font-size: 0.95rem;">@(((decimal)weightedDiscount).ToString("0.00"))%</div>
                     </div>

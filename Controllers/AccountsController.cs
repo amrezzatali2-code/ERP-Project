@@ -24,7 +24,7 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        private const string InvestorAccountCode = "3101"; // حساب المستثمرين (رأس المال)
+        private const string InvestorAccountCode = "3101"; // حساب المستثمرين
 
         public AccountsController(AppDbContext context, IUserActivityLogger activityLogger, IPermissionService permissionService)
         {

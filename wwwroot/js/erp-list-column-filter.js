@@ -7,6 +7,36 @@
 (function () {
     'use strict';
 
+    // ——— مطابقة نصية موحّدة مع توثيق الأصناف/العملاء (أرقام عربية + كلمات متعددة AND + يحتوي) ———
+    function normalizeDigits(s) {
+        if (!s) return '';
+        var map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+            '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+        var out = '';
+        for (var i = 0; i < s.length; i++) {
+            var c = s[i];
+            out += map[c] !== undefined ? map[c] : c;
+        }
+        return out;
+    }
+    function normalizeForColumnFilterSearch(s) {
+        if (!s) return '';
+        return normalizeDigits(String(s).toLowerCase());
+    }
+    /** كل كلمات الاستعلام يجب أن تظهر كنص فرعي في العرض (مثل Like %word% على الخادم) */
+    function textMatchesColumnFilterSearch(displayOrValue, rawQuery) {
+        var q = (rawQuery || '').trim();
+        if (!q) return true;
+        var hay = normalizeForColumnFilterSearch(displayOrValue || '');
+        var words = q.split(/\s+/).filter(Boolean);
+        for (var i = 0; i < words.length; i++) {
+            var w = normalizeForColumnFilterSearch(words[i]);
+            if (!w) continue;
+            if (hay.indexOf(w) === -1) return false;
+        }
+        return true;
+    }
+
     function init(options) {
         if (!options || !options.panelId || !options.tableId || !options.getColumnValuesUrl) return;
 
@@ -141,18 +171,23 @@
                         }
                         return { value: v, display: v };
                     });
-                    renderList(searchInp ? searchInp.value : '');
+                    renderList(searchInp ? searchInp.value : '', { preserveScroll: false });
                 })
                 .catch(function () {
                     if (listEl) listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>';
                 });
         }
 
-        function renderList(search) {
+        function renderList(search, renderOpts) {
+            renderOpts = renderOpts || {};
+            var preserveScroll = !!renderOpts.preserveScroll;
+            var itemsScrollEl = listEl ? listEl.querySelector('.erp-filter-items') : null;
+            var prevScroll = (preserveScroll && itemsScrollEl) ? itemsScrollEl.scrollTop : 0;
+
             if (!listEl) return;
-            var term = (search || '').toLowerCase();
+            var term = (search || '').trim();
             var filtered = term ? allItems.filter(function (x) {
-                return (x.display || x.value || '').toLowerCase().indexOf(term) >= 0;
+                return textMatchesColumnFilterSearch(x.display != null ? x.display : x.value, term);
             }) : allItems;
             var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
             var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
@@ -182,16 +217,20 @@
                         if (this.checked) currentSelected.add(String(x.value));
                         else currentSelected.delete(String(x.value));
                     }.bind(this));
-                    renderList(searchInp ? searchInp.value : '');
+                    renderList(searchInp ? searchInp.value : '', { preserveScroll: true });
                 };
             }
             listEl.querySelectorAll('.erp-filter-item').forEach(function (cb) {
                 cb.onchange = function () {
                     if (this.checked) currentSelected.add(this.value);
                     else currentSelected.delete(this.value);
-                    renderList(searchInp ? searchInp.value : '');
+                    renderList(searchInp ? searchInp.value : '', { preserveScroll: true });
                 };
             });
+            if (preserveScroll) {
+                var newItems = listEl.querySelector('.erp-filter-items');
+                if (newItems) newItems.scrollTop = prevScroll;
+            }
             adjustPanelPosition();
         }
 
@@ -271,7 +310,7 @@
         if (searchInp) {
             searchInp.addEventListener('input', function () {
                 if (currentCol && isNumericCol(currentCol)) return;
-                renderList(this.value);
+                renderList(this.value, { preserveScroll: false });
                 if (fetchDebounce) clearTimeout(fetchDebounce);
                 fetchDebounce = setTimeout(function () {
                     fetchDebounce = null;
@@ -291,7 +330,7 @@
                             }
                             return { value: v, display: v };
                         });
-                        renderList(searchInp ? searchInp.value : '');
+                        renderList(searchInp ? searchInp.value : '', { preserveScroll: false });
                     });
                 }, 400);
             });

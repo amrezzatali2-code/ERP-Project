@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.ComponentModel.DataAnnotations;          // تعليقات العرض Display + Required
 using System.ComponentModel.DataAnnotations.Schema;   // DatabaseGenerated
@@ -115,7 +115,8 @@ namespace ERP.Models
         public Product? Product { get; set; }                       // تعليق: الصنف المرتبط بالحركة (FK → ProdId)
         public Warehouse? Warehouse { get; set; }                   // تعليق: المخزن المرتبط بالحركة (FK → WarehouseId)
         public Batch? Batch { get; set; }                           // تعليق: التشغيلة المرتبطة (اختياريًا) (FK → BatchId)
-        // ممكن لاحقًا نضيف:
-        // public User? User { get; set; } لو عندك موديل User واضح
+
+        [ForeignKey(nameof(UserId))]
+        public User? User { get; set; }                             // المستخدم الذي نفّذ الحركة (اختياري)
     }
 }

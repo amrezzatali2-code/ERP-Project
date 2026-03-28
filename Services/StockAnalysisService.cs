@@ -73,17 +73,17 @@ namespace ERP.Services
 
         // ============================================================
         // 3) الخصم المرجح الحالي بعد البيع
-        // ✅ يعتمد على المتبقي من "مشتريات" أو "رصيد أول المدة" (مطابق لتقرير أرصدة الأصناف)
+        // ✅ يعتمد على المتبقي من مشتريات أو افتتاحي أو دخول تحويل (مطابق لتقرير أرصدة الأصناف مع التحويلات)
         // ============================================================
         public async Task<decimal> GetWeightedPurchaseDiscountCurrentAsync(int prodId)
         {
             // تعليق: RemainingQty تُملأ فقط لسطور الدخول
-            // ✅ مشتريات أو رصيد أول المدة (Opening) حتى يظهر الخصم المرجح مثل تقرير أرصدة الأصناف
+            // ✅ Purchase أو Opening أو TransferIn (خصم محفوظ على سطر الدخول)
             var rows = await _context.StockLedger
                 .AsNoTracking()
                 .Where(x =>
                     x.ProdId == prodId &&
-                    (x.SourceType == "Purchase" || x.SourceType == "Opening") &&
+                    (x.SourceType == "Purchase" || x.SourceType == "Opening" || x.SourceType == "TransferIn") &&
                     (x.RemainingQty ?? 0) > 0)
                 .Select(x => new
                 {
@@ -106,7 +106,7 @@ namespace ERP.Services
 
         /// <summary>
         /// الخصم المرجح للصنف في مخزن معين (للاستخدام في التحويل بين المخازن).
-        /// يشمل Purchase و Opening (مطابق لتقرير أرصدة الأصناف).
+        /// يشمل Purchase و Opening و TransferIn (دخول من تحويل مخزني مع خصم شراء محفوظ على السطر).
         /// </summary>
         public async Task<decimal> GetWeightedPurchaseDiscountForWarehouseAsync(int prodId, int warehouseId)
         {
@@ -115,7 +115,7 @@ namespace ERP.Services
                 .Where(x =>
                     x.ProdId == prodId &&
                     x.WarehouseId == warehouseId &&
-                    (x.SourceType == "Purchase" || x.SourceType == "Opening") &&
+                    (x.SourceType == "Purchase" || x.SourceType == "Opening" || x.SourceType == "TransferIn") &&
                     (x.RemainingQty ?? 0) > 0)
                 .Select(x => new
                 {

@@ -48,6 +48,66 @@ namespace ERP.Controllers
         // =========================================================
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        /// <summary>فلتر رقمي لكود التغيير (PriceChangeId) — نفس صيغ قائمة الأصناف.</summary>
+        private static IQueryable<ProductPriceHistory> ApplyPriceChangeIdExpr(IQueryable<ProductPriceHistory> q, string exprRaw)
+        {
+            var expr = exprRaw.Trim();
+            if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var max))
+                return q.Where(h => h.PriceChangeId <= max);
+            if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var min))
+                return q.Where(h => h.PriceChangeId >= min);
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var max2))
+                return q.Where(h => h.PriceChangeId < max2);
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var min2))
+                return q.Where(h => h.PriceChangeId > min2);
+            if ((expr.Contains(':') || (expr.Contains('-') && !expr.StartsWith("-"))) && expr.Length > 1)
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0].Trim(), out var from) &&
+                    int.TryParse(parts[1].Trim(), out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return q.Where(h => h.PriceChangeId >= from && h.PriceChangeId <= to);
+                }
+            }
+            if (int.TryParse(expr, out var exactId))
+                return q.Where(h => h.PriceChangeId == exactId);
+            return q;
+        }
+
+        /// <summary>فلتر رقمي للسعر القديم أو الجديد — نفس صيغ سعر الجمهور في قائمة الأصناف.</summary>
+        private static IQueryable<ProductPriceHistory> ApplyDecimalPriceExpr(IQueryable<ProductPriceHistory> q, string exprRaw, bool oldPrice)
+        {
+            var expr = exprRaw.Trim();
+            if (expr.StartsWith("<=") && expr.Length > 2 && decimal.TryParse(expr.Substring(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var max))
+                return oldPrice ? q.Where(h => h.OldPrice <= max) : q.Where(h => h.NewPrice <= max);
+            if (expr.StartsWith(">=") && expr.Length > 2 && decimal.TryParse(expr.Substring(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var min))
+                return oldPrice ? q.Where(h => h.OldPrice >= min) : q.Where(h => h.NewPrice >= min);
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && decimal.TryParse(expr.Substring(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var max2))
+                return oldPrice ? q.Where(h => h.OldPrice < max2) : q.Where(h => h.NewPrice < max2);
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && decimal.TryParse(expr.Substring(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var min2))
+                return oldPrice ? q.Where(h => h.OldPrice > min2) : q.Where(h => h.NewPrice > min2);
+            if ((expr.Contains(':') || (expr.Contains('-') && !expr.StartsWith("-"))) && expr.Length > 1)
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    decimal.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var from) &&
+                    decimal.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return oldPrice
+                        ? q.Where(h => h.OldPrice >= from && h.OldPrice <= to)
+                        : q.Where(h => h.NewPrice >= from && h.NewPrice <= to);
+                }
+            }
+            if (decimal.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var exact))
+                return oldPrice ? q.Where(h => h.OldPrice == exact) : q.Where(h => h.NewPrice == exact);
+            return q;
+        }
+
         [HttpGet]
         public async Task<IActionResult> Index(
             string? search,                 // نص البحث المكتوب في صندوق البحث
@@ -55,19 +115,26 @@ namespace ERP.Controllers
             string? sort = "date",    // date | prod | code | old | new | user
             string? dir = "desc",    // asc | desc
             int page = 1,         // رقم الصفحة الحالية
-            int pageSize = 50,        // عدد السطور في الصفحة
+            int pageSize = 10,        // عدد السطور في الصفحة (0 = الكل)
             bool useDateRange = false,     // هل فلترة التاريخ مفعّلة؟
             DateTime? fromDate = null,      // من تاريخ (ChangeDate)
             DateTime? toDate = null,       // إلى تاريخ
             string? filterCol_code = null,
+            string? filterCol_codeExpr = null,
             string? filterCol_date = null,
             string? filterCol_prod = null,
             string? filterCol_oldprice = null,
+            string? filterCol_oldpriceExpr = null,
             string? filterCol_newprice = null,
+            string? filterCol_newpriceExpr = null,
             string? filterCol_user = null,
             string? filterCol_reason = null
         )
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+
             // (1) مصدر البيانات — IQueryable للسماح بالبناء التدريجي
             IQueryable<ProductPriceHistory> q =
                 _ctx.ProductPriceHistories
@@ -141,9 +208,11 @@ namespace ERP.Controllers
             }
 
             // =====================================================
-            // (3b) فلاتر الأعمدة (بنمط Excel)
+            // (3b) فلاتر الأعمدة (بنمط Excel) — كود التغيير والأسعار: أولوية للتعبير الرقمي Expr
             // =====================================================
-            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            if (!string.IsNullOrWhiteSpace(filterCol_codeExpr))
+                q = ApplyPriceChangeIdExpr(q, filterCol_codeExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_code))
             {
                 var ids = filterCol_code.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -181,7 +250,9 @@ namespace ERP.Controllers
                 if (prodIds.Count > 0)
                     q = q.Where(h => prodIds.Contains(h.ProdId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_oldprice))
+            if (!string.IsNullOrWhiteSpace(filterCol_oldpriceExpr))
+                q = ApplyDecimalPriceExpr(q, filterCol_oldpriceExpr, oldPrice: true);
+            else if (!string.IsNullOrWhiteSpace(filterCol_oldprice))
             {
                 var prices = filterCol_oldprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -191,7 +262,9 @@ namespace ERP.Controllers
                 if (prices.Count > 0)
                     q = q.Where(h => prices.Contains(h.OldPrice));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_newprice))
+            if (!string.IsNullOrWhiteSpace(filterCol_newpriceExpr))
+                q = ApplyDecimalPriceExpr(q, filterCol_newpriceExpr, oldPrice: false);
+            else if (!string.IsNullOrWhiteSpace(filterCol_newprice))
             {
                 var prices = filterCol_newprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -275,11 +348,20 @@ namespace ERP.Controllers
             // (5) الترقيم — تجهيز PagedResult مع حفظ قيم الفلاتر
             // =====================================================
             if (page < 1) page = 1;
-            if (pageSize < 1) pageSize = 50;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
             int total = await q.CountAsync();                               // إجمالي السجلات بعد الفلترة
-            var items = await q.Skip((page - 1) * pageSize)                 // تخطي الصفوف السابقة
-                               .Take(pageSize)                              // أخذ عدد الصفوف المطلوبة
+            var effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                page = 1;
+                effectivePageSize = total == 0 ? 10 : Math.Min(total, 100_000);
+            }
+
+            var items = await q.Skip((page - 1) * effectivePageSize)                 // تخطي الصفوف السابقة
+                               .Take(effectivePageSize)                              // أخذ عدد الصفوف المطلوبة
                                .ToListAsync();                              // تنفيذ الاستعلام فعليًا
 
             // إنشاء نموذج الترقيم مع تخزين قيم الفلاتر بداخله
@@ -327,12 +409,45 @@ namespace ERP.Controllers
             ViewBag.FromDate = fromDate;
             ViewBag.ToDate = toDate;
             ViewBag.FilterCol_Code = filterCol_code;
+            ViewBag.FilterCol_CodeExpr = filterCol_codeExpr;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_Prod = filterCol_prod;
             ViewBag.FilterCol_OldPrice = filterCol_oldprice;
+            ViewBag.FilterCol_OldPriceExpr = filterCol_oldpriceExpr;
             ViewBag.FilterCol_NewPrice = filterCol_newprice;
+            ViewBag.FilterCol_NewPriceExpr = filterCol_newpriceExpr;
             ViewBag.FilterCol_User = filterCol_user;
             ViewBag.FilterCol_Reason = filterCol_reason;
+
+            // عرض فلتر كود من/إلى من filterCol_codeExpr إن وُجد
+            int? codeFrom = null, codeTo = null;
+            if (!string.IsNullOrWhiteSpace(filterCol_codeExpr))
+            {
+                var e = filterCol_codeExpr.Trim();
+                if ((e.Contains(':') || (e.Contains('-') && !e.StartsWith("-"))) && e.Length > 1)
+                {
+                    var sep = e.Contains(':') ? ':' : '-';
+                    var parts = e.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 &&
+                        int.TryParse(parts[0].Trim(), out var a) &&
+                        int.TryParse(parts[1].Trim(), out var b))
+                    {
+                        codeFrom = a;
+                        codeTo = b;
+                    }
+                }
+                else if (e.StartsWith(">=", StringComparison.Ordinal) && e.Length > 2 && int.TryParse(e.Substring(2), out var mn))
+                    codeFrom = mn;
+                else if (e.StartsWith("<=", StringComparison.Ordinal) && e.Length > 2 && int.TryParse(e.Substring(2), out var mx))
+                    codeTo = mx;
+                else if (int.TryParse(e, out var id))
+                {
+                    codeFrom = id;
+                    codeTo = id;
+                }
+            }
+            ViewBag.CodeFrom = codeFrom;
+            ViewBag.CodeTo = codeTo;
 
             return View(model);
         }
@@ -350,18 +465,16 @@ namespace ERP.Controllers
 
             List<(string Value, string Display)> items = column?.ToLowerInvariant() switch
             {
-                "code" => (await q.Select(h => h.PriceChangeId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
-                    .Select(v => (v.ToString(), v.ToString())).ToList(),
+                // الأعمدة الرقمية تُفلتر عبر filterCol_*Expr في الواجهة — لا نحمّل قوائم قيم
+                "code" => new List<(string Value, string Display)>(),
                 "date" => (await q.Select(h => new { h.ChangeDate.Year, h.ChangeDate.Month }).Distinct()
                     .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month).Take(100).ToListAsync())
                     .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
                 "prod" => (await q.Where(h => h.Product != null).Select(h => new { h.ProdId, Name = h.Product!.ProdName ?? "" })
                     .Distinct().OrderBy(x => x.Name).Take(500).ToListAsync())
                     .Select(x => (x.ProdId.ToString(), string.IsNullOrEmpty(x.Name) ? x.ProdId.ToString() : x.Name)).ToList(),
-                "oldprice" => (await q.Select(h => h.OldPrice).Distinct().OrderBy(v => v).Take(500).ToListAsync())
-                    .Select(v => (v.ToString(CultureInfo.InvariantCulture), v.ToString("N2"))).ToList(),
-                "newprice" => (await q.Select(h => h.NewPrice).Distinct().OrderBy(v => v).Take(500).ToListAsync())
-                    .Select(v => (v.ToString(CultureInfo.InvariantCulture), v.ToString("N2"))).ToList(),
+                "oldprice" => new List<(string Value, string Display)>(),
+                "newprice" => new List<(string Value, string Display)>(),
                 "user" => (await q.Where(h => h.ChangedBy != null && h.ChangedBy != "").Select(h => h.ChangedBy!).Distinct()
                     .OrderBy(c => c).Take(500).ToListAsync()).Select(c => (c!, c)).ToList(),
                 "reason" => (await q.Where(h => h.Reason != null && h.Reason != "").Select(h => h.Reason!).Distinct()
@@ -390,10 +503,13 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_code = null,
+            string? filterCol_codeExpr = null,
             string? filterCol_date = null,
             string? filterCol_prod = null,
             string? filterCol_oldprice = null,
+            string? filterCol_oldpriceExpr = null,
             string? filterCol_newprice = null,
+            string? filterCol_newpriceExpr = null,
             string? filterCol_user = null,
             string? filterCol_reason = null,
             string? format = "excel"
@@ -450,7 +566,9 @@ namespace ERP.Controllers
                 if (toDate.HasValue) q = q.Where(h => h.ChangeDate <= toDate.Value);
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_code))
+            if (!string.IsNullOrWhiteSpace(filterCol_codeExpr))
+                q = ApplyPriceChangeIdExpr(q, filterCol_codeExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_code))
             {
                 var ids = filterCol_code.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
@@ -473,13 +591,17 @@ namespace ERP.Controllers
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (prodIds.Count > 0) q = q.Where(h => prodIds.Contains(h.ProdId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_oldprice))
+            if (!string.IsNullOrWhiteSpace(filterCol_oldpriceExpr))
+                q = ApplyDecimalPriceExpr(q, filterCol_oldpriceExpr, oldPrice: true);
+            else if (!string.IsNullOrWhiteSpace(filterCol_oldprice))
             {
                 var prices = filterCol_oldprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (prices.Count > 0) q = q.Where(h => prices.Contains(h.OldPrice));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_newprice))
+            if (!string.IsNullOrWhiteSpace(filterCol_newpriceExpr))
+                q = ApplyDecimalPriceExpr(q, filterCol_newpriceExpr, oldPrice: false);
+            else if (!string.IsNullOrWhiteSpace(filterCol_newprice))
             {
                 var prices = filterCol_newprice.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
@@ -725,135 +847,6 @@ namespace ERP.Controllers
             TempData["Success"] = "تم حذف جميع سجلات تغييرات السعر.";
             return RedirectToAction(nameof(Index));
         }
-
-
-
-        // ==================== التصدير (Export) ====================
-        [HttpGet]
-        public async Task<IActionResult> Export(
-            string? search,
-            string? searchBy,
-            string? sort,
-            string? dir,
-            bool useDateRange = false,
-            DateTime? fromDate = null,
-            DateTime? toDate = null,
-            string format = "excel")
-        {
-            // كويرى الأساس مع ربط الصنف
-            var query = _ctx.ProductPriceHistories
-                .Include(r => r.Product)
-                .AsNoTracking()
-                .AsQueryable();
-
-            searchBy = string.IsNullOrWhiteSpace(searchBy) ? "prod" : searchBy.ToLowerInvariant();
-            dir = string.Equals(dir, "asc", StringComparison.OrdinalIgnoreCase) ? "asc" : "desc";
-            search = search?.Trim();
-
-            // ===== نفس منطق البحث باختصار =====
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                switch (searchBy)
-                {
-                    case "prod":
-                        query = query.Where(r =>
-                            (r.Product != null && r.Product.ProdName.Contains(search)) ||
-                            r.ProdId.ToString().Contains(search));
-                        break;
-
-                    case "user":
-                        query = query.Where(r => r.ChangedBy!.Contains(search));
-                        break;
-
-                    case "reason":
-                        query = query.Where(r => r.Reason!.Contains(search));
-                        break;
-
-                    case "date":
-                        query = query.Where(r =>
-                            r.ChangeDate.ToString("yyyy/MM/dd").Contains(search));
-                        break;
-
-                    case "all":
-                    default:
-                        query = query.Where(r =>
-                            (r.Product != null && r.Product.ProdName.Contains(search)) ||
-                            r.ProdId.ToString().Contains(search) ||
-                            (r.ChangedBy != null && r.ChangedBy.Contains(search)) ||
-                            (r.Reason != null && r.Reason.Contains(search)) ||
-                            r.ChangeDate.ToString("yyyy/MM/dd").Contains(search));
-                        break;
-                }
-            }
-
-            // ===== فلترة التاريخ/الوقت =====
-            if (useDateRange && fromDate.HasValue && toDate.HasValue)
-            {
-                var from = fromDate.Value;
-                var to = toDate.Value;
-
-                query = query.Where(r => r.ChangeDate >= from && r.ChangeDate <= to);
-            }
-
-            // ===== الترتيب =====
-            sort = string.IsNullOrWhiteSpace(sort) ? "date" : sort.ToLowerInvariant();
-
-            query = (sort, dir) switch
-            {
-                ("prod", "asc") => query.OrderBy(r => r.Product!.ProdName),
-                ("prod", "desc") => query.OrderByDescending(r => r.Product!.ProdName),
-
-                ("oldprice", "asc") => query.OrderBy(r => r.OldPrice),
-                ("oldprice", "desc") => query.OrderByDescending(r => r.OldPrice),
-
-                ("newprice", "asc") => query.OrderBy(r => r.NewPrice),
-                ("newprice", "desc") => query.OrderByDescending(r => r.NewPrice),
-
-                ("user", "asc") => query.OrderBy(r => r.ChangedBy),
-                ("user", "desc") => query.OrderByDescending(r => r.ChangedBy),
-
-                ("reason", "asc") => query.OrderBy(r => r.Reason),
-                ("reason", "desc") => query.OrderByDescending(r => r.Reason),
-
-                // الافتراضى: التاريخ
-                (_, "asc") => query.OrderBy(r => r.ChangeDate),
-                _ => query.OrderByDescending(r => r.ChangeDate)
-            };
-
-            var list = await query.ToListAsync();
-
-            // ===== تكوين CSV بسيط يُفتح في Excel =====
-            var sb = new StringBuilder();
-            sb.AppendLine("التاريخ,اسم الصنف,السعر القديم,السعر الجديد,المستخدم,السبب");
-
-            foreach (var r in list)
-            {
-                var prodName = r.Product?.ProdName ?? $"ProdId {r.ProdId}";
-                var user = r.ChangedBy ?? "";
-                var reason = r.Reason ?? "";
-
-                // نهرب الفواصل بعلامات اقتباس
-                string LineEscape(string s) =>
-                    "\"" + s.Replace("\"", "\"\"") + "\"";
-
-                sb.AppendLine(string.Join(",",
-                    r.ChangeDate.ToString("yyyy-MM-dd HH:mm"),
-                    LineEscape(prodName),
-                    r.OldPrice.ToString("0.00"),
-                    r.NewPrice.ToString("0.00"),
-                    LineEscape(user),
-                    LineEscape(reason)
-                ));
-            }
-
-            var bytes = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true).GetBytes(sb.ToString());
-
-            format = format?.ToLowerInvariant() ?? "excel";
-            var fileName = ExcelExportNaming.ArabicTimestampedFileName("سجل تغييرات أسعار الأصناف", format == "csv" ? ".csv" : ".xlsx");
-
-            return File(bytes, "text/csv; charset=utf-8", fileName);
-        }
-
 
     }
 }

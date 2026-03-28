@@ -78,36 +78,33 @@ namespace ERP.Controllers
             // =========================================================
             // ✅ عرض كل العملاء (نشطين وموقوفين) — العميل الموقوف يظهر مع رسالة تمنع الحفظ
             var customers = await customerBaseQuery
-      .Include(c => c.Governorate)
-      .Include(c => c.District)
-      .Include(c => c.Area)
-      .Include(c => c.Policy) // ✅ تحميل السياسة
-      .OrderBy(c => c.CustomerName)
-      .Select(c => new
-      {
-          Id = c.CustomerId,                               // كود العميل
-          Name = c.CustomerName,                           // اسم العميل
-          Phone = c.Phone1 ?? string.Empty,                // الهاتف
-          Address = c.Address ?? string.Empty,             // العنوان
-          Gov = c.Governorate != null
-                      ? c.Governorate.GovernorateName
-                      : string.Empty,                      // المحافظة
-          District = c.District != null
-                      ? c.District.DistrictName
-                      : string.Empty,                      // الحي
-          Area = c.Area != null
-                      ? c.Area.AreaName
-                      : string.Empty,                      // المنطقة
-          Credit = c.CreditLimit,                          // حد الائتمان
-          CurrentBalance = c.CurrentBalance,               // الحساب السابق للعميل
-
-          // ✅ جديد: سياسة العميل
-          PolicyId = c.PolicyId,                           // كود السياسة (nullable)
-          PolicyName = c.Policy != null ? c.Policy.Name : "", // اسم السياسة من Policy.Name
-
-          IsActive = c.IsActive                            // ✅ للتحقق عند الحفظ: العميل الموقوف يمنع الحفظ
-      })
-      .ToListAsync();
+                .Include(c => c.Governorate)
+                .Include(c => c.District)
+                .Include(c => c.Area)
+                .Include(c => c.Policy)
+                .OrderBy(c => c.CustomerName)
+                .Select(c => new
+                {
+                    Id = c.CustomerId,
+                    Name = c.CustomerName,
+                    Phone = c.Phone1 ?? string.Empty,
+                    Address = c.Address ?? string.Empty,
+                    Gov = c.Governorate != null
+                        ? c.Governorate.GovernorateName
+                        : string.Empty,
+                    District = c.District != null
+                        ? c.District.DistrictName
+                        : string.Empty,
+                    Area = c.Area != null
+                        ? c.Area.AreaName
+                        : string.Empty,
+                    Credit = c.CreditLimit,
+                    CurrentBalance = c.CurrentBalance,
+                    PolicyId = c.PolicyId,
+                    PolicyName = c.Policy != null ? c.Policy.Name : "",
+                    IsActive = c.IsActive
+                })
+                .ToListAsync();
 
             // لو فاتورة قديمة وعميلها (مثلاً مستثمر) غير ظاهر في القائمة بعد الفلتر، نضيفه حتى يظهر اسمه في الحقل
             if (selectedCustomerId.HasValue && !customers.Any(c => c.Id == selectedCustomerId.Value))
@@ -139,17 +136,13 @@ namespace ERP.Controllers
                     customers.Insert(0, extra);
             }
 
-            // إرسال القائمة للـ View
             ViewBag.Customers = customers;
 
-            // لو فى عميل مختار (فاتورة قديمة) نحضر اسمه لعرضه تلقائياً
             if (selectedCustomerId.HasValue)
             {
                 var current = customers.FirstOrDefault(c => c.Id == selectedCustomerId.Value);
                 if (current != null)
-                {
-                    ViewBag.SelectedCustomerName = current.Name; // متغير: اسم العميل الحالي
-                }
+                    ViewBag.SelectedCustomerName = current.Name;
             }
 
             // =========================================================
@@ -160,15 +153,13 @@ namespace ERP.Controllers
                 .OrderBy(w => w.WarehouseName)
                 .ToListAsync();
 
-            // متغير: إرسال قائمة المخازن للـ View كـ SelectList
             ViewBag.Warehouses = new SelectList(
                 warehouses,
-                "WarehouseId",        // متغير: كود المخزن
-                "WarehouseName",      // متغير: اسم المخزن
-                selectedWarehouseId   // متغير: المخزن المختار (لو موجود)
+                "WarehouseId",
+                "WarehouseName",
+                selectedWarehouseId
             );
         }
-
 
 
 
@@ -387,7 +378,6 @@ namespace ERP.Controllers
 
             if (!includeZeroQty)
             {
-                // أصناف لها رصيد قابل للبيع (RemainingQty > 0) في StockLedger — نفس مصدر أرصدة الأصناف
                 var prodIdsWithStock = _context.StockLedger
                     .AsNoTracking()
                     .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
@@ -575,17 +565,12 @@ namespace ERP.Controllers
             }
 
             // =========================
-            // (3) كميات لحظية من StockLedger (نفس مصدر تقرير أرصدة الأصناف — RemainingQty القابل للبيع)
+            // (3) كميات لحظية — نفس منطق الحركة الصافية (QtyIn − QtyOut) لتطابق التحويلات والبيع
             // =========================
-            var qtyCurrentWarehouse = await _context.StockLedger
-                .AsNoTracking()
-                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0)
-                .SumAsync(sl => (decimal?)(sl.RemainingQty ?? 0)) ?? 0m;
-
-            var qtyAllWarehouses = await _context.StockLedger
-                .AsNoTracking()
-                .Where(sl => sl.ProdId == prodId && sl.QtyIn > 0)
-                .SumAsync(sl => (decimal?)(sl.RemainingQty ?? 0)) ?? 0m;
+            int qtyCwInt = await _StockAnalysisService.GetCurrentQtyAsync(prodId, warehouseId);
+            int qtyAllInt = await _StockAnalysisService.GetCurrentQtyAsync(prodId, null);
+            decimal qtyCurrentWarehouse = qtyCwInt;
+            decimal qtyAllWarehouses = qtyAllInt;
 
             // =========================
             // (4) الخصم الفعّال للصنف (يدوي من ProductDiscountOverrides إن وُجد، وإلا المرجّح من StockLedger)
@@ -613,51 +598,78 @@ namespace ERP.Controllers
 
 
             // =========================
-            // (5) تشغيلات FEFO من StockLedger (نفس مصدر تقرير أرصدة الأصناف — RemainingQty فقط)
+            // (5) تشغيلات FEFO — من StockLedger (طبقات الدخول المتبقية)
+            // - نستخدم (RemainingQty ?? QtyIn) لكل سطر دخول حتى تظهر التشغيلات بعد التحويلات حتى لو كانت RemainingQty قديماً null
+            // - إن لم يُستخرج أي صف من الدفتر رغم وجود رصيد (كمية المخزن) نكمّل من Stock_Batches ليطابق الواقع بعد التحويل
             // =========================
             var ledgerBatchList = await _context.StockLedger
                 .AsNoTracking()
-                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
-                .Select(sl => new { sl.BatchNo, sl.Expiry, RemainingQty = sl.RemainingQty ?? 0 })
+                .Where(sl => sl.ProdId == prodId && sl.WarehouseId == warehouseId && sl.QtyIn > 0
+                    && (sl.RemainingQty ?? sl.QtyIn) > 0)
+                .Select(sl => new { sl.BatchNo, sl.Expiry, RemainingQty = sl.RemainingQty ?? sl.QtyIn })
                 .ToListAsync();
 
             var rawLedgerBatches = ledgerBatchList
                 .GroupBy(x => new { BatchNo = x.BatchNo ?? "", Expiry = x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null })
-                .Where(g => g.Key.Expiry.HasValue)
-                .Select(g => new { g.Key.BatchNo, g.Key.Expiry, Qty = g.Sum(x => x.RemainingQty) })
+                .Select(g => new { g.Key.BatchNo, Expiry = g.Key.Expiry, Qty = g.Sum(x => x.RemainingQty) })
                 .Where(x => x.Qty > 0)
                 .ToList();
 
-            var batchKeys = rawLedgerBatches.Select(x => new { ProdId = prodId, x.BatchNo, Expiry = x.Expiry!.Value.Date }).ToList();
-            var batchPrices = new Dictionary<(string BatchNo, DateTime ExpiryDate), decimal>();
-            var batchIds = new Dictionary<(string BatchNo, DateTime ExpiryDate), int>();
-            if (batchKeys.Any())
+            // احتياط: رصيد الصنف في المخزن > 0 لكن لا توجد طبقات دفتر قابلة للعرض — نقرأ من جدول أرصدة التشغيلات
+            if (rawLedgerBatches.Count == 0 && qtyCurrentWarehouse > 0)
             {
-                var expiryDates = batchKeys.Select(k => k.Expiry).Distinct().ToList();
-                var batchNos = batchKeys.Select(k => k.BatchNo).Distinct().ToList();
-                var pricesFromDb = await _context.Batches
+                var sbRows = await _context.StockBatches
                     .AsNoTracking()
-                    .Where(b => b.ProdId == prodId && batchNos.Contains(b.BatchNo)
-                        && expiryDates.Contains(b.Expiry.Date))
-                    .Select(b => new { b.BatchId, b.BatchNo, b.Expiry, b.PriceRetailBatch })
+                    .Where(sb => sb.ProdId == prodId && sb.WarehouseId == warehouseId && sb.QtyOnHand > 0)
                     .ToListAsync();
-                foreach (var p in pricesFromDb)
+                rawLedgerBatches = sbRows
+                    .GroupBy(sb => new { BatchNo = sb.BatchNo ?? "", Expiry = sb.Expiry.HasValue ? sb.Expiry.Value.Date : (DateTime?)null })
+                    .Select(g => new { g.Key.BatchNo, Expiry = g.Key.Expiry, Qty = g.Sum(x => x.QtyOnHand) })
+                    .Where(x => x.Qty > 0)
+                    .ToList();
+            }
+
+            var batchNosDistinct = rawLedgerBatches
+                .Select(x => x.BatchNo)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct()
+                .ToList();
+
+            var allBatchesForProduct = batchNosDistinct.Count == 0
+                ? new List<Batch>()
+                : await _context.Batches
+                    .AsNoTracking()
+                    .Where(b => b.ProdId == prodId && batchNosDistinct.Contains(b.BatchNo))
+                    .ToListAsync();
+
+            (Batch? Row, decimal Price) ResolveBatchRow(string batchNo, DateTime? expiry)
+            {
+                if (string.IsNullOrWhiteSpace(batchNo))
+                    return (null, productPriceRetail);
+                var candidates = allBatchesForProduct.Where(b => b.BatchNo == batchNo).ToList();
+                if (candidates.Count == 0)
+                    return (null, productPriceRetail);
+                if (expiry.HasValue)
                 {
-                    batchPrices[(p.BatchNo, p.Expiry.Date)] = p.PriceRetailBatch ?? productPriceRetail;
-                    batchIds[(p.BatchNo, p.Expiry.Date)] = p.BatchId;
+                    var exact = candidates.FirstOrDefault(b => b.Expiry.Date == expiry.Value.Date);
+                    if (exact != null)
+                        return (exact, exact.PriceRetailBatch ?? productPriceRetail);
                 }
+                var fifo = candidates.OrderBy(b => b.Expiry).First();
+                return (fifo, fifo.PriceRetailBatch ?? productPriceRetail);
             }
 
             // بناء قائمة التشغيلات مع الخصم الفعّال (من جدول الخصم اليدوي) لكل تشغيلة
             var batchesOrdered = rawLedgerBatches
-                .OrderBy(x => x.Expiry).ThenBy(x => x.BatchNo)
+                .OrderBy(x => x.Expiry ?? DateTime.MaxValue)
+                .ThenBy(x => x.BatchNo)
                 .ToList();
             var batches = new List<object>();
             for (int i = 0; i < batchesOrdered.Count; i++)
             {
                 var sb = batchesOrdered[i];
-                var expDate = sb.Expiry!.Value.Date;
-                int? batchId = batchIds.TryGetValue((sb.BatchNo, expDate), out var bid) ? bid : (int?)null;
+                var (bRow, batchPriceRetail) = ResolveBatchRow(sb.BatchNo, sb.Expiry);
+                int? batchId = bRow?.BatchId;
                 decimal batchWeightedDiscount = weightedDiscount;
                 decimal batchSaleDisc1 = saleDisc1;
                 if (batchId.HasValue)
@@ -674,11 +686,10 @@ namespace ERP.Controllers
                     expiry = sb.Expiry,
                     expiryText = sb.Expiry.HasValue ? sb.Expiry.Value.ToString("MM/yyyy") : "",
                     qty = sb.Qty,
-                    priceRetailBatch = batchPrices.TryGetValue((sb.BatchNo, expDate), out var pr) ? pr : productPriceRetail,
+                    priceRetailBatch = batchPriceRetail,
                     weightedDiscount = batchWeightedDiscount,
                     saleDisc1 = batchSaleDisc1
                 });
-                // الخصم المرجح المعروض افتراضياً = خصم التشغيلة الأولى (لأي عدد تشغيلات)
                 if (i == 0)
                 {
                     weightedDiscount = batchWeightedDiscount;
@@ -691,14 +702,14 @@ namespace ERP.Controllers
             // =========================
             string firstBatchNo = "";
             string firstExpiryText = "";
-            decimal firstPriceRetailBatch = productPriceRetail; // افتراضي: سعر الصنف (يُستبدل بسعر التشغيلة إن وُجدت)
+            decimal firstPriceRetailBatch = productPriceRetail;
             if (batchesOrdered.Count > 0)
             {
                 var sb0 = batchesOrdered[0];
-                var exp0 = sb0.Expiry!.Value.Date;
+                var (_, pr0) = ResolveBatchRow(sb0.BatchNo, sb0.Expiry);
                 firstBatchNo = sb0.BatchNo ?? "";
                 firstExpiryText = sb0.Expiry.HasValue ? sb0.Expiry.Value.ToString("MM/yyyy") : "";
-                firstPriceRetailBatch = batchPrices.TryGetValue((sb0.BatchNo, exp0), out var pr0) ? pr0 : productPriceRetail;
+                firstPriceRetailBatch = pr0;
             }
 
             // نص البونص المعروض
@@ -3929,6 +3940,7 @@ namespace ERP.Controllers
 
             var blockedIds = new List<int>();
             var failedIds = new List<int>();
+            var failedReasons = new List<string>();
 
             foreach (var id in existingIds)
             {
@@ -3945,6 +3957,8 @@ namespace ERP.Controllers
                 {
                     failedCount++;
                     failedIds.Add(id);
+                    if (!string.IsNullOrWhiteSpace(result.Message))
+                        failedReasons.Add($"فاتورة {id}: {result.Message}");
                 }
             }
 
@@ -3955,16 +3969,16 @@ namespace ERP.Controllers
                 TempData["SuccessMessage"] = summary;
                 if (blockedIds.Count > 0)
                     TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
-                if (failedIds.Count > 0)
-                    TempData["ErrorMessage"] = $"فواتير فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
+                if (failedReasons.Count > 0)
+                    TempData["ErrorMessage"] = "تعذر حذف بعض الفواتير: " + string.Join(" — ", failedReasons);
             }
             else
             {
                 TempData["ErrorMessage"] = $"لم يتم حذف أي فاتورة. {summary}";
                 if (blockedIds.Count > 0)
                     TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
-                if (failedIds.Count > 0)
-                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | فواتير فشل حذفها: {string.Join(", ", failedIds)}";
+                if (failedReasons.Count > 0)
+                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} — {string.Join(" — ", failedReasons)}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -4006,6 +4020,7 @@ namespace ERP.Controllers
 
             var blockedIds = new List<int>();
             var failedIds = new List<int>();
+            var failedReasons = new List<string>();
 
             foreach (var id in allIds)
             {
@@ -4022,6 +4037,8 @@ namespace ERP.Controllers
                 {
                     failedCount++;
                     failedIds.Add(id);
+                    if (!string.IsNullOrWhiteSpace(result.Message))
+                        failedReasons.Add($"فاتورة {id}: {result.Message}");
                 }
             }
 
@@ -4032,16 +4049,16 @@ namespace ERP.Controllers
                 TempData["SuccessMessage"] = summary;
                 if (blockedIds.Count > 0)
                     TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
-                if (failedIds.Count > 0)
-                    TempData["ErrorMessage"] = $"فواتير فشل حذفها بسبب خطأ: {string.Join(", ", failedIds)}";
+                if (failedReasons.Count > 0)
+                    TempData["ErrorMessage"] = "تعذر حذف بعض الفواتير: " + string.Join(" — ", failedReasons);
             }
             else
             {
                 TempData["ErrorMessage"] = $"لم يتم حذف أي فاتورة. {summary}";
                 if (blockedIds.Count > 0)
                     TempData["WarningMessage"] = $"فواتير ممنوع حذفها (تم البيع/الصرف منها): {string.Join(", ", blockedIds)}";
-                if (failedIds.Count > 0)
-                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} | فواتير فشل حذفها: {string.Join(", ", failedIds)}";
+                if (failedReasons.Count > 0)
+                    TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} — {string.Join(" — ", failedReasons)}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -4073,6 +4090,14 @@ namespace ERP.Controllers
 
             if (invoice == null)
                 return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed, "الفاتورة غير موجودة.");
+
+            // مرتجع مرتبط بهذه الفاتورة — لا حذف حتى لا تنكسر الروابط المحاسبية/المخزنية
+            var linkedReturn = await _context.SalesReturns
+                .AsNoTracking()
+                .AnyAsync(sr => sr.SalesInvoiceId == id);
+            if (linkedReturn)
+                return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed,
+                    "لا يمكن حذف الفاتورة لأنها مرتبطة بمرتجع مبيعات. احذف المرتجع أولاً أو عالج الارتباط من شاشة مرتجعات المبيعات.");
 
             // =========================
             // 1) تحميل سطور الفاتورة

@@ -233,7 +233,7 @@
                                 <tr>
                                     <td><strong>@item.CustomerCode</strong></td>
                                     <td>@item.CustomerName</td>
-                                    <td><small class="text-muted">@(item.PartyCategory == "Customer" ? "عميل" : item.PartyCategory == "Supplier" ? "مورد" : item.PartyCategory ?? "—")</small></td>
+                                    <td><small class="text-muted">@(string.IsNullOrEmpty(item.PartyCategory) ? "—" : PartyCategoryDisplay.ToArabic(item.PartyCategory))</small></td>
                                     <td><small class="text-muted">@item.Phone1</small></td>
                                     
                                     @* الربح من البيع فقط *@

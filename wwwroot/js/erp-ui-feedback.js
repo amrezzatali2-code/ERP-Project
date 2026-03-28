@@ -1,5 +1,5 @@
 /**
- * ERP — مودال تأكيد مركزي + توست (بديل alert/confirm للترحيل وغيره)
+ * ERP — مودال تأكيد/تنبيه موحّد الشكل + توست (يفضّل استخدامه بدل alert/confirm)
  */
 (function (w) {
     'use strict';
@@ -46,19 +46,24 @@
      * @param {{ title?: string, message?: string, confirmText?: string, cancelText?: string }} opts
      * @returns {Promise<boolean>}
      */
-    w.ERP.showConfirmModal = function (opts) {
+    /**
+     * رسالة بزر واحد (بديل alert) — نفس شكل مودال التأكيد
+     * @param {{ title?: string, message?: string, okText?: string }} opts
+     * @returns {Promise<void>}
+     */
+    w.ERP.showAlertModal = function (opts) {
         opts = opts || {};
-        var title = opts.title || 'تأكيد';
+        var title = opts.title || 'تنبيه';
         var message = opts.message || '';
-        var confirmText = opts.confirmText || 'تأكيد';
-        var cancelText = opts.cancelText || 'إلغاء';
+        var okText = opts.okText || 'حسناً';
+        var titleId = 'erpAlertTitle_' + Date.now();
 
         return new Promise(function (resolve) {
             var backdrop = document.createElement('div');
             backdrop.className = 'erp-confirm-backdrop';
             backdrop.setAttribute('role', 'dialog');
             backdrop.setAttribute('aria-modal', 'true');
-            backdrop.setAttribute('aria-labelledby', 'erpConfirmTitle');
+            backdrop.setAttribute('aria-labelledby', titleId);
 
             var dialog = document.createElement('div');
             dialog.className = 'erp-confirm-dialog';
@@ -66,7 +71,77 @@
             var header = document.createElement('div');
             header.className = 'erp-confirm-header';
             var h = document.createElement('h2');
-            h.id = 'erpConfirmTitle';
+            h.id = titleId;
+            h.className = 'erp-confirm-title';
+            h.textContent = title;
+            header.appendChild(h);
+
+            var body = document.createElement('div');
+            body.className = 'erp-confirm-body';
+            body.textContent = message;
+
+            var footer = document.createElement('div');
+            footer.className = 'erp-confirm-footer erp-confirm-footer-single';
+
+            var btnOk = document.createElement('button');
+            btnOk.type = 'button';
+            btnOk.className = 'btn btn-erp btn-erp-primary btn-erp-sm erp-confirm-ok';
+            btnOk.textContent = okText;
+
+            footer.appendChild(btnOk);
+            dialog.appendChild(header);
+            dialog.appendChild(body);
+            dialog.appendChild(footer);
+            backdrop.appendChild(dialog);
+            document.body.appendChild(backdrop);
+
+            function cleanup() {
+                document.removeEventListener('keydown', onKey);
+                if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+                resolve();
+            }
+
+            function onKey(e) {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cleanup();
+                }
+            }
+
+            document.addEventListener('keydown', onKey);
+            btnOk.addEventListener('click', cleanup);
+            backdrop.addEventListener('click', function (e) {
+                if (e.target === backdrop) cleanup();
+            });
+
+            setTimeout(function () {
+                try { btnOk.focus(); } catch (x) { }
+            }, 50);
+        });
+    };
+
+    w.ERP.showConfirmModal = function (opts) {
+        opts = opts || {};
+        var title = opts.title || 'تأكيد';
+        var message = opts.message || '';
+        var confirmText = opts.confirmText || 'تأكيد';
+        var cancelText = opts.cancelText || 'إلغاء';
+        var titleId = 'erpConfirmTitle_' + Date.now();
+
+        return new Promise(function (resolve) {
+            var backdrop = document.createElement('div');
+            backdrop.className = 'erp-confirm-backdrop';
+            backdrop.setAttribute('role', 'dialog');
+            backdrop.setAttribute('aria-modal', 'true');
+            backdrop.setAttribute('aria-labelledby', titleId);
+
+            var dialog = document.createElement('div');
+            dialog.className = 'erp-confirm-dialog';
+
+            var header = document.createElement('div');
+            header.className = 'erp-confirm-header';
+            var h = document.createElement('h2');
+            h.id = titleId;
             h.className = 'erp-confirm-title';
             h.textContent = title;
             header.appendChild(h);

@@ -50,6 +50,12 @@ namespace ERP.Services
         private readonly AppDbContext _db; // متغير: سياق قاعدة البيانات
         private readonly ILogger<LedgerPostingService> _logger;
 
+        /// <summary>
+        /// في <see cref="StockBatch"/> العمود Expiry إلزامي في القاعدة؛ لسطور التسوية «بدون تشغيلة» (BatchNo فارغ)
+        /// نخزّن تاريخًا ثابتًا بعيدًا يمثّل «لا صلاحية محددة» بدل NULL.
+        /// </summary>
+        private static readonly DateTime StockBatchExpiryWhenNoBatch = new(2099, 12, 31);
+
         public LedgerPostingService(AppDbContext db, ILogger<LedgerPostingService> logger)
         {
             _db = db;
@@ -2365,7 +2371,7 @@ namespace ERP.Services
                                 WarehouseId = adjustment.WarehouseId,
                                 ProdId = line.ProductId,
                                 BatchNo = "",
-                                Expiry = null,
+                                Expiry = StockBatchExpiryWhenNoBatch,
                                 QtyOnHand = line.QtyAfter,
                                 UpdatedAt = DateTime.UtcNow
                             });
@@ -2534,6 +2540,12 @@ namespace ERP.Services
                     }
                     decimal inUnitCost = lineProfit > 0 ? transferPricePerUnit : costPerUnit;
 
+                    // خصم الشراء على رصيد الدخول: إن وُجد خصم تحويل يُخزَّن كما أدخله المستخدم؛ وإلا يُنسَخ الخصم المرجح من المصدر
+                    // (يُستخدم في حساب الخصم المرجح للمخزن الوجهة عند تضمين TransferIn في StockAnalysisService)
+                    decimal inboundPurchaseDiscount = line.DiscountPct ?? line.WeightedDiscountPct ?? 0m;
+                    if (inboundPurchaseDiscount < 0m) inboundPurchaseDiscount = 0m;
+                    if (inboundPurchaseDiscount > 100m) inboundPurchaseDiscount = 100m;
+
                     // حركة خروج من المخزن المصدر (بالتكلفة)
                     var outLedger = new StockLedger
                     {
@@ -2568,6 +2580,7 @@ namespace ERP.Services
                         QtyIn = line.Qty,
                         QtyOut = 0,
                         UnitCost = inUnitCost,
+                        PurchaseDiscount = inboundPurchaseDiscount,
                         RemainingQty = line.Qty,
                         SourceType = "TransferIn",
                         SourceId = transfer.Id,

@@ -1,4 +1,4 @@
-﻿using System;                                  // لو احتجنا تواريخ أو حسابات إضافية لاحقًا
+using System;                                  // لو احتجنا تواريخ أو حسابات إضافية لاحقًا
 using System.ComponentModel.DataAnnotations;   // خصائص التحقق من صحة البيانات
 using Microsoft.EntityFrameworkCore;           // Precision للكسور العشرية
 
@@ -44,6 +44,14 @@ namespace ERP.Models
         [Precision(18, 4)]
         [Display(Name = "تكلفة الوحدة")]              // تكلفة الصنف وقت التسوية (سعر التكلفة)
         public decimal? CostPerUnit { get; set; }      // متغير: تكلفة الوحدة (اختياري)
+
+        [Precision(18, 2)]
+        [Display(Name = "سعر الجمهور")]              // لقطة وقت التسوية (من الصنف أو التشغيلة)
+        public decimal? PriceRetail { get; set; }
+
+        [Precision(5, 2)]
+        [Display(Name = "الخصم المرجح %")]           // نسبة الخصم المرجّح من المشتريات (قابلة للتعديل في الواجهة)
+        public decimal? WeightedDiscountPct { get; set; }
 
         [Precision(18, 2)]
         [Display(Name = "فرق التكلفة")]               // إجمالي تأثير التسوية على القيمة

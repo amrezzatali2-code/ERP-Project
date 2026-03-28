@@ -1,4 +1,4 @@
-﻿@model ERP.Models.Customer
+@model ERP.Models.Customer
 
 @{
     ViewData["Title"] = "حذف عميل";
@@ -21,7 +21,7 @@
         <dd class="col-sm-9">@Model.CustomerName</dd>
 
         <dt class="col-sm-3">نوع الطرف</dt>
-        <dd class="col-sm-9">@Model.PartyCategory</dd>
+        <dd class="col-sm-9">@PartyCategoryDisplay.ToArabic(Model.PartyCategory)</dd>
 
         <dt class="col-sm-3">الحساب المحاسبي</dt>
         <dd class="col-sm-9">

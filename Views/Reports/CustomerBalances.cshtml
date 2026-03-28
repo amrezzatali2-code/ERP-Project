@@ -37,6 +37,7 @@
     string? filterCol_name = ViewBag.FilterCol_Name as string ?? Context.Request.Query["filterCol_name"].ToString();
     string? filterCol_category = ViewBag.FilterCol_Category as string ?? Context.Request.Query["filterCol_category"].ToString();
     string? filterCol_phone = ViewBag.FilterCol_Phone as string ?? Context.Request.Query["filterCol_phone"].ToString();
+    string? filterCol_account = ViewBag.FilterCol_Account as string ?? Context.Request.Query["filterCol_account"].ToString();
     string? filterCol_debit = ViewBag.FilterCol_Debit as string ?? Context.Request.Query["filterCol_debit"].ToString();
     string? filterCol_credit = ViewBag.FilterCol_Credit as string ?? Context.Request.Query["filterCol_credit"].ToString();
     string? filterCol_creditlimit = ViewBag.FilterCol_CreditLimit as string ?? Context.Request.Query["filterCol_creditlimit"].ToString();
@@ -52,7 +53,7 @@
     Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
         var currentFilter = colKey == "code" ? filterCol_code : colKey == "name" ? filterCol_name : colKey == "category" ? filterCol_category :
-            colKey == "phone" ? filterCol_phone : colKey == "debit" ? filterCol_debit : colKey == "credit" ? filterCol_credit :
+            colKey == "phone" ? filterCol_phone : colKey == "account" ? filterCol_account : colKey == "debit" ? filterCol_debit : colKey == "credit" ? filterCol_credit :
             colKey == "creditlimit" ? filterCol_creditlimit : colKey == "sales" ? filterCol_sales : colKey == "purchases" ? filterCol_purchases :
             colKey == "returns" ? filterCol_returns : colKey == "availablecredit" ? filterCol_availablecredit : null;
         bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
@@ -105,6 +106,7 @@
                 @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
                 @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
                 @if (!string.IsNullOrWhiteSpace(filterCol_phone)) { <input type="hidden" name="filterCol_phone" value="@filterCol_phone" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
                 @if (!string.IsNullOrWhiteSpace(filterCol_debit)) { <input type="hidden" name="filterCol_debit" value="@filterCol_debit" /> }
                 @if (!string.IsNullOrWhiteSpace(filterCol_credit)) { <input type="hidden" name="filterCol_credit" value="@filterCol_credit" /> }
                 @if (!string.IsNullOrWhiteSpace(filterCol_creditlimit)) { <input type="hidden" name="filterCol_creditlimit" value="@filterCol_creditlimit" /> }
@@ -190,7 +192,7 @@
                         </a>
                         @if (reportData.Any())
                         {
-                            <a href="@Url.Action("ExportCustomerBalances", "Reports", new { search, partyCategory, governorateId, fromDate, toDate, includeZeroBalance, sortBy, sortDir, filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales, filterCol_purchases, filterCol_returns, filterCol_availablecredit })"
+                            <a href="@Url.Action("ExportCustomerBalances", "Reports", new { search, partyCategory, governorateId, fromDate, toDate, includeZeroBalance, sortBy, sortDir, filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_account, filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales, filterCol_purchases, filterCol_returns, filterCol_availablecredit })"
                                class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none customer-balances-btn customer-balances-btn-success">
                                 <span>📥</span> تصدير Excel
                             </a>
@@ -276,6 +278,7 @@
                         <th style="width: 80px;" data-col="code">@filterableCol("code", "code", "الكود")</th>
                         <th style="width: 90px;" data-col="externalcode">كود الاكسل</th>
                         <th style="width: 200px;" data-col="name">@filterableCol("name", "name", "اسم العميل")</th>
+                        <th style="min-width: 220px;" data-col="account">@filterableCol("account", "account", "حساب العميل")</th>
                         <th data-col="category">@filterableCol("category", "category", "فئة العميل")</th>
                         <th data-col="phone">@filterableCol("phone", "phone", "الهاتف")</th>
                         <th class="text-end" style="width: 120px;" data-col="debit">@filterableCol("debit", "debit", "مدين")</th>
@@ -295,7 +298,8 @@
                             <td data-col="code"><strong>@item.CustomerCode</strong></td>
                             <td data-col="externalcode"><small>@(item.ExternalCode ?? "—")</small></td>
                             <td data-col="name">@item.CustomerName</td>
-                            <td data-col="category"><small class="text-muted">@(item.PartyCategory == "Customer" ? "عميل" : item.PartyCategory == "Supplier" ? "مورد" : item.PartyCategory ?? "—")</small></td>
+                            <td data-col="account"><small class="text-muted">@(string.IsNullOrEmpty(item.AccountDisplay) ? "—" : item.AccountDisplay)</small></td>
+                            <td data-col="category"><small class="text-muted">@(string.IsNullOrEmpty(item.PartyCategory) ? "—" : PartyCategoryDisplay.ToArabic(item.PartyCategory))</small></td>
                             <td data-col="phone"><small>@item.Phone1</small></td>
                             <td data-col="debit" class="text-end">@(item.CurrentBalance > 0 ? item.CurrentBalance.ToString("N2", n2) : "—")</td>
                             <td data-col="credit" class="text-end">@(item.CurrentBalance < 0 ? Math.Abs(item.CurrentBalance).ToString("N2", n2) : "—")</td>
@@ -319,7 +323,7 @@
                 </tbody>
                 <tfoot class="table-secondary fw-bold">
                     <tr>
-                        <td colspan="5" class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                        <td colspan="6" class="text-end"><strong>المجموع الإجمالي:</strong></td>
                         <td data-col="debit" class="text-end"><strong>@totalDebit.ToString("N2", n2)</strong></td>
                         <td data-col="credit" class="text-end"><strong>@totalCredit.ToString("N2", n2)</strong></td>
                         <td data-col="creditlimit" class="text-end"><strong>@totalCreditLimit.ToString("N2", n2)</strong></td>
@@ -463,7 +467,7 @@
             var btnClose = document.getElementById("erpColumnFilterClose");
 
             var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-            var filterColumns = ["code", "name", "category", "phone"];
+            var filterColumns = ["code", "name", "account", "category", "phone"];
             var numericColumns = ["debit", "credit", "creditlimit", "sales", "purchases", "returns", "availablecredit"];
 
             function getQueryParams() {

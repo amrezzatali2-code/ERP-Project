@@ -73,6 +73,67 @@
             padding: 0.5rem 1rem;
         }
 
+        /* كتلة واحدة — حاوية الجسم شفافة بدون صندوق (docs/فتح الفواتير ككتلة واحدة.md) */
+        #SA_BodyHost,
+        .adjustment-page div#SA_BodyHost {
+            display: block !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            padding: 0 !important;
+        }
+        .adjustment-page .container-fluid,
+        .adjustment-page .row {
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* قائمة نوع الطباعة — نفس فاتورة المبيعات */
+        .adjustment-page .si-print-dropdown-menu {
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 8px 28px rgba(99, 102, 241, 0.22) !important;
+            padding: 0.35rem 0 !important;
+            margin-top: 0.35rem !important;
+            overflow: hidden;
+            min-width: 100%;
+        }
+        .adjustment-page .si-print-dropdown-header {
+            font-weight: 600;
+            color: #475569 !important;
+            letter-spacing: 0.02em;
+        }
+        .adjustment-page .si-print-dropdown-item {
+            display: flex !important;
+            align-items: center;
+            gap: 0.65rem;
+            padding: 0.55rem 1rem !important;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #0f172a !important;
+            border-radius: 0 !important;
+            transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        .adjustment-page .si-print-dropdown-item:hover,
+        .adjustment-page .si-print-dropdown-item:focus {
+            background: linear-gradient(90deg, rgba(99, 102, 241, 0.12) 0%, rgba(14, 165, 233, 0.1) 100%) !important;
+            color: #312e81 !important;
+        }
+        .adjustment-page .si-print-opt-icon {
+            font-size: 1.15rem;
+            line-height: 1;
+            flex-shrink: 0;
+            opacity: 0.92;
+        }
+        .adjustment-page .si-print-opt-text {
+            flex: 1;
+            text-align: right;
+        }
+        .adjustment-page .si-print-dropdown-btn.dropdown-toggle::after {
+            margin-inline-start: 0.35rem;
+        }
+
         /* الكروت الرئيسية — خلفية بيضاء، زوايا مستديرة، حدود */
         .adjustment-header-card,
         .adjustment-add-card,
@@ -117,6 +178,12 @@
         .adjustment-page .adjustment-lines-card .erp-table tbody tr:hover td {
             background-color: #f8fafc !important;
         }
+        .adjustment-page .adjustment-lines-card .erp-table tbody tr.erp-list-selectable-row {
+            cursor: pointer;
+        }
+        .adjustment-page .adjustment-lines-card .erp-table tbody tr.erp-sa-row-selected td {
+            background-color: rgba(99, 102, 241, 0.12) !important;
+        }
         .adjustment-page .adjustment-lines-card .erp-table tbody td,
         .adjustment-page .adjustment-lines-card .erp-table tbody th {
             color: #0f172a !important;
@@ -158,11 +225,110 @@
         .adjustment-price-label-unlock { cursor: pointer; }
         .adjustment-price-label-unlock:hover { text-decoration: underline; }
 
-        /* بوكس اسم الصنف — حد ملون واضح */
-        .adjustment-page .adjustment-prod-name-input {
+        /* ===== بوكس اسم الصنف — نفس فاتورة المبيعات (wrapper + قائمة مخصصة) ===== */
+        #SA_BodyHost .adjustment-add-card #ProdNameInput.pi-product-name-input,
+        #SA_BodyHost .adjustment-add-card #ProdNameInput,
+        #SA_BodyHost .adjustment-add-card input#ProdNameInput {
+            border: 0 !important;
+            border-radius: 0.55rem;
+            background: transparent !important;
+        }
+        #SA_BodyHost .adjustment-add-card #ProdNameInput:focus,
+        #SA_BodyHost .adjustment-add-card input#ProdNameInput:focus {
+            border-color: #4338ca !important;
+            box-shadow: none !important;
+        }
+        #SA_BodyHost .adjustment-add-card #productDropdownWrap {
             border: 2px solid #6366f1 !important;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(99, 102, 241, 0.3);
+            border-radius: 0.55rem !important;
+            padding: 3px !important;
+            box-shadow: 0 1px 3px rgba(99, 102, 241, 0.25);
+        }
+        #SA_BodyHost .adjustment-add-card #productDropdownWrap:focus-within {
+            border-color: #4338ca !important;
+            box-shadow: none !important;
+        }
+        #SA_BodyHost .adjustment-add-card .product-dropdown-onebox {
+            border: 0 !important;
+            background: transparent !important;
+            border-radius: 0.45rem !important;
+        }
+        #SA_BodyHost .adjustment-add-card .product-dropdown-onebox:focus-within {
+            box-shadow: none !important;
+            border-color: transparent !important;
+        }
+        .adjustment-page .product-dropdown-onebox {
+            position: relative;
+            border: 1px solid #ced4da;
+            border-radius: 0.375rem;
+            background: #fff;
+        }
+        .adjustment-page .product-dropdown-arrow-inside {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #495057;
+            cursor: pointer;
+            user-select: none;
+            font-size: 0.6rem;
+            z-index: 1;
+        }
+        .adjustment-page .product-dropdown-arrow-inside:hover {
+            background-color: #e9ecef;
+        }
+        .adjustment-page .product-dropdown-onebox .product-dropdown-input {
+            width: 100%;
+            border: none !important;
+            background: transparent !important;
+            padding-left: 2.25rem !important;
+        }
+        .adjustment-page .product-dropdown-onebox .product-dropdown-input:focus {
+            box-shadow: none !important;
+            outline: none !important;
+        }
+        .adjustment-page .product-dropdown-onebox:focus-within {
+            border-color: #0d6efd !important;
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+        }
+        .adjustment-page .product-dropdown-list {
+            position: fixed;
+            max-height: 220px;
+            min-height: 40px;
+            overflow-y: auto;
+            z-index: 9999;
+            margin-top: 2px;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            background: #fff;
+            box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+        }
+        .adjustment-page .product-dropdown-list[data-open="false"] {
+            display: none !important;
+        }
+        .adjustment-page .product-dropdown-list[data-open="true"] {
+            display: block !important;
+        }
+        #SA_BodyHost .adjustment-add-card .card-body {
+            overflow: visible !important;
+        }
+        .adjustment-page .product-dropdown-item {
+            cursor: pointer;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .adjustment-page .product-dropdown-item:hover {
+            background-color: #f8f9fa;
+        }
+        .adjustment-page .product-dropdown-item:last-child {
+            border-bottom: none;
+        }
+        .adjustment-page .product-dropdown-item-active {
+            background-color: #0d6efd !important;
+            color: #fff !important;
         }
 
         /* لوحة قائمة التشغيلات — تظهر عند النقر على حقل التشغيلة */
@@ -186,6 +352,46 @@
             color: #0f172a;
             font-weight: 600;
         }
+
+        /* رسالة مركزية — أخطاء الترحيل والعمليات (بدل سكربت الخادم الطويل) */
+        .erp-sa-center-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 10050;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .erp-sa-center-modal.d-none { display: none !important; }
+        .erp-sa-center-modal-backdrop {
+            position: absolute;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(3px);
+        }
+        .erp-sa-center-modal-dialog {
+            position: relative;
+            z-index: 1;
+            max-width: 440px;
+            width: 100%;
+            border-radius: 14px;
+            overflow: hidden;
+            border: 1px solid #6366f1;
+            box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+        }
+        .erp-sa-center-modal-dialog .card-header.erp-sa-cm-h-danger {
+            background: linear-gradient(135deg, #6366f1, #4f46e5);
+            border: 0;
+        }
+        .erp-sa-center-modal-dialog .card-header.erp-sa-cm-h-success {
+            background: linear-gradient(135deg, #059669, #047857);
+            border: 0;
+        }
+        .erp-sa-center-modal-dialog .card-header.erp-sa-cm-h-warn {
+            background: linear-gradient(135deg, #d97706, #b45309);
+            border: 0;
+        }
     </style>
 }
 
@@ -193,12 +399,26 @@
     @* حاوية رسائل الترحيل والعمليات (بوب أب خارج الكارت — مثل فاتورة المبيعات) *@
     <div id="adjustmentToastContainer" class="position-fixed top-0 start-50 translate-middle-x p-2" style="z-index: 9999; margin-top: 60px;" aria-live="polite"></div>
 
-    <div class="container-fluid pt-3">
+    @* رسالة في منتصف الشاشة (أخطاء ورسائل طويلة) *@
+    <div id="erpSaCenterModal" class="erp-sa-center-modal d-none" role="alertdialog" aria-modal="true" aria-labelledby="erpSaCenterModalTitle">
+        <div class="erp-sa-center-modal-backdrop" id="erpSaCenterModalBackdrop"></div>
+        <div class="erp-sa-center-modal-dialog card shadow border-0">
+            <div id="erpSaCenterModalHeader" class="card-header py-2 text-white text-center fw-bold erp-sa-cm-h-danger">تنبيه</div>
+            <div class="card-body py-3 px-4 text-center">
+                <p id="erpSaCenterModalBody" class="mb-0 text-dark" style="line-height: 1.75; font-size: 0.95rem;"></p>
+            </div>
+            <div class="card-footer bg-transparent border-0 text-center pb-3 pt-0">
+                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm px-4" id="erpSaCenterModalBtn">حسناً</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="container-fluid pt-0">
         <form id="__AntiForgeryForm" method="post" style="display:none">
             @Html.AntiForgeryToken()
         </form>
 
-        <div class="row g-3">
+        <div class="row g-3 align-items-start">
             @* العمود الجانبي *@
             <div class="col-12 col-lg-2 order-1 order-lg-2">
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
@@ -297,6 +517,14 @@
                             🗑️ مسح كل السطور
                         </button>
 
+                        <button type="button"
+                                class="btn btn-erp btn-erp-secondary btn-erp-sm w-100"
+                                id="btnDeleteSelectedAdjustmentLine"
+                                disabled
+                                title="اختر سطراً من الجدول ثم اضغط للحذف">
+                            🗑️ مسح السطر المحدد
+                        </button>
+
                         <div>
                             <button type="button" id="btnOpenProductMovement" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
                                 📊 حركة الصنف
@@ -307,12 +535,29 @@
                                 ✏️ تعديل الصنف
                             </button>
                         </div>
+
+                        @* طباعة — نفس نظام فاتورة المبيعات (قائمة منسدلة) *@
+                        <div class="dropdown w-100 si-print-dropdown">
+                            <button type="button" id="btnPrintStockAdjustmentDropdown"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100 dropdown-toggle si-print-dropdown-btn"
+                                    data-bs-toggle="dropdown"
+                                    aria-expanded="false">
+                                🖨️ طباعة التسوية
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end w-100 si-print-dropdown-menu" aria-labelledby="btnPrintStockAdjustmentDropdown">
+                                <li class="si-print-dropdown-header px-3 py-2 small text-muted border-bottom mb-0">اختر نوع الطباعة</li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-sa-print-mode="1"><span class="si-print-opt-icon" aria-hidden="true">📄</span><span class="si-print-opt-text">طباعة صفحة واحدة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-sa-print-mode="2"><span class="si-print-opt-icon" aria-hidden="true">📑</span><span class="si-print-opt-text">طباعة أصل وصورة</span></a></li>
+                                <li><a class="dropdown-item si-print-dropdown-item" href="#" data-sa-print-mode="3"><span class="si-print-opt-icon" aria-hidden="true">📚</span><span class="si-print-opt-text">طباعة أصل وصورتين</span></a></li>
+                            </ul>
+                        </div>
                     </div>
                 </div>
             </div>
 
             @* العمود الرئيسي *@
             <div class="col-12 col-lg-10 order-2 order-lg-1">
+                <div id="SA_BodyHost">
                 @* كارت بيانات التسوية *@
                 <div class="card shadow-sm mb-2 adjustment-header-card">
                     <div class="adjustment-header-bar">
@@ -364,23 +609,18 @@
 
                             <div class="col-lg-5">
                                 <label class="form-label form-label-sm">اسم الصنف</label>
-                                <input id="ProdNameInput" list="productsList" class="form-control form-control-sm adjustment-prod-name-input" placeholder="اكتب اسم الصنف..." autocomplete="off" data-lock-posted="1" />
-                                <datalist id="productsList">
-                                    @if (ViewBag.ProductsAuto != null)
-                                    {
-                                        foreach (var p in ViewBag.ProductsAuto)
-                                        {
-                                            <option value="@p.Name"
-                                                    data-id="@p.Id"
-                                                    data-code="@p.Id"
-                                                    data-generic="@p.GenericName"
-                                                    data-company="@p.Company"
-                                                    data-price="@p.PriceRetail"
-                                                    data-hasquota="@(p.HasQuota ? "true" : "false")">
-                                            </option>
-                                        }
-                                    }
-                                </datalist>
+                                <div class="position-relative" id="productDropdownWrap">
+                                    <div class="product-dropdown-onebox" id="productDropdownInputGroup">
+                                        <span class="product-dropdown-arrow-inside" id="productDropdownArrow" title="افتح القائمة">▼</span>
+                                        <input id="ProdNameInput"
+                                               type="text"
+                                               class="form-control form-control-sm pi-product-name-input product-dropdown-input"
+                                               placeholder="اختر صنف..."
+                                               autocomplete="off"
+                                               data-lock-posted="1" />
+                                    </div>
+                                    <div id="productDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
+                                </div>
                                 <input type="hidden" id="ProdId" />
                             </div>
 
@@ -398,7 +638,10 @@
 
                             <div class="col-lg-2">
                                 <label class="form-label form-label-sm">تاريخ الصلاحية</label>
-                                <input type="date" id="ExpiryInput" class="form-control form-control-sm text-center" data-lock-posted="1" dir="ltr" style="text-align: left;" />
+                                <input type="text" id="ExpiryInput" inputmode="numeric" autocomplete="off"
+                                       class="form-control form-control-sm text-center pi-input"
+                                       placeholder="شهر/سنة (مثال: 229 = 02/2029)" data-lock-posted="1" dir="ltr" style="text-align: left;"
+                                       title="اكتب رقم الشهر ثم رقمين للسنة بدون فواصل، مثل 229 لشهر 2 سنة 2029 — مثل فاتورة المشتريات" />
                             </div>
 
                             <div class="col-lg-1">
@@ -419,7 +662,12 @@
                         <div class="row g-2 mt-2">
                             <div class="col-lg-2">
                                 <label class="form-label form-label-sm">تكلفة الوحدة</label>
-                                <input type="number" id="CostPerUnitInput" class="form-control form-control-sm text-center" step="0.0001" data-lock-posted="1" />
+                                <input type="number" id="CostPerUnitInput" class="form-control form-control-sm text-center" step="0.0001" data-lock-posted="1" title="تُحدَّث من سعر الجمهور والخصم المرجح" />
+                            </div>
+
+                            <div class="col-lg-2">
+                                <label class="form-label form-label-sm">الخصم المرجح %</label>
+                                <input type="number" id="WeightedDiscountInput" class="form-control form-control-sm text-center" step="0.01" min="0" max="100" data-lock-posted="1" title="تعديل النسبة يعيد حساب تكلفة الوحدة" />
                             </div>
 
                             <div class="col-lg-2">
@@ -427,7 +675,7 @@
                                 <input type="number" id="PriceRetailInput" class="form-control form-control-sm text-center bg-light text-muted" step="0.01" data-lock-posted="1" readonly />
                             </div>
 
-                            <div class="col-lg-6">
+                            <div class="col-lg-4">
                                 <label class="form-label form-label-sm">ملاحظات السطر</label>
                                 <input type="text" id="LineNoteInput" class="form-control form-control-sm" data-lock-posted="1" />
                             </div>
@@ -448,6 +696,7 @@
                             <table class="table table-sm table-striped table-hover mb-0 erp-table">
                                 <thead>
                                     <tr>
+                                        <th class="text-center no-print" style="width:2.5rem" title="تحديد">◻</th>
                                         <th class="text-center">#</th>
                                         <th>اسم الصنف</th>
                                         <th class="text-center">التشغيلة</th>
@@ -456,8 +705,9 @@
                                         <th class="text-center">الكمية بعد</th>
                                         <th class="text-center">الفرق</th>
                                         <th class="text-center">تكلفة الوحدة</th>
+                                        <th class="text-center">الخصم المرجح %</th>
+                                        <th class="text-center">سعر الجمهور</th>
                                         <th class="text-center">فرق التكلفة</th>
-                                        <th class="text-center no-print">مسح</th>
                                     </tr>
                                 </thead>
                                 <tbody id="AdjustmentLinesTbody">
@@ -466,7 +716,8 @@
                                         int lineNo = 1;
                                         foreach (var line in Model.Lines.OrderBy(l => l.Id))
                                         {
-                                            <tr data-line-id="@line.Id">
+                                            <tr class="erp-list-selectable-row" data-line-id="@line.Id" data-product-id="@line.ProductId">
+                                                <td class="text-center no-print"></td>
                                                 <td class="text-center">@lineNo</td>
                                                 <td>@(line.Product?.ProdName ?? $"صنف #{line.ProductId}")</td>
                                                 <td class="text-center">@(line.Batch?.BatchNo ?? "-")</td>
@@ -475,10 +726,9 @@
                                                 <td class="text-center">@line.QtyAfter</td>
                                                 <td class="text-center">@line.QtyDiff</td>
                                                 <td class="text-center">@(line.CostPerUnit?.ToString("0.0000") ?? "-")</td>
+                                                <td class="text-center">@(line.WeightedDiscountPct?.ToString("0.00") ?? "-")</td>
+                                                <td class="text-center">@(line.PriceRetail?.ToString("0.00") ?? "-")</td>
                                                 <td class="text-center">@(line.CostDiff?.ToString("0.00") ?? "-")</td>
-                                                <td class="text-center no-print">
-                                                    <button type="button" class="btn btn-sm btn-danger btn-delete-line" data-line-id="@line.Id" data-lock-posted="1">🗑️</button>
-                                                </td>
                                             </tr>
                                             lineNo++;
                                         }
@@ -486,7 +736,7 @@
                                     else
                                     {
                                         <tr>
-                                            <td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
+                                            <td colspan="12" class="text-center text-muted py-4">لا توجد سطور بعد.</td>
                                         </tr>
                                     }
                                 </tbody>
@@ -518,6 +768,73 @@
                         </div>
                     </div>
                 </div>
+
+                @* منطقة الطباعة — نفس آلية فاتورة المبيعات (erp-print.css + #piPrintWrapper) *@
+                <div id="piPrintWrapper" class="erp-print-area print-only">
+                    <div id="piPrintArea" class="pi-print-copy">
+                        <table class="pi-print-master-table table table-bordered table-sm mb-0 w-100">
+                            <thead>
+                                <tr>
+                                    <td colspan="11" class="p-0 border-0 pi-print-thead-banner-cell">
+                                        <div class="pi-print-header mb-2">
+                                            <div class="pi-print-company-row d-flex justify-content-between align-items-center">
+                                                <div class="pi-print-logo-placeholder"></div>
+                                                <div class="text-center flex-grow-1">
+                                                    <h2 class="pi-print-company-name mb-0 fw-bold">شركة الهدى</h2>
+                                                    <span class="pi-print-doc-title">ERP — تسوية جردية</span>
+                                                </div>
+                                                <div style="width:48px"></div>
+                                            </div>
+                                            <hr class="pi-print-company-underline my-1" />
+                                            <div class="pi-print-details-grid small w-100" role="presentation">
+                                                <div>رقم التسوية: <strong id="saPrintAdjNo"></strong></div>
+                                                <div>تاريخ التسوية: <strong id="saPrintAdjDate"></strong></div>
+                                                <div>المخزن: <strong id="saPrintWarehouse"></strong></div>
+                                                <div>الحالة: <strong id="saPrintStatus"></strong></div>
+                                                <div class="pi-print-details-cell-span2" aria-hidden="true"></div>
+                                                <div class="pi-print-details-span-row text-muted small" id="saPrintNow"></div>
+                                            </div>
+                                            <hr class="my-1 pi-print-hr-after-banner" />
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr class="pi-print-column-head-row table-light">
+                                    <th class="text-center">#</th>
+                                    <th>اسم الصنف</th>
+                                    <th class="text-center">التشغيلة</th>
+                                    <th class="text-center">الصلاحية</th>
+                                    <th class="text-center">الكمية قبل</th>
+                                    <th class="text-center">الكمية بعد</th>
+                                    <th class="text-center">الفرق</th>
+                                    <th class="text-center">تكلفة الوحدة</th>
+                                    <th class="text-center">الخصم المرجح %</th>
+                                    <th class="text-center">سعر الجمهور</th>
+                                    <th class="text-center">فرق التكلفة</th>
+                                </tr>
+                            </thead>
+                            <tbody id="piPrintMasterTbody" class="pi-print-master-tbody"></tbody>
+                        </table>
+                        <div id="piPrintTotalsWrap" class="pi-print-totals-block mt-2"></div>
+                    </div>
+                </div>
+
+                <datalist id="productsList" hidden aria-hidden="true">
+                    @if (ViewBag.ProductsAuto != null)
+                    {
+                        foreach (var p in ViewBag.ProductsAuto)
+                        {
+                            <option value="@p.Name"
+                                    data-id="@p.Id"
+                                    data-code="@p.Id"
+                                    data-generic="@p.GenericName"
+                                    data-company="@p.Company"
+                                    data-price="@p.PriceRetail"
+                                    data-hasquota="@(p.HasQuota ? "true" : "false")">
+                            </option>
+                        }
+                    }
+                </datalist>
+                </div>@* /#SA_BodyHost *@
             </div>
         </div>
     </div>
@@ -614,23 +931,38 @@
 
             const btnOpen = document.getElementById('btnOpenAdjustment');
             if (btnOpen) btnOpen.disabled = !posted;
+
+            const btnPrintAdj = document.getElementById('btnPrintStockAdjustmentDropdown');
+            if (btnPrintAdj) {
+                const adjId = parseInt(document.getElementById('AdjustmentId')?.value || '0', 10);
+                btnPrintAdj.disabled = !posted || adjId <= 0;
+            }
+
+            const btnDelLine = document.getElementById('btnDeleteSelectedAdjustmentLine');
+            if (btnDelLine) {
+                const hasSel = !!document.querySelector('#AdjustmentLinesTbody tr[data-line-id].erp-sa-row-selected');
+                btnDelLine.disabled = posted || !hasSel;
+            }
         }
 
-        // تطبيق القفل عند تحميل الصفحة إن كانت التسوية مترحلة
+        // تطبيق القفل عند التحميل + زر الطباعة (مرتبط بالترحيل)
         (function() {
             const serverIsPosted = @Model.IsPosted.ToString().ToLower();
-            if (serverIsPosted) {
-                setAdjustmentPosted(true);
-                applyPostedUiLock();
-            }
+            setAdjustmentPosted(!!serverIsPosted);
+            applyPostedUiLock();
         })();
 
-        // رسائل بوب أب خارج الكارت (مثل فاتورة المبيعات)
-        function showToast(text, type) {
+        // رسائل عابرة — نفس فاتورة المبيعات (ERP.showToast + مدة اختيارية للنجاح 1000ms)
+        function showToast(text, type, durationMs) {
             if (!text) return;
+            if (typeof ERP !== 'undefined' && typeof ERP.showToast === 'function') {
+                ERP.showToast(text, type, durationMs);
+                return;
+            }
             var container = document.getElementById('adjustmentToastContainer');
             if (!container) return;
             type = type || 'muted';
+            var ms = typeof durationMs === 'number' && durationMs >= 0 ? durationMs : 4000;
             var el = document.createElement('div');
             el.className = 'alert alert-' + (type === 'danger' ? 'danger' : type === 'success' ? 'success' : type === 'warning' ? 'warning' : 'secondary') + ' shadow-sm mb-0 py-2 px-3';
             el.style.minWidth = '220px';
@@ -642,11 +974,124 @@
                 setTimeout(function() {
                     if (el.parentNode) el.parentNode.removeChild(el);
                 }, 250);
-            }, 4000);
+            }, ms);
+        }
+
+        /** رسالة في منتصف الشاشة — للأخطاء ورسائل الخادم الطويلة (بدل لصق HTML/Stack كامل) */
+        function showCenterModal(message, variant) {
+            variant = variant || 'danger';
+            var wrap = document.getElementById('erpSaCenterModal');
+            var body = document.getElementById('erpSaCenterModalBody');
+            var hdr = document.getElementById('erpSaCenterModalHeader');
+            if (!wrap || !body || !hdr) {
+                showToast(message, variant === 'success' ? 'success' : 'danger');
+                return;
+            }
+            body.textContent = (message || '').toString();
+            hdr.classList.remove('erp-sa-cm-h-danger', 'erp-sa-cm-h-success', 'erp-sa-cm-h-warn');
+            if (variant === 'success') {
+                hdr.classList.add('erp-sa-cm-h-success');
+                hdr.textContent = 'تم بنجاح';
+            } else if (variant === 'warning') {
+                hdr.classList.add('erp-sa-cm-h-warn');
+                hdr.textContent = 'تنبيه';
+            } else {
+                hdr.classList.add('erp-sa-cm-h-danger');
+                hdr.textContent = 'تنبيه';
+            }
+            wrap.classList.remove('d-none');
+        }
+        function hideCenterModal() {
+            var wrap = document.getElementById('erpSaCenterModal');
+            if (wrap) wrap.classList.add('d-none');
+        }
+        document.getElementById('erpSaCenterModalBtn')?.addEventListener('click', hideCenterModal);
+        document.getElementById('erpSaCenterModalBackdrop')?.addEventListener('click', hideCenterModal);
+
+        async function parseResponseJsonSafe(response) {
+            var ct = (response.headers.get('content-type') || '').toLowerCase();
+            if (ct.indexOf('application/json') >= 0) {
+                try { return await response.json(); } catch (e) { return { ok: false, message: 'تعذر قراءة الرد.' }; }
+            }
+            var t = await response.text();
+            try { return JSON.parse(t); } catch (e) {
+                var shortMsg = (t || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+                if (shortMsg.length > 220) shortMsg = 'حدث خطأ في الخادم أثناء المعالجة. إن استمر الأمر، راجع الإعدادات أو أعد المحاولة.';
+                return { ok: false, message: shortMsg || 'حدث خطأ غير متوقع.' };
+            }
         }
 
         // تشغيلات الصنف الحالية (تُملأ عند تحميل بيانات الصنف — للاختيار من القائمة أو إدخال تشغيلة جديدة)
         let currentBatches = [];
+
+        /** نفس فاتورة/طلب المشتريات: إدخال مختصر شهر+سنة بدون فواصل → يُنسَّق MM/YYYY */
+        window.formatExpiryWithSlash = window.formatExpiryWithSlash || function (val) {
+            var s = (val || '').toString().trim().replace(/\s/g, '');
+            if (!s) return '';
+            var digits = s.replace(/\D/g, '');
+            if (digits.length === 3) { var m = digits[0]; var yy = digits.slice(1, 3); return ('0' + m).slice(-2) + '/' + '20' + yy; }
+            if (digits.length === 4) { var mm = digits.slice(0, 2); var yy2 = digits.slice(2, 4); return mm + '/' + '20' + yy2; }
+            if (digits.length === 5) { var m5 = digits[0]; var yyyy = digits.slice(1, 5); return ('0' + m5).slice(-2) + '/' + yyyy; }
+            if (digits.length >= 6) { var mm6 = digits.slice(0, 2); var yyyy6 = digits.slice(2, 6); return mm6 + '/' + yyyy6; }
+            return s;
+        };
+
+        /** yyyy-MM-dd → عرض MM/YYYY (مثل فاتورة المشتريات) */
+        function yyyyMmDdToMmYyyy(iso) {
+            if (!iso || typeof iso !== 'string') return '';
+            var t = iso.trim();
+            if (!t.includes('-')) return t;
+            var parts = t.split('-');
+            if (parts.length >= 2) return parts[1] + '/' + parts[0];
+            return t;
+        }
+
+        /** للإرسال للخادم: يفضّل yyyy-MM-dd الكامل من data-iso إن وُجد؛ وإلا MM/YYYY → أول الشهر */
+        function getExpiryForApi() {
+            var el = document.getElementById('ExpiryInput');
+            if (!el) return '';
+            var iso = el.getAttribute('data-expiry-iso');
+            if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso;
+            var v = (el.value || '').trim();
+            if (!v) return '';
+            if (typeof formatExpiryWithSlash === 'function') v = formatExpiryWithSlash(v);
+            v = v.replace(/\s/g, '');
+            if (/^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+            var m = v.match(/^(\d{1,2})\/(\d{4})$/);
+            if (m) {
+                var mm = parseInt(m[1], 10);
+                var yyyy = parseInt(m[2], 10);
+                if (mm >= 1 && mm <= 12 && yyyy > 1900)
+                    return yyyy + '-' + String(mm).padStart(2, '0') + '-01';
+            }
+            return v;
+        }
+
+        function setExpiryFieldFromIso(iso) {
+            var el = document.getElementById('ExpiryInput');
+            if (!el) return;
+            if (iso && /^\d{4}-\d{2}-\d{2}$/.test(String(iso).trim())) {
+                el.setAttribute('data-expiry-iso', String(iso).trim());
+                el.value = yyyyMmDdToMmYyyy(String(iso).trim());
+            } else {
+                el.removeAttribute('data-expiry-iso');
+                el.value = iso ? String(iso) : '';
+            }
+        }
+
+        /** تكلفة الوحدة = سعر الجمهور × (1 - الخصم المرجح%/100) — نفس منطق عرض التكلفة من السعر والخصم */
+        function recalcAdjustmentCostFromRetailDiscount() {
+            var retailEl = document.getElementById('PriceRetailInput');
+            var wdEl = document.getElementById('WeightedDiscountInput');
+            var costEl = document.getElementById('CostPerUnitInput');
+            if (!retailEl || !wdEl || !costEl) return;
+            var retail = parseFloat(String(retailEl.value || '').replace(',', '.'));
+            var wd = parseFloat(String(wdEl.value || '').replace(',', '.'));
+            if (isNaN(retail) || isNaN(wd)) return;
+            wd = Math.max(0, Math.min(100, wd));
+            var cost = retail * (1 - wd / 100);
+            costEl.value = cost.toFixed(4);
+        }
 
         // تحميل بيانات الصنف تلقائياً + ملء قائمة التشغيلات
         let busyLoadInfo = false;
@@ -663,12 +1108,14 @@
                 if (qtyBeforeEl) qtyBeforeEl.value = '0';
                 var batchToggle = document.getElementById('BatchDropdownToggle');
                 if (batchToggle) batchToggle.style.visibility = 'hidden';
+                var wdIn = document.getElementById('WeightedDiscountInput');
+                if (wdIn) wdIn.value = '';
                 return;
             }
             if (busyLoadInfo) return;
             busyLoadInfo = true;
             const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
-            const expiry = document.getElementById('ExpiryInput').value || '';
+            const expiry = getExpiryForApi();
             try {
                 const url = '@Url.Action("GetStockAdjustmentProductInfo", "StockAdjustments")'
                     + '?prodId=' + encodeURIComponent(prodId)
@@ -680,8 +1127,10 @@
                 if (data && data.ok) {
                     document.getElementById('TotalQtyInput').value = data.totalQty ?? 0;
                     document.getElementById('QtyBeforeInput').value = data.qtyBefore || 0;
-                    document.getElementById('CostPerUnitInput').value = data.costPerUnit || '';
-                    document.getElementById('PriceRetailInput').value = data.priceRetail || '';
+                    document.getElementById('PriceRetailInput').value = data.priceRetail != null ? data.priceRetail : '';
+                    var wdEl = document.getElementById('WeightedDiscountInput');
+                    if (wdEl) wdEl.value = data.weightedDiscount != null ? data.weightedDiscount : '';
+                    recalcAdjustmentCostFromRetailDiscount();
                     currentBatches = data.batches || [];
                     var batchListEl = document.getElementById('batchList');
                     if (batchListEl) {
@@ -695,7 +1144,7 @@
                     }
                     // عند تحميل صنف جديد نعيّن دائماً التشغيلة وتاريخ الصلاحية لأول تشغيلة له (حتى بعد تغيير الصنف بالاسم/الكود + Enter)
                     document.getElementById('BatchNoInput').value = data.firstBatchNo ?? '';
-                    document.getElementById('ExpiryInput').value = data.firstExpiry ?? '';
+                    setExpiryFieldFromIso(data.firstExpiry || '');
                     var batchToggle = document.getElementById('BatchDropdownToggle');
                     if (batchToggle) batchToggle.style.visibility = (currentBatches && currentBatches.length > 1) ? 'visible' : 'hidden';
                 } else {
@@ -712,7 +1161,7 @@
             var v = this.value?.trim() || '';
             var found = currentBatches.find(function(b) { return (b.batchNo || '').trim() === v; });
             if (found && found.expiryText) {
-                document.getElementById('ExpiryInput').value = found.expiryText;
+                setExpiryFieldFromIso(found.expiryText);
                 loadProductInfo();
             }
         });
@@ -740,7 +1189,7 @@
                     btn.addEventListener('click', function(e) {
                         e.preventDefault();
                         batchInput.value = batchNo;
-                        document.getElementById('ExpiryInput').value = expiryText;
+                        setExpiryFieldFromIso(expiryText);
                         loadProductInfo();
                         panel.classList.add('d-none');
                     });
@@ -787,86 +1236,441 @@
                 priceLocked = !priceLocked;
                 applyPriceLockUI();
             });
+            priceInput.addEventListener('input', function() {
+                recalcAdjustmentCostFromRetailDiscount();
+            });
         })();
 
-        function resolveProductByName(val, exactOnly) {
-            if (!(val || '').trim()) return null;
-            val = (val || '').trim();
-            var opt = document.querySelector('#productsList option[value="' + val.replace(/"/g, '\\"') + '"]');
-            if (!opt && !exactOnly) {
-                var opts = document.querySelectorAll('#productsList option');
-                for (var i = 0; i < opts.length; i++) {
-                    var v = (opts[i].getAttribute('value') || '').trim();
-                    if (v === val || v.indexOf(val) === 0) { opt = opts[i]; break; }
-                }
-            }
-            return opt;
-        }
-        document.getElementById('ProdNameInput')?.addEventListener('input', function() {
-            var opt = resolveProductByName(this.value, true);
-            if (opt) {
-                document.getElementById('ProdId').value = opt.getAttribute('data-id');
-                document.getElementById('ProdCodeInput').value = opt.getAttribute('data-id');
-                document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
-                loadProductInfo();
-            }
-        });
-        // عند الخروج من حقل اسم الصنف: إن كان النص يطابق صنفاً (تطابق تام أو يبدأ بـ) نحمّل بياناته
-        document.getElementById('ProdNameInput')?.addEventListener('blur', function() {
-            var val = (this.value || '').trim();
-            if (!val) return;
-            var opt = resolveProductByName(val, false);
-            if (opt) {
-                var newId = opt.getAttribute('data-id');
-                if (document.getElementById('ProdId').value !== newId) {
-                    document.getElementById('ProdId').value = newId;
-                    document.getElementById('ProdCodeInput').value = newId;
-                    document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
-                    loadProductInfo();
-                }
-            }
-        });
+        document.getElementById('WeightedDiscountInput')?.addEventListener('input', recalcAdjustmentCostFromRetailDiscount);
+        document.getElementById('WeightedDiscountInput')?.addEventListener('change', recalcAdjustmentCostFromRetailDiscount);
 
-        document.getElementById('ProdCodeInput')?.addEventListener('input', function() {
-            const code = (this.value || '').trim();
-            if (code) {
-                const selectedOption = document.querySelector('#productsList option[data-id="' + code + '"]');
-                if (selectedOption) {
-                    document.getElementById('ProdId').value = code;
-                    document.getElementById('ProdNameInput').value = selectedOption.getAttribute('value') || selectedOption.value || '';
-                    loadProductInfo();
-                }
+        // =========================================================
+        // أوتوكومبليت اسم الصنف — نفس منطق فاتورة المبيعات (قائمة مخصصة + بحث متعدد الكلمات)
+        // =========================================================
+        (function () {
+            const prodCodeInput = document.getElementById('ProdCodeInput');
+            const prodNameInput = document.getElementById('ProdNameInput');
+            const prodHiddenId = document.getElementById('ProdId');
+            const prodDataList = document.getElementById('productsList');
+            const batchNoInput = document.getElementById('BatchNoInput');
+
+            if (!prodDataList) {
+                console.warn('قائمة الأصناف (productsList) غير موجودة.');
+                return;
             }
-        });
-        // عند الخروج من حقل كود الصنف: إن كان الكود يطابق صنفاً نحمّل بياناته
-        document.getElementById('ProdCodeInput')?.addEventListener('blur', function() {
-            var code = (this.value || '').trim();
-            if (!code) return;
-            var opt = document.querySelector('#productsList option[data-id="' + code + '"]');
-            if (opt && document.getElementById('ProdId').value !== code) {
-                document.getElementById('ProdId').value = code;
-                document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
+
+            function normalizeDigits(txt) {
+                if (!txt) return '';
+                const map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                    '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                let out = '';
+                for (let i = 0; i < txt.length; i++) {
+                    const c = txt[i];
+                    out += map[c] !== undefined ? map[c] : c;
+                }
+                return out;
+            }
+
+            function normalizeWord(w) {
+                return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+            }
+
+            function normalizeText(txt) {
+                return (txt || '')
+                    .trim()
+                    .toLowerCase()
+                    .split(/\s+/)
+                    .filter(Boolean)
+                    .map(function (w) { return normalizeWord(w); })
+                    .filter(Boolean)
+                    .join(' ')
+                    .replace(/\s+/g, ' ');
+            }
+
+            function wordMatchesQueryWord(nameWord, queryWord) {
+                const nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                const qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                const nw = nw0.replace(/^[اأإآ]/u, '');
+                const qw = qw0.replace(/^[اأإآ]/u, '');
+                if (!qw) return true;
+                return nw === qw || nw.startsWith(qw);
+            }
+
+            function productNameMatchesSearch(productName, rawSearch) {
+                const raw = (rawSearch || '').trim();
+                if (!raw) return true;
+                const qWords = raw.split(/\s+/).filter(Boolean);
+                const nWords = (productName || '').trim().split(/\s+/).filter(Boolean);
+                if (qWords.length === 0) return true;
+                return qWords.every(function (qw) {
+                    return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                });
+            }
+
+            function productSearchRank(name, rawSearch) {
+                const raw = (rawSearch || '').trim();
+                const nm = (name || '').trim();
+                if (!raw) return 50;
+                if (nm === raw) return 0;
+                if (nm.startsWith(raw)) return 1;
+                const rawWords = raw.split(/\s+/).filter(Boolean);
+                const firstQ = rawWords[0] || '';
+                const nmWords = nm.split(/\s+/).filter(Boolean);
+                if (firstQ && nmWords.length) {
+                    if (nmWords[0].startsWith(firstQ)) return 2;
+                    const nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                    const qw0 = normalizeDigits(firstQ.toLowerCase());
+                    const nw = nw0.replace(/^[اأإآ]/u, '');
+                    const qw = qw0.replace(/^[اأإآ]/u, '');
+                    if (qw && (nw === qw || nw.startsWith(qw))) return 3;
+                }
+                return 4;
+            }
+
+            function findProductByName(name) {
+                const raw = (name || '').trim();
+                const search = normalizeText(raw);
+                if (!search) return null;
+                const opts = prodDataList.options;
+                for (let i = 0; i < opts.length; i++) {
+                    if (normalizeText(opts[i].value) === search) return opts[i];
+                }
+                for (let i = 0; i < opts.length; i++) {
+                    if ((opts[i].value || '').trim() === raw) return opts[i];
+                }
+                return null;
+            }
+
+            function findProductByCode(code) {
+                const search = (code || '').toString().trim();
+                if (!search) return null;
+                const opts = prodDataList.options;
+                for (let i = 0; i < opts.length; i++) {
+                    const idAttr = (opts[i].getAttribute('data-id') || '').toString();
+                    const codeAttr = (opts[i].getAttribute('data-code') || '').toString();
+                    if (idAttr === search || codeAttr === search) return opts[i];
+                }
+                return null;
+            }
+
+            function getProductDropdownFilterQuery(rawTrim) {
+                const raw = (rawTrim || '').trim();
+                if (!raw || !prodDataList || !prodDataList.options) return raw;
+                const nRaw = normalizeText(raw);
+                let canonical = '';
+                const opts = prodDataList.options;
+                for (let i = 0; i < opts.length; i++) {
+                    const v = (opts[i].value || '').trim();
+                    if (!v) continue;
+                    if (v === raw) { canonical = v; break; }
+                    if (nRaw && normalizeText(v) === nRaw) { canonical = v; break; }
+                }
+                if (!canonical) return raw;
+                const parts = canonical.split(/\s+/).filter(Boolean);
+                return parts[0] || raw;
+            }
+
+            const PRODUCT_LIST_MAX = 15;
+
+            function getFilteredProductOptions(search, max, pinDisplayName) {
+                if (!prodDataList || !prodDataList.options) return [];
+                const limit = max || PRODUCT_LIST_MAX;
+                const opts = prodDataList.options;
+                const rawTrim = (search || '').trim();
+                if (!rawTrim) {
+                    const out = [];
+                    for (let i = 0; i < opts.length && out.length < limit; i++) out.push(opts[i]);
+                    return out;
+                }
+                const qNorm = normalizeText(rawTrim);
+                const words = rawTrim.split(/\s+/).filter(Boolean);
+                const matched = [];
+                for (let i = 0; i < opts.length; i++) {
+                    const opt = opts[i];
+                    const nameVal = (opt.value || '').trim();
+                    const code = (opt.getAttribute('data-code') || '').toString().trim();
+                    const idAttr = (opt.getAttribute('data-id') || '').toString().trim();
+                    const codeOrId = code || idAttr;
+                    const nameOk = qNorm ? productNameMatchesSearch(nameVal, rawTrim) : true;
+                    const idOk = words.length > 0 && words.some(function (w) { return codeOrId.indexOf(w) !== -1; });
+                    const codeRawOk = codeOrId && codeOrId.indexOf(rawTrim) !== -1;
+                    if (nameOk || idOk || codeRawOk) matched.push(opt);
+                }
+                matched.sort(function (a, b) {
+                    const ra = productSearchRank((a.value || '').trim(), rawTrim);
+                    const rb = productSearchRank((b.value || '').trim(), rawTrim);
+                    if (ra !== rb) return ra - rb;
+                    return (a.value || '').localeCompare(b.value || '', 'ar');
+                });
+                let result = matched.slice(0, limit);
+                const pinRaw = (pinDisplayName || '').trim();
+                if (pinRaw) {
+                    const nPin = normalizeText(pinRaw);
+                    let pinOpt = null;
+                    for (let j = 0; j < opts.length; j++) {
+                        const v = (opts[j].value || '').trim();
+                        if (v === pinRaw || (nPin && normalizeText(v) === nPin)) { pinOpt = opts[j]; break; }
+                    }
+                    if (pinOpt && matched.indexOf(pinOpt) >= 0) {
+                        const inResult = result.some(function (o) { return o === pinOpt; });
+                        if (!inResult) {
+                            result = matched.slice(0, limit - 1);
+                            result.push(pinOpt);
+                        }
+                    }
+                }
+                return result;
+            }
+
+            var productDropdownHighlightedIndex = -1;
+            var productDropdownSelectableItems = [];
+            var productDropdownPendingMoveToNext = false;
+
+            function fillProductFromOption(opt) {
+                if (!opt) {
+                    if (prodHiddenId) prodHiddenId.value = '';
+                    if (prodCodeInput) prodCodeInput.value = '';
+                    if (prodNameInput) prodNameInput.value = '';
+                    currentBatches = [];
+                    var bl = document.getElementById('batchList');
+                    if (bl) bl.innerHTML = '';
+                    var bt = document.getElementById('BatchDropdownToggle');
+                    if (bt) bt.style.visibility = 'hidden';
+                    loadProductInfo();
+                    return;
+                }
+                const id = opt.getAttribute('data-id') || '';
+                const code = opt.getAttribute('data-code') || id;
+                const name = opt.value || '';
+                if (prodHiddenId) prodHiddenId.value = id;
+                if (prodCodeInput) prodCodeInput.value = code;
+                if (prodNameInput) prodNameInput.value = name;
                 loadProductInfo();
             }
-        });
+
+            function openProductDropdown() {
+                const panel = document.getElementById('productDropdownList');
+                const inp = document.getElementById('ProdNameInput');
+                if (!panel || !inp) return;
+                var searchTerm = (inp.value || '').trim();
+                var filterQuery = getProductDropdownFilterQuery(searchTerm);
+                const list = getFilteredProductOptions(filterQuery, PRODUCT_LIST_MAX, searchTerm);
+                panel.innerHTML = '';
+                productDropdownSelectableItems = [];
+                var currentVal = (inp.value || '').trim();
+                var highlightIdx = 0;
+                if (list.length > 0) {
+                    for (var i = 0; i < list.length; i++) {
+                        if (normalizeText((list[i].value || '').trim()) === normalizeText(currentVal)) { highlightIdx = i; break; }
+                    }
+                }
+                if (list.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
+                    empty.textContent = inp.value ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + PRODUCT_LIST_MAX + ' كحد أقصى)');
+                    panel.appendChild(empty);
+                } else {
+                    list.forEach(function (opt, idx) {
+                        const id = (opt.getAttribute('data-id') || '').toString();
+                        const name = (opt.value || '').trim();
+                        const it = document.createElement('div');
+                        it.className = 'product-dropdown-item py-2 px-3' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
+                        it.setAttribute('role', 'option');
+                        it.setAttribute('data-id', id);
+                        it.textContent = name;
+                        it.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            const o = findProductByCode(id);
+                            if (o) fillProductFromOption(o);
+                            if (inp) inp.value = name;
+                            closeProductDropdown();
+                        });
+                        panel.appendChild(it);
+                        productDropdownSelectableItems.push(it);
+                    });
+                    productDropdownHighlightedIndex = highlightIdx;
+                }
+                panel.style.display = 'block';
+                panel.setAttribute('data-open', 'true');
+                positionProductDropdownList();
+            }
+
+            function positionProductDropdownList() {
+                const panel = document.getElementById('productDropdownList');
+                const wrap = document.getElementById('productDropdownWrap');
+                if (!panel || !wrap || panel.getAttribute('data-open') !== 'true') return;
+                const r = wrap.getBoundingClientRect();
+                panel.style.width = r.width + 'px';
+                panel.style.top = r.bottom + 'px';
+                panel.style.left = r.left + 'px';
+            }
+
+            function closeProductDropdown() {
+                const panel = document.getElementById('productDropdownList');
+                if (panel) {
+                    panel.style.display = 'none';
+                    panel.setAttribute('data-open', 'false');
+                }
+                productDropdownHighlightedIndex = -1;
+                productDropdownSelectableItems = [];
+                productDropdownPendingMoveToNext = false;
+            }
+
+            function setProductDropdownHighlight(idx) {
+                if (idx < 0 || idx >= productDropdownSelectableItems.length) return;
+                productDropdownSelectableItems.forEach(function (el, i) {
+                    el.classList.toggle('product-dropdown-item-active', i === idx);
+                });
+                productDropdownHighlightedIndex = idx;
+                productDropdownSelectableItems[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            }
+
+            function selectHighlightedProduct(keepOpen) {
+                if (productDropdownHighlightedIndex < 0 || productDropdownHighlightedIndex >= productDropdownSelectableItems.length) return false;
+                const el = productDropdownSelectableItems[productDropdownHighlightedIndex];
+                const id = el.getAttribute('data-id');
+                const name = el.textContent.trim();
+                const o = findProductByCode(id);
+                if (o) {
+                    fillProductFromOption(o);
+                    const inp = document.getElementById('ProdNameInput');
+                    if (inp) inp.value = name;
+                }
+                if (!keepOpen) closeProductDropdown();
+                return true;
+            }
+
+            window.addEventListener('resize', positionProductDropdownList);
+
+            if (prodNameInput) {
+                prodNameInput.addEventListener('input', function () {
+                    openProductDropdown();
+                });
+                prodNameInput.addEventListener('blur', function () {
+                    setTimeout(function () {
+                        closeProductDropdown();
+                        fillProductFromOption(findProductByName(prodNameInput.value));
+                    }, 180);
+                });
+                prodNameInput.addEventListener('keydown', function (e) {
+                    const panel = document.getElementById('productDropdownList');
+                    const isOpen = panel && panel.getAttribute('data-open') === 'true';
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        productDropdownPendingMoveToNext = false;
+                        if (isOpen && productDropdownSelectableItems.length > 0) {
+                            const next = Math.min(productDropdownHighlightedIndex + 1, productDropdownSelectableItems.length - 1);
+                            setProductDropdownHighlight(next);
+                        } else {
+                            openProductDropdown();
+                        }
+                        return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        productDropdownPendingMoveToNext = false;
+                        if (isOpen && productDropdownSelectableItems.length > 0) {
+                            const prev = Math.max(productDropdownHighlightedIndex - 1, 0);
+                            setProductDropdownHighlight(prev);
+                        }
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (productDropdownPendingMoveToNext) {
+                            closeProductDropdown();
+                            productDropdownPendingMoveToNext = false;
+                            if (batchNoInput) { batchNoInput.focus(); batchNoInput.select?.(); }
+                            return;
+                        }
+                        if (isOpen && productDropdownSelectableItems.length > 0) {
+                            selectHighlightedProduct(false);
+                            productDropdownPendingMoveToNext = true;
+                            return;
+                        }
+                        fillProductFromOption(findProductByName(prodNameInput.value));
+                        if (batchNoInput) { batchNoInput.focus(); batchNoInput.select?.(); }
+                    }
+                });
+            }
+
+            document.addEventListener('click', function (ev) {
+                const wrap = document.getElementById('productDropdownWrap');
+                if (wrap && !wrap.contains(ev.target)) closeProductDropdown();
+            });
+
+            const productDropdownWrap = document.getElementById('productDropdownWrap');
+            const productDropdownArrow = document.getElementById('productDropdownArrow');
+            if (productDropdownWrap) {
+                productDropdownWrap.addEventListener('click', function (ev) {
+                    if (!ev.target.closest('#productDropdownList')) {
+                        const inp = document.getElementById('ProdNameInput');
+                        if (inp) inp.focus();
+                    }
+                });
+            }
+            if (productDropdownArrow) {
+                productDropdownArrow.addEventListener('click', function (ev) {
+                    ev.preventDefault();
+                    const inp = document.getElementById('ProdNameInput');
+                    if (inp) { inp.focus(); openProductDropdown(); }
+                });
+            }
+
+            if (prodCodeInput) {
+                prodCodeInput.addEventListener('input', function () {
+                    const code = (this.value || '').trim();
+                    if (code) {
+                        const o = findProductByCode(code);
+                        if (o) fillProductFromOption(o);
+                    } else {
+                        fillProductFromOption(null);
+                    }
+                });
+                prodCodeInput.addEventListener('blur', function () {
+                    const code = (this.value || '').trim();
+                    if (!code) {
+                        fillProductFromOption(null);
+                        return;
+                    }
+                    fillProductFromOption(findProductByCode(code));
+                });
+                prodCodeInput.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        fillProductFromOption(findProductByCode(this.value));
+                        if (prodNameInput) { prodNameInput.focus(); prodNameInput.select?.(); }
+                    }
+                });
+            }
+        })();
 
         document.getElementById('BatchNoInput')?.addEventListener('blur', loadProductInfo);
-        document.getElementById('ExpiryInput')?.addEventListener('change', loadProductInfo);
+        document.getElementById('ExpiryInput')?.addEventListener('input', function () {
+            this.removeAttribute('data-expiry-iso');
+        });
+        document.getElementById('ExpiryInput')?.addEventListener('blur', function () {
+            if (this.value && typeof formatExpiryWithSlash === 'function')
+                this.value = formatExpiryWithSlash(this.value);
+            loadProductInfo();
+        });
         document.querySelector('[name="WarehouseId"]')?.addEventListener('change', function() {
             if (document.getElementById('ProdId').value) loadProductInfo();
         });
 
-        // دالة مسح حقول إضافة السطر وإعادة الفوكس لاسم الصنف
+        // دالة مسح حقول إضافة السطر وإعادة الفوكس لاسم الصنف (بعد إعادة تفعيل زر الإضافة حتى لا ينتقل التركيز للتشغيلة)
         function clearAddLineFormAndFocus() {
             document.getElementById('ProdId').value = '';
             document.getElementById('ProdCodeInput').value = '';
             document.getElementById('ProdNameInput').value = '';
             document.getElementById('BatchNoInput').value = '';
-            document.getElementById('ExpiryInput').value = '';
+            setExpiryFieldFromIso('');
             document.getElementById('TotalQtyInput').value = '0';
             document.getElementById('QtyBeforeInput').value = '0';
             document.getElementById('QtyAfterInput').value = '0';
             document.getElementById('CostPerUnitInput').value = '';
+            var wdClear = document.getElementById('WeightedDiscountInput');
+            if (wdClear) wdClear.value = '';
             document.getElementById('PriceRetailInput').value = '';
             document.getElementById('LineNoteInput').value = '';
             currentBatches = [];
@@ -874,21 +1678,28 @@
             if (batchListEl) batchListEl.innerHTML = '';
             var batchToggle = document.getElementById('BatchDropdownToggle');
             if (batchToggle) batchToggle.style.visibility = 'hidden';
-            const prodNameInput = document.getElementById('ProdNameInput');
-            prodNameInput?.focus();
-            prodNameInput?.select?.();
+            setTimeout(function () {
+                var prodNameInput = document.getElementById('ProdNameInput');
+                if (prodNameInput) {
+                    prodNameInput.focus();
+                    prodNameInput.select?.();
+                }
+            }, 60);
         }
 
         // دالة إضافة صف للجدول أو تحديثه
         function upsertAdjustmentRow(result, lineNo) {
             const tbody = document.getElementById('AdjustmentLinesTbody');
-            const placeholder = tbody.querySelector('tr td[colspan="10"]');
+            const placeholder = tbody.querySelector('tr td[colspan="12"]');
             if (placeholder) placeholder.closest('tr').remove();
 
             const existingRow = tbody.querySelector(`tr[data-line-id="${result.lineId}"]`);
             const costStr = result.costPerUnit != null ? parseFloat(result.costPerUnit).toFixed(4) : '-';
             const costDiffStr = result.costDiff != null ? parseFloat(result.costDiff).toFixed(2) : '-';
-            const rowHtml = `<tr data-line-id="${result.lineId}">
+            const wdStr = result.weightedDiscountPct != null ? parseFloat(result.weightedDiscountPct).toFixed(2) : '-';
+            const prStr = result.priceRetail != null ? parseFloat(result.priceRetail).toFixed(2) : '-';
+            const rowHtml = `<tr class="erp-list-selectable-row" data-line-id="${result.lineId}" data-product-id="${result.productId != null ? result.productId : ''}">
+                <td class="text-center no-print"></td>
                 <td class="text-center">${lineNo}</td>
                 <td>${escapeHtml(result.productName)}</td>
                 <td class="text-center">${escapeHtml(result.batchNo)}</td>
@@ -897,10 +1708,9 @@
                 <td class="text-center">${result.qtyAfter}</td>
                 <td class="text-center">${result.qtyDiff}</td>
                 <td class="text-center">${costStr}</td>
+                <td class="text-center">${wdStr}</td>
+                <td class="text-center">${prStr}</td>
                 <td class="text-center">${costDiffStr}</td>
-                <td class="text-center no-print">
-                    <button type="button" class="btn btn-sm btn-danger btn-delete-line" data-line-id="${result.lineId}" data-lock-posted="1">🗑️</button>
-                </td>
             </tr>`;
 
             if (existingRow) {
@@ -909,7 +1719,7 @@
                 tbody.insertAdjacentHTML('beforeend', rowHtml);
             }
             if (tbody.querySelectorAll('tr').length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
             }
         }
         function escapeHtml(s) { return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -922,10 +1732,10 @@
             var totalQtyBefore = 0, totalQtyAfter = 0, totalCostDiff = 0;
             for (var i = 0; i < rows.length; i++) {
                 var cells = rows[i].cells;
-                if (cells.length >= 10) {
-                    totalQtyBefore += parseInt(cells[4].textContent || '0', 10);
-                    totalQtyAfter += parseInt(cells[5].textContent || '0', 10);
-                    var costDiffText = (cells[8].textContent || '0').replace(',', '.');
+                if (cells.length >= 12) {
+                    totalQtyBefore += parseInt(cells[5].textContent || '0', 10);
+                    totalQtyAfter += parseInt(cells[6].textContent || '0', 10);
+                    var costDiffText = (cells[11].textContent || '0').replace(',', '.');
                     totalCostDiff += parseFloat(costDiffText) || 0;
                 }
             }
@@ -952,9 +1762,13 @@
             const qtyBefore = parseInt(document.getElementById('QtyBeforeInput').value || '0', 10);
             const qtyAfter = parseInt(document.getElementById('QtyAfterInput').value || '0', 10);
             const batchNo = document.getElementById('BatchNoInput').value?.trim() || '';
-            const expiry = document.getElementById('ExpiryInput').value || '';
+            var expIn = document.getElementById('ExpiryInput');
+            if (expIn && expIn.value && typeof formatExpiryWithSlash === 'function')
+                expIn.value = formatExpiryWithSlash(expIn.value);
+            const expiry = getExpiryForApi();
             const costPerUnit = parseFloat(document.getElementById('CostPerUnitInput').value || '0');
             const priceRetail = parseFloat(document.getElementById('PriceRetailInput').value || '0');
+            const weightedDiscountPct = parseFloat(document.getElementById('WeightedDiscountInput').value || '');
             const note = document.getElementById('LineNoteInput').value?.trim() || '';
 
             if (!prodId || prodId <= 0) {
@@ -972,7 +1786,8 @@
                 productId: prodId,
                 batchNo: batchNo || null,
                 expiry: expiry || null,
-                priceRetail: priceRetail || null,
+                priceRetail: isNaN(priceRetail) ? null : priceRetail,
+                weightedDiscountPct: isNaN(weightedDiscountPct) ? null : weightedDiscountPct,
                 qtyBefore: qtyBefore,
                 qtyAfter: qtyAfter,
                 costPerUnit: costPerUnit || null,
@@ -1026,16 +1841,11 @@
 
         document.getElementById('btnAddAdjustmentLine')?.addEventListener('click', doAddAdjustmentLine);
 
-        // الانتقال بـ Enter بين الحقول وزر الإضافة
+        // الانتقال بـ Enter: من التشغيلة → … → الكمية بعد → زر إضافة (يتخطى تكلفة الوحدة وسعر الجمهور والملاحظات)
         const enterNavFields = [
-            document.getElementById('ProdCodeInput'),
-            document.getElementById('ProdNameInput'),
             document.getElementById('BatchNoInput'),
             document.getElementById('ExpiryInput'),
             document.getElementById('QtyAfterInput'),
-            document.getElementById('CostPerUnitInput'),
-            document.getElementById('PriceRetailInput'),
-            document.getElementById('LineNoteInput'),
             document.getElementById('btnAddAdjustmentLine')
         ].filter(Boolean);
 
@@ -1045,33 +1855,8 @@
             el.addEventListener('keydown', async function(e) {
                 if (e.key !== 'Enter') return;
                 e.preventDefault();
-                if (el === document.getElementById('ProdNameInput')) {
-                    const val = (el.value || '').trim();
-                    if (val) {
-                        const opt = resolveProductByName(val, false);
-                        if (opt) {
-                            document.getElementById('ProdId').value = opt.getAttribute('data-id');
-                            document.getElementById('ProdCodeInput').value = opt.getAttribute('data-id');
-                            document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || val;
-                            await loadProductInfo();
-                        }
-                    }
-                }
-                if (el === document.getElementById('ProdCodeInput')) {
-                    const code = (el.value || '').trim();
-                    if (code) {
-                        let opt = document.querySelector('#productsList option[data-id="' + code + '"]');
-                        if (opt) {
-                            document.getElementById('ProdId').value = code;
-                            document.getElementById('ProdNameInput').value = opt.getAttribute('value') || opt.value || '';
-                            await loadProductInfo();
-                        }
-                    }
-                }
                 const next = enterNavFields[idx + 1];
                 if (el === document.getElementById('btnAddAdjustmentLine')) {
-                    doAddAdjustmentLine();
-                } else if (el === document.getElementById('LineNoteInput')) {
                     doAddAdjustmentLine();
                 } else if (next) {
                     next.focus();
@@ -1080,42 +1865,89 @@
             });
         });
 
-        // Delete line (event delegation للصفوف المضافة ديناميكياً)
-        document.getElementById('AdjustmentLinesTbody')?.addEventListener('click', async function(e) {
-            const btn = e.target.closest('.btn-delete-line');
+        ['CostPerUnitInput', 'WeightedDiscountInput', 'PriceRetailInput', 'LineNoteInput'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (!el || el.dataset.boundEnterAdd === '1') return;
+            el.dataset.boundEnterAdd = '1';
+            el.addEventListener('keydown', function (e) {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                doAddAdjustmentLine();
+            });
+        });
+
+        function refreshDeleteSelectedAdjustmentLineButton() {
+            const btn = document.getElementById('btnDeleteSelectedAdjustmentLine');
             if (!btn) return;
-            if (btn.disabled) return;
-            const lineId = parseInt(btn.getAttribute('data-line-id') || '0', 10);
+            const posted = typeof isAdjustmentPosted === 'function' && isAdjustmentPosted();
+            const hasSel = !!document.querySelector('#AdjustmentLinesTbody tr[data-line-id].erp-sa-row-selected');
+            btn.disabled = posted || !hasSel;
+        }
+
+        /** عند اختيار سطر: تعبئة بوكس الصنف والكود مثل فاتورة المبيعات */
+        function fillProductFromAdjustmentLineRow(tr) {
+            if (!tr || !tr.cells || tr.cells.length < 3) return;
+            var pid = tr.getAttribute('data-product-id');
+            if (!pid) return;
+            var nameCell = tr.cells[2];
+            var name = nameCell ? (nameCell.textContent || '').trim() : '';
+            var prodIdEl = document.getElementById('ProdId');
+            var codeEl = document.getElementById('ProdCodeInput');
+            var nameEl = document.getElementById('ProdNameInput');
+            if (prodIdEl) prodIdEl.value = pid;
+            if (codeEl) codeEl.value = pid;
+            if (nameEl) nameEl.value = name;
+            if (typeof loadProductInfo === 'function') loadProductInfo();
+        }
+
+        document.getElementById('AdjustmentLinesTbody')?.addEventListener('click', function (e) {
+            const tr = e.target.closest('tr[data-line-id]');
+            if (!tr) return;
+            document.querySelectorAll('#AdjustmentLinesTbody tr.erp-sa-row-selected').forEach(function (r) {
+                r.classList.remove('erp-sa-row-selected');
+            });
+            tr.classList.add('erp-sa-row-selected');
+            refreshDeleteSelectedAdjustmentLineButton();
+            fillProductFromAdjustmentLineRow(tr);
+        });
+
+        async function deleteAdjustmentLineById(lineId) {
             if (!lineId || lineId <= 0) return;
             if (typeof isAdjustmentPosted === 'function' && isAdjustmentPosted()) return;
-
-            if (!confirm('هل أنت متأكد من حذف هذا السطر؟')) return;
-
+            let okDel = false;
+            if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                okDel = await ERP.showConfirmModal({
+                    title: 'حذف سطر',
+                    message: 'هل أنت متأكد من حذف هذا السطر من التسوية؟',
+                    confirmText: 'حذف',
+                    cancelText: 'إلغاء'
+                });
+            } else {
+                okDel = confirm('هل أنت متأكد من حذف هذا السطر؟');
+            }
+            if (!okDel) return;
             const token = getAntiForgeryToken();
-            btn.disabled = true;
-
+            const btn = document.getElementById('btnDeleteSelectedAdjustmentLine');
+            if (btn) btn.disabled = true;
             try {
                 const response = await fetch(`@Url.Action("DeleteLineJson", "StockAdjustments")?id=${lineId}`, {
                     method: 'POST',
-                    headers: {
-                        'RequestVerificationToken': token
-                    }
+                    headers: { 'RequestVerificationToken': token }
                 });
-
                 if (!response.ok) {
                     alert('حدث خطأ أثناء حذف السطر.');
                     return;
                 }
-
                 const result = await response.json();
                 if (result.ok) {
-                    const row = btn.closest('tr');
+                    const row = document.querySelector(`#AdjustmentLinesTbody tr[data-line-id="${lineId}"]`);
                     if (row) row.remove();
                     const tbody = document.getElementById('AdjustmentLinesTbody');
                     if (tbody && tbody.querySelectorAll('tr[data-line-id]').length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-4">لا توجد سطور بعد.</td></tr>';
                     }
                     updateAdjustmentTotalsCard();
+                    refreshDeleteSelectedAdjustmentLineButton();
                 } else {
                     alert(result.message || 'حدث خطأ أثناء حذف السطر.');
                 }
@@ -1123,8 +1955,15 @@
                 console.error('Error deleting line:', error);
                 alert('حدث خطأ أثناء حذف السطر.');
             } finally {
-                btn.disabled = false;
+                refreshDeleteSelectedAdjustmentLineButton();
             }
+        }
+
+        document.getElementById('btnDeleteSelectedAdjustmentLine')?.addEventListener('click', async function () {
+            const tr = document.querySelector('#AdjustmentLinesTbody tr[data-line-id].erp-sa-row-selected');
+            if (!tr) return;
+            const lineId = parseInt(tr.getAttribute('data-line-id') || '0', 10);
+            await deleteAdjustmentLineById(lineId);
         });
 
         // Save header (رقم مرجعي مخفي — يُرسل من الحقل المخفي)
@@ -1203,7 +2042,18 @@
                 return;
             }
 
-            if (!confirm('هل أنت متأكد من ترحيل هذه التسوية؟')) return;
+            let okPost = false;
+            if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                okPost = await ERP.showConfirmModal({
+                    title: 'ترحيل تسوية جرد',
+                    message: 'هل أنت متأكد من ترحيل هذه التسوية؟ بعد الترحيل سيتم قفل التعديل على السطور.',
+                    confirmText: 'ترحيل',
+                    cancelText: 'إلغاء'
+                });
+            } else {
+                okPost = confirm('هل أنت متأكد من ترحيل هذه التسوية؟');
+            }
+            if (!okPost) return;
 
             const token = getAntiForgeryToken();
             const btnPost = this;
@@ -1225,14 +2075,14 @@
                         body: JSON.stringify(saveDto)
                     });
                     if (!saveRes.ok) {
-                        const errTxt = await saveRes.text();
-                        showToast('تعذر حفظ التعديلات: ' + errTxt, 'danger');
+                        const saveErr = await parseResponseJsonSafe(saveRes);
+                        showCenterModal((saveErr && saveErr.message) ? saveErr.message : 'تعذر حفظ التعديلات قبل الترحيل.', 'danger');
                         btnPost.disabled = false; btnPost.innerHTML = oldHtml;
                         return;
                     }
                     const saveResult = await saveRes.json();
                     if (!saveResult || !saveResult.ok) {
-                        showToast((saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل الترحيل.', 'danger');
+                        showCenterModal((saveResult && saveResult.message) ? saveResult.message : 'تعذر حفظ التعديلات قبل الترحيل.', 'danger');
                         btnPost.disabled = false; btnPost.innerHTML = oldHtml;
                         return;
                     }
@@ -1244,33 +2094,26 @@
                     headers: { 'RequestVerificationToken': token }
                 });
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    showToast('خطأ: ' + errorText, 'danger');
+                const result = await parseResponseJsonSafe(response);
+                if (!response.ok || !result || result.ok === false) {
+                    showCenterModal((result && result.message) ? result.message : 'تعذر ترحيل التسوية.', 'danger');
                     btnPost.disabled = false;
                     btnPost.innerHTML = oldHtml;
                     return;
                 }
 
-                const result = await response.json();
-                if (result.ok) {
-                    setAdjustmentPosted(true);
-                    applyPostedUiLock();
-                    var statusDisplay = document.getElementById('AdjustmentStatusDisplay');
-                    if (statusDisplay) statusDisplay.value = 'مترحلة';
-                    var btnOpen = document.getElementById('btnOpenAdjustment');
-                    if (btnOpen) btnOpen.disabled = false;
-                    btnPost.innerHTML = '✅ تم ترحيل التسوية';
-                    btnPost.disabled = true;
-                    showToast(result.message || 'تم الترحيل بنجاح.', 'success');
-                } else {
-                    showToast(result.message || 'حدث خطأ أثناء الترحيل.', 'danger');
-                    btnPost.disabled = false;
-                    btnPost.innerHTML = oldHtml;
-                }
+                setAdjustmentPosted(true);
+                applyPostedUiLock();
+                var statusDisplay = document.getElementById('AdjustmentStatusDisplay');
+                if (statusDisplay) statusDisplay.value = 'مترحلة';
+                var btnOpen = document.getElementById('btnOpenAdjustment');
+                if (btnOpen) btnOpen.disabled = false;
+                btnPost.innerHTML = '✅ تم ترحيل التسوية';
+                btnPost.disabled = true;
+                showToast(result.message || 'تم ترحيل التسوية بنجاح.', 'success', 1000);
             } catch (error) {
                 console.error('Error posting adjustment:', error);
-                showToast('حدث خطأ أثناء الترحيل.', 'danger');
+                showCenterModal('حدث خطأ أثناء الترحيل. تحقق من الاتصال ثم أعد المحاولة.', 'danger');
                 btnPost.disabled = false;
                 btnPost.innerHTML = oldHtml;
             }
@@ -1284,7 +2127,18 @@
                 return;
             }
 
-            if (!confirm('هل أنت متأكد من فتح هذه التسوية؟')) return;
+            let okOpen = false;
+            if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                okOpen = await ERP.showConfirmModal({
+                    title: 'فتح تسوية جرد',
+                    message: 'هل أنت متأكد من فتح هذه التسوية للتعديل؟ سيتم السماح بالتعديل حتى تقوم بترحيلها مرة أخرى.',
+                    confirmText: 'فتح',
+                    cancelText: 'إلغاء'
+                });
+            } else {
+                okOpen = confirm('هل أنت متأكد من فتح هذه التسوية؟');
+            }
+            if (!okOpen) return;
 
             const token = getAntiForgeryToken();
             this.disabled = true;
@@ -1297,12 +2151,11 @@
                     }
                 });
 
-                if (!response.ok) {
-                    alert('حدث خطأ أثناء فتح التسوية.');
+                const result = await parseResponseJsonSafe(response);
+                if (!response.ok || !result || result.ok === false) {
+                    showCenterModal((result && result.message) ? result.message : 'تعذر فتح التسوية.', 'danger');
                     return;
                 }
-
-                const result = await response.json();
                 if (result.ok) {
                     setAdjustmentPosted(false);
                     applyPostedUiLock();
@@ -1312,13 +2165,13 @@
                     if (btnPost) { btnPost.disabled = false; btnPost.innerHTML = '📤 ترحيل التسوية'; }
                     var btnOpen = document.getElementById('btnOpenAdjustment');
                     if (btnOpen) btnOpen.disabled = true;
-                    showToast('تم فتح التسوية بنجاح.', 'success');
+                    showToast(result.message || 'تم فتح التسوية بنجاح.', 'success', 1000);
                 } else {
-                    showToast(result.message || 'حدث خطأ أثناء فتح التسوية.', 'danger');
+                    showCenterModal(result.message || 'حدث خطأ أثناء فتح التسوية.', 'danger');
                 }
             } catch (error) {
                 console.error('Error opening adjustment:', error);
-                alert('حدث خطأ أثناء فتح التسوية.');
+                showCenterModal('حدث خطأ أثناء فتح التسوية.', 'danger');
             } finally {
                 this.disabled = false;
             }
@@ -1333,7 +2186,18 @@
                 return;
             }
 
-            if (!confirm('هل أنت متأكد من مسح كل سطور التسوية؟')) return;
+            let okClear = false;
+            if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                okClear = await ERP.showConfirmModal({
+                    title: 'مسح سطور التسوية',
+                    message: 'هل أنت متأكد من مسح كل سطور هذه التسوية؟ لا يمكن التراجع عن هذا الإجراء.',
+                    confirmText: 'مسح الكل',
+                    cancelText: 'إلغاء'
+                });
+            } else {
+                okClear = confirm('هل أنت متأكد من مسح كل سطور التسوية؟');
+            }
+            if (!okClear) return;
 
             const token = getAntiForgeryToken();
             this.disabled = true;
@@ -1439,6 +2303,142 @@
                     openTabFromFrame(buildMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
                 });
             }
+        })();
+
+        // ——— طباعة تسوية الجرد (نفس آلية فاتورة المبيعات: piPrintWrapper / print-mode / afterprint) ———
+        (function () {
+            var btnPrint = document.getElementById('btnPrintStockAdjustmentDropdown');
+            if (!btnPrint || btnPrint.dataset.boundSaPrint) return;
+            btnPrint.dataset.boundSaPrint = '1';
+            var printing = false;
+            var printWrapperParent = null;
+            var printWrapperNext = null;
+
+            function el(id) { return document.getElementById(id); }
+
+            function prepareStockAdjustmentPrint() {
+                if (!el('piPrintArea')) return false;
+                var adjId = (el('AdjustmentId') && el('AdjustmentId').value) ? el('AdjustmentId').value.trim() : '';
+                var adjDate = (el('AdjustmentDateInput') && el('AdjustmentDateInput').value) ? el('AdjustmentDateInput').value.trim() : '';
+                var status = (el('AdjustmentStatusDisplay') && el('AdjustmentStatusDisplay').value) ? el('AdjustmentStatusDisplay').value.trim() : '';
+                var whName = '';
+                var whSel = document.querySelector('[name="WarehouseId"]');
+                if (whSel && whSel.options && whSel.selectedIndex >= 0)
+                    whName = (whSel.options[whSel.selectedIndex].text || '').trim();
+                if (el('saPrintAdjNo')) el('saPrintAdjNo').textContent = adjId || '—';
+                if (el('saPrintAdjDate')) el('saPrintAdjDate').textContent = adjDate || '—';
+                if (el('saPrintWarehouse')) el('saPrintWarehouse').textContent = whName || '—';
+                if (el('saPrintStatus')) el('saPrintStatus').textContent = status || '—';
+                if (el('saPrintNow')) el('saPrintNow').textContent = new Date().toLocaleString();
+
+                var destTbody = el('piPrintMasterTbody');
+                if (!destTbody) return false;
+                destTbody.innerHTML = '';
+                var srcTbody = el('AdjustmentLinesTbody');
+                if (!srcTbody) {
+                    destTbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
+                } else {
+                    var rows = srcTbody.querySelectorAll('tr[data-line-id]');
+                    if (!rows.length) {
+                        destTbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-2">لا توجد سطور للطباعة.</td></tr>';
+                    } else {
+                        rows.forEach(function (tr) {
+                            var c = tr.cloneNode(true);
+                            c.querySelectorAll('button, a, .no-print').forEach(function (x) { x.remove(); });
+                            c.querySelectorAll('th.no-print, td.no-print').forEach(function (x) { x.remove(); });
+                            destTbody.appendChild(c);
+                        });
+                    }
+                }
+
+                var totalsWrap = el('piPrintTotalsWrap');
+                if (!totalsWrap) return false;
+                var totalLines = el('AdjustmentTotalLinesValue') ? el('AdjustmentTotalLinesValue').textContent.trim() : '0';
+                var totalBefore = el('AdjustmentTotalQtyBeforeValue') ? el('AdjustmentTotalQtyBeforeValue').textContent.trim() : '0';
+                var totalAfter = el('AdjustmentTotalQtyAfterValue') ? el('AdjustmentTotalQtyAfterValue').textContent.trim() : '0';
+                var totalCostDiff = el('AdjustmentTotalCostDiffValue') ? el('AdjustmentTotalCostDiffValue').textContent.trim() : '0';
+                totalsWrap.innerHTML =
+                    '<div class="card shadow-sm invoice-totals-card mb-0">' +
+                    '<div class="card-body py-2">' +
+                    '<div class="d-flex flex-wrap align-items-stretch gap-2 invoice-summary-row invoice-summary-row-boxes">' +
+                    '<div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">عدد السطور</span><span class="invoice-summary-value">' + totalLines + '</span></div>' +
+                    '<div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الكمية قبل</span><span class="invoice-summary-value">' + totalBefore + '</span></div>' +
+                    '<div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي الكمية بعد</span><span class="invoice-summary-value">' + totalAfter + '</span></div>' +
+                    '<div class="invoice-summary-item invoice-summary-box"><span class="invoice-summary-label">إجمالي فرق التكلفة</span><span class="invoice-summary-value">' + totalCostDiff + '</span></div>' +
+                    '</div></div></div>';
+                return true;
+            }
+
+            function doStockAdjustmentPrint(mode) {
+                var id = parseInt((el('AdjustmentId') && el('AdjustmentId').value) || '0', 10) || 0;
+                if (id <= 0) {
+                    showToast('⚠️ احفظ التسوية أولاً ثم اطبع.', 'warning');
+                    return;
+                }
+                if (typeof isAdjustmentPosted === 'function' && !isAdjustmentPosted()) {
+                    showToast('❌ يجب ترحيل التسوية قبل الطباعة', 'danger');
+                    document.getElementById('btnPostAdjustment')?.focus();
+                    return;
+                }
+                if (printing) return;
+                printing = true;
+                if (!prepareStockAdjustmentPrint()) {
+                    printing = false;
+                    showToast('تعذر تجهيز الطباعة.', 'danger');
+                    return;
+                }
+                var wrapper = el('piPrintWrapper');
+                var printArea = el('piPrintArea');
+                if (!wrapper || !printArea) { printing = false; return; }
+                wrapper.classList.remove('print-mode-1', 'print-mode-2', 'print-mode-3');
+                wrapper.querySelectorAll('.pi-print-copy:not(#piPrintArea)').forEach(function (c) { c.remove(); });
+                if (mode === 2 || mode === 3) {
+                    var copies = mode === 2 ? 2 : 3;
+                    for (var i = 1; i < copies; i++) {
+                        var clone = printArea.cloneNode(true);
+                        clone.id = '';
+                        clone.classList.add('pi-print-copy');
+                        clone.querySelectorAll('[id]').forEach(function (node) { node.removeAttribute('id'); });
+                        wrapper.appendChild(clone);
+                    }
+                    wrapper.classList.add('print-mode-' + mode);
+                } else {
+                    wrapper.classList.add('print-mode-1');
+                }
+                printWrapperParent = null;
+                printWrapperNext = null;
+                if (wrapper.parentNode !== document.body) {
+                    printWrapperParent = wrapper.parentNode;
+                    printWrapperNext = wrapper.nextSibling;
+                    document.body.appendChild(wrapper);
+                }
+                document.body.classList.add('printing-invoice');
+                setTimeout(function () { window.print(); }, 50);
+            }
+
+            document.querySelectorAll('[data-sa-print-mode]').forEach(function (item) {
+                item.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var mode = parseInt(this.getAttribute('data-sa-print-mode') || '1', 10);
+                    doStockAdjustmentPrint(mode);
+                });
+            });
+
+            window.addEventListener('afterprint', function () {
+                document.body.classList.remove('printing-invoice');
+                printing = false;
+                var wrapper = el('piPrintWrapper');
+                if (wrapper) {
+                    wrapper.classList.remove('print-mode-1', 'print-mode-2', 'print-mode-3');
+                    wrapper.querySelectorAll('.pi-print-copy:not(#piPrintArea)').forEach(function (c) { c.remove(); });
+                    if (printWrapperParent) {
+                        if (printWrapperNext) printWrapperParent.insertBefore(wrapper, printWrapperNext);
+                        else printWrapperParent.appendChild(wrapper);
+                        printWrapperParent = null;
+                        printWrapperNext = null;
+                    }
+                }
+            });
         })();
     </script>
 }
