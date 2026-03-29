@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -26,12 +26,17 @@ namespace ERP.Infrastructure
             IDictionary<string, Expression<Func<T, int>>>? intFields = null,
             IDictionary<string, Expression<Func<T, object>>>? orderFields = null,
             string defaultSearchBy = "all",
-            string defaultSortBy = "name")
+            string defaultSortBy = "name",
+            string? searchMode = null)
         {
             // تجهيز القواميس (بحساسية أحرف غير مهمة)
             stringFields ??= new Dictionary<string, Expression<Func<T, string?>>>(StringComparer.OrdinalIgnoreCase);
             intFields ??= new Dictionary<string, Expression<Func<T, int>>>(StringComparer.OrdinalIgnoreCase);
             orderFields ??= new Dictionary<string, Expression<Func<T, object>>>(StringComparer.OrdinalIgnoreCase);
+
+            var mode = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (mode != "starts" && mode != "ends")
+                mode = "contains";
 
             // أسماء المفاتيح المختارة
             var sb = (searchBy ?? defaultSearchBy).Trim().ToLowerInvariant(); // مفتاح البحث
@@ -82,28 +87,28 @@ namespace ERP.Infrastructure
                     }
                 }
                 // --- بحث بمفتاح محدّد (نصي/رقمي)
-                else if (intFields.TryGetValue(sb, out var intExpr))
+                else if (intFields.TryGetValue(sb, out var intSel))
                 {
-                    if (int.TryParse(text, out var n))
+                    var param = intSel.Parameters[0];
+                    var bodyInt = intSel.Body;
+                    var toString = Expression.Call(bodyInt, typeof(int).GetMethod(nameof(int.ToString), Type.EmptyTypes)!);
+                    var matchStr = BuildStringSearchMatch(toString, text, mode);
+                    Expression pred = matchStr;
+                    if (mode == "contains" && int.TryParse(text, out var nExact))
                     {
-                        var param = intExpr.Parameters[0];
-                        var bodyEq = Expression.Equal(intExpr.Body, Expression.Constant(n));
-                        var lambda = Expression.Lambda<Func<T, bool>>(bodyEq, param);
-                        q = q.Where(lambda);
+                        var eq = Expression.Equal(bodyInt, Expression.Constant(nExact));
+                        pred = Expression.OrElse(matchStr, eq);
                     }
-                    // لو النص ليس رقمًا نتجاهل فلترة الرقم
+                    var lambda = Expression.Lambda<Func<T, bool>>(pred, param);
+                    q = q.Where(lambda);
                 }
                 else if (stringFields.TryGetValue(sb, out var strExpr))
                 {
                     var param = strExpr.Parameters[0];
                     var member = strExpr.Body; // string?
                     var notNull = Expression.NotEqual(member, Expression.Constant(null, typeof(string)));
-                    var contains = Expression.Call(
-                        member,
-                        typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) })!,
-                        Expression.Constant(text)
-                    );
-                    var andAlso = Expression.AndAlso(notNull, contains);
+                    var match = BuildStringSearchMatch(member, text, mode);
+                    var andAlso = Expression.AndAlso(notNull, match);
                     var lambda = Expression.Lambda<Func<T, bool>>(andAlso, param);
                     q = q.Where(lambda);
                 }
@@ -130,6 +135,26 @@ namespace ERP.Infrastructure
 
             q = isDesc ? q.OrderByDescending(orderExpr) : q.OrderBy(orderExpr);
             return q;
+        }
+
+        private static Expression BuildStringSearchMatch(Expression stringMember, string text, string mode)
+        {
+            var constText = Expression.Constant(text);
+            return mode switch
+            {
+                "starts" => Expression.Call(
+                    stringMember,
+                    typeof(string).GetMethod(nameof(string.StartsWith), new[] { typeof(string) })!,
+                    constText),
+                "ends" => Expression.Call(
+                    stringMember,
+                    typeof(string).GetMethod(nameof(string.EndsWith), new[] { typeof(string) })!,
+                    constText),
+                _ => Expression.Call(
+                    stringMember,
+                    typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) })!,
+                    constText)
+            };
         }
 
         /// <summary>مبدّل باراميتر للتعبيرات حتى تتوحّد في Where</summary>

@@ -62,6 +62,8 @@
     string? filterCol_lastprice = ViewBag.FilterCol_LastPrice as string;
     string? filterCol_hasQuota = ViewBag.FilterCol_HasQuota as string;
     string? filterCol_quotaQuantity = ViewBag.FilterCol_QuotaQuantity as string;
+    string? filterCol_cartonQuantity = ViewBag.FilterCol_CartonQuantity as string;
+    string? filterCol_packQuantity = ViewBag.FilterCol_PackQuantity as string;
     string? filterCol_descShort = ViewBag.FilterCol_DescShort as string;
     string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string;
     string? filterCol_priceExpr = ViewBag.FilterCol_PriceExpr as string;
@@ -101,6 +103,8 @@
         filterCol_lastprice,
         filterCol_hasQuota,
         filterCol_quotaQuantity,
+        filterCol_cartonQuantity,
+        filterCol_packQuantity,
         filterCol_descShort,
         filterCol_idExpr,
         filterCol_priceExpr,
@@ -147,6 +151,8 @@
             filterCol_lastprice,
             filterCol_hasQuota,
             filterCol_quotaQuantity,
+            filterCol_cartonQuantity,
+            filterCol_packQuantity,
             filterCol_descShort,
             filterCol_idExpr,
             filterCol_priceExpr,
@@ -184,6 +190,8 @@
                             colKey == "lastprice" ? filterCol_lastprice :
                             colKey == "hasQuota" ? filterCol_hasQuota :
                             colKey == "quotaQuantity" ? filterCol_quotaQuantity :
+                            colKey == "cartonQuantity" ? filterCol_cartonQuantity :
+                            colKey == "packQuantity" ? filterCol_packQuantity :
                             colKey == "descShort" ? filterCol_descShort : null;
 
         bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
@@ -363,6 +371,8 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_cartonQuantity)) { <input type="hidden" name="filterCol_cartonQuantity" value="@filterCol_cartonQuantity" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_packQuantity)) { <input type="hidden" name="filterCol_packQuantity" value="@filterCol_packQuantity" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
@@ -433,6 +443,8 @@
         @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
         @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
         @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_cartonQuantity)) { <input type="hidden" name="filterCol_cartonQuantity" value="@filterCol_cartonQuantity" /> }
+        @if (!string.IsNullOrWhiteSpace(filterCol_packQuantity)) { <input type="hidden" name="filterCol_packQuantity" value="@filterCol_packQuantity" /> }
         @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
         @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
         @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
@@ -479,6 +491,8 @@
                     @* 🔹 أعمدة الكوتة *@
                     <th data-col="hasQuota">@filterableCol("hasQuota", "hasquota", "له كوتة؟")</th>
                     <th data-col="quotaQuantity">@filterableCol("quotaQuantity", "quotaquantity", "كمية الكوتة")</th>
+                    <th data-col="cartonQuantity">@filterableCol("cartonQuantity", "cartonquantity", "كمية الكرتونة")</th>
+                    <th data-col="packQuantity">@filterableCol("packQuantity", "packquantity", "كمية الباكو")</th>
 
                     <th data-col="descShort">@filterableCol("descShort", "descshort", "الوصف المختصر")</th>
                 </tr>
@@ -487,8 +501,8 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        @* عدد الأعمدة = 21 (تحديد + كود + اسم + … + الوصف المختصر) *@
-                        <td colspan="21" class="text-center text-muted py-4">
+                        @* عدد الأعمدة = 23 (تحديد + كود + اسم + … + الوصف المختصر) *@
+                        <td colspan="23" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -549,6 +563,8 @@
                                                         ? p.QuotaQuantity.Value.ToString()
                                                         : "-")
                             </td>
+                            <td data-col="cartonQuantity">@(p.CartonQuantity.HasValue ? p.CartonQuantity.Value.ToString() : "—")</td>
+                            <td data-col="packQuantity">@(p.PackQuantity.HasValue ? p.PackQuantity.Value.ToString() : "—")</td>
 
                             <td data-col="descShort" title="@desc">@descShort</td>
                         </tr>
@@ -601,6 +617,8 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_cartonQuantity)) { <input type="hidden" name="filterCol_cartonQuantity" value="@filterCol_cartonQuantity" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_packQuantity)) { <input type="hidden" name="filterCol_packQuantity" value="@filterCol_packQuantity" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
@@ -744,6 +762,8 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_lastprice)) { <input type="hidden" name="filterCol_lastprice" value="@filterCol_lastprice" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_hasQuota)) { <input type="hidden" name="filterCol_hasQuota" value="@filterCol_hasQuota" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_quotaQuantity)) { <input type="hidden" name="filterCol_quotaQuantity" value="@filterCol_quotaQuantity" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_cartonQuantity)) { <input type="hidden" name="filterCol_cartonQuantity" value="@filterCol_cartonQuantity" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_packQuantity)) { <input type="hidden" name="filterCol_packQuantity" value="@filterCol_packQuantity" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_descShort)) { <input type="hidden" name="filterCol_descShort" value="@filterCol_descShort" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_priceExpr)) { <input type="hidden" name="filterCol_priceExpr" value="@filterCol_priceExpr" /> }
@@ -1090,7 +1110,7 @@
                 else url.searchParams.delete("filterImported");
                 ["filterCol_productGroup","filterCol_bonusGroup","filterCol_company","filterCol_location","filterCol_imported","filterCol_isactive",
                  "filterCol_id","filterCol_name","filterCol_barcode","filterCol_generic","filterCol_category","filterCol_classification","filterCol_price",
-                 "filterCol_created","filterCol_modified","filterCol_lastprice","filterCol_hasQuota","filterCol_quotaQuantity","filterCol_descShort",
+                 "filterCol_created","filterCol_modified","filterCol_lastprice","filterCol_hasQuota","filterCol_quotaQuantity","filterCol_cartonQuantity","filterCol_packQuantity","filterCol_descShort",
                  "filterCol_idExpr","filterCol_priceExpr"].forEach(k => {
                     const v = new URL(window.location.href).searchParams.get(k);
                     if (v) url.searchParams.set(k, v);
@@ -1140,7 +1160,7 @@
                         if (filterImp?.value) url.searchParams.set("filterImported", filterImp.value);
                         ["filterCol_productGroup","filterCol_bonusGroup","filterCol_company","filterCol_location","filterCol_imported","filterCol_isactive",
                          "filterCol_id","filterCol_name","filterCol_barcode","filterCol_generic","filterCol_category","filterCol_classification","filterCol_price",
-                         "filterCol_created","filterCol_modified","filterCol_lastprice","filterCol_hasQuota","filterCol_quotaQuantity","filterCol_descShort",
+                         "filterCol_created","filterCol_modified","filterCol_lastprice","filterCol_hasQuota","filterCol_quotaQuantity","filterCol_cartonQuantity","filterCol_packQuantity","filterCol_descShort",
                          "filterCol_idExpr","filterCol_priceExpr"].forEach(k => {
                             const v = new URL(window.location.href).searchParams.get(k);
                             if (v) url.searchParams.set(k, v);
@@ -1177,7 +1197,7 @@
                 name: "name", barcode: "code", generic: "gen", company: "comp", category: "category",
                 productGroup: "productgroup", bonusGroup: "bonusgroup", price: "price",
                 imported: "imported", isactive: "active", created: "updated", modified: "updated", lastprice: "updated",
-                hasQuota: "all", quotaQuantity: "all", descShort: "all"
+                hasQuota: "all", quotaQuantity: "all", cartonQuantity: "all", packQuantity: "all", descShort: "all"
             };
 
             function getCurrentFilterValue(col) {

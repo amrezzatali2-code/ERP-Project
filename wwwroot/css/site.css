@@ -1590,3 +1590,54 @@ select#ProdBatchSelectInRow {
         transform: scale(0.95);
     }
 }
+
+/* ================== نموذج صنف (إنشاء / تعديل) — كروت + حدود أوضح + ترتيب تشيك بوكس ================== */
+.product-form-page div.card.product-form-card {
+    border: 1px solid #6366f1 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 3px rgba(99, 102, 241, 0.22) !important;
+    overflow: hidden;
+}
+
+.product-form-page .product-form-card .card-header {
+    border-bottom: 1px solid rgba(99, 102, 241, 0.25);
+    font-weight: 600;
+}
+
+.product-form-page .form-control,
+.product-form-page .form-select {
+    border-color: #94a3b8;
+}
+
+.product-form-page .form-control:focus,
+.product-form-page .form-select:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 0.2rem rgba(99, 102, 241, 0.18);
+}
+
+.product-form-page .form-control:disabled {
+    border-color: #cbd5e1;
+    background-color: #f1f5f9;
+}
+
+/* تشيك بوكس يسار النص (LTR داخل السطر) */
+.product-form-page .product-form-check-inline {
+    direction: ltr;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 2.5rem;
+}
+
+.product-form-page .product-form-check-inline .form-check-input {
+    float: none;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.product-form-page .product-form-check-inline .form-check-label {
+    direction: rtl;
+    text-align: right;
+    margin: 0;
+    cursor: pointer;
+}

@@ -31,6 +31,7 @@ namespace ERP.Controllers
         private readonly IFullReturnService _fullReturnService;
         private readonly IPermissionService _permissionService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
+        private readonly SalesFifoCostRepairService _fifoCostRepairService;
 
         // مصفوفة طرق الدفع الثابتة لعرضها في الفورم
         private static readonly string[] PaymentMethods = new[] { "نقدي", "شبكة", "آجل", "مختلط" };
@@ -44,7 +45,8 @@ namespace ERP.Controllers
                                         StockAnalysisService stockAnalysisService,
                                         IFullReturnService fullReturnService,
                                         IPermissionService permissionService,
-                                        IUserAccountVisibilityService accountVisibilityService)
+                                        IUserAccountVisibilityService accountVisibilityService,
+                                        SalesFifoCostRepairService fifoCostRepairService)
 
         {
             _context = context;
@@ -55,6 +57,7 @@ namespace ERP.Controllers
             _fullReturnService = fullReturnService;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
             _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
+            _fifoCostRepairService = fifoCostRepairService ?? throw new ArgumentNullException(nameof(fifoCostRepairService));
         }
 
 
@@ -833,6 +836,81 @@ namespace ERP.Controllers
             public string? expiryText { get; set; }       // متغير: الصلاحية كنص MM/YYYY أو yyyy-MM-dd حسب الواجهة
         }
 
+        private DateTime? ParseExpiryText(string? expiryText)
+        {
+            DateTime? expDate = null;
+            if (!string.IsNullOrWhiteSpace(expiryText))
+            {
+                var s = expiryText.Trim();
+
+                // (أ) محاولة yyyy-MM-dd
+                if (DateTime.TryParse(s, out var parsed))
+                {
+                    expDate = parsed.Date;
+                }
+                else
+                {
+                    // (ب) محاولة MM/YYYY
+                    var parts = s.Split('/');
+                    if (parts.Length == 2 &&
+                        int.TryParse(parts[0], out int mm) &&
+                        int.TryParse(parts[1], out int yyyy) &&
+                        mm >= 1 && mm <= 12)
+                    {
+                        expDate = new DateTime(yyyy, mm, 1).Date;
+                    }
+                }
+            }
+
+            return expDate;
+        }
+
+        private string? ValidateAddLineRequest(AddLineJsonDto? dto, int siId)
+        {
+            if (dto == null)
+                return "لم يتم إرسال بيانات.";
+            if (siId <= 0 || dto.prodId <= 0)
+                return "بيانات الفاتورة/الصنف غير صحيحة.";
+            if (dto.qty <= 0)
+                return "الكمية يجب أن تكون أكبر من صفر.";
+            return null;
+        }
+
+        private decimal NormalizeSaleDiscount(decimal purchaseDiscountPct)
+        {
+            decimal saleDisc1 = purchaseDiscountPct;
+            if (saleDisc1 < 0) saleDisc1 = 0;
+            if (saleDisc1 > 100) saleDisc1 = 100;
+            return saleDisc1;
+        }
+
+        private enum LoadInvoiceForAddLineStatus
+        {
+            Ok = 0,
+            NotFound = 1,
+            MissingWarehouse = 2,
+            Locked = 3
+        }
+
+        private async Task<(SalesInvoice? Invoice, LoadInvoiceForAddLineStatus Status, string? ErrorMessage)> LoadInvoiceForAddLineAsync(int siId)
+        {
+            var invoice = await _context.SalesInvoices
+                .Include(x => x.Lines)
+                .FirstOrDefaultAsync(x => x.SIId == siId);
+
+            if (invoice == null)
+                return (null, LoadInvoiceForAddLineStatus.NotFound, "الفاتورة غير موجودة.");
+
+            if (invoice.WarehouseId <= 0)
+                return (null, LoadInvoiceForAddLineStatus.MissingWarehouse, "يجب اختيار مخزن قبل إضافة سطور.");
+
+            bool isLocked = invoice.IsPosted || invoice.Status == "Posted" || invoice.Status == "Closed";
+            if (isLocked)
+                return (null, LoadInvoiceForAddLineStatus.Locked, "لا يمكن إضافة/تعديل سطور: هذه الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً.");
+
+            return (invoice, LoadInvoiceForAddLineStatus.Ok, null);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> AddLineJson([FromBody] AddLineJsonDto dto)
@@ -845,51 +923,22 @@ namespace ERP.Controllers
                 // =========================
                 // 0) فحص سريع للمدخلات
                 // =========================
-                if (dto == null)
-                    return BadRequest(new { ok = false, message = "لم يتم إرسال بيانات." });
-
                 // متغير: رقم الفاتورة (نقبل SIId أو invoiceId لو الواجهة بتبعته)
-                int siId = dto.SIId > 0 ? dto.SIId : 0;
-                if (siId <= 0 || dto.prodId <= 0)
-                    return BadRequest(new { ok = false, message = "بيانات الفاتورة/الصنف غير صحيحة." });
-
-                if (dto.qty <= 0)
-                    return BadRequest(new { ok = false, message = "الكمية يجب أن تكون أكبر من صفر." });
+                int siId = dto?.SIId > 0 ? dto.SIId : 0;
+                var validationMessage = ValidateAddLineRequest(dto, siId);
+                if (validationMessage != null)
+                    return BadRequest(new { ok = false, message = validationMessage });
 
                 // =========================
                 // 0.1) تنظيف خصم البيع (Disc1)
                 // =========================
-                decimal saleDisc1 = dto.purchaseDiscountPct; // متغير: خصم البيع %
-                if (saleDisc1 < 0) saleDisc1 = 0;
-                if (saleDisc1 > 100) saleDisc1 = 100;
+                decimal saleDisc1 = NormalizeSaleDiscount(dto.purchaseDiscountPct); // متغير: خصم البيع %
 
                 // =========================
                 // 1) تحويل expiryText إلى DateTime? (مرن)
                 // - نقبل MM/YYYY أو yyyy-MM-dd
                 // =========================
-                DateTime? expDate = null; // متغير: الصلاحية (Date فقط)
-                if (!string.IsNullOrWhiteSpace(dto.expiryText))
-                {
-                    var s = dto.expiryText.Trim();
-
-                    // (أ) محاولة yyyy-MM-dd
-                    if (DateTime.TryParse(s, out var parsed))
-                    {
-                        expDate = parsed.Date;
-                    }
-                    else
-                    {
-                        // (ب) محاولة MM/YYYY
-                        var parts = s.Split('/');
-                        if (parts.Length == 2 &&
-                            int.TryParse(parts[0], out int mm) &&
-                            int.TryParse(parts[1], out int yyyy) &&
-                            mm >= 1 && mm <= 12)
-                        {
-                            expDate = new DateTime(yyyy, mm, 1).Date;
-                        }
-                    }
-                }
+                DateTime? expDate = ParseExpiryText(dto.expiryText); // متغير: الصلاحية (Date فقط)
 
                 // متغير: التشغيلة بعد تنظيف المسافات
                 var startBatchNo = string.IsNullOrWhiteSpace(dto.BatchNo) ? null : dto.BatchNo.Trim();
@@ -897,28 +946,17 @@ namespace ERP.Controllers
                 // =========================
                 // 2) تحميل الفاتورة + السطور
                 // =========================
-                var invoice = await _context.SalesInvoices
-                    .Include(x => x.Lines)
-                    .FirstOrDefaultAsync(x => x.SIId == siId);
-
-                if (invoice == null)
-                    return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
-
-                if (invoice.WarehouseId <= 0)
-                    return BadRequest(new { ok = false, message = "يجب اختيار مخزن قبل إضافة سطور." });
-
-                // =========================
-                // 2.1) منع التعديل على فاتورة مُرحّلة/مقفولة
-                // =========================
-                bool isLocked = invoice.IsPosted || invoice.Status == "Posted" || invoice.Status == "Closed";
-                if (isLocked)
+                var (invoice, invLoadStatus, invoiceErr) = await LoadInvoiceForAddLineAsync(siId);
+                if (invLoadStatus != LoadInvoiceForAddLineStatus.Ok)
                 {
-                    await tx.RollbackAsync();
-                    return BadRequest(new
+                    if (invLoadStatus == LoadInvoiceForAddLineStatus.NotFound)
+                        return NotFound(new { ok = false, message = invoiceErr });
+                    if (invLoadStatus == LoadInvoiceForAddLineStatus.Locked)
                     {
-                        ok = false,
-                        message = "لا يمكن إضافة/تعديل سطور: هذه الفاتورة مُرحّلة ومقفولة. استخدم زر (فتح الفاتورة) أولاً."
-                    });
+                        await tx.RollbackAsync();
+                        return BadRequest(new { ok = false, message = invoiceErr });
+                    }
+                    return BadRequest(new { ok = false, message = invoiceErr });
                 }
 
                 // =========================
@@ -1274,6 +1312,16 @@ namespace ERP.Controllers
                     // - ننقص RemainingQty
                     // - نضيف StockFifoMap
                     // -------------------------
+                    // تكلفة وحدة الدخلة: أول مدة قد يُملأ إجمالي التكلفة دون تكلفة وحدة في المصدر القديم
+                    decimal InflowUnitCostForFifo(StockLedger inL)
+                    {
+                        if (inL.QtyIn <= 0) return inL.UnitCost;
+                        if (inL.UnitCost != 0m) return inL.UnitCost;
+                        if (inL.TotalCost.HasValue && inL.TotalCost.Value != 0m)
+                            return Math.Round(inL.TotalCost.Value / inL.QtyIn, 4, MidpointRounding.AwayFromZero);
+                        return 0m;
+                    }
+
                     int need = qtyDelta;           // متغير: كمية نحتاج نسحبها من الدخلات
                     decimal costTotal = 0m;        // متغير: إجمالي تكلفة الكمية المباعة (COGS)
 
@@ -1303,19 +1351,61 @@ namespace ERP.Controllers
                         inL.RemainingQty = avail - take;
 
                         // تسجيل الربط في FIFO Map
+                        var inUc = InflowUnitCostForFifo(inL);
                         var mapRow = new StockFifoMap
                         {
                             OutEntryId = outLedger.EntryId,
                             InEntryId = inL.EntryId,
                             Qty = take,
-                            UnitCost = inL.UnitCost // لقطة تكلفة الدخلة
+                            UnitCost = inUc // لقطة تكلفة الدخلة
                         };
                         _context.Set<StockFifoMap>().Add(mapRow);
 
                         // تجميع التكلفة
-                        costTotal += (take * inL.UnitCost);
+                        costTotal += (take * inUc);
 
                         need -= take;
+                    }
+
+                    // 5.5b) FIFO احتياطي: دخلات مثل «رصيد أول المدة» غالباً بدون BatchNo/Expiry بينما البيع من تشغيلة/صلاحية محددة
+                    // — المرحلة السابقة لا تطابقها → نستهلك من أي دخلات متبقية لنفس المخزن والصنف (FEFO ثم FIFO)
+                    if (need > 0)
+                    {
+                        var fallbackInLedgers = await _context.StockLedger
+                            .Where(x =>
+                                x.WarehouseId == invoice.WarehouseId &&
+                                x.ProdId == dto.prodId &&
+                                x.QtyIn > 0 &&
+                                (x.RemainingQty ?? 0) > 0)
+                            .OrderBy(x => x.Expiry)
+                            .ThenBy(x => x.EntryId)
+                            .ToListAsync();
+
+                        foreach (var inL in fallbackInLedgers)
+                        {
+                            if (need <= 0) break;
+
+                            int avail = (inL.RemainingQty ?? 0);
+                            if (avail <= 0) continue;
+
+                            int take = Math.Min(need, avail);
+
+                            inL.RemainingQty = avail - take;
+
+                            var inUcFb = InflowUnitCostForFifo(inL);
+                            var mapRow = new StockFifoMap
+                            {
+                                OutEntryId = outLedger.EntryId,
+                                InEntryId = inL.EntryId,
+                                Qty = take,
+                                UnitCost = inUcFb
+                            };
+                            _context.Set<StockFifoMap>().Add(mapRow);
+
+                            costTotal += (take * inUcFb);
+
+                            need -= take;
+                        }
                     }
 
                     // لو لسه في احتياج → StockBatches فيها كمية لكن StockLedger (دخلات الشراء) مفيهاش RemainingQty كافي
@@ -1326,8 +1416,9 @@ namespace ERP.Controllers
                     decimal costPerUnit = qtyDelta > 0 ? (costTotal / qtyDelta) : 0m;
                     costPerUnit = Math.Round(costPerUnit, 2);
 
-                    // تحديث حركة الخروج بتكلفة الوحدة (اختياري لكنه مفيد)
+                    // تحديث حركة الخروج بتكلفة الوحدة وإجمالي تكلفة الخط (للتقارير والترحيل)
                     outLedger.UnitCost = costPerUnit;
+                    outLedger.TotalCost = Math.Round(costTotal, 2);
 
                     // تحديث السطر بتكلفة وربحية
                     decimal revenueSeg = qtyDelta * unitSalePrice * (1m - (saleDisc1 / 100m));
@@ -1517,6 +1608,61 @@ namespace ERP.Controllers
 
 
 
+
+        private object BuildSalesInvoiceTotals(List<SalesInvoiceLine> lines)
+        {
+            int totalLines = lines.Count;
+            int totalItems = lines.Select(x => x.ProdId).Distinct().Count();
+            int totalQty = lines.Sum(x => x.Qty);
+
+            decimal totalRetail = lines.Sum(x => x.Qty * x.UnitSalePrice);
+            decimal totalDiscount = lines.Sum(x => x.DiscountValue);
+            decimal totalAfterDiscount = lines.Sum(x => x.LineTotalAfterDiscount);
+            decimal taxAmount = lines.Sum(x => x.TaxValue);
+            decimal netTotal = totalAfterDiscount + taxAmount;
+
+            return new
+            {
+                totalLines,
+                totalItems,
+                totalQty,
+                totalRetail,
+                totalDiscount,
+                totalAfterDiscount,
+                taxAmount,
+                netTotal
+            };
+        }
+
+        private List<object> BuildRemoveLineResponseLinesDto(
+            List<SalesInvoiceLine> lines,
+            Dictionary<int, string> prodMap,
+            Dictionary<int, string> locMap)
+        {
+            var linesDto = lines.Select(l =>
+            {
+                var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
+                var location = locMap.TryGetValue(l.ProdId, out var loc) ? loc : "";
+
+                return new
+                {
+                    lineNo = l.LineNo,
+                    prodId = l.ProdId,
+                    prodName = name,
+                    location,
+                    qty = l.Qty,
+                    priceRetail = l.UnitSalePrice,
+                    discPct = l.Disc1Percent,
+                    batchNo = l.BatchNo,
+                    expiry = l.Expiry?.ToString("yyyy-MM-dd"),
+                    lineValue = l.LineTotalAfterDiscount
+                };
+            }).ToList();
+
+            var list = new List<object>(linesDto.Count);
+            foreach (var x in linesDto) list.Add(x);
+            return list;
+        }
 
         // ================================================================
         // DTO: بيانات مسح سطر بيع (جاية من AJAX)
@@ -1711,52 +1857,16 @@ namespace ERP.Controllers
                 var prodMap = prodRowsRm.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
                 var locMap = prodRowsRm.ToDictionary(x => x.ProdId, x => x.Location ?? "");
 
-                int totalLines = linesNow.Count;
-                int totalItems = linesNow.Select(x => x.ProdId).Distinct().Count();
-                int totalQty = linesNow.Sum(x => x.Qty);
+                var totals = BuildSalesInvoiceTotals(linesNow);
 
-                decimal totalRetail = linesNow.Sum(x => x.Qty * x.UnitSalePrice);
-                decimal totalDiscount = linesNow.Sum(x => x.DiscountValue);
-                decimal totalAfterDiscount = linesNow.Sum(x => x.LineTotalAfterDiscount);
-                decimal taxAmount = linesNow.Sum(x => x.TaxValue);
-                decimal netTotal = totalAfterDiscount + taxAmount;
-
-                var linesDto = linesNow.Select(l =>
-                {
-                    var name = prodMap.TryGetValue(l.ProdId, out var n) ? n : "";
-                    var location = locMap.TryGetValue(l.ProdId, out var loc) ? loc : "";
-
-                    return new
-                    {
-                        lineNo = l.LineNo,
-                        prodId = l.ProdId,
-                        prodName = name,
-                        location,
-                        qty = l.Qty,
-                        priceRetail = l.UnitSalePrice,
-                        discPct = l.Disc1Percent,
-                        batchNo = l.BatchNo,
-                        expiry = l.Expiry?.ToString("yyyy-MM-dd"),
-                        lineValue = l.LineTotalAfterDiscount
-                    };
-                }).ToList();
+                var linesDto = BuildRemoveLineResponseLinesDto(linesNow, prodMap, locMap);
 
                 return Json(new
                 {
                     ok = true,
                     message = "تم حذف السطر بنجاح.",
                     lines = linesDto,
-                    totals = new
-                    {
-                        totalLines,
-                        totalItems,
-                        totalQty,
-                        totalRetail,
-                        totalDiscount,
-                        totalAfterDiscount,
-                        taxAmount,
-                        netTotal
-                    }
+                    totals
                 });
             }
             catch (Exception ex)
@@ -1823,7 +1933,7 @@ namespace ERP.Controllers
                         ok = true,
                         message = "لا توجد أصناف لمسحها.",
                         lines = new object[0],
-                        totals = new { totalLines = 0, totalItems = 0, totalQty = 0, totalRetail = 0m, totalDiscount = 0m, totalAfterDiscount = 0m, taxAmount = 0m, netTotal = 0m }
+                        totals = BuildSalesInvoiceTotals(new List<SalesInvoiceLine>())
                     });
                 }
 
@@ -1967,7 +2077,7 @@ namespace ERP.Controllers
                         ? "تم مسح جميع الأصناف وترحيل الفاتورة تلقائياً (تم عمل قيود عكسية وقيد جديد)." 
                         : "تم مسح جميع الأصناف وترحيل الفاتورة تلقائياً.",
                     lines = new object[0],
-                    totals = new { totalLines = 0, totalItems = 0, totalQty = 0, totalRetail = 0m, totalDiscount = 0m, totalAfterDiscount = 0m, taxAmount = 0m, netTotal = 0m },
+                    totals = BuildSalesInvoiceTotals(new List<SalesInvoiceLine>()),
                     isPosted = true // تعليق: الفاتورة أصبحت مُرحّلة
                 });
             }
@@ -1986,19 +2096,45 @@ namespace ERP.Controllers
             public decimal taxTotal { get; set; }    // قيمة الضريبة (تُحسب من النسبة في الواجهة)
         }
 
+        private string? ValidateSaveTaxDto(SaveTaxJsonDto? dto)
+        {
+            if (dto == null || dto.SIId <= 0)
+                return "بيانات الضريبة غير صحيحة.";
+            return null;
+        }
+
+        private enum LoadInvoiceForSaveTaxStatus
+        {
+            Ok = 0,
+            NotFound = 1,
+            Posted = 2
+        }
+
+        private async Task<(SalesInvoice? Invoice, LoadInvoiceForSaveTaxStatus Status, string? ErrorMessage)> LoadInvoiceForSaveTaxAsync(int siId)
+        {
+            var invoice = await _context.SalesInvoices.FirstOrDefaultAsync(s => s.SIId == siId);
+            if (invoice == null)
+                return (null, LoadInvoiceForSaveTaxStatus.NotFound, "الفاتورة غير موجودة.");
+            if (invoice.IsPosted)
+                return (null, LoadInvoiceForSaveTaxStatus.Posted, "لا يمكن تعديل الضريبة: الفاتورة مُرحّلة. استخدم (فتح الفاتورة) أولاً.");
+            return (invoice, LoadInvoiceForSaveTaxStatus.Ok, null);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> SaveTaxJson([FromBody] SaveTaxJsonDto dto)
         {
-            if (dto == null || dto.SIId <= 0)
-                return BadRequest(new { ok = false, message = "بيانات الضريبة غير صحيحة." });
+            var dtoErr = ValidateSaveTaxDto(dto);
+            if (dtoErr != null)
+                return BadRequest(new { ok = false, message = dtoErr });
 
-            var invoice = await _context.SalesInvoices.FirstOrDefaultAsync(s => s.SIId == dto.SIId);
-            if (invoice == null)
-                return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
-
-            if (invoice.IsPosted)
-                return BadRequest(new { ok = false, message = "لا يمكن تعديل الضريبة: الفاتورة مُرحّلة. استخدم (فتح الفاتورة) أولاً." });
+            var (invoice, loadStatus, loadErr) = await LoadInvoiceForSaveTaxAsync(dto!.SIId);
+            if (loadStatus != LoadInvoiceForSaveTaxStatus.Ok)
+            {
+                if (loadStatus == LoadInvoiceForSaveTaxStatus.NotFound)
+                    return NotFound(new { ok = false, message = loadErr });
+                return BadRequest(new { ok = false, message = loadErr });
+            }
 
             invoice.TaxAmount = Math.Round(dto.taxTotal, 2);
             invoice.NetTotal = Math.Round(invoice.TotalAfterDiscountBeforeTax + invoice.TaxAmount, 2);
@@ -2018,6 +2154,41 @@ namespace ERP.Controllers
             });
         }
 
+        private enum LoadInvoiceForPostStatus
+        {
+            Ok = 0,
+            NotFound = 1,
+            AlreadyPosted = 2,
+            MissingCustomer = 3,
+            MissingWarehouse = 4,
+            CustomerNotEligibleForPost = 5
+        }
+
+        private async Task<(SalesInvoice? Invoice, LoadInvoiceForPostStatus Status, string? ErrorMessage)> LoadInvoiceForPostAsync(int id)
+        {
+            var invoice = await _context.SalesInvoices
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.SIId == id);
+
+            if (invoice == null)
+                return (null, LoadInvoiceForPostStatus.NotFound, "الفاتورة غير موجودة.");
+
+            if (invoice.IsPosted)
+                return (invoice, LoadInvoiceForPostStatus.AlreadyPosted, "هذه الفاتورة مترحّلة بالفعل.");
+
+            if (invoice.CustomerId <= 0)
+                return (invoice, LoadInvoiceForPostStatus.MissingCustomer, "يجب اختيار العميل قبل الترحيل.");
+
+            if (invoice.WarehouseId <= 0)
+                return (invoice, LoadInvoiceForPostStatus.MissingWarehouse, "يجب اختيار المخزن قبل الترحيل.");
+
+            var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
+            if (cust == null || !cust.IsActive)
+                return (invoice, LoadInvoiceForPostStatus.CustomerNotEligibleForPost, "لا يمكن ترحيل فاتورة لعميل غير نشط. يرجى تفعيل العميل أولاً.");
+
+            return (invoice, LoadInvoiceForPostStatus.Ok, null);
+        }
+
         [HttpPost]
         [IgnoreAntiforgeryToken]
         [RequirePermission("SalesInvoices.PostInvoice")]
@@ -2033,58 +2204,21 @@ namespace ERP.Controllers
             try
             {
                 // ================================
-                // 1) تحميل الفاتورة (للتحقق السريع فقط)
+                // 1)–3.1) تحميل الفاتورة والتحقق الأولي
                 // ================================
-                var invoice = await _context.SalesInvoices
-                    .AsNoTracking() // تعليق: هنا قراءة فقط
-                    .FirstOrDefaultAsync(x => x.SIId == id);
-
-                if (invoice == null)
+                var (invoice, loadStatus, loadErr) = await LoadInvoiceForPostAsync(id);
+                if (loadStatus != LoadInvoiceForPostStatus.Ok)
                 {
-                    if (isAjax) return NotFound(new { ok = false, message = "الفاتورة غير موجودة." });
-                    TempData["Error"] = "الفاتورة غير موجودة.";
-                    return RedirectToAction("Index");
-                }
+                    if (loadStatus == LoadInvoiceForPostStatus.NotFound)
+                    {
+                        if (isAjax) return NotFound(new { ok = false, message = loadErr });
+                        TempData["Error"] = loadErr;
+                        return RedirectToAction("Index");
+                    }
 
-                // ================================
-                // 2) منع الترحيل لو مترحّلة بالفعل
-                // ================================
-                if (invoice.IsPosted)
-                {
-                    if (isAjax) return BadRequest(new { ok = false, message = "هذه الفاتورة مترحّلة بالفعل." });
-                    TempData["Error"] = "هذه الفاتورة مترحّلة بالفعل.";
-                    return RedirectToAction("Show", new { id = invoice.SIId });
-                }
-
-                // ================================
-                // 3) تحقق سريع قبل الترحيل
-                // ================================
-                if (invoice.CustomerId <= 0)
-                {
-                    var m = "يجب اختيار العميل قبل الترحيل.";
-                    if (isAjax) return BadRequest(new { ok = false, message = m });
-                    TempData["Error"] = m;
-                    return RedirectToAction("Show", new { id = invoice.SIId });
-                }
-
-                if (invoice.WarehouseId <= 0)
-                {
-                    var m = "يجب اختيار المخزن قبل الترحيل.";
-                    if (isAjax) return BadRequest(new { ok = false, message = m });
-                    TempData["Error"] = m;
-                    return RedirectToAction("Show", new { id = invoice.SIId });
-                }
-
-                // ================================
-                // 3.1) التحقق من أن العميل نشط
-                // ================================
-                var cust = await _context.Customers.AsNoTracking().FirstOrDefaultAsync(c => c.CustomerId == invoice.CustomerId);
-                if (cust == null || !cust.IsActive)
-                {
-                    var m = "لا يمكن ترحيل فاتورة لعميل غير نشط. يرجى تفعيل العميل أولاً.";
-                    if (isAjax) return BadRequest(new { ok = false, message = m });
-                    TempData["Error"] = m;
-                    return RedirectToAction("Show", new { id = invoice.SIId });
+                    if (isAjax) return BadRequest(new { ok = false, message = loadErr });
+                    TempData["Error"] = loadErr;
+                    return RedirectToAction("Show", new { id = invoice!.SIId });
                 }
 
                 // ملاحظة: التحقق من الحد الائتماني يتم عند إضافة السطور (AddLineJson) وليس عند الترحيل
@@ -3070,20 +3204,15 @@ namespace ERP.Controllers
                     query = query.Where(si => si.CreatedBy != null && vals.Contains(si.CreatedBy));
             }
 
-            // 2) تطبيق الترتيب
+            // إجمالي الصافي والعدد قبل OrderBy — تجنب SQL غير صالح مع Sum/Count على استعلام مرتب (EF + SQL Server)
+            decimal totalNet = await query.SumAsync(si => (decimal?)si.NetTotal) ?? 0m;
+            int totalCount = await query.CountAsync();
+
+            // 2) تطبيق الترتيب ثم الترقيم
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             query = ApplySort(query, sort, sortDesc);
 
-            // =========================================================
-            // حساب إجمالي الصافي من نفس الاستعلام (بعد الفلاتر)
-            // ✅ مهم: لازم قبل الـ Paging علشان ما تتحسبش على الصفحة بس
-            // =========================================================
-            decimal totalNet = await query.SumAsync(si => (decimal?)si.NetTotal) ?? 0m;
-
-            // 3) حساب العدد الكلي بعد الفلاتر
-            int totalCount = await query.CountAsync();
-
-            // 4) حجم الصفحة الفعلي (دعم 0 = الكل — نمط موحّد لجميع القوائم)
+            // 3) حجم الصفحة الفعلي (دعم 0 = الكل — نمط موحّد لجميع القوائم)
             int effectivePageSize = pageSize;
             if (pageSize == 0)
             {
@@ -3091,7 +3220,7 @@ namespace ERP.Controllers
                 page = 1;
             }
 
-            // 5) قراءة صفحة واحدة فقط (Skip/Take)
+            // 4) قراءة صفحة واحدة فقط (Skip/Take)
             var items = await query
                 .Skip((page - 1) * effectivePageSize)
                 .Take(effectivePageSize)
@@ -4245,6 +4374,22 @@ namespace ERP.Controllers
                 await tx.RollbackAsync();
                 return new DeleteInvoiceResult(DeleteInvoiceStatus.Failed, ex.Message);
             }
+        }
+
+        /// <summary>
+        /// إصلاح تكلفة FIFO لحركات مبيعات قديمة كانت بتكلفة صفر (بدون StockFifoMap) — يعيد الاستهلاك من أول المدة/المشتريات بنفس منطق إضافة السطر.
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("SalesInvoices.Edit")]
+        public async Task<IActionResult> RepairZeroCostFifoCost(System.Threading.CancellationToken cancellationToken)
+        {
+            var r = await _fifoCostRepairService.RepairZeroCostSalesOutLedgersAsync(null, cancellationToken);
+            TempData["Success"] =
+                $"إصلاح تكلفة FIFO: تم تحديث {r.Fixed} حركة. تخطي (خرائط FIFO موجودة مسبقاً): {r.SkippedHadFifoMap}. لم يُصلح (لا رصيد كافٍ أو تكلفة صفر): {r.SkippedStillZero}. أخطاء: {r.Errors}.";
+            if (r.Messages.Count > 0)
+                TempData["Warning"] = string.Join(" | ", r.Messages.Take(15));
+            return RedirectToAction(nameof(Index));
         }
 
         // ============================================================================

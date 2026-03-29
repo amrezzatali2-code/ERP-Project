@@ -116,6 +116,8 @@ namespace ERP.Controllers
       string? filterCol_lastprice = null,
       string? filterCol_hasQuota = null,
       string? filterCol_quotaQuantity = null,
+      string? filterCol_cartonQuantity = null,
+      string? filterCol_packQuantity = null,
       string? filterCol_descShort = null,
       // فلاتر رقمية متقدمة (صيغ < > من:إلى)
       string? filterCol_idExpr = null,      // مثل: <10 أو >10 أو 10:100
@@ -577,6 +579,26 @@ namespace ERP.Controllers
                 if (qty.Count > 0)
                     q = q.Where(p => p.QuotaQuantity != null && qty.Contains(p.QuotaQuantity.Value));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_cartonQuantity))
+            {
+                var qty = filterCol_cartonQuantity.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (qty.Count > 0)
+                    q = q.Where(p => p.CartonQuantity != null && qty.Contains(p.CartonQuantity.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_packQuantity))
+            {
+                var qty = filterCol_packQuantity.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue)
+                    .Select(x => x!.Value)
+                    .ToList();
+                if (qty.Count > 0)
+                    q = q.Where(p => p.PackQuantity != null && qty.Contains(p.PackQuantity.Value));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_descShort))
             {
                 var vals = filterCol_descShort.Split(sep, StringSplitOptions.RemoveEmptyEntries)
@@ -763,6 +785,8 @@ namespace ERP.Controllers
                 "active" or "isactive" => desc ? q.OrderByDescending(p => p.IsActive) : q.OrderBy(p => p.IsActive),
                 "hasquota" => desc ? q.OrderByDescending(p => p.HasQuota) : q.OrderBy(p => p.HasQuota),
                 "quotaquantity" => desc ? q.OrderByDescending(p => p.QuotaQuantity ?? 0) : q.OrderBy(p => p.QuotaQuantity ?? 0),
+                "cartonquantity" => desc ? q.OrderByDescending(p => p.CartonQuantity ?? 0) : q.OrderBy(p => p.CartonQuantity ?? 0),
+                "packquantity" => desc ? q.OrderByDescending(p => p.PackQuantity ?? 0) : q.OrderBy(p => p.PackQuantity ?? 0),
                 "lastprice" => desc ? q.OrderByDescending(p => p.LastPriceChangeDate) : q.OrderBy(p => p.LastPriceChangeDate),
                 "descshort" => desc ? q.OrderByDescending(p => p.Description) : q.OrderBy(p => p.Description),
                 _ => desc ? q.OrderByDescending(p => p.ProdName) : q.OrderBy(p => p.ProdName)
@@ -843,6 +867,8 @@ namespace ERP.Controllers
             ViewBag.FilterCol_LastPrice = filterCol_lastprice;
             ViewBag.FilterCol_HasQuota = filterCol_hasQuota;
             ViewBag.FilterCol_QuotaQuantity = filterCol_quotaQuantity;
+            ViewBag.FilterCol_CartonQuantity = filterCol_cartonQuantity;
+            ViewBag.FilterCol_PackQuantity = filterCol_packQuantity;
             ViewBag.FilterCol_DescShort = filterCol_descShort;
             ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_PriceExpr = filterCol_priceExpr;
@@ -1029,6 +1055,24 @@ namespace ERP.Controllers
                 "quotaquantity" => (await q
                     .Where(p => p.QuotaQuantity.HasValue && p.QuotaQuantity.Value > 0)
                     .Select(p => p.QuotaQuantity!.Value)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString()))
+                    .ToList(),
+                "cartonquantity" => (await q
+                    .Where(p => p.CartonQuantity.HasValue && p.CartonQuantity.Value > 0)
+                    .Select(p => p.CartonQuantity!.Value)
+                    .Distinct()
+                    .OrderBy(v => v)
+                    .Take(500)
+                    .ToListAsync())
+                    .Select(v => (v.ToString(), v.ToString()))
+                    .ToList(),
+                "packquantity" => (await q
+                    .Where(p => p.PackQuantity.HasValue && p.PackQuantity.Value > 0)
+                    .Select(p => p.PackQuantity!.Value)
                     .Distinct()
                     .OrderBy(v => v)
                     .Take(500)
@@ -1550,6 +1594,8 @@ namespace ERP.Controllers
             string? filterCol_lastprice = null,
             string? filterCol_hasQuota = null,
             string? filterCol_quotaQuantity = null,
+            string? filterCol_cartonQuantity = null,
+            string? filterCol_packQuantity = null,
             string? filterCol_descShort = null,
             // فلاتر رقمية متقدمة
             string? filterCol_idExpr = null,
@@ -1794,6 +1840,20 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (qty.Count > 0) q = q.Where(p => p.QuotaQuantity != null && qty.Contains(p.QuotaQuantity.Value));
             }
+            if (!string.IsNullOrWhiteSpace(filterCol_cartonQuantity))
+            {
+                var qty = filterCol_cartonQuantity.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (qty.Count > 0) q = q.Where(p => p.CartonQuantity != null && qty.Contains(p.CartonQuantity.Value));
+            }
+            if (!string.IsNullOrWhiteSpace(filterCol_packQuantity))
+            {
+                var qty = filterCol_packQuantity.Split(sep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
+                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
+                if (qty.Count > 0) q = q.Where(p => p.PackQuantity != null && qty.Contains(p.PackQuantity.Value));
+            }
             if (!string.IsNullOrWhiteSpace(filterCol_descShort))
             {
                 var vals = filterCol_descShort.Split(sep, StringSplitOptions.RemoveEmptyEntries)
@@ -1969,6 +2029,14 @@ namespace ERP.Controllers
                     (desc ? q.OrderByDescending(p => p.LastPriceChangeDate)
                           : q.OrderBy(p => p.LastPriceChangeDate)),
 
+                "cartonquantity" =>
+                    (desc ? q.OrderByDescending(p => p.CartonQuantity ?? 0)
+                          : q.OrderBy(p => p.CartonQuantity ?? 0)),
+
+                "packquantity" =>
+                    (desc ? q.OrderByDescending(p => p.PackQuantity ?? 0)
+                          : q.OrderBy(p => p.PackQuantity ?? 0)),
+
                 "name" or _ =>
                     (desc ? q.OrderByDescending(p => p.ProdName)
                           : q.OrderBy(p => p.ProdName)),
@@ -2002,6 +2070,8 @@ namespace ERP.Controllers
                     Csv("تاريخ الإنشاء"),
                     Csv("آخر تعديل"),
                     Csv("آخر تغيير سعر"),
+                    Csv("كمية الكرتونة"),
+                    Csv("كمية الباكو"),
                     Csv("الوصف")
                 ));
 
@@ -2014,6 +2084,7 @@ namespace ERP.Controllers
                         Csv(p.Barcode),
                         Csv(p.GenericName),
                         Csv(p.CategoryId.ToString()),
+                        Csv(p.Classification?.Name),
                         Csv(p.Company),
                         Csv(p.Location),
                         Csv(p.Warehouse?.WarehouseName),
@@ -2023,6 +2094,8 @@ namespace ERP.Controllers
                         Csv(p.CreatedAt.ToString("yyyy-MM-dd HH:mm")),
                         Csv(p.UpdatedAt.ToString("yyyy-MM-dd HH:mm")),
                         Csv(p.LastPriceChangeDate?.ToString("yyyy-MM-dd")),
+                        Csv(p.CartonQuantity?.ToString(CultureInfo.InvariantCulture)),
+                        Csv(p.PackQuantity?.ToString(CultureInfo.InvariantCulture)),
                         Csv(p.Description)
                     ));
                 }
@@ -2057,10 +2130,12 @@ namespace ERP.Controllers
             ws.Cell(r, 13).Value = "تاريخ الإنشاء";
             ws.Cell(r, 14).Value = "آخر تعديل";
             ws.Cell(r, 15).Value = "آخر تغيير سعر";
-            ws.Cell(r, 16).Value = "الوصف";
+            ws.Cell(r, 16).Value = "كمية الكرتونة";
+            ws.Cell(r, 17).Value = "كمية الباكو";
+            ws.Cell(r, 18).Value = "الوصف";
 
             // تنسيق صف العناوين
-            var headerRange = ws.Range(r, 1, r, 16);
+            var headerRange = ws.Range(r, 1, r, 18);
             headerRange.Style.Font.Bold = true;
             headerRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -2084,7 +2159,9 @@ namespace ERP.Controllers
                 ws.Cell(r, 13).Value = p.CreatedAt;
                 ws.Cell(r, 14).Value = p.UpdatedAt;
                 ws.Cell(r, 15).Value = p.LastPriceChangeDate;
-                ws.Cell(r, 16).Value = p.Description ?? "";
+                ws.Cell(r, 16).Value = p.CartonQuantity;
+                ws.Cell(r, 17).Value = p.PackQuantity;
+                ws.Cell(r, 18).Value = p.Description ?? "";
             }
 
             // ضبط عرض الأعمدة تلقائيًا
@@ -2784,6 +2861,19 @@ namespace ERP.Controllers
                     return GetCellDecimal("PriceRetail", "سعرج", r);
                 }
 
+                int? GetCellIntOptional(int r, params string[] keys)
+                {
+                    foreach (var k in keys)
+                    {
+                        if (string.IsNullOrEmpty(k) || !headers.TryGetValue(k, out var c)) continue;
+                        var t = sheet.Cells[r, c].Text?.Trim();
+                        if (string.IsNullOrWhiteSpace(t)) continue;
+                        if (int.TryParse(t, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) && v >= 0) return v;
+                        if (int.TryParse(t, NumberStyles.Any, CultureInfo.GetCultureInfo("ar-EG"), out v) && v >= 0) return v;
+                    }
+                    return null;
+                }
+
                 // ===== 5) قائمة المخازن للربط بالاسم من الإكسل =====
                 var warehousesByName = await _db.Warehouses.AsNoTracking()
                     .Where(w => w.IsActive)
@@ -2877,6 +2967,8 @@ namespace ERP.Controllers
                             existing.DosageForm = GetCell("DosageForm", "الشكل الدوائي", row);
                             existing.Barcode = GetCell("Barcode", "Barcode", row);
                             existing.Imported = GetCell("Imported", "المنشأ", row);
+                            existing.CartonQuantity = GetCellIntOptional(row, "CartonQuantity", "كمية الكرتونة", "الكرتونة");
+                            existing.PackQuantity = GetCellIntOptional(row, "PackQuantity", "كمية الباكو", "الباكو", "باكو");
                             existing.UpdatedAt = DateTime.UtcNow;
                             if (categoryIdForImport.HasValue) existing.CategoryId = categoryIdForImport.Value;
                             if (existing.ProdId != 0) totalUpdated++;
@@ -2896,6 +2988,8 @@ namespace ERP.Controllers
                                 DosageForm = GetCell("DosageForm", "الشكل الدوائي", row),
                                 Barcode = GetCell("Barcode", "Barcode", row),
                                 Imported = GetCell("Imported", "المنشأ", row),
+                                CartonQuantity = GetCellIntOptional(row, "CartonQuantity", "كمية الكرتونة", "الكرتونة"),
+                                PackQuantity = GetCellIntOptional(row, "PackQuantity", "كمية الباكو", "الباكو", "باكو"),
                                 IsActive = true,
                                 CreatedAt = DateTime.UtcNow,
                                 UpdatedAt = DateTime.UtcNow
@@ -2930,8 +3024,8 @@ namespace ERP.Controllers
                             foreach (var p in withExplicitId)
                             {
                                 await _db.Database.ExecuteSqlRawAsync(
-                                    "INSERT INTO [Products] (ProdId, ProdName, PriceRetail, ExternalCode, GenericName, Company, ClassificationId, Location, WarehouseId, Description, DosageForm, Barcode, Imported, IsActive, CreatedAt, UpdatedAt, CategoryId) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16})",
-                                    p.ProdId, p.ProdName ?? "", p.PriceRetail, p.ExternalCode, p.GenericName, p.Company, p.ClassificationId, p.Location, p.WarehouseId, p.Description, p.DosageForm, p.Barcode, p.Imported, p.IsActive, p.CreatedAt, p.UpdatedAt, p.CategoryId);
+                                    "INSERT INTO [Products] (ProdId, ProdName, PriceRetail, ExternalCode, GenericName, Company, ClassificationId, Location, WarehouseId, Description, DosageForm, Barcode, Imported, IsActive, CreatedAt, UpdatedAt, CategoryId, CartonQuantity, PackQuantity) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}, {12}, {13}, {14}, {15}, {16}, {17}, {18})",
+                                    p.ProdId, p.ProdName ?? "", p.PriceRetail, p.ExternalCode, p.GenericName, p.Company, p.ClassificationId, p.Location, p.WarehouseId, p.Description, p.DosageForm, p.Barcode, p.Imported, p.IsActive, p.CreatedAt, p.UpdatedAt, p.CategoryId, p.CartonQuantity, p.PackQuantity);
                             }
                             await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Products] OFF");
                             await tran.CommitAsync();
@@ -3044,6 +3138,8 @@ namespace ERP.Controllers
                 int? colUnitCost = GetCol(headers, "تكلفة العلبة", "تكلفة الوحدة", "UnitCost");
                 int? colPriceRetail = GetCol(headers, "سعر الجمهور", "PriceRetail", "PriceRetailBatch");
                 int? colWarehouse = GetCol(headers, "كود المخزن", "WarehouseId", "المخزن", "اسم المخزن", "WarehouseName");
+                int? colBatchNo = GetCol(headers, "التشغيلة", "التشغيله", "رقم التشغيلة", "رقم التشغيله", "BatchNo", "Batch");
+                int? colExpiry = GetCol(headers, "الصلاحية", "الصلاحيه", "Expiry", "تاريخ الصلاحية", "تاريخ الصلاحيه", "Expire");
 
                 var defaultWarehouse = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseId).Select(w => w.WarehouseId).FirstOrDefaultAsync();
                 if (defaultWarehouse == 0 && !colWarehouse.HasValue)
@@ -3060,9 +3156,11 @@ namespace ERP.Controllers
                 var productByName = await _db.Products.AsNoTracking().Where(p => p.ProdName != null).ToDictionaryAsync(p => p.ProdName!.Trim(), p => p, StringComparer.OrdinalIgnoreCase);
 
                 var entries = new List<StockLedger>();
+                var batchCache = new Dictionary<string, Batch>();
                 var tranDate = DateTime.UtcNow.Date;
                 var skippedNoProduct = 0;
                 var skippedNoQty = 0;
+                var skippedBatchIncomplete = 0;
 
                 for (int row = 2; row <= lastRow; row++)
                 {
@@ -3126,11 +3224,35 @@ namespace ERP.Controllers
                     if (!priceRetailBatch.HasValue && productById.TryGetValue(prodId, out var prodRef) && prodRef.PriceRetail > 0)
                         priceRetailBatch = prodRef.PriceRetail;
 
+                    string? batchNoText = null;
+                    DateTime? expiryDate = null;
+                    if (colBatchNo.HasValue) batchNoText = sheet.Cells[row, colBatchNo.Value].Text?.Trim();
+                    if (colExpiry.HasValue) expiryDate = GetDateFromExcelCell(sheet.Cells[row, colExpiry.Value]);
+
+                    Batch? batchEntity = null;
+                    string? batchNoForLedger = null;
+                    DateTime? expiryForLedger = null;
+                    if (!string.IsNullOrWhiteSpace(batchNoText) && expiryDate.HasValue)
+                    {
+                        batchEntity = await GetOrCreateBatchForOpeningAsync(
+                            batchCache, prodId, batchNoText, expiryDate.Value, unitCost, priceRetailBatch, purchaseDiscount);
+                        batchNoForLedger = batchNoText.Length > 50 ? batchNoText.Substring(0, 50) : batchNoText;
+                        expiryForLedger = expiryDate.Value.Date;
+                    }
+                    else if (!string.IsNullOrWhiteSpace(batchNoText) && !expiryDate.HasValue ||
+                             string.IsNullOrWhiteSpace(batchNoText) && expiryDate.HasValue)
+                    {
+                        skippedBatchIncomplete++;
+                    }
+
                     entries.Add(new StockLedger
                     {
                         TranDate = tranDate,
                         WarehouseId = warehouseId,
                         ProdId = prodId,
+                        BatchNo = batchNoForLedger,
+                        Expiry = expiryForLedger,
+                        Batch = batchEntity,
                         QtyIn = qty,
                         QtyOut = 0,
                         UnitCost = unitCost,
@@ -3143,6 +3265,13 @@ namespace ERP.Controllers
                         SourceLine = row - 1,
                         CreatedAt = DateTime.UtcNow
                     });
+                }
+
+                // توحيد تكلفة الوحدة من إجمالي التكلفة إن وُجد إجمالي وكمية (ملفات منقولة قد تترك تكلفة العلبة صفراً)
+                foreach (var e in entries)
+                {
+                    if (e.QtyIn > 0 && e.UnitCost == 0m && e.TotalCost.HasValue && e.TotalCost.Value != 0m)
+                        e.UnitCost = Math.Round(e.TotalCost.Value / e.QtyIn, 4, MidpointRounding.AwayFromZero);
                 }
 
                 if (entries.Count == 0)
@@ -3159,16 +3288,23 @@ namespace ERP.Controllers
                     await _db.SaveChangesAsync();
                 }
 
+                await SyncStockBatchesFromLedgerAsync();
+
                 _db.StockLedger.AddRange(entries);
                 await _db.SaveChangesAsync();
+
+                await SyncStockBatchesFromLedgerAsync();
+
                 var msg = allOpening.Count > 0
                     ? $"تم مسح {allOpening.Count} قيد رصيد قديم واستيراد رصيد أول المدة لـ {entries.Count} صفاً."
                     : $"تم استيراد رصيد أول المدة لـ {entries.Count} صفاً بنجاح.";
-                if (skippedNoProduct > 0 || skippedNoQty > 0)
+                msg += " تم تحديث أرصدة التشغيلات (Stock_Batches) لتطابق دفتر الحركة.";
+                if (skippedNoProduct > 0 || skippedNoQty > 0 || skippedBatchIncomplete > 0)
                 {
                     var parts = new List<string>();
                     if (skippedNoProduct > 0) parts.Add($"{skippedNoProduct} صنف غير موجود في القائمة");
                     if (skippedNoQty > 0) parts.Add($"{skippedNoQty} كمية صفر أو فارغة");
+                    if (skippedBatchIncomplete > 0) parts.Add($"{skippedBatchIncomplete} صفاً بها تشغيلة أو صلاحية فقط (بدون الآخر) — تُجاهل ربط التشغيلة");
                     msg += " (تم تخطي: " + string.Join("، ", parts) + ").";
                 }
                 TempData["Success"] = msg;
@@ -3324,13 +3460,132 @@ namespace ERP.Controllers
             return result;
         }
 
+        /// <summary>قراءة تاريخ من خلية إكسل (قيمة تاريخ أو رقم سيريال أو نص).</summary>
+        private static DateTime? GetDateFromExcelCell(ExcelRangeBase cell)
+        {
+            if (cell?.Value == null) return null;
+            var v = cell.Value;
+            if (v is DateTime dt) return dt.Date;
+            if (v is double d) { try { return DateTime.FromOADate(d).Date; } catch { /* ignore */ } }
+            var text = cell.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt2)) return dt2.Date;
+            if (DateTime.TryParse(text, CultureInfo.GetCultureInfo("ar-EG"), DateTimeStyles.None, out dt2)) return dt2.Date;
+            return null;
+        }
+
+        /// <summary>مزامنة Stock_Batches من StockLedger (نفس منطق تقارير أرصدة الأصناف).</summary>
+        private async Task SyncStockBatchesFromLedgerAsync()
+        {
+            var ledgerBalances = await _db.StockLedger
+                .AsNoTracking()
+                .GroupBy(sl => new { sl.WarehouseId, sl.ProdId, BatchNo = sl.BatchNo ?? "", Expiry = sl.Expiry.HasValue ? sl.Expiry.Value.Date : (DateTime?)null })
+                .Select(g => new
+                {
+                    g.Key.WarehouseId,
+                    g.Key.ProdId,
+                    g.Key.BatchNo,
+                    g.Key.Expiry,
+                    Qty = g.Sum(sl => sl.QtyIn - sl.QtyOut)
+                })
+                .ToListAsync();
+
+            foreach (var lb in ledgerBalances)
+            {
+                int qtyToSet = Math.Max(0, lb.Qty);
+                var sb = await _db.StockBatches.FirstOrDefaultAsync(x =>
+                    x.WarehouseId == lb.WarehouseId && x.ProdId == lb.ProdId &&
+                    (x.BatchNo ?? "").Trim() == (lb.BatchNo ?? "").Trim() &&
+                    ((x.Expiry.HasValue ? x.Expiry.Value.Date : (DateTime?)null) == lb.Expiry));
+                if (sb != null)
+                {
+                    if (sb.QtyOnHand != qtyToSet)
+                    {
+                        sb.QtyOnHand = qtyToSet;
+                        sb.UpdatedAt = DateTime.UtcNow;
+                        sb.Note = $"مزامنة من StockLedger {DateTime.UtcNow:yyyy-MM-dd HH:mm}";
+                    }
+                }
+                else if (qtyToSet > 0)
+                {
+                    _db.StockBatches.Add(new StockBatch
+                    {
+                        WarehouseId = lb.WarehouseId,
+                        ProdId = lb.ProdId,
+                        BatchNo = lb.BatchNo ?? "",
+                        Expiry = lb.Expiry,
+                        QtyOnHand = qtyToSet,
+                        UpdatedAt = DateTime.UtcNow,
+                        Note = $"مزامنة من StockLedger {DateTime.UtcNow:yyyy-MM-dd HH:mm}"
+                    });
+                }
+            }
+
+            var allBatches = await _db.StockBatches.Where(sb => sb.QtyOnHand > 0).ToListAsync();
+            foreach (var sb in allBatches)
+            {
+                var key = (sb.WarehouseId, sb.ProdId, BatchNo: (sb.BatchNo ?? "").Trim(), Expiry: sb.Expiry.HasValue ? sb.Expiry.Value.Date : (DateTime?)null);
+                if (!ledgerBalances.Any(lb => lb.WarehouseId == key.WarehouseId && lb.ProdId == key.ProdId &&
+                    (lb.BatchNo ?? "").Trim() == key.BatchNo && ((lb.Expiry.HasValue ? lb.Expiry.Value.Date : (DateTime?)null) == key.Expiry)))
+                {
+                    sb.QtyOnHand = 0;
+                    sb.UpdatedAt = DateTime.UtcNow;
+                    sb.Note = $"مزامنة: تصفير (لا رصيد في Ledger) {DateTime.UtcNow:yyyy-MM-dd HH:mm}";
+                }
+            }
+
+            await _db.SaveChangesAsync();
+        }
+
+        /// <summary>تشغيلة افتتاحية: جدول Batch + ربط السطر في StockLedger.</summary>
+        private async Task<Batch> GetOrCreateBatchForOpeningAsync(
+            Dictionary<string, Batch> cache,
+            int prodId,
+            string batchNo,
+            DateTime expiry,
+            decimal unitCost,
+            decimal? priceRetailBatch,
+            decimal purchaseDiscountPct)
+        {
+            var bn = batchNo.Trim();
+            if (bn.Length > 50) bn = bn.Substring(0, 50);
+            var exp = expiry.Date;
+            var key = $"{prodId}\u001f{bn}\u001f{exp:yyyy-MM-dd}";
+            if (cache.TryGetValue(key, out var cached))
+                return cached;
+
+            var existing = await _db.Batches.FirstOrDefaultAsync(b =>
+                b.ProdId == prodId && b.BatchNo == bn && b.Expiry.Date == exp);
+            if (existing != null)
+            {
+                cache[key] = existing;
+                return existing;
+            }
+
+            var batch = new Batch
+            {
+                ProdId = prodId,
+                BatchNo = bn,
+                Expiry = exp,
+                PriceRetailBatch = priceRetailBatch,
+                UnitCostDefault = unitCost > 0 ? unitCost : null,
+                PurchaseDiscountPct = purchaseDiscountPct == 0 ? null : purchaseDiscountPct,
+                EntryDate = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                IsActive = true
+            };
+            _db.Batches.Add(batch);
+            cache[key] = batch;
+            return batch;
+        }
+
         // =====================
         // استيراد العملاء من إكسل — مسلسل → كود الإكسل (ExternalCode)، والاسم مطلوب (Upsert بالاسم)
         // =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequirePermission("Products.Import")]
-        public async Task<IActionResult> ImportCustomers(IFormFile? excelFile)
+        public async Task<IActionResult> ImportCustomers(IFormFile? excelFile, int? governorateId, int? districtId)
         {
             if (excelFile == null || excelFile.Length == 0)
             {
@@ -3427,16 +3682,6 @@ namespace ERP.Controllers
                 int? colRecordNum = GetCol(headers, "رقم السجل", "RecordNumber");
                 int? colLicense = GetCol(headers, "رقم الرخصة", "LicenseNumber");
 
-                var usersByName = await _db.Users.AsNoTracking()
-                    .Where(u => u.DisplayName != null || u.UserName != null)
-                    .ToListAsync();
-                var userByDisplayName = usersByName
-                    .Where(u => !string.IsNullOrWhiteSpace(u.DisplayName))
-                    .ToDictionary(u => u.DisplayName!.Trim(), u => u.UserId, StringComparer.OrdinalIgnoreCase);
-                var userByUserName = usersByName
-                    .Where(u => !string.IsNullOrWhiteSpace(u.UserName))
-                    .ToDictionary(u => u.UserName!.Trim(), u => u.UserId, StringComparer.OrdinalIgnoreCase);
-
                 string GetCell(int row, int? col)
                 {
                     if (!col.HasValue || col <= 0) return "";
@@ -3463,11 +3708,63 @@ namespace ERP.Controllers
                     return null;
                 }
 
+                var areasByName = await _db.Areas.AsNoTracking().Where(a => a.AreaName != null).ToDictionaryAsync(a => a.AreaName!.Trim(), a => a.AreaId, StringComparer.OrdinalIgnoreCase);
+                int regionsCreated = 0;
+                if (colRegion.HasValue && colRegion.Value > 0)
+                {
+                    var namesToCreate = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    for (int scanRow = 2; scanRow <= lastRow; scanRow++)
+                    {
+                        var rn = GetCell(scanRow, colRegion).Trim();
+                        if (string.IsNullOrWhiteSpace(rn)) continue;
+                        if (!areasByName.ContainsKey(rn))
+                            namesToCreate.Add(rn);
+                    }
+                    if (namesToCreate.Count > 0)
+                    {
+                        var (ok, gid, did, err) = await ResolveGovernorateDistrictForImportAsync(governorateId, districtId);
+                        if (!ok)
+                        {
+                            TempData["Error"] = err;
+                            return RedirectToAction(nameof(Import));
+                        }
+                        var nowUtc = DateTime.UtcNow;
+                        var createdAreas = new List<Area>();
+                        foreach (var n in namesToCreate)
+                        {
+                            var a = new Area
+                            {
+                                AreaName = n,
+                                GovernorateId = gid,
+                                DistrictId = did,
+                                IsActive = true,
+                                CreatedAt = nowUtc,
+                                UpdatedAt = nowUtc
+                            };
+                            _db.Areas.Add(a);
+                            createdAreas.Add(a);
+                        }
+                        await _db.SaveChangesAsync();
+                        foreach (var a in createdAreas)
+                            areasByName[a.AreaName.Trim()] = a.AreaId;
+                        regionsCreated = createdAreas.Count;
+                    }
+                }
+
+                var usersByName = await _db.Users.AsNoTracking()
+                    .Where(u => u.DisplayName != null || u.UserName != null)
+                    .ToListAsync();
+                var userByDisplayName = usersByName
+                    .Where(u => !string.IsNullOrWhiteSpace(u.DisplayName))
+                    .ToDictionary(u => u.DisplayName!.Trim(), u => u.UserId, StringComparer.OrdinalIgnoreCase);
+                var userByUserName = usersByName
+                    .Where(u => !string.IsNullOrWhiteSpace(u.UserName))
+                    .ToDictionary(u => u.UserName!.Trim(), u => u.UserId, StringComparer.OrdinalIgnoreCase);
+
                 int inserted = 0, updated = 0;
                 var existingByName = await _db.Customers.Where(c => c.CustomerName != null).ToDictionaryAsync(c => c.CustomerName!.Trim(), c => c, StringComparer.OrdinalIgnoreCase);
                 var usedCustomerIds = existingByName.Values.Select(c => c.CustomerId).ToHashSet();
                 var newCustomersList = new List<Customer>();
-                var areasByName = await _db.Areas.AsNoTracking().Where(a => a.AreaName != null).ToDictionaryAsync(a => a.AreaName!.Trim(), a => a.AreaId, StringComparer.OrdinalIgnoreCase);
 
                 for (int row = 2; row <= lastRow; row++)
                 {
@@ -3596,7 +3893,10 @@ namespace ERP.Controllers
                     }
                 }
                 await _db.SaveChangesAsync();
-                TempData["Success"] = $"تم استيراد قائمة العملاء: {inserted} جديد، {updated} محدّث.";
+                var msg = $"تم استيراد قائمة العملاء: {inserted} جديد، {updated} محدّث.";
+                if (regionsCreated > 0)
+                    msg += $" وتم إنشاء {regionsCreated} منطقة جديدة في جدول المناطق وربط العملاء بها حسب عمود «المنطقة».";
+                TempData["Success"] = msg;
                 return RedirectToAction(nameof(Import));
             }
             catch (Exception ex)
@@ -3606,177 +3906,23 @@ namespace ERP.Controllers
             }
         }
 
-        // =====================
-        // استيراد المناطق من عمود «المنطقة» في ملف إكسل (وليس من أسماء العملاء)
-        // =====================
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        [RequirePermission("Products.Import")]
-        public async Task<IActionResult> ImportRegionsFromExcel(IFormFile? excelFile, int? governorateId, int? districtId)
+        /// <summary>محافظة + حي لربط المناطق الجديدة عند استيراد العملاء (أو أول محافظة/حي إن لم يُحدَّد).</summary>
+        private async Task<(bool ok, int gid, int did, string? err)> ResolveGovernorateDistrictForImportAsync(int? governorateId, int? districtId)
         {
-            if (excelFile == null || excelFile.Length == 0)
+            if (governorateId.HasValue && districtId.HasValue)
             {
-                TempData["Error"] = "من فضلك اختر ملف إكسل يحتوي على عمود «المنطقة».";
-                return RedirectToAction(nameof(Import));
+                var district = await _db.Districts.FindAsync(districtId.Value);
+                if (district == null || district.GovernorateId != governorateId.Value)
+                    return (false, 0, 0, "الحي المختار لا يتبع المحافظة المختارة.");
+                return (true, governorateId.Value, districtId.Value, null);
             }
-
-            try
-            {
-                int gid;
-                int did;
-                if (governorateId.HasValue && districtId.HasValue)
-                {
-                    var district = await _db.Districts.FindAsync(districtId.Value);
-                    if (district == null || district.GovernorateId != governorateId.Value)
-                    {
-                        TempData["Error"] = "الحي المختار لا يتبع المحافظة المختارة.";
-                        return RedirectToAction(nameof(Import));
-                    }
-                    gid = governorateId.Value;
-                    did = districtId.Value;
-                }
-                else
-                {
-                    var firstGov = await _db.Governorates.OrderBy(g => g.GovernorateId).FirstOrDefaultAsync();
-                    if (firstGov == null)
-                    {
-                        TempData["Error"] = "لا توجد محافظات في النظام. أضف محافظة وحيّاً أولاً.";
-                        return RedirectToAction(nameof(Import));
-                    }
-                    var firstDist = await _db.Districts.Where(d => d.GovernorateId == firstGov.GovernorateId).OrderBy(d => d.DistrictId).FirstOrDefaultAsync();
-                    if (firstDist == null)
-                    {
-                        TempData["Error"] = "لا يوجد حي/مركز في المحافظة الأولى. أضف حيّاً أولاً.";
-                        return RedirectToAction(nameof(Import));
-                    }
-                    gid = firstGov.GovernorateId;
-                    did = firstDist.DistrictId;
-                }
-
-                // مسح القديم كله ثم استيراد الجديد: فك ربط العملاء بالمناطق ثم حذف كل المناطق
-                var customersWithArea = await _db.Customers.Where(c => c.AreaId != null).ToListAsync();
-                foreach (var c in customersWithArea) c.AreaId = null;
-                if (customersWithArea.Count > 0) await _db.SaveChangesAsync();
-                var allAreas = await _db.Areas.ToListAsync();
-                if (allAreas.Count > 0) { _db.Areas.RemoveRange(allAreas); await _db.SaveChangesAsync(); }
-
-                using var stream = new MemoryStream();
-                await excelFile.CopyToAsync(stream);
-                stream.Position = 0;
-                ExcelPackage.License.SetNonCommercialPersonal("Amr ERP Dev");
-                using var package = new ExcelPackage(stream);
-                var sheet = package.Workbook.Worksheets[0];
-                if (sheet.Dimension == null)
-                {
-                    TempData["Error"] = "الملف لا يحتوي على بيانات.";
-                    return RedirectToAction(nameof(Import));
-                }
-
-                int lastRow = sheet.Dimension.End.Row;
-                int lastCol = sheet.Dimension.End.Column;
-                var fixedNames = new HashSet<string>(ExcelImportColumns.Regions, StringComparer.OrdinalIgnoreCase);
-                var headers = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-                for (int col = 1; col <= lastCol; col++)
-                {
-                    var headerText = sheet.Cells[1, col].Text?.Trim();
-                    if (!string.IsNullOrWhiteSpace(headerText) && fixedNames.Contains(headerText) && !headers.ContainsKey(headerText))
-                        headers[headerText] = col;
-                }
-
-                int? colRegion = GetCol(headers, "المنطقة", "Region", "Area", "AreaName");
-                if (!colRegion.HasValue || colRegion <= 0)
-                {
-                    TempData["Error"] = "الملف يجب أن يحتوي على عمود «المنطقة» (أو Region / Area / AreaName).";
-                    return RedirectToAction(nameof(Import));
-                }
-                int? colCode = GetCol(headers, "اسم الكود", "كود المنطقة", "AreaId");
-
-                var regionRows = new List<(int? AreaId, string Name)>();
-                var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                for (int row = 2; row <= lastRow; row++)
-                {
-                    var cell = sheet.Cells[row, colRegion.Value];
-                    var val = cell.Value;
-                    string? text = null;
-                    if (val is double d) text = d.ToString(CultureInfo.InvariantCulture);
-                    else text = cell.Text?.Trim();
-                    var name = text?.Trim();
-                    if (string.IsNullOrWhiteSpace(name) || seenNames.Contains(name)) continue;
-                    seenNames.Add(name);
-                    int? areaId = null;
-                    if (colCode.HasValue && colCode.Value > 0)
-                    {
-                        var codeText = sheet.Cells[row, colCode.Value].Text?.Trim();
-                        if (!string.IsNullOrWhiteSpace(codeText) && int.TryParse(codeText, NumberStyles.Any, CultureInfo.InvariantCulture, out var codeInt) && codeInt > 0)
-                            areaId = codeInt;
-                    }
-                    regionRows.Add((areaId, name));
-                }
-
-                if (regionRows.Count == 0)
-                {
-                    TempData["Error"] = "لم يُعثَر على أي قيمة في عمود المنطقة.";
-                    return RedirectToAction(nameof(Import));
-                }
-
-                var usedAreaIds = new HashSet<int>();
-                int created = 0;
-                var withIdentityAreas = new List<Area>();
-                var withExplicitIdAreas = new List<Area>();
-                foreach (var (areaId, name) in regionRows)
-                {
-                    var newArea = new Area
-                    {
-                        AreaName = name,
-                        GovernorateId = gid,
-                        DistrictId = did,
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
-                        UpdatedAt = DateTime.UtcNow
-                    };
-                    if (areaId.HasValue && areaId.Value > 0 && !usedAreaIds.Contains(areaId.Value))
-                    {
-                        newArea.AreaId = areaId.Value;
-                        usedAreaIds.Add(areaId.Value);
-                        withExplicitIdAreas.Add(newArea);
-                    }
-                    else
-                        withIdentityAreas.Add(newArea);
-                }
-                if (withIdentityAreas.Count > 0)
-                    _db.Areas.AddRange(withIdentityAreas);
-                if (withExplicitIdAreas.Count > 0)
-                {
-                    using var tran = await _db.Database.BeginTransactionAsync();
-                    try
-                    {
-                        await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Areas] ON");
-                        foreach (var a in withExplicitIdAreas)
-                        {
-                            await _db.Database.ExecuteSqlRawAsync(
-                                "INSERT INTO [Areas] (AreaId, AreaName, GovernorateId, DistrictId, IsActive, CreatedAt, UpdatedAt) VALUES ({0}, {1}, {2}, {3}, {4}, {5}, {6})",
-                                a.AreaId, a.AreaName ?? "", a.GovernorateId, a.DistrictId, a.IsActive, a.CreatedAt, a.UpdatedAt);
-                        }
-                        await _db.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [Areas] OFF");
-                        await tran.CommitAsync();
-                    }
-                    catch
-                    {
-                        await tran.RollbackAsync();
-                        throw;
-                    }
-                }
-                await _db.SaveChangesAsync();
-                created = regionRows.Count;
-
-                TempData["Success"] = $"تم استيراد المناطق: إنشاء {created} منطقة (مسح القديم ثم استيراد الجديد، مع دعم عمود اسم الكود).";
-                return RedirectToAction(nameof(Import));
-            }
-            catch (Exception ex)
-            {
-                TempData["Error"] = "خطأ أثناء استيراد المناطق: " + (ex.InnerException?.Message ?? ex.Message);
-                return RedirectToAction(nameof(Import));
-            }
+            var firstGov = await _db.Governorates.OrderBy(g => g.GovernorateId).FirstOrDefaultAsync();
+            if (firstGov == null)
+                return (false, 0, 0, "لا توجد محافظات في النظام. أضف محافظة وحيّاً أولاً.");
+            var firstDist = await _db.Districts.Where(d => d.GovernorateId == firstGov.GovernorateId).OrderBy(d => d.DistrictId).FirstOrDefaultAsync();
+            if (firstDist == null)
+                return (false, 0, 0, "لا يوجد حي/مركز في المحافظة الأولى. أضف حيّاً أولاً.");
+            return (true, firstGov.GovernorateId, firstDist.DistrictId, null);
         }
 
         // =====================

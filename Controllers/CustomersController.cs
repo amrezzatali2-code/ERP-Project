@@ -569,6 +569,125 @@ namespace ERP.Controllers
 
 
 
+        /// <summary>بحث عام في قائمة العملاء مع وضع النص: يبدأ / يحتوي / ينتهي.</summary>
+        private static IQueryable<Customer> ApplyCustomerListSearch(IQueryable<Customer> q, string? search, string? searchBy, string? searchMode)
+        {
+            var s = (search ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(s)) return q;
+
+            var sb = (searchBy ?? "all").Trim().ToLowerInvariant();
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
+            switch (sb)
+            {
+                case "id":
+                    if (int.TryParse(s, out var custId))
+                        return q.Where(c => c.CustomerId == custId);
+                    return sm switch
+                    {
+                        "starts" => q.Where(c => c.CustomerId.ToString().StartsWith(s)),
+                        "ends" => q.Where(c => c.CustomerId.ToString().EndsWith(s)),
+                        _ => q.Where(c => c.CustomerId.ToString().Contains(s))
+                    };
+
+                case "name":
+                    return sm switch
+                    {
+                        "starts" => q.Where(c => c.CustomerName.StartsWith(s)),
+                        "ends" => q.Where(c => c.CustomerName.EndsWith(s)),
+                        _ => q.Where(c => c.CustomerName.Contains(s))
+                    };
+
+                case "phone":
+                    return sm switch
+                    {
+                        "starts" => q.Where(c =>
+                            (c.Phone1 != null && c.Phone1.StartsWith(s)) ||
+                            (c.Phone2 != null && c.Phone2.StartsWith(s)) ||
+                            (c.Whatsapp != null && c.Whatsapp.StartsWith(s))),
+                        "ends" => q.Where(c =>
+                            (c.Phone1 != null && c.Phone1.EndsWith(s)) ||
+                            (c.Phone2 != null && c.Phone2.EndsWith(s)) ||
+                            (c.Whatsapp != null && c.Whatsapp.EndsWith(s))),
+                        _ => q.Where(c =>
+                            (c.Phone1 != null && c.Phone1.Contains(s)) ||
+                            (c.Phone2 != null && c.Phone2.Contains(s)) ||
+                            (c.Whatsapp != null && c.Whatsapp.Contains(s)))
+                    };
+
+                case "address":
+                    return sm switch
+                    {
+                        "starts" => q.Where(c => c.Address != null && c.Address.StartsWith(s)),
+                        "ends" => q.Where(c => c.Address != null && c.Address.EndsWith(s)),
+                        _ => q.Where(c => c.Address != null && c.Address.Contains(s))
+                    };
+
+                case "type":
+                    return sm switch
+                    {
+                        "starts" => q.Where(c => c.PartyCategory != null && c.PartyCategory.StartsWith(s)),
+                        "ends" => q.Where(c => c.PartyCategory != null && c.PartyCategory.EndsWith(s)),
+                        _ => q.Where(c => c.PartyCategory != null && c.PartyCategory.Contains(s))
+                    };
+
+                case "account":
+                    return sm switch
+                    {
+                        "starts" => q.Where(c => c.Account != null &&
+                            (c.Account.AccountCode.StartsWith(s) || c.Account.AccountName.StartsWith(s))),
+                        "ends" => q.Where(c => c.Account != null &&
+                            (c.Account.AccountCode.EndsWith(s) || c.Account.AccountName.EndsWith(s))),
+                        _ => q.Where(c => c.Account != null &&
+                            (c.Account.AccountCode.Contains(s) || c.Account.AccountName.Contains(s)))
+                    };
+
+                case "active":
+                    var yes = new[] { "1", "نعم", "yes", "true", "صح" };
+                    var no = new[] { "0", "لا", "no", "false" };
+                    if (yes.Contains(s, StringComparer.OrdinalIgnoreCase))
+                        return q.Where(c => c.IsActive);
+                    if (no.Contains(s, StringComparer.OrdinalIgnoreCase))
+                        return q.Where(c => !c.IsActive);
+                    return q;
+
+                case "all":
+                default:
+                    return sm switch
+                    {
+                        "starts" => q.Where(c =>
+                            c.CustomerId.ToString().StartsWith(s) ||
+                            c.CustomerName.StartsWith(s) ||
+                            (c.Phone1 != null && c.Phone1.StartsWith(s)) ||
+                            (c.Phone2 != null && c.Phone2.StartsWith(s)) ||
+                            (c.Whatsapp != null && c.Whatsapp.StartsWith(s)) ||
+                            (c.Address != null && c.Address.StartsWith(s)) ||
+                            (c.PartyCategory != null && c.PartyCategory.StartsWith(s)) ||
+                            (c.Account != null && (c.Account.AccountCode.StartsWith(s) || c.Account.AccountName.StartsWith(s)))),
+                        "ends" => q.Where(c =>
+                            c.CustomerId.ToString().EndsWith(s) ||
+                            c.CustomerName.EndsWith(s) ||
+                            (c.Phone1 != null && c.Phone1.EndsWith(s)) ||
+                            (c.Phone2 != null && c.Phone2.EndsWith(s)) ||
+                            (c.Whatsapp != null && c.Whatsapp.EndsWith(s)) ||
+                            (c.Address != null && c.Address.EndsWith(s)) ||
+                            (c.PartyCategory != null && c.PartyCategory.EndsWith(s)) ||
+                            (c.Account != null && (c.Account.AccountCode.EndsWith(s) || c.Account.AccountName.EndsWith(s)))),
+                        _ => q.Where(c =>
+                            c.CustomerId.ToString().Contains(s) ||
+                            c.CustomerName.Contains(s) ||
+                            (c.Phone1 != null && c.Phone1.Contains(s)) ||
+                            (c.Phone2 != null && c.Phone2.Contains(s)) ||
+                            (c.Whatsapp != null && c.Whatsapp.Contains(s)) ||
+                            (c.Address != null && c.Address.Contains(s)) ||
+                            (c.PartyCategory != null && c.PartyCategory.Contains(s)) ||
+                            (c.Account != null &&
+                                (c.Account.AccountCode.Contains(s) || c.Account.AccountName.Contains(s))))
+                    };
+            }
+        }
+
         // =======================================================
         //  أكشن Index — قائمة العملاء / الأطراف
         // =======================================================
@@ -576,6 +695,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "name",
             string? dir = "asc",
             bool useDateRange = false,
@@ -596,7 +716,6 @@ namespace ERP.Controllers
             string? filterCol_PolicyId = null,
             string? filterCol_credit = null,
             string? filterCol_isactive = null,
-            string? filterCol_CurrentBalance = null,
             string? filterCol_ordercontact = null,
             string? filterCol_created = null,
             string? filterCol_updated = null,
@@ -606,7 +725,7 @@ namespace ERP.Controllers
             string? filterCol_licensenumber = null,
             string? filterCol_segment = null,
             int page = 1,
-            int pageSize = 50
+            int pageSize = 10
         )
         {
             var sep = new[] { '|', ',' };
@@ -624,76 +743,13 @@ namespace ERP.Controllers
             // 2) تهيئة قيم البحث والترتيب
             var s = (search ?? string.Empty).Trim();
             var sb = (searchBy ?? "all").Trim().ToLowerInvariant();
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
             var so = (sort ?? "name").Trim().ToLowerInvariant();
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-            // 3) تطبيق البحث
-            if (!string.IsNullOrWhiteSpace(s))
-            {
-                switch (sb)
-                {
-                    case "id":
-                        if (int.TryParse(s, out var custId))
-                            q = q.Where(c => c.CustomerId == custId);
-                        else
-                            q = q.Where(c => c.CustomerId.ToString().Contains(s));
-                        break;
-
-                    case "name":
-                        q = q.Where(c => c.CustomerName.Contains(s));
-                        break;
-
-                    case "phone":
-                        q = q.Where(c =>
-                            (c.Phone1 != null && c.Phone1.Contains(s)) ||
-                            (c.Phone2 != null && c.Phone2.Contains(s)) ||
-                            (c.Whatsapp != null && c.Whatsapp.Contains(s)));
-                        break;
-
-                    case "address":
-                        q = q.Where(c => c.Address != null && c.Address.Contains(s));
-                        break;
-
-                    case "type":
-                        q = q.Where(c => c.PartyCategory != null && c.PartyCategory.Contains(s));
-                        break;
-
-                    case "account":
-                        q = q.Where(c =>
-                            c.Account != null &&
-                            (c.Account.AccountCode.Contains(s) ||
-                             c.Account.AccountName.Contains(s)));
-                        break;
-
-                    case "active":
-                        var yes = new[] { "1", "نعم", "yes", "true", "صح" };
-                        var no = new[] { "0", "لا", "no", "false" };
-
-                        if (yes.Contains(s, StringComparer.OrdinalIgnoreCase))
-                            q = q.Where(c => c.IsActive);
-                        else if (no.Contains(s, StringComparer.OrdinalIgnoreCase))
-                            q = q.Where(c => !c.IsActive);
-                        break;
-
-                    case "all":
-                    default:
-                        q = q.Where(c =>
-                            c.CustomerId.ToString().Contains(s) ||
-                            c.CustomerName.Contains(s) ||
-                            (c.Phone1 != null && c.Phone1.Contains(s)) ||
-                            (c.Phone2 != null && c.Phone2.Contains(s)) ||
-                            (c.Whatsapp != null && c.Whatsapp.Contains(s)) ||
-                            (c.Address != null && c.Address.Contains(s)) ||
-                            (c.PartyCategory != null && c.PartyCategory.Contains(s)) ||
-                            (
-                                c.Account != null &&
-                                (c.Account.AccountCode.Contains(s) ||
-                                 c.Account.AccountName.Contains(s))
-                            )
-                        );
-                        break;
-                }
-            }
+            // 3) تطبيق البحث (يبدأ / يحتوي / ينتهي)
+            q = ApplyCustomerListSearch(q, s, sb, sm);
 
             // 4) فلتر كود من/إلى
             if (fromCode.HasValue)
@@ -823,16 +879,6 @@ namespace ERP.Controllers
                 if (activeList.Count > 0)
                     q = q.Where(c => activeList.Contains(c.IsActive));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_CurrentBalance))
-            {
-                var vals = filterCol_CurrentBalance.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
-                if (vals.Count > 0)
-                {
-                    var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                    if (decimals.Count > 0)
-                        q = q.Where(c => decimals.Contains(c.CurrentBalance));
-                }
-            }
             if (!string.IsNullOrWhiteSpace(filterCol_ordercontact))
             {
                 var vals = filterCol_ordercontact.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
@@ -934,28 +980,36 @@ namespace ERP.Controllers
                           : q.OrderBy(c => c.CustomerName),
             };
 
-            // 7) إجمالى الرصيد الحالى (بعد الفلاتر)
-            decimal totalCurrentBalance = 0m;
-            try
-            {
-                totalCurrentBalance = await q.SumAsync(c => c.CurrentBalance);
-            }
-            catch
-            {
-                // فى حالة وجود Null أو مشكلة فى الجمع نتجاهل الخطأ
-            }
+            // 7) الترقيم (آخر pageSize، افتراضي 10، «الكل» = 0)
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
 
-            // 8) الترقيم
             if (page < 1) page = 1;
-            if (pageSize < 1) pageSize = 50;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
             int total = await q.CountAsync();
-            int pages = Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
+
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = total == 0 ? 10 : Math.Min(total, 100_000);
+                page = 1;
+            }
+
+            int pages = pageSize == 0 ? 1 : Math.Max(1, (int)Math.Ceiling(total / (double)pageSize));
             if (page > pages) page = pages;
 
-            var items = await q.Skip((page - 1) * pageSize)
-                               .Take(pageSize)
-                               .ToListAsync();
+            var skip = (page - 1) * effectivePageSize;
+            if (total > 0 && skip >= total)
+            {
+                page = Math.Max(1, pages);
+                skip = (page - 1) * effectivePageSize;
+            }
+
+            var items = await q.Skip(skip).Take(effectivePageSize).ToListAsync();
 
             var model = new PagedResult<Customer>(items, page, pageSize, total)
             {
@@ -968,10 +1022,9 @@ namespace ERP.Controllers
             };
 
             // ViewBag للقيم المستخدمة فى الواجهة
-            ViewBag.TotalCurrentBalance = totalCurrentBalance;
-
             ViewBag.Search = s;
             ViewBag.SearchBy = sb;
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = so;
             ViewBag.Dir = desc ? "desc" : "asc";
 
@@ -998,7 +1051,6 @@ namespace ERP.Controllers
             ViewBag.FilterCol_PolicyId = filterCol_PolicyId;
             ViewBag.FilterCol_Credit = filterCol_credit;
             ViewBag.FilterCol_IsActive = filterCol_isactive;
-            ViewBag.FilterCol_CurrentBalance = filterCol_CurrentBalance;
             ViewBag.FilterCol_OrderContact = filterCol_ordercontact;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
@@ -1008,6 +1060,8 @@ namespace ERP.Controllers
             ViewBag.FilterCol_LicenseNumber = filterCol_licensenumber;
             ViewBag.FilterCol_Segment = filterCol_segment;
             ViewBag.PartyCategoryDisplayNames = PartyCategoryDisplay.ArabicByKey;
+
+            ViewBag.CanEdit = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Customers", "Edit"));
 
             return View(model);
         }
@@ -1062,7 +1116,6 @@ namespace ERP.Controllers
                 "policyid" => (await q.Where(c => c.PolicyId.HasValue).Select(c => c.PolicyId!.Value).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString(), v.ToString())).ToList(),
                 "credit" => (await q.Select(c => c.CreditLimit).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString("0.00"), v.ToString("0.00"))).ToList(),
                 "isactive" => new List<(string, string)> { ("نشط", "نشط"), ("موقوف", "موقوف") },
-                "currentbalance" => (await q.Select(c => c.CurrentBalance).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v.ToString("0.00"), v.ToString("0.00"))).ToList(),
                 "ordercontact" => string.IsNullOrEmpty(searchTerm)
                     ? (await q.Where(c => c.OrderContactName != null).Select(c => c.OrderContactName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v, v)).ToList()
                     : (await q.Where(c => c.OrderContactName != null && EF.Functions.Like(c.OrderContactName, "%" + searchTerm + "%")).Select(c => c.OrderContactName!).Distinct().OrderBy(v => v).Take(500).ToListAsync()).Select(v => (v!, v)).ToList(),
@@ -1983,6 +2036,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -2004,76 +2058,7 @@ namespace ERP.Controllers
             var so = (sort ?? "name").Trim().ToLowerInvariant();
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-            if (!string.IsNullOrWhiteSpace(s))
-            {
-                switch (searchKey)
-                {
-                    case "id":
-                        if (int.TryParse(s, out var custId))
-                            query = query.Where(c => c.CustomerId == custId);
-                        else
-                            query = query.Where(c => c.CustomerId.ToString().Contains(s));
-                        break;
-
-                    case "name":
-                        query = query.Where(c => c.CustomerName.Contains(s));
-                        break;
-
-                    case "phone":
-                        query = query.Where(c =>
-                            (c.Phone1 != null && c.Phone1.Contains(s)) ||
-                            (c.Phone2 != null && c.Phone2.Contains(s)) ||
-                            (c.Whatsapp != null && c.Whatsapp.Contains(s)));
-                        break;
-
-                    case "address":
-                        query = query.Where(c => c.Address != null && c.Address.Contains(s));
-                        break;
-
-                    case "type":
-                        query = query.Where(c => c.PartyCategory != null && c.PartyCategory.Contains(s));
-                        break;
-
-                    case "account":
-                        query = query.Where(c =>
-                            c.Account != null &&
-                            (
-                                c.Account.AccountCode.Contains(s) ||
-                                c.Account.AccountName.Contains(s)
-                            ));
-                        break;
-
-                    case "active":
-                        var yes = new[] { "1", "نعم", "yes", "true", "صح" };
-                        var no = new[] { "0", "لا", "no", "false" };
-
-                        if (yes.Contains(s, StringComparer.OrdinalIgnoreCase))
-                            query = query.Where(c => c.IsActive);
-                        else if (no.Contains(s, StringComparer.OrdinalIgnoreCase))
-                            query = query.Where(c => !c.IsActive);
-                        break;
-
-                    case "all":
-                    default:
-                        query = query.Where(c =>
-                            c.CustomerId.ToString().Contains(s) ||
-                            c.CustomerName.Contains(s) ||
-                            (c.Phone1 != null && c.Phone1.Contains(s)) ||
-                            (c.Phone2 != null && c.Phone2.Contains(s)) ||
-                            (c.Whatsapp != null && c.Whatsapp.Contains(s)) ||
-                            (c.Address != null && c.Address.Contains(s)) ||
-                            (c.PartyCategory != null && c.PartyCategory.Contains(s)) ||
-                            (
-                                c.Account != null &&
-                                (
-                                    c.Account.AccountCode.Contains(s) ||
-                                    c.Account.AccountName.Contains(s)
-                                )
-                            )
-                        );
-                        break;
-                }
-            }
+            query = ApplyCustomerListSearch(query, s, searchKey, searchMode);
 
             if (useDateRange)
             {
@@ -2129,7 +2114,7 @@ namespace ERP.Controllers
                 var csvBuilder = new StringBuilder();
 
                 csvBuilder.AppendLine(
-                    "كود العميل,كود الإكسل,اسم العميل,نوع الطرف,الهاتف,العنوان,المحافظة,الحي,المنطقة,الرقم الضريبي/القومي,رقم السجل,رقم الرخصة,الشريحة,الحساب المحاسبي,كود السياسة,كود المستخدم,اسم مسئول الطلب,هاتف مسئول الطلب,مضاعفة الكوتة,مضاعف الكوتة,الحد الائتماني,الحالة,تاريخ الإنشاء,آخر تعديل,الرصيد الحالي");
+                    "كود العميل,كود الإكسل,اسم العميل,نوع الطرف,الهاتف,العنوان,المحافظة,الحي,المنطقة,الرقم الضريبي/القومي,رقم السجل,رقم الرخصة,الشريحة,الحساب المحاسبي,كود السياسة,كود المستخدم,اسم مسئول الطلب,هاتف مسئول الطلب,مضاعفة الكوتة,مضاعف الكوتة,الحد الائتماني,الحالة,تاريخ الإنشاء,آخر تعديل");
 
                 string CsvEscape(string? value)
                 {
@@ -2172,8 +2157,7 @@ namespace ERP.Controllers
                         c.CreditLimit.ToString("0.00"),
                         CsvEscape(status),
                         c.CreatedAt.ToString("yyyy-MM-dd HH:mm"),
-                        c.UpdatedAt.ToString("yyyy-MM-dd HH:mm"),
-                        c.CurrentBalance.ToString("0.00")
+                        c.UpdatedAt.ToString("yyyy-MM-dd HH:mm")
                     ));
                 }
 
@@ -2214,7 +2198,6 @@ namespace ERP.Controllers
                 ws.Cell(row, 22).Value = "الحالة";
                 ws.Cell(row, 23).Value = "تاريخ الإنشاء";
                 ws.Cell(row, 24).Value = "آخر تعديل";
-                ws.Cell(row, 25).Value = "الرصيد الحالي";
 
                 foreach (var c in data)
                 {
@@ -2251,7 +2234,6 @@ namespace ERP.Controllers
                     ws.Cell(row, 22).Value = status;
                     ws.Cell(row, 23).Value = c.CreatedAt;
                     ws.Cell(row, 24).Value = c.UpdatedAt;
-                    ws.Cell(row, 25).Value = c.CurrentBalance;
                 }
 
                 ws.Columns().AdjustToContents();

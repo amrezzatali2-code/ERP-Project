@@ -10,6 +10,7 @@
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "batchno";
+    var searchMode = (string?)ViewBag.SearchMode ?? "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "expiry";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -56,6 +57,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -87,6 +89,7 @@
         {
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -207,13 +210,18 @@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في التشغيلات</label>
-                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:110px;min-width:100px" title="نوع البحث في الحقول النصية">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <input type="text"
                                name="search"
                                class="form-control erp-filter-input"
                                placeholder="اكتب نص البحث..."
                                value="@search"
-                               style="min-width:140px" />
+                               style="min-width:140px;flex:1 1 140px" />
                         <select name="searchBy"
                                 class="form-select form-select-arrow erp-filter-input"
                                 style="max-width:180px;min-width:120px">
@@ -225,8 +233,10 @@
                             <option value="created"@Html.Raw(searchBy == "created" ? " selected" : "")>تاريخ الإنشاء</option>
                             <option value="updated"@Html.Raw(searchBy == "updated" ? " selected" : "")>آخر تعديل</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">عرض</button>
-                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0" href="@Url.Action(action, controller)">إلغاء</a>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
@@ -263,11 +273,6 @@
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                     <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <a class="btn btn-erp btn-erp-success btn-erp-sm"
-                           asp-action="Create">
-                            + إضافة تشغيلة
-                        </a>
-
                         <button type="button"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm"
                                 data-bs-toggle="modal"
@@ -282,37 +287,15 @@
                             اختيار الأعمدة
                         </button>
 
-                        <div class="dropdown d-inline">
-                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                حذف
-                            </button>
-                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
-                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteSelected">حذف المحدد</button></li>
-                                <li><hr class="dropdown-divider" /></li>
-                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف جميع التشغيلات</button></li>
-                            </ul>
-                        </div>
-
-                        <form id="bulkDeleteForm"
-                              asp-action="BulkDelete"
-                              method="post"
-                              class="d-none">
-                            @Html.AntiForgeryToken()
-                            <input type="hidden" name="selectedIds" id="selectedIdsInput" />
-                        </form>
-
-                        <form id="deleteAllForm"
-                              asp-action="DeleteAll"
-                              method="post"
-                              class="d-none">
-                            @Html.AntiForgeryToken()
-                        </form>
-
                         <button type="button"
                                 id="btnPrint"
                                 class="btn btn-erp btn-erp-secondary btn-erp-sm">
                             🖨️ طباعة
                         </button>
+
+                        <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراء على التشغيلة المحددة">
+                            <button type="button" id="btnBatchProductMovement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="دفتر الحركة المخزنية للصنف">حركة الصنف</button>
+                        </span>
 
                         <form method="get"
                               asp-action="Export"
@@ -321,6 +304,7 @@
 
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
@@ -360,6 +344,7 @@
     <form id="batchesSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
         <input type="hidden" name="search" value="@search" />
         <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="searchMode" value="@searchMode" />
         <input type="hidden" name="sort" value="@sort" />
         <input type="hidden" name="dir" value="@dir" />
         <input type="hidden" name="page" value="1" />
@@ -433,19 +418,13 @@
                     <th data-col="active">@filterableCol("active", "active", "الحالة")</th>
                     <th data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
                     <th data-col="modified">@filterableCol("updated", "updated", "آخر تعديل")</th>
-
-                    <th class="text-nowrap no-print"
-                        data-col="actions"
-                        data-col-fixed="true"
-                        style="width:220px;">
-                    </th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="12" class="text-center text-muted py-4">
+                        <td colspan="10" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -454,7 +433,11 @@
                 {
                     foreach (var b in Model.Items)
                     {
-                        <tr>
+                        var movementUrl = Url.Action("Index", "StockLedger", new { search = b.ProdId.ToString(), searchBy = "product" }) + "?frame=1";
+                        <tr class="erp-list-selectable-row"
+                            data-prod-id="@b.ProdId"
+                            data-movement-url="@movementUrl"
+                            data-tab-title="حركة صنف @b.ProdId">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select"
@@ -474,29 +457,11 @@
                                                 ? b.UpdatedAt.Value.ToString("yyyy/MM/dd HH:mm")
                                                 : "")
                             </td>
-
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                   asp-action="Show"
-                                   asp-route-id="@b.BatchId">
-                                    عرض
-                                </a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                   asp-action="Edit"
-                                   asp-route-id="@b.BatchId">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                   asp-action="Delete"
-                                   asp-route-id="@b.BatchId">
-                                    حذف
-                                </a>
-                            </td>
                         </tr>
                     }
 
                     <tr class="table-secondary fw-bold">
-                        <td colspan="11" class="text-end">
+                        <td colspan="9" class="text-end">
                             عدد التشغيلات (حسب الفلتر الحالي):
                         </td>
                         <td class="text-end">
@@ -519,6 +484,7 @@
               class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -607,6 +573,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -698,22 +665,23 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         // زر الطباعة
         document.getElementById("btnPrint")?.addEventListener("click", function () {
             window.print();
         });
 
-        // تحديد الصفوف / حذف المحدد / حذف الكل
+        // تحديد الكل في خانات الصفوف (حركة الصنف تستخدم صفاً واحداً مميزاً عبر erp-list-selectable)
         (function () {
-            const table  = document.getElementById("batchesTable");
+            const table = document.getElementById("batchesTable");
             if (!table) return;
 
             const chkAll = document.getElementById("chkAllRows");
             const rowsChk = () => table.querySelectorAll("tbody .row-select");
 
             chkAll?.addEventListener("change", function () {
-                rowsChk().forEach(cb => cb.checked = chkAll.checked);
+                rowsChk().forEach(cb => { cb.checked = chkAll.checked; });
             });
 
             table.addEventListener("change", function (e) {
@@ -722,35 +690,16 @@
                     if (!target.checked && chkAll) chkAll.checked = false;
                 }
             });
-
-            const btnDeleteSelected = document.getElementById("btnDeleteSelected");
-            const bulkForm          = document.getElementById("bulkDeleteForm");
-            const selectedInput     = document.getElementById("selectedIdsInput");
-
-            btnDeleteSelected?.addEventListener("click", function () {
-                const ids = Array.from(rowsChk())
-                    .filter(cb => cb.checked)
-                    .map(cb => cb.value);
-
-                if (ids.length === 0) {
-                    alert("من فضلك اختر على الأقل تشغيلة واحدة للحذف.");
-                    return;
-                }
-
-                if (!confirm("هل أنت متأكد من حذف التشغيلات المحددة؟")) return;
-
-                selectedInput.value = ids.join(",");
-                bulkForm.submit();
-            });
-
-            const btnDeleteAll  = document.getElementById("btnDeleteAll");
-            const deleteAllForm = document.getElementById("deleteAllForm");
-
-            btnDeleteAll?.addEventListener("click", function () {
-                if (!confirm("تحذير: سيتم حذف جميع التشغيلات. هل أنت متأكد؟")) return;
-                deleteAllForm.submit();
-            });
         })();
+
+        ERP.initListSelection({
+            movementButtonId: 'btnBatchProductMovement',
+            movementUrlAttribute: 'data-movement-url',
+            movementTabTitle: 'حركة الصنف',
+            movementTabId: 'batch-product-movement-tab',
+            idAttribute: 'data-prod-id',
+            tabTitleAttribute: 'data-tab-title'
+        });
 
         // اختيار الأعمدة + localStorage
         (function () {

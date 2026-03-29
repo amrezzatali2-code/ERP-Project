@@ -37,6 +37,16 @@ namespace ERP.Controllers
             _accountVisibilityService = accountVisibilityService;
         }
 
+        /// <summary>تكلفة وحدة دخلة (أول مدة/شراء) عندما UnitCost = 0 لكن إجمالي التكلفة أو الكمية متوفرين — لتوافق البيانات المنقولة من أنظمة أخرى.</summary>
+        private static decimal EffectiveStockInflowUnitCost(decimal unitCost, int qtyIn, decimal? totalCost)
+        {
+            if (qtyIn <= 0) return unitCost;
+            if (unitCost != 0m) return unitCost;
+            if (totalCost.HasValue && totalCost.Value != 0m)
+                return totalCost.Value / qtyIn;
+            return 0m;
+        }
+
         /// <summary>عملاء نشطون + فلترة ظهور الحسابات — نفس بذرة أرصدة العملاء وربح الميزانية.</summary>
         private async Task<HashSet<int>> GetEligibleActiveCustomerIdsForBalanceSheetAsync()
         {
@@ -3709,14 +3719,15 @@ namespace ERP.Controllers
                 salesProfitQuery = salesProfitQuery.Where(sil => sil.SalesInvoice.SIDate < to);
             }
 
-            // الإيرادات والكمية من SalesInvoiceLines
+            // الإيرادات والكمية من SalesInvoiceLines (+ تكلفة السطور كاحتياط عندما دفتر الحركة = 0)
             var salesProfitData = await salesProfitQuery
                 .GroupBy(sil => sil.ProdId)
                 .Select(g => new
                 {
                     ProdId = g.Key,
                     SalesRevenue = g.Sum(sil => sil.LineNetTotal),
-                    SalesQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m
+                    SalesQty = g.Sum(sil => (decimal?)sil.Qty) ?? 0m,
+                    LineCostTotal = g.Sum(sil => sil.CostTotal)
                 })
                 .ToDictionaryAsync(x => x.ProdId);
 
@@ -3734,6 +3745,25 @@ namespace ERP.Controllers
                     .GroupBy(sl => sl.ProdId)
                     .Select(g => new { ProdId = g.Key, SalesCost = g.Sum(sl => sl.TotalCost ?? (sl.UnitCost * sl.QtyOut)) })
                     .ToDictionaryAsync(x => x.ProdId, x => x.SalesCost);
+            }
+
+            // إذا تكلفة حركات الخروج صفر لكن يوجد ربط FIFO: نعيد حساب COGS من خرائط FIFO + دخلات الدورة (يصلح UnitCost=0 على دخلة أول مدة مع TotalCost)
+            Dictionary<int, decimal> salesCostFromFifoRecalc = new Dictionary<int, decimal>();
+            if (siIdsInRange.Any())
+            {
+                var fifoRows = await (
+                    from m in _context.StockFifoMap.AsNoTracking()
+                    join slOut in _context.StockLedger.AsNoTracking() on m.OutEntryId equals slOut.EntryId
+                    join slIn in _context.StockLedger.AsNoTracking() on m.InEntryId equals slIn.EntryId
+                    where slOut.SourceType == "Sales" && slOut.QtyOut > 0 && siIdsInRange.Contains(slOut.SourceId) && productIds.Contains(slOut.ProdId)
+                    select new { slOut.ProdId, slOut.WarehouseId, m.Qty, slIn.UnitCost, slIn.TotalCost, slIn.QtyIn }
+                ).ToListAsync();
+                var q = fifoRows.AsEnumerable();
+                if (warehouseId.HasValue && warehouseId.Value > 0)
+                    q = q.Where(x => x.WarehouseId == warehouseId.Value);
+                salesCostFromFifoRecalc = q
+                    .GroupBy(x => x.ProdId)
+                    .ToDictionary(g => g.Key, g => g.Sum(x => x.Qty * EffectiveStockInflowUnitCost(x.UnitCost, x.QtyIn, x.TotalCost)));
             }
 
             // =========================================================
@@ -3867,10 +3897,14 @@ namespace ERP.Controllers
                 if (!productsDict.TryGetValue(prodId, out var product)) continue;
 
                 // ========= فواتير البيع (Gross) =========
-                // التكلفة من StockLedger (FIFO) لتطابق فواتير الشراء
-                decimal salesRevenue = salesProfitData.TryGetValue(prodId, out var salesData) ? salesData.SalesRevenue : 0m;
-                decimal salesCost = salesCostFromLedger.TryGetValue(prodId, out var costVal) ? costVal : 0m;
-                decimal salesQtyGross = salesProfitData.TryGetValue(prodId, out var salesData3) ? salesData3.SalesQty : 0m;
+                // التكلفة: دفتر الحركة ثم إعادة حساب من FIFO+الدخلات ثم مجموع تكلفة السطور (بيانات منقولة / قديمة)
+                salesProfitData.TryGetValue(prodId, out var salesRow);
+                decimal salesRevenue = salesRow?.SalesRevenue ?? 0m;
+                decimal ledgerSalesCost = salesCostFromLedger.TryGetValue(prodId, out var costVal) ? costVal : 0m;
+                decimal fifoRecalcCost = salesCostFromFifoRecalc.TryGetValue(prodId, out var fifoC) ? fifoC : 0m;
+                decimal lineCostFallback = salesRow?.LineCostTotal ?? 0m;
+                decimal salesCost = ledgerSalesCost > 0m ? ledgerSalesCost : (fifoRecalcCost > 0m ? fifoRecalcCost : lineCostFallback);
+                decimal salesQtyGross = salesRow?.SalesQty ?? 0m;
                 decimal salesProfit = salesRevenue - salesCost;
                 decimal salesProfitPercent = salesRevenue != 0 ? (salesProfit / salesRevenue) * 100m : 0m;
 

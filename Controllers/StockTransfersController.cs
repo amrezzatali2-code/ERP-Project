@@ -30,7 +30,18 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly StockAnalysisService _stockAnalysisService;
         private readonly IUserActivityLogger _activityLogger;
-        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
+        private static string NormalizeArabicDigitsToLatin(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            var chars = s.ToCharArray();
+            for (var i = 0; i < chars.Length; i++)
+            {
+                if (chars[i] >= '٠' && chars[i] <= '٩')
+                    chars[i] = (char)('0' + (chars[i] - '٠'));
+            }
+            return new string(chars);
+        }
 
         public StockTransfersController(AppDbContext context, StockAnalysisService stockAnalysisService, IUserActivityLogger activityLogger)
         {
@@ -50,36 +61,47 @@ namespace ERP.Controllers
         /// - تقسيم الصفحات باستخدام PagedResult
         /// </summary>
         public async Task<IActionResult> Index(
-            string? search,          // متغير: نص البحث
-            string? searchBy,        // متغير: البحث بأي حقل (all, id, fromWarehouse, toWarehouse, note, date)
-            string? sort,            // متغير: اسم عمود الترتيب
-            string? dir,             // متغير: اتجاه الترتيب asc/desc
-            int page = 1,            // متغير: رقم الصفحة الحالية
-            int pageSize = 20,       // متغير: عدد السجلات في الصفحة
-            bool useDateRange = false,   // متغير: هل نستخدم فلتر التاريخ؟
-            DateTime? fromDate = null,   // متغير: تاريخ من
-            DateTime? toDate = null,     // متغير: تاريخ إلى
-            int? fromCode = null,        // متغير: كود من
-            int? toCode = null,          // متغير: كود إلى
+            string? search,
+            string? searchBy,
+            string? searchMode,
+            string? sort,
+            string? dir,
+            int page = 1,
+            int pageSize = 10,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_fromwarehouse = null,
+            string? filterCol_fromwarehouseExpr = null,
             string? filterCol_towarehouse = null,
+            string? filterCol_towarehouseExpr = null,
             string? filterCol_note = null,
             string? filterCol_created = null,
             string? filterCol_updated = null
         )
         {
-            // قيم افتراضية
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+
             searchBy ??= "all";
             sort ??= "id";
             bool descending = (dir == "desc");
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
-            // نبدأ باستعلام بسيط بدون Include
-            IQueryable<StockTransfer> baseQuery = _context.StockTransfers
-                .AsNoTracking(); // متغير: استعلام أساسي على جدول التحويلات
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
-            // نطبق الفلاتر العامة (بحث + كود + تاريخ + ترتيب)
+            IQueryable<StockTransfer> baseQuery = _context.StockTransfers.AsNoTracking();
+
             var filteredQuery = ApplyFiltersAndSorting(
                 baseQuery,
                 search,
@@ -90,110 +112,71 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode
-            );
+                toCode,
+                sm);
 
-            // فلاتر الأعمدة (بنمط Excel)
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
-            {
-                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    filteredQuery = filteredQuery.Where(t => ids.Contains(t.Id));
-            }
+            filteredQuery = StockTransferColumnFilter.ApplyColumnFilters(
+                filteredQuery,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_fromwarehouse,
+                filterCol_fromwarehouseExpr,
+                filterCol_towarehouse,
+                filterCol_towarehouseExpr,
+                filterCol_note,
+                filterCol_date,
+                filterCol_created,
+                filterCol_updated);
 
-            if (!string.IsNullOrWhiteSpace(filterCol_fromwarehouse))
-            {
-                var ids = filterCol_fromwarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    filteredQuery = filteredQuery.Where(t => ids.Contains(t.FromWarehouseId));
-            }
+            var totalCount = await filteredQuery.CountAsync();
+            var totalPostedFiltered = await filteredQuery.CountAsync(t => t.IsPosted);
+            ViewBag.TotalPostedFiltered = totalPostedFiltered;
+            ViewBag.TotalUnpostedFiltered = totalCount - totalPostedFiltered;
 
-            if (!string.IsNullOrWhiteSpace(filterCol_towarehouse))
-            {
-                var ids = filterCol_towarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    filteredQuery = filteredQuery.Where(t => ids.Contains(t.ToWarehouseId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_note))
-            {
-                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
-                if (vals.Count > 0)
-                    filteredQuery = filteredQuery.Where(t => t.Note != null && vals.Contains(t.Note));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_date))
-            {
-                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    filteredQuery = filteredQuery.Where(t => dates.Contains(t.TransferDate.Date));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_created))
-            {
-                var dates = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    filteredQuery = filteredQuery.Where(t => dates.Contains(t.CreatedAt.Date));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_updated))
-            {
-                var dates = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    filteredQuery = filteredQuery.Where(t => t.UpdatedAt.HasValue && dates.Contains(t.UpdatedAt.Value.Date));
-            }
-
-            // بعد الفلاتر نضيف الـ Include (مش هتأثر على نوع المتغير)
             var query = filteredQuery
-                .Include(t => t.FromWarehouse)    // متغير: جلب بيانات المخزن المصدر
-                .Include(t => t.ToWarehouse);     // متغير: جلب بيانات المخزن الوجهة
+                .Include(t => t.FromWarehouse)
+                .Include(t => t.ToWarehouse);
 
-            // إنشاء نتيجة مقسمة إلى صفحات باستخدام PagedResult
-            var result = await PagedResult<StockTransfer>.CreateAsync(
-                query,
-                page,
-                pageSize,
-                search,
-                descending,
-                sort,
-                searchBy
-            );
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
 
-            // تعبئة خصائص إضافية داخل الـ PagedResult حتى تستخدمها الواجهة (الفلاتر)
-            result.SearchBy = searchBy;
-            result.SortColumn = sort;
-            result.SortDescending = descending;
-            result.UseDateRange = useDateRange;
-            result.FromDate = fromDate;
-            result.ToDate = toDate;
-            // FromCode / ToCode غير موجودة في PagedResult حالياً، فهنستخدم ViewBag لهم
+            var skip = (page - 1) * effectivePageSize;
+            if (totalCount > 0 && skip >= totalCount)
+            {
+                page = Math.Max(1, (int)Math.Ceiling((double)totalCount / effectivePageSize));
+                skip = (page - 1) * effectivePageSize;
+            }
 
-            // نرسل قيم من/إلى كود للواجهة عن طريق ViewBag
+            var items = await query.Skip(skip).Take(effectivePageSize).ToListAsync();
+            var result = new PagedResult<StockTransfer>(items, page, pageSize, totalCount)
+            {
+                Search = search ?? "",
+                SearchBy = searchBy,
+                SortColumn = sort,
+                SortDescending = descending,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
+
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
-
-            // حفظ قيم الترتيب في ViewBag عشان الـ sortLink في الواجهة
             ViewBag.Sort = sort;
             ViewBag.Dir = descending ? "desc" : "asc";
+            ViewBag.SearchMode = sm;
+            ViewBag.PageSize = pageSize;
 
-            // تمرير فلاتر الأعمدة إلى الواجهة
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr ?? string.Empty;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_FromWarehouse = filterCol_fromwarehouse;
+            ViewBag.FilterCol_FromWarehouseExpr = filterCol_fromwarehouseExpr ?? string.Empty;
             ViewBag.FilterCol_ToWarehouse = filterCol_towarehouse;
+            ViewBag.FilterCol_ToWarehouseExpr = filterCol_towarehouseExpr ?? string.Empty;
             ViewBag.FilterCol_Note = filterCol_note;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
@@ -220,7 +203,8 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode
+            int? toCode,
+            string searchMode = "contains"
         )
         {
             // 1) فلتر التاريخ (نستخدم تاريخ التحويل)
@@ -245,52 +229,90 @@ namespace ERP.Controllers
                 query = query.Where(t => t.Id <= codeTo);
             }
 
-            // 3) البحث العام/المتخصص
+            // 3) البحث العام/المتخصص (يبدأ بـ / يحتوي / ينتهي بـ)
             if (!string.IsNullOrWhiteSpace(search))
             {
-                string term = search.Trim();
+                string term = NormalizeArabicDigitsToLatin(search.Trim());
+                var termLower = term.ToLowerInvariant();
                 searchBy = searchBy?.ToLowerInvariant();
+                var sm = searchMode;
+                if (sm != "starts" && sm != "ends") sm = "contains";
 
                 switch (searchBy)
                 {
                     case "id":
-                        if (int.TryParse(term, out int idValue))
+                        if (int.TryParse(term, NumberStyles.Any, CultureInfo.InvariantCulture, out int idValue))
                             query = query.Where(t => t.Id == idValue);
                         else
-                            query = query.Where(t => false);
+                        {
+                            query = sm switch
+                            {
+                                "starts" => query.Where(t => t.Id.ToString().StartsWith(term)),
+                                "ends" => query.Where(t => t.Id.ToString().EndsWith(term)),
+                                _ => query.Where(t => t.Id.ToString().Contains(term))
+                            };
+                        }
                         break;
 
                     case "fromwarehouse":
-                        query = query.Where(t =>
-                            t.FromWarehouseId.ToString().Contains(term));
+                        query = sm switch
+                        {
+                            "starts" => query.Where(t => t.FromWarehouseId.ToString().StartsWith(term)),
+                            "ends" => query.Where(t => t.FromWarehouseId.ToString().EndsWith(term)),
+                            _ => query.Where(t => t.FromWarehouseId.ToString().Contains(term))
+                        };
                         break;
 
                     case "towarehouse":
-                        query = query.Where(t =>
-                            t.ToWarehouseId.ToString().Contains(term));
+                        query = sm switch
+                        {
+                            "starts" => query.Where(t => t.ToWarehouseId.ToString().StartsWith(term)),
+                            "ends" => query.Where(t => t.ToWarehouseId.ToString().EndsWith(term)),
+                            _ => query.Where(t => t.ToWarehouseId.ToString().Contains(term))
+                        };
                         break;
 
                     case "note":
-                        query = query.Where(t =>
-                            t.Note != null && t.Note.Contains(term));
+                        query = sm switch
+                        {
+                            "starts" => query.Where(t => t.Note != null && t.Note.ToLower().StartsWith(termLower)),
+                            "ends" => query.Where(t => t.Note != null && t.Note.ToLower().EndsWith(termLower)),
+                            _ => query.Where(t => t.Note != null && t.Note.ToLower().Contains(termLower))
+                        };
                         break;
 
                     case "date":
-                        if (DateTime.TryParse(term, out DateTime d))
+                    {
+                        DateTime? parsed = null;
+                        if (DateTime.TryParse(term, CultureInfo.InvariantCulture, DateTimeStyles.None, out var d1))
+                            parsed = d1;
+                        else if (DateTime.TryParse(term, out var d2))
+                            parsed = d2;
+                        if (parsed.HasValue)
                         {
-                            DateTime dFrom = d.Date;
-                            DateTime dTo = d.Date.AddDays(1).AddTicks(-1);
+                            DateTime dFrom = parsed.Value.Date;
+                            DateTime dTo = parsed.Value.Date.AddDays(1).AddTicks(-1);
                             query = query.Where(t => t.TransferDate >= dFrom && t.TransferDate <= dTo);
                         }
                         break;
+                    }
 
                     case "all":
                     default:
                         query = query.Where(t =>
-                            t.Id.ToString().Contains(term) ||
-                            t.FromWarehouseId.ToString().Contains(term) ||
-                            t.ToWarehouseId.ToString().Contains(term) ||
-                            (t.Note != null && t.Note.Contains(term)));
+                            (sm == "starts" && t.Id.ToString().StartsWith(term)) ||
+                            (sm == "ends" && t.Id.ToString().EndsWith(term)) ||
+                            (sm == "contains" && t.Id.ToString().Contains(term)) ||
+                            (sm == "starts" && t.FromWarehouseId.ToString().StartsWith(term)) ||
+                            (sm == "ends" && t.FromWarehouseId.ToString().EndsWith(term)) ||
+                            (sm == "contains" && t.FromWarehouseId.ToString().Contains(term)) ||
+                            (sm == "starts" && t.ToWarehouseId.ToString().StartsWith(term)) ||
+                            (sm == "ends" && t.ToWarehouseId.ToString().EndsWith(term)) ||
+                            (sm == "contains" && t.ToWarehouseId.ToString().Contains(term)) ||
+                            (t.Note != null && (
+                                (sm == "starts" && t.Note.ToLower().StartsWith(termLower)) ||
+                                (sm == "ends" && t.Note.ToLower().EndsWith(termLower)) ||
+                                (sm == "contains" && t.Note.ToLower().Contains(termLower)))));
                         break;
                 }
             }
@@ -768,31 +790,34 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> Export(
             string? search,
-            string? searchBy = "all",     // متغير: نوع البحث (كل الحقول / كود / من مخزن / إلى مخزن / ...)
-            string? sort = "id",          // متغير: عمود الترتيب الافتراضي
-            string? dir = "asc",          // متغير: اتجاه الترتيب asc / desc
-            bool useDateRange = false,    // متغير: هل نستخدم فلتر التاريخ أم لا
-            DateTime? fromDate = null,    // متغير: تاريخ من
-            DateTime? toDate = null,      // متغير: تاريخ إلى
-            int? fromCode = null,         // متغير: فلتر من كود
-            int? toCode = null,           // متغير: فلتر إلى كود
+            string? searchBy = "all",
+            string? searchMode = "contains",
+            string? sort = "id",
+            string? dir = "asc",
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            int? fromCode = null,
+            int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_fromwarehouse = null,
+            string? filterCol_fromwarehouseExpr = null,
             string? filterCol_towarehouse = null,
+            string? filterCol_towarehouseExpr = null,
             string? filterCol_note = null,
             string? filterCol_created = null,
             string? filterCol_updated = null,
-            string format = "excel")      // excel | csv (الاثنين حالياً يخرجوا CSV)
+            string format = "excel")
         {
-            // متغير: هل الترتيب تنازلي؟
             bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-            // 1) نبني الاستعلام الأساسي بدون فلاتر (مع عدم التتبع لتحسين الأداء)
-            IQueryable<StockTransfer> baseQuery = _context.StockTransfers
-                .AsNoTracking();
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
-            // 2) نطبق الفلاتر والترتيب بنفس دالة Index (نفس النتائج العامة تماماً)
+            IQueryable<StockTransfer> baseQuery = _context.StockTransfers.AsNoTracking();
+
             var filtered = ApplyFiltersAndSorting(
                 baseQuery,
                 search,
@@ -803,70 +828,21 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                sm);
 
-            // 2.1 فلاتر الأعمدة (بنفس منطق Index)
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
-            {
-                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    filtered = filtered.Where(t => ids.Contains(t.Id));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_fromwarehouse))
-            {
-                var ids = filterCol_fromwarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    filtered = filtered.Where(t => ids.Contains(t.FromWarehouseId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_towarehouse))
-            {
-                var ids = filterCol_towarehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    filtered = filtered.Where(t => ids.Contains(t.ToWarehouseId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_note))
-            {
-                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
-                if (vals.Count > 0)
-                    filtered = filtered.Where(t => t.Note != null && vals.Contains(t.Note));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_date))
-            {
-                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    filtered = filtered.Where(t => dates.Contains(t.TransferDate.Date));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_created))
-            {
-                var dates = filterCol_created.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    filtered = filtered.Where(t => dates.Contains(t.CreatedAt.Date));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_updated))
-            {
-                var dates = filterCol_updated.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    filtered = filtered.Where(t => t.UpdatedAt.HasValue && dates.Contains(t.UpdatedAt.Value.Date));
-            }
+            filtered = StockTransferColumnFilter.ApplyColumnFilters(
+                filtered,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_fromwarehouse,
+                filterCol_fromwarehouseExpr,
+                filterCol_towarehouse,
+                filterCol_towarehouseExpr,
+                filterCol_note,
+                filterCol_date,
+                filterCol_created,
+                filterCol_updated);
 
             // 3) نضيف Include لجلب أسماء/أكواد المخازن (من/إلى)
             var query = filtered

@@ -1,6 +1,7 @@
 // erp-list-selectable.js
 // سكربت مشترك: اختيار صف من الجدول + أزرار عرض/حذف في الشريط (نمط الخزينة)
-// الاستخدام: ERP.initListSelection({ rowSelector?, showButtonId, showTabId?, deleteButtonId?, deleteFormId?, movementButtonId?, movementUrlAttribute?, movementTabTitle?, movementTabId?, idAttribute?, showUrlAttribute?, tabTitleAttribute?, deleteConfirmMessage? })
+// الاستخدام: ERP.initListSelection({ rowSelector?, showButtonId?, showTabId?, editButtonId?, editUrlAttribute?, editTabId?, deleteButtonId?, deleteFormId?, movementButtonId?, movementUrlAttribute?, movementTabTitle?, movementTabId?, idAttribute?, showUrlAttribute?, tabTitleAttribute?, deleteConfirmMessage?, multiSelectCheckboxes? })
+// multiSelectCheckboxes: true = خانات التحديد مستقلة (تعدد للحذف الجماعي)، والنقر على الصف يحدد صفاً واحداً لزر العرض فقط دون مسح باقي الخانات
 // showTabId: معرف تاب ثابت لزر العرض (مثل si-show-tab) لإعادة استخدام نفس التاب بدل list-show-{id}
 // movementTabId: نفس الفكرة لزر الحركة (اختياري)
 
@@ -27,10 +28,13 @@
 
     function init(options) {
         if (!options) return;
-        if (!options.showButtonId && !options.movementButtonId) return;
+        if (!options.showButtonId && !options.movementButtonId && !options.editButtonId && !options.deleteButtonId) return;
 
         var rowSelector = options.rowSelector || '.erp-list-selectable-row';
         var showButtonId = options.showButtonId || '';
+        var editButtonId = options.editButtonId || '';
+        var editUrlAttribute = options.editUrlAttribute || 'data-edit-url';
+        var editTabIdFixed = (options.editTabId && String(options.editTabId).trim()) ? String(options.editTabId).trim() : '';
         var deleteButtonId = options.deleteButtonId || '';
         var deleteFormId = options.deleteFormId || '';
         var movementButtonId = options.movementButtonId || '';
@@ -43,9 +47,11 @@
         var showTabIdFixed = (options.showTabId && String(options.showTabId).trim()) ? String(options.showTabId).trim() : '';
         var movementTabIdFixed = (options.movementTabId && String(options.movementTabId).trim()) ? String(options.movementTabId).trim() : '';
         var deleteConfirmMessage = options.deleteConfirmMessage;
+        var multiSelectCheckboxes = options.multiSelectCheckboxes === true;
         var openInTab = typeof options.openInTab === 'function' ? options.openInTab : openInTabDefault;
 
         var btnShow = showButtonId ? document.getElementById(showButtonId) : null;
+        var btnEdit = editButtonId ? document.getElementById(editButtonId) : null;
         var btnDelete = deleteButtonId ? document.getElementById(deleteButtonId) : null;
         var btnMovement = movementButtonId ? document.getElementById(movementButtonId) : null;
         var deleteForm = deleteFormId ? document.getElementById(deleteFormId) : null;
@@ -55,6 +61,7 @@
         function updateButtons() {
             if (!selectedRow) {
                 if (btnShow) btnShow.disabled = true;
+                if (btnEdit) btnEdit.disabled = true;
                 if (btnDelete) btnDelete.disabled = true;
                 if (btnMovement) btnMovement.disabled = true;
                 return;
@@ -62,6 +69,10 @@
             if (btnShow) {
                 var showUrl = selectedRow.getAttribute(showUrlAttribute);
                 btnShow.disabled = !showUrl;
+            }
+            if (btnEdit) {
+                var editUrl = selectedRow.getAttribute(editUrlAttribute);
+                btnEdit.disabled = !editUrl;
             }
             if (btnDelete) btnDelete.disabled = false;
             if (btnMovement) {
@@ -71,6 +82,7 @@
         }
 
         function syncRowSelectCheckboxes() {
+            if (multiSelectCheckboxes) return;
             document.querySelectorAll(rowSelector).forEach(function (r) {
                 var c = r.querySelector('input.row-select[type="checkbox"]');
                 if (c) c.checked = (r === selectedRow);
@@ -79,7 +91,7 @@
 
         rows.forEach(function (row) {
             row.addEventListener('click', function (e) {
-                if (e.target.closest('button') || e.target.closest('input[type="checkbox"]')) return;
+                if (e.target.closest('a') || e.target.closest('button') || e.target.closest('input[type="checkbox"]')) return;
                 if (e.target.closest('input:not(.row-select)') || e.target.closest('textarea') || e.target.closest('select')) return;
                 document.querySelectorAll(rowSelector).forEach(function (r) { r.classList.remove('selected'); });
                 row.classList.add('selected');
@@ -92,6 +104,9 @@
             if (rowCb) {
                 rowCb.addEventListener('change', function (e) {
                     e.stopPropagation();
+                    if (multiSelectCheckboxes) {
+                        return;
+                    }
                     if (rowCb.checked) {
                         document.querySelectorAll(rowSelector).forEach(function (r) {
                             r.classList.remove('selected');
@@ -123,6 +138,19 @@
                 }
                 if (!tabId) tabId = 'list-show-' + id;
                 openInTab(tabId, url, title);
+            });
+        }
+
+        if (btnEdit) {
+            btnEdit.addEventListener('click', function (e) {
+                e.preventDefault();
+                if (!selectedRow) return;
+                var url = selectedRow.getAttribute(editUrlAttribute);
+                if (!url) return;
+                var id = selectedRow.getAttribute(idAttribute) || '';
+                var title = selectedRow.getAttribute(tabTitleAttribute) || '';
+                var tabId = editTabIdFixed || ('list-edit-' + id);
+                openInTab(tabId, url, title || 'تعديل');
             });
         }
 

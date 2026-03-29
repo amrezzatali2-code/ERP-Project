@@ -58,7 +58,7 @@
             <form asp-action="ImportProductOpeningBalance" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
                 @Html.AntiForgeryToken()
                 <div class="col-md-7">
-                    <label class="form-label">نفس ملف الأصناف (Excel) — يقرأ الأعمدة: صنف، مخزن، كمية، مرجح، إجمالي التكلفة، تكلفة العلبة، سعر الجمهور</label>
+                    <label class="form-label">نفس ملف الأصناف (Excel) — صنف، مخزن، كمية، مرجح، إجمالي التكلفة، تكلفة العلبة، سعر الجمهور، واختياري: التشغيلة + الصلاحية معاً (تُسجَّل في Batch وStockLedger وتُزامن Stock_Batches)</label>
                     <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" required />
                     <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colProductBal</small>
                 </div>
@@ -98,43 +98,10 @@
         </div>
     </div>
 
-    @* ========== 3ب) استيراد المناطق من عمود «المنطقة» في ملف إكسل ========== *@
     @{
         var govList = ViewBag.Governorates as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
         var distList = ViewBag.Districts as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
-        var colRegions = string.Join("، ", ExcelImportColumns.Regions);
     }
-    <div class="card mb-3 border-success">
-        <div class="card-header bg-light"><strong>استيراد المناطق من ملف إكسل (عمود المنطقة)</strong></div>
-        <div class="card-body">
-            <p class="text-muted small mb-3">
-                يقرأ القيم المميزة من عمود <strong>«المنطقة»</strong> في الملف وينشئ لها سجلات في جدول المناطق. يمكن استخدام نفس ملف العملاء (يُقرأ عمود المنطقة فقط).
-            </p>
-            <form asp-action="ImportRegionsFromExcel" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
-                @Html.AntiForgeryToken()
-                <div class="col-md-3">
-                    <label class="form-label">ملف إكسل (يحتوي عمود المنطقة)</label>
-                    <input type="file" name="excelFile" class="form-control form-control-sm" accept=".xlsx,.xls" required />
-                    <small class="text-muted d-block mt-1">أسماء العمود: @colRegions</small>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">المحافظة (اختياري)</label>
-                    <select name="governorateId" class="form-select form-select-sm" asp-items="govList">
-                        <option value="">— أول محافظة —</option>
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label">الحي (اختياري)</label>
-                    <select name="districtId" class="form-select form-select-sm" asp-items="distList">
-                        <option value="">— أول حي —</option>
-                    </select>
-                </div>
-                <div class="col-md-2 d-grid">
-                    <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد المناطق</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <div class="card mb-3 border-secondary">
         <div class="card-header bg-light"><strong>أو: إنشاء مناطق من أسماء المناطق النصية للعملاء</strong></div>
@@ -163,16 +130,31 @@
         </div>
     </div>
 
-    @* ========== 4) ملف قائمة العملاء ========== *@
+    @* ========== 4) ملف قائمة العملاء (مع عمود المنطقة — إنشاء مناطق جديدة عند الحاجة) ========== *@
     <div class="card mb-3">
         <div class="card-header bg-light"><strong>استيراد قائمة العملاء</strong></div>
         <div class="card-body">
+            <p class="text-muted small mb-3">
+                عمود <strong>«المنطقة»</strong> في الملف: إن وُجد الاسم في جدول المناطق يُربط العميل به؛ وإن لم يوجد يُنشأ سجل منطقة جديد تحت المحافظة والحي المختارين أدناه (أو أول محافظة/حي في النظام إن تُرك الحقلان فارغين).
+            </p>
             <form asp-action="ImportCustomers" asp-controller="Products" method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
                 @Html.AntiForgeryToken()
-                <div class="col-md-7">
+                <div class="col-md-5">
                     <label class="form-label">ملف قائمة العملاء (Excel)</label>
                     <input type="file" name="excelFile" class="form-control" accept=".xlsx,.xls" required />
                     <small class="text-muted d-block mt-1"><strong>أعمدة ثابتة (تُتجاهل الزيادة):</strong> @colCustomers</small>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">المحافظة (للمناطق الجديدة)</label>
+                    <select name="governorateId" class="form-select form-select-sm" asp-items="govList">
+                        <option value="">— أول محافظة —</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">الحي (للمناطق الجديدة)</label>
+                    <select name="districtId" class="form-select form-select-sm" asp-items="distList">
+                        <option value="">— أول حي —</option>
+                    </select>
                 </div>
                 <div class="col-md-2 d-grid">
                     <button type="submit" class="btn btn-erp btn-erp-primary btn-import-submit">استيراد العملاء</button>

@@ -958,8 +958,7 @@
 
                         <button type="button" id="btnDeleteSelectedInvoiceLine"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
-                                data-lock-posted="1"
-                                title="يُمسح السطر المحدد في الجدول (اضغط على سطر التشغيلة أولاً)">
+                                data-lock-posted="1">
                             🗑️ مسح السطر المحدد
                         </button>
 
@@ -2494,6 +2493,8 @@
                         const batchQueueBody = document.getElementById('BatchQueueBody'); // متغير: جسم جدول التشغيلات (tbody)
                         const prodBatchSelect = document.getElementById('ProdBatchSelect'); // متغير: دروب داون اختيار التشغيلة (تجاوز FIFO)
                         let currentProductBatches = []; // متغير: قائمة التشغيلات الحالية (من GetSalesProductInfo) لاستخدامها عند تغيير الاختيار
+                        let __siServerWarehouseQty = null; // رصيد المخزن من آخر GetSalesProductInfo (أساس معاينة كمية البيع)
+                        let __siServerAllQty = null;       // إجمالي الكمية من السيرفر (نفس الأساس)
                         /** تعبئة اسم الصنف من سطر الجدول تُطلق input؛ نمنع فتح قائمة البحث في هذه الحالة */
                         let suppressProductDropdownOnce = false;
 
@@ -2585,6 +2586,89 @@
                         // دالة: تنسيق رقم (رقمين عشريين)
                         function fmt2(val) {
                             return parseDecimalSafe(val).toFixed(2);
+                        }
+
+                        // =========================================================
+                        // جدول التشغيلات (FEFO): معاينة الكميات المتبقية بعد كمية البيع في سطر الإضافة
+                        // (نفس ترتيب السيرفر؛ يخصم من أول تشغيلة ثم التالية)
+                        // =========================================================
+                        function syncBatchQueueHighlightRow() {
+                            if (!batchQueueBody) return;
+                            let idx = 0;
+                            const selInRow = document.getElementById('ProdBatchSelectInRow');
+                            if (selInRow && !selInRow.classList.contains('d-none') && selInRow.value) {
+                                const p = parseInt(selInRow.value, 10);
+                                if (!isNaN(p)) idx = p;
+                            } else if (prodBatchSelect && prodBatchSelect.value) {
+                                const p = parseInt(prodBatchSelect.value, 10);
+                                if (!isNaN(p)) idx = p;
+                            }
+                            batchQueueBody.querySelectorAll('tr[data-batch-index]').forEach(function (tr) {
+                                const i = parseInt(tr.getAttribute('data-batch-index'), 10);
+                                tr.classList.toggle('table-success', i === idx);
+                            });
+                        }
+
+                        /** توزيع رصيد المخزن الرسمي على التشغيلات بترتيب FEFO (يتطابق مع qtyCurrentWarehouse حتى لو مجموع الدفتر ≠ الرصيد) */
+                        function allocateWarehouseQtyToBatchesFefo(batches, warehouseCap) {
+                            if (warehouseCap == null || !Number.isFinite(Number(warehouseCap))) {
+                                return batches.map(function (b) {
+                                    return Math.max(0, Number(b.qty ?? 0) || 0);
+                                });
+                            }
+                            let need = Math.max(0, Number(warehouseCap));
+                            return batches.map(function (b) {
+                                const orig = Math.max(0, Number(b.qty ?? 0) || 0);
+                                const take = Math.min(need, orig);
+                                need -= take;
+                                return take;
+                            });
+                        }
+
+                        /** طرح كمية البيع من الكميات الموزّعة (FEFO) */
+                        function subtractSaleFromAllocated(allocQtys, saleQty) {
+                            let need = Math.max(0, parseInt(saleQty, 10) || 0);
+                            return allocQtys.map(function (a) {
+                                const avail = Math.max(0, Number(a) || 0);
+                                const take = Math.min(need, avail);
+                                need -= take;
+                                return avail - take;
+                            });
+                        }
+
+                        function renderBatchQueueRowsWithRemaining(lineSaleQty) {
+                            if (!batchQueueBody) return;
+                            const batches = currentProductBatches || [];
+                            if (!batches.length) {
+                                batchQueueBody.innerHTML = `<tr><td colspan="6" class="text-muted">لا توجد تشغيلات متاحة لهذا الصنف في هذا المخزن.</td></tr>`;
+                                return;
+                            }
+                            const alloc = allocateWarehouseQtyToBatchesFefo(batches, __siServerWarehouseQty);
+                            const remainingQtys = subtractSaleFromAllocated(alloc, lineSaleQty);
+                            batchQueueBody.innerHTML = batches.map((b, idx) => {
+                                const remaining = remainingQtys[idx];
+                                return `
+                                <tr class="${idx === 0 ? 'table-success' : ''}" data-batch-index="${idx}">
+                                    <td>${idx + 1}</td>
+                                    <td>${b.batchNo || ''}</td>
+                                    <td>${b.expiryText || ''}</td>
+                                    <td>${remaining}</td>
+                                    <td>${fmt2(b.priceRetailBatch ?? 0)}</td>
+                                    <td>${fmt2(b.weightedDiscount ?? 0)}</td>
+                                </tr>`;
+                            }).join('');
+                            syncBatchQueueHighlightRow();
+                        }
+
+                        function applyLineQtyPreviewToProductCard() {
+                            const sale = Math.max(0, parseInt(prodQtyInput?.value || '0', 10) || 0);
+                            if (__siServerWarehouseQty != null && prodQtyWarehouse) {
+                                prodQtyWarehouse.value = String(Math.max(0, __siServerWarehouseQty - sale));
+                            }
+                            if (__siServerAllQty != null && prodQtyAll) {
+                                prodQtyAll.value = String(Math.max(0, __siServerAllQty - sale));
+                            }
+                            renderBatchQueueRowsWithRemaining(sale);
                         }
 
                         // =========================================================
@@ -2835,6 +2919,10 @@
 
                                 if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
                                 if (prodQtyAll)       prodQtyAll.value       = '0';
+                                __siServerWarehouseQty = null;
+                                __siServerAllQty = null;
+                                currentProductBatches = [];
+                                if (batchQueueBody) batchQueueBody.innerHTML = `<tr><td colspan="6" class="text-muted">لا توجد تشغيلات بعد.</td></tr>`;
 
                                 if (prodAltSelect) {
                                     prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
@@ -2931,6 +3019,9 @@
                         console.warn('⚠️ GetSalesProductInfo فشل:', data?.message || 'no data');
 
                         // تفريغ سريع لو فشل
+                        __siServerWarehouseQty = null;
+                        __siServerAllQty = null;
+                        currentProductBatches = [];
                         if (prodQtyWarehouse) prodQtyWarehouse.value = '0';
                         if (prodQtyAll) prodQtyAll.value = '0';
                         if (prodWeightedDisc) prodWeightedDisc.value = '0';
@@ -2941,10 +3032,6 @@
                         if (probatchInputFail) probatchInputFail.classList.remove('d-none');
                         return;
                     }
-
-                    // 1) تعبئة كميات كارت 2
-                    if (prodQtyWarehouse) prodQtyWarehouse.value = (data.qtyCurrentWarehouse ?? 0);
-                    if (prodQtyAll)       prodQtyAll.value       = (data.qtyAllWarehouses ?? 0);
 
                     // 2) كوتة
                     if (prodQuotaText) prodQuotaText.value = (data.quotaText ?? 'بدون كوتة').toString();
@@ -2971,26 +3058,12 @@
                     }
 
 
-                    // 4) جدول تشغيلات FEFO (كارت 2) + دروب داون اختيار التشغيلة (تجاوز FIFO)
+                    // 4) جدول تشغيلات FEFO (كارت 2) + معاينة كمية البيع + دروب داون اختيار التشغيلة (تجاوز FIFO)
                     const batches = data.batches || [];
                     currentProductBatches = batches;
-
-                    if (batchQueueBody) {
-                        if (!batches.length) {
-                            batchQueueBody.innerHTML = `<tr><td colspan="6" class="text-muted">لا توجد تشغيلات متاحة لهذا الصنف في هذا المخزن.</td></tr>`;
-                        } else {
-                            batchQueueBody.innerHTML = batches.map((b, idx) => `
-                                <tr class="${idx === 0 ? 'table-success' : ''}" data-batch-index="${idx}">
-                                    <td>${idx + 1}</td>
-                                    <td>${b.batchNo || ''}</td>
-                                    <td>${b.expiryText || ''}</td>
-                                    <td>${b.qty ?? 0}</td>
-                                    <td>${fmt2(b.priceRetailBatch ?? 0)}</td>
-                                    <td>${fmt2(b.weightedDiscount ?? 0)}</td>
-                                </tr>
-                            `).join('');
-                        }
-                    }
+                    __siServerWarehouseQty = Number(data.qtyCurrentWarehouse ?? 0);
+                    __siServerAllQty = Number(data.qtyAllWarehouses ?? 0);
+                    applyLineQtyPreviewToProductCard();
 
                     if (prodBatchSelect) {
                         prodBatchSelect.innerHTML = '';
@@ -3940,9 +4013,18 @@
                     // مسح سطر واحد (AJAX) — زر «مسح السطر المحدد» في كارت الإجراءات
                     // ===============================
                     window.removeInvoiceLineAjax = async function (lineNo, triggerEl) {
-                        const siId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10);
-                        if (!siId || siId <= 0) { alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.'); return; }
-                        if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
+                        // InvoiceId (الشريط الجانبي) يُحدَّث بعد SaveHeader؛ NavCurrentId داخل الـ body قد يبقى 0 — نفس أولوية زر الترحيل
+                        const siId = parseInt((document.getElementById('InvoiceId')?.value || document.getElementById('NavCurrentId')?.value || '0'), 10);
+                        if (!siId || siId <= 0) {
+                            if (typeof showToast === 'function') showToast('لا يمكن مسح سطر: رقم الفاتورة غير معروف.', 'warning');
+                            else alert('لا يمكن مسح سطر: رقم الفاتورة غير معروف.');
+                            return;
+                        }
+                        if (!lineNo || lineNo <= 0) {
+                            if (typeof showToast === 'function') showToast('لا يمكن مسح سطر: رقم السطر غير صحيح.', 'warning');
+                            else alert('لا يمكن مسح سطر: رقم السطر غير صحيح.');
+                            return;
+                        }
                         let okDelete = false;
                         if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
                             okDelete = await ERP.showConfirmModal({
@@ -3981,7 +4063,8 @@
                             }
                             if (!res.ok || !data || data.ok !== true) {
                                 const msg = (data && data.message) ? data.message : 'فشل مسح السطر.';
-                                alert(msg);
+                                if (typeof showToast === 'function') showToast(msg, 'danger');
+                                else alert(msg);
                                 return;
                             }
                             const lines = Array.isArray(data.lines) ? data.lines : [];
@@ -4001,16 +4084,18 @@
                             }
                             const okMsg = (data && data.message && String(data.message).trim()) ? String(data.message).trim() : 'تم مسح الصنف بنجاح';
                             if (typeof showToast === 'function') {
-                                showToast(okMsg, 'success', 4500);
+                                showToast(okMsg, 'success', 1000);
                             }
                             const prodInput = document.getElementById('ProdNameInput');
                             if (prodInput) { prodInput.focus(); prodInput.select && prodInput.select(); }
                         } catch (e) {
                             console.error(e);
                             if (e && e.name === 'AbortError') {
-                                alert('التنفيذ أخذ وقت طويل. حاول مرة أخرى.');
+                                if (typeof showToast === 'function') showToast('التنفيذ أخذ وقت طويل. حاول مرة أخرى.', 'warning');
+                                else alert('التنفيذ أخذ وقت طويل. حاول مرة أخرى.');
                             } else {
-                                alert('حدث خطأ أثناء مسح السطر.');
+                                if (typeof showToast === 'function') showToast('حدث خطأ أثناء مسح السطر.', 'danger');
+                                else alert('حدث خطأ أثناء مسح السطر.');
                             }
                         } finally {
                             clearTimeout(timeoutId);
@@ -4209,130 +4294,6 @@
                     }
 
 
-                               // =========================================================
-                     // ✅ دالة: تحديث بيانات الصنف بعد الإضافة
-                     // - تعالج مشكلة: الكمية/الخصم لا تتحدث إلا عند اختيار الصنف مرة أخرى
-                     // - تعتمد على IDs الفعلية الموجودة في Show.cshtml عندك
-                     // =========================================================
-                     async function refreshProductInfoAfterAddLine(prodId) {
-
-                         // =========================
-                         // 0) تأكيد بداية التنفيذ (للتتبع)
-                         // =========================
-                         console.log('refreshProductInfoAfterAddLine START - prodId =', prodId);
-
-                         // =========================
-                         // 1) قراءة المخزن المختار
-                         // =========================
-                         const whEl = document.getElementById('WarehouseId');          // متغير: كود المخزن (Select)
-                         const warehouseId = whEl ? parseInt(whEl.value || '0', 10) : 0; // متغير: رقم المخزن كـ int
-
-                         // تأكيدات حماية
-                         const pid = parseInt((prodId || '0').toString(), 10) || 0;    // متغير: رقم الصنف كـ int
-                         if (pid <= 0) {
-                             console.warn('refreshProductInfoAfterAddLine: prodId invalid =', prodId);
-                             return;
-                         }
-                         if (warehouseId <= 0) {
-                             console.warn('refreshProductInfoAfterAddLine: warehouseId invalid =', warehouseId);
-                             return;
-                         }
-
-                         // =========================
-                         // 2) استدعاء API بيانات الصنف (GET)
-                         // =========================
-                         const customerId = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
-                         const url = `/SalesInvoices/GetSalesProductInfo?prodId=${pid}&warehouseId=${warehouseId}&customerId=${customerId}`;
-                         console.log('refreshProductInfoAfterAddLine URL =', url);
-
-                         try {
-                             const resp = await fetch(url, { method: 'GET', headers: { 'Accept': 'application/json' } });
-
-                             if (!resp.ok) {
-                                 console.warn('GetSalesProductInfo HTTP error:', resp.status);
-                                 return;
-                             }
-
-                             const info = await resp.json();
-                             console.log('GetSalesProductInfo JSON =', info);
-
-                             // لو عندك شكل response: { ok: true, ... }
-                             if (!info || info.ok === false) {
-                                 console.warn('GetSalesProductInfo returned not ok:', info?.message);
-                                 return;
-                             }
-
-                             // =========================
-                             // 3) تحديث بوكسات "بيانات الصنف" (IDs الصحيحة)
-                             // =========================
-
-                             // متغير: الكمية في هذا المخزن
-                             const qtyWhBox = document.getElementById('ProdQtyCurrentWarehouse');
-                             if (qtyWhBox) qtyWhBox.value = (info.qtyCurrentWarehouse ?? 0).toString();
-
-                             // متغير: إجمالي الكمية في كل المخازن
-                             const qtyAllBox = document.getElementById('ProdQtyAllWarehouses');
-                             if (qtyAllBox) qtyAllBox.value = (info.qtyAllWarehouses ?? 0).toString();
-
-                             // متغير: الصنف عليه كوتة؟
-                             const quotaBox = document.getElementById('ProdQuotaText');
-                             if (quotaBox) quotaBox.value = (info.quotaText ?? 'بدون كوتة').toString();
-
-                             const bonusBox = document.getElementById('ProdBonusText');
-                             if (bonusBox) bonusBox.value = (info.bonusText ?? 'بدون بونص').toString();
-
-                             const groupBox = document.getElementById('ProdGroupText');
-                             if (groupBox) groupBox.value = (info.productGroupName ?? 'بدون مجموعة').toString();
-
-                             const groupPolicyBox = document.getElementById('ProdGroupPolicyText');
-                             if (groupPolicyBox) groupPolicyBox.value = (info.appliedGroupPolicyName ?? info.appliedGroupPolicyId ?? '').toString() || '—';
-
-                             // متغير: الخصم المرجح للصنف %
-                             const wdBox = document.getElementById('ProdWeightedDiscount');
-                             if (wdBox) {
-                                 const wd = Number(info.weightedDiscount ?? 0);
-                                 wdBox.value = (Number.isFinite(wd) && wd >= 0 && wd <= 100) ? Number(wd).toFixed(2) : '0.00';
-                             }
-
-                             // =========================
-                             // 4) تحديث جدول التشغيلات FEFO (BatchQueueBody)
-                             // =========================
-                             const batchesTbody = document.getElementById('BatchQueueBody');
-                             if (batchesTbody && Array.isArray(info.batches)) {
-
-                                 batchesTbody.innerHTML = '';
-
-                                 if (info.batches.length === 0) {
-                                     batchesTbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">لا توجد تشغيلات بعد.</td></tr>`;
-                                 } else {
-                                     info.batches.forEach((b, i) => {
-
-                                         // متغير: دور التشغيلة (FEFO)
-                                         const role = (b.role != null) ? b.role : (i + 1);
-
-                                         // ملاحظة: escapeHtml و fmt2 موجودين عندك بالفعل في الملف
-                                         const tr = document.createElement('tr');
-                                         tr.innerHTML = `
-                                             <td class="text-center">${role}</td>
-                                             <td class="text-center">${escapeHtml(b.batchNo || '')}</td>
-                                             <td class="text-center">${escapeHtml(b.expiryText || '')}</td>
-                                             <td class="text-center">${Number(b.qtyOnHand || 0)}</td>
-                                             <td class="text-center">${fmt2(b.priceRetailBatch || 0)}</td>
-                                         `;
-                                         batchesTbody.appendChild(tr);
-                                     });
-                                 }
-                             }
-
-                             console.log('refreshProductInfoAfterAddLine DONE');
-
-                         } catch (err) {
-                             console.error('refreshProductInfoAfterAddLine error:', err);
-                         }
-                     }
-
-
-
              // =========================================================
             // ✅ نظام حماية من تداخل طلبات التحديث (Race Condition)
             // - أي Refresh قديم يرجع متأخر لا يغيّر الشاشة
@@ -4385,13 +4346,11 @@
                     if (!info || info.ok === false) return;
 
                     // =========================
-                    // 1) تحديث بوكسات بيانات الصنف (IDs الصحيحة عندك)
+                    // 1) تحديث كميات المخزن/الإجمالي وجدول التشغيلات (معاينة كمية البيع الحالية)
                     // =========================
-                    const qtyWhBox = document.getElementById('ProdQtyCurrentWarehouse');
-                    if (qtyWhBox) qtyWhBox.value = (info.qtyCurrentWarehouse ?? 0).toString();
-
-                    const qtyAllBox = document.getElementById('ProdQtyAllWarehouses');
-                    if (qtyAllBox) qtyAllBox.value = (info.qtyAllWarehouses ?? 0).toString();
+                    if (typeof window.__siSyncProductCardAfterGetSalesProductInfo === 'function') {
+                        window.__siSyncProductCardAfterGetSalesProductInfo(info);
+                    }
 
                     const quotaBox = document.getElementById('ProdQuotaText');
                     if (quotaBox) quotaBox.value = (info.quotaText ?? 'بدون كوتة').toString();
@@ -4409,38 +4368,6 @@
                     if (wdBox) {
                         const wd = Number(info.weightedDiscount ?? 0);
                         wdBox.value = (Number.isFinite(wd) && wd >= 0 && wd <= 100) ? Number(wd).toFixed(2) : '0.00';
-                    }
-
-                    // =========================
-                    // 2) تحديث جدول التشغيلات (BatchQueueBody)
-                    // =========================
-                    const batchesTbody = document.getElementById('BatchQueueBody');
-                    if (batchesTbody && Array.isArray(info.batches)) {
-
-                        batchesTbody.innerHTML = '';
-
-                        if (info.batches.length === 0) {
-                            batchesTbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted">لا توجد تشغيلات بعد.</td></tr>`;
-                        } else {
-                            info.batches.forEach((b, i) => {
-                                const role = (b.role != null) ? b.role : (i + 1);
-
-                                const tr = document.createElement('tr');
-
-                                // ✅ هنا مصدر اللون الأخضر
-                                     //if (isAuto) tr.classList.add('table-success');
-
-                                tr.innerHTML = `
-                                    <td class="text-center">${role}</td>
-                                    <td class="text-center">${escapeHtml(b.batchNo || '')}</td>
-                                    <td class="text-center">${escapeHtml(b.expiryText || '')}</td>
-                                    <td class="text-center">${Number(b.qty ?? 0)}</td>  
-
-                                    <td class="text-center">${fmt2(b.priceRetailBatch || 0)}</td>
-                                `;
-                                batchesTbody.appendChild(tr);
-                            });
-                        }
                     }
 
                 } catch (err) {
@@ -4595,9 +4522,14 @@
                                 console.error('UI Update Error after AddLineJson:', uiErr);
                                 alert('تمت الإضافة في السيرفر، لكن حدث خطأ أثناء تحديث الجدول في الصفحة. راجع Console.');
                             }
-          
 
-
+                            // =========================================================
+                            // 6.4) تنظيف كمية البيع قبل جلب بيانات الصنف من السيرفر
+                            // السيرفر يعيد الرصيد بعد البيع؛ لو بقي ProdQtyInput يُطرح مرة ثانية في applyLineQtyPreviewToProductCard (خصم مزدوج)
+                            // =========================================================
+                            if (prodQtyInput) prodQtyInput.value = '';
+                            if (prodBatchInput) prodBatchInput.value = '';
+                            if (prodExpiryInput) prodExpiryInput.value = '';
 
              // =========================================================
             // 6.5) ✅ تحديث بيانات الصنف بعد الإضافة (منفصل عن تحديث الجدول)
@@ -4619,13 +4551,8 @@
                             // لا نغيّر الصنف المكتوب بعد الإضافة (نترك اسم الصنف كما هو، مثل طلب الشراء)
 
                             // =========================================================
-                            // 7) تنظيف الخانات + فوكس على اسم الصنف
+                            // 7) فوكس على اسم الصنف
                             // =========================================================
-                            if (prodQtyInput) prodQtyInput.value = '';
-                            if (prodBatchInput) prodBatchInput.value = '';
-                            if (prodExpiryInput) prodExpiryInput.value = '';
-
-                            // فوكس على اسم الصنف (مش الكود)
                             document.getElementById('ProdNameInput')?.focus();
                             document.getElementById('ProdNameInput')?.select?.();
 
@@ -4827,16 +4754,19 @@
                                 const tbody = document.getElementById('PILinesTbody');
                                 const selected = tbody ? tbody.querySelector('tr.erp-list-selectable-row.selected') : null;
                                 if (!selected) {
-                                    alert('من فضلك اضغط على سطر التشغيلة في الجدول أولاً لتحديده ثم اضغط مسح السطر المحدد.');
+                                    if (typeof showToast === 'function') showToast('من فضلك اضغط على سطر التشغيلة في الجدول أولاً لتحديده ثم اضغط مسح السطر المحدد.', 'warning');
+                                    else alert('من فضلك اضغط على سطر التشغيلة في الجدول أولاً لتحديده ثم اضغط مسح السطر المحدد.');
                                     return;
                                 }
                                 const lineNo = parseInt(selected.getAttribute('data-line-no') || '0', 10);
                                 if (!lineNo || lineNo <= 0) {
-                                    alert('سطر المجموعة لا يُمسح من هنا — اختر سطر تشغيلة محدداً (يظهر فيه رقم السطر والكمية).');
+                                    if (typeof showToast === 'function') showToast('سطر المجموعة لا يُمسح من هنا — اختر سطر تشغيلة محدداً (يظهر فيه رقم السطر والكمية).', 'warning');
+                                    else alert('سطر المجموعة لا يُمسح من هنا — اختر سطر تشغيلة محدداً (يظهر فيه رقم السطر والكمية).');
                                     return;
                                 }
                                 if (typeof window.removeInvoiceLineAjax !== 'function') {
-                                    alert('تعذّر مسح السطر.');
+                                    if (typeof showToast === 'function') showToast('تعذّر مسح السطر.', 'danger');
+                                    else alert('تعذّر مسح السطر.');
                                     return;
                                 }
                                 await window.removeInvoiceLineAjax(lineNo, btnDeleteSelectedLine);
@@ -4950,6 +4880,19 @@
                             const opt = findProductByCode(prodHiddenId.value);
                             if (opt) fillProductFromOption(opt);
                         }
+
+                        if (prodQtyInput) {
+                            prodQtyInput.addEventListener('input', applyLineQtyPreviewToProductCard);
+                            prodQtyInput.addEventListener('change', applyLineQtyPreviewToProductCard);
+                        }
+
+                        window.__siSyncProductCardAfterGetSalesProductInfo = function (info) {
+                            if (!info || info.ok === false) return;
+                            currentProductBatches = info.batches || [];
+                            __siServerWarehouseQty = Number(info.qtyCurrentWarehouse ?? 0);
+                            __siServerAllQty = Number(info.qtyAllWarehouses ?? 0);
+                            applyLineQtyPreviewToProductCard();
+                        };
 
                     })(); // نهاية IIFE الأصناف
 
@@ -5071,6 +5014,8 @@
                                       const newId = (data.invoiceId || data.siId || data.id || 0);
                                 const invoiceIdInput = document.getElementById('InvoiceId');
                                 if (newId > 0 && invoiceIdInput) invoiceIdInput.value = newId.toString();
+                                const navCurrentIdEl = document.getElementById('NavCurrentId');
+                                if (newId > 0 && navCurrentIdEl) navCurrentIdEl.value = newId.toString();
 
                                 const invoiceNumberDisplay = document.getElementById('InvoiceNumberDisplay');
                                 if (invoiceNumberDisplay) {
@@ -5236,7 +5181,7 @@
                                     return;
                                 }
 
-                                const ok = confirm("هل تريد مسح جميع الأصناف من الفاتورة؟");
+                                const ok = confirm("سيتم حذف جميع أصناف الفاتورة من الجدول. هل تريد المتابعة؟");
                                 if (!ok) return;
 
                                 busy = true;
@@ -6256,20 +6201,28 @@
                             }
                         }
 
-                        // ✅ زر التحديث في الناف بار: تحديث الفاتورة الحالية فقط (بدون فتح فاتورة جديدة)
+                        // ✅ زر «تحديث» في الناف بار: إعادة تحميل صفحة الفاتورة داخل الـ iframe (وليس استبدال PI_BodyHost فقط)
+                        // — استبدال الجسم فقط كان يترك سكربت أوتوكومبليت الأصناف مربوطاً بعقد DOM قديمة فيختفي التفاعل مع الداتاليست رغم بقاء السطور.
                         window.__ERP_REFRESH__ = function () {
-                            const currentId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10) || 0;
-                            const baseUrl = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url') || '@Url.Action("Show", "SalesInvoices", new { frame = 1 })';
-                            if (currentId > 0 && typeof loadInvoiceBody === 'function') {
+                            const currentId = parseInt((document.getElementById('InvoiceId')?.value || document.getElementById('NavCurrentId')?.value || '0'), 10) || 0;
+                            if (currentId <= 0) return;
+                            try {
+                                const baseShow = '@Url.Action("Show", "SalesInvoices")'.replace(/\/$/, '');
+                                const u = new URL(baseShow + '/' + encodeURIComponent(currentId), window.location.origin);
+                                u.searchParams.set('frame', '1');
+                                const chk = document.getElementById('chkIncludeZeroQty');
+                                if (chk && chk.checked) u.searchParams.set('includeZeroQty', 'true');
+                                else u.searchParams.delete('includeZeroQty');
+                                u.searchParams.set('_ts', String(Date.now()));
+                                window.location.replace(u.toString());
+                            } catch (e) {
+                                console.warn('__ERP_REFRESH__:', e);
                                 try {
-                                    const u = new URL(baseUrl, window.location.origin);
-                                    u.searchParams.set('id', currentId);
-                                    const chk = document.getElementById('chkIncludeZeroQty');
-                                    if (chk && chk.checked) u.searchParams.set('includeZeroQty', 'true');
-                                    loadInvoiceBody(u.toString());
-                                } catch (e) { console.warn('__ERP_REFRESH__:', e); }
+                                    const u2 = new URL(window.location.href);
+                                    u2.searchParams.set('_ts', String(Date.now()));
+                                    window.location.replace(u2.toString());
+                                } catch { window.location.reload(); }
                             }
-                            // لو فاتورة جديدة (currentId=0): لا نعيد التحميل حتى لا نفقد البيانات المدخلة
                         };
 
 

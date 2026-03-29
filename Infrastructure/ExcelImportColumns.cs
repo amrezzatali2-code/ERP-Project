@@ -25,12 +25,15 @@ namespace ERP.Infrastructure
             "الوصف", "Description",
             "الشكل الدوائي", "DosageForm",
             "Barcode", "الباركود",
-            "المنشأ", "Imported"
+            "المنشأ", "Imported",
+            "كمية الكرتونة", "CartonQuantity", "الكرتونة",
+            "كمية الباكو", "PackQuantity", "الباكو", "باكو"
         };
 
         /// <summary>
         /// استيراد أرصدة الأصناف (رصيد أول المدة) — دفتر الحركة المخزنية SourceType = Opening.
         /// مطلوب: الصنف (كود أو اسم)، الكمية، الخصم المرجح، إجمالي التكلفة. اختياري: كود المخزن.
+        /// التشغيلة + الصلاحية معاً: تُنشئ/تربط جدول Batch وتُسجّل في StockLedger ثم تُزامن Stock_Batches مع الدفتر.
         /// </summary>
         public static readonly IReadOnlyList<string> ProductOpeningBalance = new[]
         {
@@ -40,13 +43,16 @@ namespace ERP.Infrastructure
             "إجمالي التكلفة", "اجمالي التكلفة", "إجمالي تكلفة", "TotalCost",
             "تكلفة العلبة", "تكلفة الوحدة", "UnitCost",
             "سعر الجمهور", "PriceRetail", "PriceRetailBatch",
-            "كود المخزن", "WarehouseId", "المخزن"
+            "كود المخزن", "WarehouseId", "المخزن",
+            "التشغيلة", "التشغيله", "رقم التشغيلة", "رقم التشغيله", "BatchNo", "Batch",
+            "الصلاحية", "الصلاحيه", "Expiry", "تاريخ الصلاحية", "تاريخ الصلاحيه", "Expire"
         };
 
         /// <summary>
         /// استيراد قائمة العملاء.
         /// مطلوب: اسم العميل أو كود العميل (الاسم). الباقي اختياري.
         /// مسلسل → كود الإكسل (ExternalCode).
+        /// عمود المنطقة: يطابق مناطق موجودة أو يُنشئ مناطق جديدة (مع المحافظة/الحي في واجهة الاستيراد).
         /// </summary>
         public static readonly IReadOnlyList<string> Customers = new[]
         {
@@ -89,15 +95,6 @@ namespace ERP.Infrastructure
             "اسم المستخدم", "UserName", "اسم الدخول",
             "الاسم", "Name", "DisplayName",
             "البريد", "Email"
-        };
-
-        /// <summary>
-        /// استيراد المناطق من ملف إكسل — عمود المنطقة فقط.
-        /// </summary>
-        public static readonly IReadOnlyList<string> Regions = new[]
-        {
-            "اسم الكود", "كود المنطقة", "AreaId",
-            "المنطقة", "Region", "Area", "AreaName"
         };
 
         /// <summary>

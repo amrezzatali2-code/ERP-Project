@@ -79,6 +79,14 @@ namespace ERP.Models
         [Range(0, int.MaxValue, ErrorMessage = "كمية الكوتة يجب أن تكون رقمًا موجبًا")]
         public int? QuotaQuantity { get; set; }
 
+        [Display(Name = "كمية الكرتونة")]
+        [Range(0, int.MaxValue, ErrorMessage = "كمية الكرتونة يجب أن تكون رقمًا موجبًا")]
+        public int? CartonQuantity { get; set; }
+
+        [Display(Name = "كمية الباكو")]
+        [Range(0, int.MaxValue, ErrorMessage = "كمية الباكو يجب أن تكون رقمًا موجبًا")]
+        public int? PackQuantity { get; set; }
+
 
         // ================= تواريخ الإنشاء والتعديل =================
 

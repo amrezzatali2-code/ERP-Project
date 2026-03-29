@@ -10,97 +10,104 @@
 
     string search = (string?)ViewBag.Search ?? "";
     string searchBy = ((string?)ViewBag.SearchBy ?? "all").ToLowerInvariant();
-    string sort = (string?)ViewBag.Sort ?? "OutEntryId";
+    string searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    string sort = (string?)ViewBag.Sort ?? "MapId";
     string dir = ((string?)ViewBag.Dir ?? "asc").ToLowerInvariant();
 
-    int ps = ViewBag.PageSize != null ? (int)ViewBag.PageSize : 50;
+    int ps = ViewBag.PageSize != null ? (int)ViewBag.PageSize : 10;
+    if (ps < 0) ps = 10;
+
     int total = ViewBag.TotalRows != null ? (int)ViewBag.TotalRows : 0;
     int page = ViewBag.Page != null ? (int)ViewBag.Page : 1;
     int pages = ViewBag.TotalPages != null ? (int)ViewBag.TotalPages : 1;
     if (pages < 1) pages = 1;
+
+    int start = total == 0 ? 0 : (ps == 0 ? 1 : ((page - 1) * (ps > 0 ? ps : 1)) + 1);
+    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
 
     int first = 1;
     int last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
     int next = Math.Min(last, page + 1);
 
-    int start = ViewBag.RangeStart != null ? (int)ViewBag.RangeStart : 0;
-    int end = ViewBag.RangeEnd != null ? (int)ViewBag.RangeEnd : 0;
+    bool hasPrevious = page > first;
+    bool hasNext = page < last;
 
-    // من كود / إلى كود (فلترة على MapId)
     int? fromCode = ViewBag.FromCode as int?;
     int? toCode = ViewBag.ToCode as int?;
 
-    // فلاتر أعمدة (بنمط Excel)
     string? filterCol_map = ViewBag.FilterCol_Map as string;
+    string? filterCol_mapExpr = ViewBag.FilterCol_MapExpr as string;
     string? filterCol_out = ViewBag.FilterCol_Out as string;
+    string? filterCol_outExpr = ViewBag.FilterCol_OutExpr as string;
     string? filterCol_in = ViewBag.FilterCol_In as string;
+    string? filterCol_inExpr = ViewBag.FilterCol_InExpr as string;
     string? filterCol_qty = ViewBag.FilterCol_Qty as string;
+    string? filterCol_qtyExpr = ViewBag.FilterCol_QtyExpr as string;
+    string? filterCol_prod = ViewBag.FilterCol_Prod as string;
+    string? filterCol_prodExpr = ViewBag.FilterCol_ProdExpr as string;
+    string? filterCol_prodname = ViewBag.FilterCol_ProdName as string;
+    string? filterCol_outsource = ViewBag.FilterCol_OutSource as string;
+    string? filterCol_insource = ViewBag.FilterCol_InSource as string;
     string? filterCol_unitcost = ViewBag.FilterCol_UnitCost as string;
+    string? filterCol_unitcostExpr = ViewBag.FilterCol_UnitCostExpr as string;
 
-    // دالة توليد لينك الترقيم مع الحفاظ على الفلاتر
     string Link(int p) => Url.Action(action, controller, new
     {
         page = p,
         pageSize = ps,
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         fromCode,
         toCode,
         filterCol_map,
+        filterCol_mapExpr,
         filterCol_out,
+        filterCol_outExpr,
         filterCol_in,
+        filterCol_inExpr,
         filterCol_qty,
-        filterCol_unitcost
+        filterCol_qtyExpr,
+        filterCol_prod,
+        filterCol_prodExpr,
+        filterCol_prodname,
+        filterCol_outsource,
+        filterCol_insource,
+        filterCol_unitcost,
+        filterCol_unitcostExpr
     })!;
 
-    // لينك الترتيب مع السهم
-    Func<string, string, IHtmlContent> sortLink = (col, caption) =>
-    {
-        var isCurrent = string.Equals(sort, col, StringComparison.OrdinalIgnoreCase);
-        var newDir = (isCurrent && dir == "asc") ? "desc" : "asc";
-
-        var url = Url.Action(action, controller, new
-        {
-            page = 1,
-            pageSize = ps,
-            search,
-            searchBy,
-            sort = col,
-            dir = newDir,
-            fromCode,
-            toCode,
-            filterCol_map,
-            filterCol_out,
-            filterCol_in,
-            filterCol_qty,
-            filterCol_unitcost
-        }) ?? "#";
-
-        string icon = "⇅";
-        if (isCurrent)
-            icon = dir == "asc" ? "▲" : "▼";
-
-        return new HtmlString($@"<a href=""{url}"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>");
-    };
-
-    // دوال الفلترة بنمط Excel
     string? FilterForCol(string colKey) => colKey switch
     {
         "map" => filterCol_map,
         "out" => filterCol_out,
         "in" => filterCol_in,
         "qty" => filterCol_qty,
+        "prod" => filterCol_prod,
+        "prodname" => filterCol_prodname,
+        "outsource" => filterCol_outsource,
+        "insource" => filterCol_insource,
         "unitcost" => filterCol_unitcost,
+        _ => null
+    };
+
+    string? FilterExprForCol(string colKey) => colKey switch
+    {
+        "map" => filterCol_mapExpr,
+        "out" => filterCol_outExpr,
+        "in" => filterCol_inExpr,
+        "qty" => filterCol_qtyExpr,
+        "prod" => filterCol_prodExpr,
+        "unitcost" => filterCol_unitcostExpr,
         _ => null
     };
 
     Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
-        var currentFilter = FilterForCol(colKey);
-        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var hasFilter = !string.IsNullOrWhiteSpace(FilterForCol(colKey)) || !string.IsNullOrWhiteSpace(FilterExprForCol(colKey));
         var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
         var sortDir = isCurrentSort ? dir : "asc";
         var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
@@ -121,78 +128,72 @@
 }
 
 <div dir="rtl" class="container-fluid">
-    @* الهيدر العلوي *@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4 class="mb-0">@ViewData["Title"]</h4>
-
-        <small class="text-muted d-none d-md-inline">
-            عدد القيود الحالية: @total
-        </small>
+        <small class="text-muted d-none d-md-inline">عدد القيود (بعد الفلتر): @total</small>
     </div>
 
-    @* ===== شريط الفلاتر الموحد (نمط القوائم) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في ربط FIFO</label>
-                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
-                        <input type="text"
-                               name="search"
-                               class="form-control erp-filter-input"
-                               placeholder="اكتب رقم الربط أو الخروج أو الدخول أو الكمية..."
-                               value="@search"
-                               style="min-width:160px" />
-                        <select name="searchBy"
-                                class="form-select form-select-arrow erp-filter-input"
-                                style="max-width:190px;min-width:140px">
-                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
-                            <option value="map"@Html.Raw(searchBy == "map" ? " selected" : "")>MapId (رقم الربط)</option>
-                            <option value="out"@Html.Raw(searchBy == "out" ? " selected" : "")>OutEntry (الخروج)</option>
-                            <option value="in"@Html.Raw(searchBy == "in" ? " selected" : "")>InEntry (الدخول)</option>
-                            <option value="qty"@Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px" title="نوع البحث في الحقول النصية">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">عرض</button>
-                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0" href="@Url.Action(action, controller)">إلغاء</a>
+                        <input type="text" name="search" class="form-control erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
+                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:170px;min-width:120px">
+                            <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
+                            <option value="map"@Html.Raw(searchBy == "map" ? " selected" : "")>MapId</option>
+                            <option value="out"@Html.Raw(searchBy == "out" ? " selected" : "")>الخروج (قيد)</option>
+                            <option value="in"@Html.Raw(searchBy == "in" ? " selected" : "")>الدخول (قيد)</option>
+                            <option value="prod"@Html.Raw(searchBy == "prod" ? " selected" : "")>كود الصنف</option>
+                            <option value="prodname"@Html.Raw(searchBy == "prodname" ? " selected" : "")>اسم الصنف</option>
+                            <option value="outsource"@Html.Raw(searchBy == "outsource" ? " selected" : "")>مصدر الخروج</option>
+                            <option value="insource"@Html.Raw(searchBy == "insource" ? " selected" : "")>مصدر الدخول</option>
+                            <option value="qty"@Html.Raw(searchBy == "qty" ? " selected" : "")>الكمية</option>
+                            <option value="unitcost"@Html.Raw(searchBy == "unitcost" ? " selected" : "")>تكلفة/وحدة</option>
+                        </select>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
                     <input type="hidden" name="pageSize" value="@ps" />
-                    <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
-                    <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
+                    @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+                    @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_map)) { <input type="hidden" name="filterCol_map" value="@filterCol_map" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_mapExpr)) { <input type="hidden" name="filterCol_mapExpr" value="@filterCol_mapExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_out)) { <input type="hidden" name="filterCol_out" value="@filterCol_out" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_outExpr)) { <input type="hidden" name="filterCol_outExpr" value="@filterCol_outExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_in)) { <input type="hidden" name="filterCol_in" value="@filterCol_in" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_inExpr)) { <input type="hidden" name="filterCol_inExpr" value="@filterCol_inExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_prod)) { <input type="hidden" name="filterCol_prod" value="@filterCol_prod" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_prodExpr)) { <input type="hidden" name="filterCol_prodExpr" value="@filterCol_prodExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_outsource)) { <input type="hidden" name="filterCol_outsource" value="@filterCol_outsource" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_insource)) { <input type="hidden" name="filterCol_insource" value="@filterCol_insource" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_unitcost)) { <input type="hidden" name="filterCol_unitcost" value="@filterCol_unitcost" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_unitcostExpr)) { <input type="hidden" name="filterCol_unitcostExpr" value="@filterCol_unitcostExpr" /> }
                 </form>
             </div>
 
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label w-100 text-center">فلتر الكود (MapId)</label>
                 <div class="erp-list-code-filter justify-content-center">
-                    <input id="codeFromInput"
-                           type="number"
-                           class="form-control erp-filter-input"
-                           placeholder="من كود"
-                           value="@(fromCode?.ToString() ?? "")" />
-                    <input id="codeToInput"
-                           type="number"
-                           class="form-control erp-filter-input"
-                           placeholder="إلى كود"
-                           value="@(toCode?.ToString() ?? "")" />
-                    <button type="button"
-                            id="btnApplyCodeFilter"
-                            class="btn btn-erp btn-erp-primary btn-erp-sm">
-                        تطبيق
-                    </button>
-                    <button type="button"
-                            id="btnClearCodeFilter"
-                            class="btn btn-erp btn-erp-secondary btn-erp-sm">
-                        مسح
-                    </button>
+                    <input id="codeFromInput" type="number" class="form-control erp-filter-input" placeholder="من كود" value="@(fromCode?.ToString() ?? "")" />
+                    <input id="codeToInput" type="number" class="form-control erp-filter-input" placeholder="إلى كود" value="@(toCode?.ToString() ?? "")" />
+                    <button type="button" id="btnApplyCodeFilter" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                    <button type="button" id="btnClearCodeFilter" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح</button>
                 </div>
             </div>
 
@@ -200,574 +201,381 @@
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-
-                        <button type="button"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm"
-                                data-bs-toggle="modal"
-                                data-bs-target="#columnsModalFifo">
-                            اختيار الأعمدة
-                        </button>
-
-                        <button type="button"
-                                id="btnPrintFifo"
-                                class="btn btn-erp btn-erp-secondary btn-erp-sm">
-                            🖨️ طباعة
-                        </button>
-
-                        <form method="get"
-                              asp-action="Export"
-                              asp-controller="StockFifoMap"
-                              class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
-
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalFifo">اختيار الأعمدة</button>
+                        <button type="button" id="btnFifoMovement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر صفاً في الجدول أولاً">حركة الصنف</button>
+                        <button type="button" id="btnPrintFifo" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <form method="get" asp-action="Export" asp-controller="StockFifoMap" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_map)) { <input type="hidden" name="filterCol_map" value="@filterCol_map" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_mapExpr)) { <input type="hidden" name="filterCol_mapExpr" value="@filterCol_mapExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_out)) { <input type="hidden" name="filterCol_out" value="@filterCol_out" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_outExpr)) { <input type="hidden" name="filterCol_outExpr" value="@filterCol_outExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_in)) { <input type="hidden" name="filterCol_in" value="@filterCol_in" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_inExpr)) { <input type="hidden" name="filterCol_inExpr" value="@filterCol_inExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prod)) { <input type="hidden" name="filterCol_prod" value="@filterCol_prod" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prodExpr)) { <input type="hidden" name="filterCol_prodExpr" value="@filterCol_prodExpr" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_outsource)) { <input type="hidden" name="filterCol_outsource" value="@filterCol_outsource" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_insource)) { <input type="hidden" name="filterCol_insource" value="@filterCol_insource" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_unitcost)) { <input type="hidden" name="filterCol_unitcost" value="@filterCol_unitcost" /> }
-
-                            <select name="format"
-                                    class="form-select form-select-arrow erp-filter-input"
-                                    style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;"
-                                    title="اختر صيغة التصدير">
+                            @if (!string.IsNullOrWhiteSpace(filterCol_unitcostExpr)) { <input type="hidden" name="filterCol_unitcostExpr" value="@filterCol_unitcostExpr" /> }
+                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
                             </select>
-
-                            <button type="submit"
-                                    class="btn btn-erp btn-erp-success btn-erp-sm">
-                                تصدير
-                            </button>
+                            <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
-
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <form id="fifoSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
-        <input type="hidden" name="search" value="@search" />
-        <input type="hidden" name="searchBy" value="@searchBy" />
-        <input type="hidden" name="sort" value="@sort" />
-        <input type="hidden" name="dir" value="@dir" />
-        <input type="hidden" name="page" value="1" />
-        <input type="hidden" name="pageSize" value="@ps" />
-        <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
-        <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
-        @if (!string.IsNullOrWhiteSpace(filterCol_map)) { <input type="hidden" name="filterCol_map" value="@filterCol_map" /> }
-        @if (!string.IsNullOrWhiteSpace(filterCol_out)) { <input type="hidden" name="filterCol_out" value="@filterCol_out" /> }
-        @if (!string.IsNullOrWhiteSpace(filterCol_in)) { <input type="hidden" name="filterCol_in" value="@filterCol_in" /> }
-        @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
-        @if (!string.IsNullOrWhiteSpace(filterCol_unitcost)) { <input type="hidden" name="filterCol_unitcost" value="@filterCol_unitcost" /> }
-    </form>
-
-    @* ===== جدول FIFO ===== *@
     <div class="erp-table-scroll-container mt-3 ps-0 pe-0">
-        <div class="erp-table-wrapper mt-0 erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
-        <table id="fifoTable" class="table table-striped table-hover erp-table erp-table-sortable">
-            <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
-                <tr>
-                    <th data-col="map">@filterableCol("map", "MapId", "MapId")</th>
-                    <th data-col="prod">كود الصنف</th>
-                    <th data-col="prodname">اسم الصنف</th>
-                    <th data-col="out">@filterableCol("out", "OutEntryId", "الخروج (قيد)")</th>
-                    <th data-col="outsource">مصدر الخروج</th>
-                    <th data-col="in">@filterableCol("in", "InEntryId", "الدخول (قيد)")</th>
-                    <th data-col="insource">مصدر الدخول</th>
-                    <th class="text-end" data-col="qty">@filterableCol("qty", "Qty", "الكمية")</th>
-                    <th class="text-end" data-col="unitcost">@filterableCol("unitcost", "UnitCost", "تكلفة/وحدة")</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (Model == null || !Model.Any())
-                {
+        <div id="fifoScrollWrapper" class="erp-table-wrapper mt-0 erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+            <table id="fifoTable" class="table table-striped table-hover erp-table erp-table-sortable">
+                <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-4">
-                            لا توجد بيانات.
-                        </td>
+                        <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
+                            <input type="checkbox" id="chkAllFifoRows" />
+                        </th>
+                        <th data-col="map">@filterableCol("map", "MapId", "MapId")</th>
+                        <th data-col="prod">@filterableCol("prod", "ProdId", "كود الصنف")</th>
+                        <th data-col="prodname">@filterableCol("prodname", "ProdName", "اسم الصنف")</th>
+                        <th data-col="out">@filterableCol("out", "OutEntryId", "الخروج (قيد)")</th>
+                        <th data-col="outsource">@filterableCol("outsource", "OutEntryId", "مصدر الخروج")</th>
+                        <th data-col="in">@filterableCol("in", "InEntryId", "الدخول (قيد)")</th>
+                        <th data-col="insource">@filterableCol("insource", "InEntryId", "مصدر الدخول")</th>
+                        <th class="text-end" data-col="qty">@filterableCol("qty", "Qty", "الكمية")</th>
+                        <th class="text-end" data-col="unitcost">@filterableCol("unitcost", "UnitCost", "تكلفة/وحدة")</th>
                     </tr>
-                }
-                else
-                {
-                    var outDict = ViewBag.OutLedgerDict as System.Collections.Generic.IDictionary<int, object>;
-                    var inDict = ViewBag.InLedgerDict as System.Collections.Generic.IDictionary<int, object>;
-                    var pNames = ViewBag.ProdNames as System.Collections.Generic.IDictionary<int, string>;
-                    foreach (var x in Model)
+                </thead>
+                <tbody>
+                    @if (Model == null || !Model.Any())
                     {
-                        var outInfo = outDict != null && outDict.ContainsKey(x.OutEntryId) ? outDict[x.OutEntryId] : null;
-                        var inInfo = inDict != null && inDict.ContainsKey(x.InEntryId) ? inDict[x.InEntryId] : null;
-                        int? prodId = null;
-                        if (outInfo != null)
-                        {
-                            var prop = outInfo.GetType().GetProperty("ProdId");
-                            if (prop != null) prodId = (int?)prop.GetValue(outInfo);
-                        }
-                        string? prodName = (prodId.HasValue && pNames != null && pNames.ContainsKey(prodId.Value)) ? pNames[prodId.Value] : "";
-                        string outSource = "";
-                        if (outInfo != null)
-                        {
-                            var st = outInfo.GetType().GetProperty("SourceType")?.GetValue(outInfo)?.ToString();
-                            var si = outInfo.GetType().GetProperty("SourceId")?.GetValue(outInfo);
-                            outSource = st != null ? $"{st} {si}" : "";
-                        }
-                        string inSource = "";
-                        if (inInfo != null)
-                        {
-                            var st = inInfo.GetType().GetProperty("SourceType")?.GetValue(inInfo)?.ToString();
-                            var si = inInfo.GetType().GetProperty("SourceId")?.GetValue(inInfo);
-                            inSource = st != null ? $"{st} {si}" : "";
-                        }
                         <tr>
-                            <td data-col="map">@x.MapId</td>
-                            <td data-col="prod">@(prodId?.ToString() ?? "—")</td>
-                            <td data-col="prodname">@(prodName ?? "—")</td>
-                            <td data-col="out">@x.OutEntryId</td>
-                            <td data-col="outsource">@outSource</td>
-                            <td data-col="in">@x.InEntryId</td>
-                            <td data-col="insource">@inSource</td>
-                            <td class="text-end" data-col="qty">@x.Qty</td>
-                            <td class="text-end" data-col="unitcost">@x.UnitCost.ToString("0.0000")</td>
+                            <td colspan="10" class="text-center text-muted py-4">لا توجد بيانات.</td>
                         </tr>
                     }
-                }
-            </tbody>
-        </table>
+                    else
+                    {
+                        var outDict = ViewBag.OutLedgerDict as System.Collections.Generic.IDictionary<int, object>;
+                        var inDict = ViewBag.InLedgerDict as System.Collections.Generic.IDictionary<int, object>;
+                        var pNames = ViewBag.ProdNames as System.Collections.Generic.IDictionary<int, string>;
+                        foreach (var x in Model)
+                        {
+                            var outInfo = outDict != null && outDict.ContainsKey(x.OutEntryId) ? outDict[x.OutEntryId] : null;
+                            var inInfo = inDict != null && inDict.ContainsKey(x.InEntryId) ? inDict[x.InEntryId] : null;
+                            int? prodId = null;
+                            if (outInfo != null)
+                            {
+                                var prop = outInfo.GetType().GetProperty("ProdId");
+                                if (prop != null) prodId = (int?)prop.GetValue(outInfo);
+                            }
+                            string? prodName = (prodId.HasValue && pNames != null && pNames.ContainsKey(prodId.Value)) ? pNames[prodId.Value] : "";
+                            string outSource = "";
+                            if (outInfo != null)
+                            {
+                                var st = outInfo.GetType().GetProperty("SourceType")?.GetValue(outInfo)?.ToString();
+                                var si = outInfo.GetType().GetProperty("SourceId")?.GetValue(outInfo);
+                                outSource = st != null ? $"{st} {si}" : "";
+                            }
+                            string inSource = "";
+                            if (inInfo != null)
+                            {
+                                var st = inInfo.GetType().GetProperty("SourceType")?.GetValue(inInfo)?.ToString();
+                                var si = inInfo.GetType().GetProperty("SourceId")?.GetValue(inInfo);
+                                inSource = st != null ? $"{st} {si}" : "";
+                            }
+                            var movementUrl = prodId.HasValue ? Url.Action("Show", "Products", new { id = prodId.Value }) + "?frame=1" : "";
+                            <tr class="erp-list-selectable-row" data-fifo-row="1" data-prod-id="@(prodId?.ToString() ?? "")" data-movement-url="@movementUrl">
+                                <td class="text-center no-print" data-col="select">
+                                    <input type="checkbox" class="row-select" value="@x.MapId" />
+                                </td>
+                                <td data-col="map">@x.MapId</td>
+                                <td data-col="prod">@(prodId?.ToString() ?? "—")</td>
+                                <td data-col="prodname">@(prodName ?? "—")</td>
+                                <td data-col="out">@x.OutEntryId</td>
+                                <td data-col="outsource">@outSource</td>
+                                <td data-col="in">@x.InEntryId</td>
+                                <td data-col="insource">@inSource</td>
+                                <td class="text-end" data-col="qty">@x.Qty</td>
+                                <td class="text-end" data-col="unitcost">@x.UnitCost.ToString("0.0000")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
     </div>
 
-    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة + الترقيم ===== *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted">
-            عرض @start - @end من @total
-        </small>
+    <div id="erpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+        <div class="erp-column-filter-header">
+            <span id="erpColumnFilterTitle">ترتيب وفلتر</span>
+            <button type="button" class="btn-close btn-sm" id="erpColumnFilterClose" aria-label="إغلاق"></button>
+        </div>
+        <div class="erp-column-filter-body">
+            <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+                <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+                <div class="d-flex flex-column gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
+                </div>
+            </div>
+            <div class="erp-filter-section">
+                <div id="erpColumnFilterSearchRow">
+                    <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                    <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+                </div>
+                <div id="erpColumnFilterList" class="erp-column-filter-list">
+                    <div class="text-muted text-center py-3">جاري التحميل...</div>
+                </div>
+            </div>
+            <div class="erp-column-filter-actions">
+                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOk">تطبيق</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClear">مسح الفلتر</button>
+            </div>
+        </div>
+    </div>
 
-        <form method="get"
-              action="@Url.Action(action, controller)"
-              class="d-flex align-items-center gap-2">
+    @* الشريط السفلي المتفق عليه: صف علوي (يمين: عرض السجلات | يسار: حجم الصفحة) + ترقيم مركزي *@
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted text-start mb-0">عرض @start - @end من @total</small>
+        <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2 flex-wrap">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
-            <input type="hidden" name="fromCode" value="@(fromCode?.ToString() ?? "")" />
-            <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
+            @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
+            @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_map)) { <input type="hidden" name="filterCol_map" value="@filterCol_map" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_mapExpr)) { <input type="hidden" name="filterCol_mapExpr" value="@filterCol_mapExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_out)) { <input type="hidden" name="filterCol_out" value="@filterCol_out" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_outExpr)) { <input type="hidden" name="filterCol_outExpr" value="@filterCol_outExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_in)) { <input type="hidden" name="filterCol_in" value="@filterCol_in" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_inExpr)) { <input type="hidden" name="filterCol_inExpr" value="@filterCol_inExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_qty)) { <input type="hidden" name="filterCol_qty" value="@filterCol_qty" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_prod)) { <input type="hidden" name="filterCol_prod" value="@filterCol_prod" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_prodExpr)) { <input type="hidden" name="filterCol_prodExpr" value="@filterCol_prodExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_outsource)) { <input type="hidden" name="filterCol_outsource" value="@filterCol_outsource" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_insource)) { <input type="hidden" name="filterCol_insource" value="@filterCol_insource" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_unitcost)) { <input type="hidden" name="filterCol_unitcost" value="@filterCol_unitcost" /> }
-
+            @if (!string.IsNullOrWhiteSpace(filterCol_unitcostExpr)) { <input type="hidden" name="filterCol_unitcostExpr" value="@filterCol_unitcostExpr" /> }
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
-            <select name="pageSize"
-                    class="form-select form-select-sm"
-                    onchange="this.form.submit()">
+            <select name="pageSize" class="form-select form-select-sm" style="width:auto;min-width:5rem;" onchange="this.form.submit()">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
     </div>
 
-    <nav aria-label="pagination" class="mt-3 no-print">
-        <ul class="pagination justify-content-center">
-            <li class="page-item @(page == first ? "disabled" : "")">
-                <a class="page-link" href="@Link(first)">الأول</a>
-            </li>
-            <li class="page-item @(page > first ? "" : "disabled")">
-                <a class="page-link" href="@Link(prev)">السابق</a>
-            </li>
-            <li class="page-item disabled">
-                <span class="page-link">
-                    صفحة @(page) من @(pages)
-                </span>
-            </li>
-            <li class="page-item @(page < last ? "" : "disabled")">
-                <a class="page-link" href="@Link(next)">التالي</a>
-            </li>
-            <li class="page-item @(page == last ? "disabled" : "")">
-                <a class="page-link" href="@Link(last)">الأخير</a>
-            </li>
+    <nav aria-label="pagination" class="mt-3 no-print d-flex justify-content-center" dir="rtl">
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
+            <li class="page-item @(hasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
+            <li class="page-item disabled"><span class="page-link bg-light text-body-secondary">صفحة @(page) من @(pages)</span></li>
+            <li class="page-item @(hasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
+            <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
         </ul>
     </nav>
 </div>
 
-@* ===== Modal اختيار الأعمدة ===== *@
-<div class="modal fade no-print"
-     id="columnsModalFifo"
-     tabindex="-1"
-     aria-labelledby="columnsModalFifoLabel"
-     aria-hidden="true">
+<div class="modal fade no-print" id="columnsModalFifo" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content" dir="rtl">
             <div class="modal-header">
-                <h5 class="modal-title flex-grow-1" id="columnsModalFifoLabel">
-                    اختيار الأعمدة الظاهرة
-                </h5>
-                <button type="button"
-                        class="btn-close ms-2"
-                        data-bs-dismiss="modal"
-                        aria-label="إغلاق"></button>
+                <h5 class="modal-title flex-grow-1">اختيار الأعمدة الظاهرة</h5>
+                <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
             </div>
             <div class="modal-body">
                 <div id="columnsListFifo"></div>
             </div>
             <div class="modal-footer">
-                <button type="button"
-                        class="btn btn-erp btn-erp-secondary"
-                        data-bs-dismiss="modal">
-                    إغلاق
-                </button>
-                <button type="button"
-                        id="btnApplyColumnsFifo"
-                        class="btn btn-erp btn-erp-primary">
-                    تطبيق
-                </button>
+                <button type="button" id="btnApplyColumnsFifo" class="btn btn-erp btn-erp-primary">تطبيق</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إغلاق</button>
             </div>
-        </div>
-    </div>
-</div>
-
-@* لوحة فلتر الأعمدة بنمط Excel *@
-<div id="erpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
-    <div class="erp-column-filter-header">
-        <span id="erpColumnFilterTitle">ترتيب وفلتر</span>
-        <button type="button" class="btn-close btn-sm" id="erpColumnFilterClose" aria-label="إغلاق"></button>
-    </div>
-    <div class="erp-column-filter-body">
-        <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
-            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
-            <div class="d-flex flex-column gap-1">
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
-            </div>
-        </div>
-        <div class="erp-filter-section">
-            <div id="erpColumnFilterSearchRow">
-                <label class="form-label small mb-1 fw-bold">الفلترة:</label>
-                <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
-            </div>
-            <div id="erpColumnFilterList" class="erp-column-filter-list">
-                <div class="text-muted text-center py-3">جاري التحميل...</div>
-            </div>
-        </div>
-        <div class="erp-column-filter-actions">
-            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOk">تطبيق</button>
-            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClear">مسح الفلتر</button>
         </div>
     </div>
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
-        // =========================
-        // زر الطباعة — يطبع الجدول فقط
-        // =========================
-        document.getElementById("btnPrintFifo")?.addEventListener("click", function () {
-            window.print();
-        });
+        document.getElementById("btnPrintFifo")?.addEventListener("click", function () { window.print(); });
 
-        // =========================
-        // اختيار الأعمدة + حفظها في localStorage
-        // =========================
         (function () {
             const table = document.getElementById("fifoTable");
             if (!table) return;
+            const chkAll = document.getElementById("chkAllFifoRows");
+            const rowsChk = () => table.querySelectorAll("tbody .row-select");
+            chkAll?.addEventListener("change", function () {
+                rowsChk().forEach(cb => { cb.checked = chkAll.checked; });
+            });
+            table.addEventListener("change", function (e) {
+                const target = e.target;
+                if (target && target.classList.contains("row-select")) {
+                    if (!target.checked && chkAll) chkAll.checked = false;
+                }
+            });
+        })();
 
-            const storageKey = "fifo-columns-visibility";
+        (function () {
+            const wrap = document.getElementById("fifoScrollWrapper");
+            if (!wrap) return;
+            function scrollHorizontalToRight() {
+                var maxScroll = wrap.scrollWidth - wrap.clientWidth;
+                if (maxScroll > 0) wrap.scrollLeft = maxScroll;
+            }
+            requestAnimationFrame(function () { requestAnimationFrame(scrollHorizontalToRight); });
+        })();
 
+        (function () {
+            const table = document.getElementById("fifoTable");
+            if (!table) return;
+            const storageKey = "fifo-columns-visibility-v2";
             const headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
-            const columns = headerCells.map(th => ({
-                key: th.getAttribute("data-col"),
-                title: th.innerText.trim()
-            }));
-
+            const columns = headerCells
+                .filter(th => !th.hasAttribute("data-col-fixed"))
+                .map(th => ({ key: th.getAttribute("data-col"), title: th.innerText.replace(/\s+/g, " ").trim() }));
             if (columns.length === 0) return;
-
             let hidden = [];
             try {
                 const saved = localStorage.getItem(storageKey);
                 if (saved) hidden = JSON.parse(saved);
             } catch { hidden = []; }
-
             function applyVisibility() {
                 columns.forEach(col => {
                     const isHidden = hidden.includes(col.key);
                     table.querySelectorAll("[data-col='" + col.key + "']")
-                        .forEach(cell => {
-                            cell.classList.toggle("d-none", isHidden);
-                        });
+                        .forEach(cell => cell.classList.toggle("d-none", isHidden));
                 });
             }
-
             applyVisibility();
-
             const listContainer = document.getElementById("columnsListFifo");
             if (listContainer) {
                 listContainer.innerHTML = "";
+                const selectAllWrap = document.createElement("div");
+                selectAllWrap.className = "form-check mb-2 border-bottom pb-2";
+                const selectAllId = "fifo_col_select_all";
+                selectAllWrap.innerHTML = '<input type="checkbox" class="form-check-input ms-2" id="' + selectAllId + '" checked><label class="form-check-label fw-bold" for="' + selectAllId + '">اختيار الكل</label>';
+                listContainer.appendChild(selectAllWrap);
+                const selectAllCb = document.getElementById(selectAllId);
                 columns.forEach(col => {
-                    const id = "col_" + col.key;
+                    const id = "fifo_col_" + col.key;
                     const wrapper = document.createElement("div");
                     wrapper.className = "form-check mb-1";
-
                     const cb = document.createElement("input");
                     cb.type = "checkbox";
                     cb.className = "form-check-input ms-2";
                     cb.id = id;
                     cb.checked = !hidden.includes(col.key);
                     cb.dataset.colKey = col.key;
-
                     const label = document.createElement("label");
                     label.className = "form-check-label";
                     label.setAttribute("for", id);
                     label.innerText = col.title;
-
                     wrapper.appendChild(cb);
                     wrapper.appendChild(label);
                     listContainer.appendChild(wrapper);
                 });
-            }
-
-            document.getElementById("btnApplyColumnsFifo")
-                ?.addEventListener("click", function () {
+                function syncSelectAll() {
                     const checks = listContainer.querySelectorAll("input[type='checkbox'][data-col-key]");
-                    hidden = [];
-                    checks.forEach(cb => {
-                        const key = cb.dataset.colKey;
-                        if (!cb.checked) hidden.push(key);
-                    });
-
-                    try {
-                        localStorage.setItem(storageKey, JSON.stringify(hidden));
-                    } catch { }
-
-                    applyVisibility();
-
-                    const modalEl = document.getElementById("columnsModalFifo");
-                    const modal   = bootstrap.Modal.getInstance(modalEl);
-                    modal?.hide();
+                    if (!selectAllCb || !checks.length) return;
+                    const allOn = Array.from(checks).every(c => c.checked);
+                    selectAllCb.checked = allOn;
+                    selectAllCb.indeterminate = !allOn && Array.from(checks).some(c => c.checked);
+                }
+                selectAllCb?.addEventListener("change", function () {
+                    const on = this.checked;
+                    listContainer.querySelectorAll("input[type='checkbox'][data-col-key]").forEach(c => { c.checked = on; });
                 });
+                listContainer.querySelectorAll("input[type='checkbox'][data-col-key]").forEach(c => {
+                    c.addEventListener("change", syncSelectAll);
+                });
+                syncSelectAll();
+            }
+            document.getElementById("btnApplyColumnsFifo")?.addEventListener("click", function () {
+                const listContainer = document.getElementById("columnsListFifo");
+                const checks = listContainer?.querySelectorAll("input[type='checkbox'][data-col-key]") || [];
+                hidden = [];
+                checks.forEach(cb => { if (!cb.checked) hidden.push(cb.dataset.colKey); });
+                try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch { }
+                applyVisibility();
+                const modalEl = document.getElementById("columnsModalFifo");
+                const modal = bootstrap.Modal.getInstance(modalEl);
+                modal?.hide();
+            });
         })();
 
-        // =========================
-        // فلتر الكود من/إلى (على MapId)
-        // =========================
         (function () {
             const btnApply = document.getElementById("btnApplyCodeFilter");
             const btnClear = document.getElementById("btnClearCodeFilter");
-            const fromInp  = document.getElementById("codeFromInput");
-            const toInp    = document.getElementById("codeToInput");
-
+            const fromInp = document.getElementById("codeFromInput");
+            const toInp = document.getElementById("codeToInput");
+            const defaultPs = "@ps";
             function buildUrl(codeFrom, codeTo) {
                 const url = new URL(window.location.href);
-
                 if (codeFrom) url.searchParams.set("fromCode", codeFrom);
-                else          url.searchParams.delete("fromCode");
-
-                if (codeTo)   url.searchParams.set("toCode", codeTo);
-                else          url.searchParams.delete("toCode");
-
+                else url.searchParams.delete("fromCode");
+                if (codeTo) url.searchParams.set("toCode", codeTo);
+                else url.searchParams.delete("toCode");
                 url.searchParams.set("page", "1");
+                if (!url.searchParams.get("pageSize")) url.searchParams.set("pageSize", defaultPs);
                 return url.toString();
             }
-
             btnApply?.addEventListener("click", function () {
-                const cf = fromInp.value.trim();
-                const ct = toInp.value.trim();
-                window.location.href = buildUrl(cf, ct);
+                window.location.href = buildUrl((fromInp?.value || "").trim(), (toInp?.value || "").trim());
             });
-
             btnClear?.addEventListener("click", function () {
-                fromInp.value = "";
-                toInp.value   = "";
-                window.location.href = buildUrl("", "");
+                if (fromInp) fromInp.value = "";
+                if (toInp) toInp.value = "";
+                const url = new URL(window.location.href);
+                url.searchParams.delete("fromCode");
+                url.searchParams.delete("toCode");
+                url.searchParams.set("page", "1");
+                window.location.href = url.toString();
             });
         })();
 
-        // =========================
-        // فلتر الأعمدة بنمط Excel (ترتيب + فلترة)
-        // =========================
-        (function () {
-            var panel = document.getElementById("erpColumnFilterPanel");
-            if (!panel) return;
-            var titleEl = document.getElementById("erpColumnFilterTitle");
-            var searchInp = document.getElementById("erpColumnFilterSearch");
-            var listEl = document.getElementById("erpColumnFilterList");
-            var btnOk = document.getElementById("erpColumnFilterOk");
-            var btnClear = document.getElementById("erpColumnFilterClear");
-            var btnClose = document.getElementById("erpColumnFilterClose");
-
-            var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-
-            function getCurrentFilterValue(col) {
-                return new URL(window.location.href).searchParams.get("filterCol_" + col) || "";
-            }
-            function getCurrentSort() {
-                var url = new URL(window.location.href);
-                return { sort: url.searchParams.get("sort") || "OutEntryId", dir: url.searchParams.get("dir") || "asc" };
-            }
-            function adjustPanelPosition() {
-                if (!panel || !anchorRect) return;
-                setTimeout(function () {
-                    var r = panel.getBoundingClientRect();
-                    var top = anchorRect.bottom + 4, left = anchorRect.left;
-                    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                    panel.style.top = top + "px";
-                    panel.style.left = left + "px";
-                }, 50);
-            }
-
-            function showPanel(btn) {
-                currentCol = btn.dataset.col;
-                currentSortKey = btn.dataset.sortKey || currentCol;
-                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-                searchInp.value = "";
-                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split(/[|,;]/).filter(Boolean));
-                anchorRect = btn.getBoundingClientRect();
-                panel.style.minWidth = Math.max(240, anchorRect.width) + "px";
-                panel.classList.remove("d-none");
-
-                var currentSort = getCurrentSort();
-                var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-                var currentDir = isCurrent ? currentSort.dir : "asc";
-                panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                    if (isCurrent && b.dataset.sortDir === currentDir) {
-                        b.classList.add("active", "btn-primary");
-                        b.classList.remove("btn-outline-secondary");
-                    } else {
-                        b.classList.remove("active", "btn-primary");
-                        b.classList.add("btn-outline-secondary");
-                    }
+        document.addEventListener("DOMContentLoaded", function () {
+            if (window.ERP && typeof ERP.initListColumnFilter === "function") {
+                ERP.initListColumnFilter({
+                    panelId: "erpColumnFilterPanel",
+                    tableId: "fifoTable",
+                    wrapperId: "fifoScrollWrapper",
+                    getColumnValuesUrl: '@Url.Action("GetColumnValues", "StockFifoMap")',
+                    defaultSort: "MapId",
+                    defaultDir: "asc",
+                    numericColumns: ["map", "out", "in", "qty", "prod", "unitcost"]
                 });
-                adjustPanelPosition();
-                document.getElementById("erpColumnFilterSearchRow").classList.remove("d-none");
-                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-                var url = "/StockFifoMap/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                    allItems = items;
-                    renderList(searchInp ? searchInp.value : "");
-                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
             }
-
-            function renderList(search) {
-                var term = (search || "").toLowerCase();
-                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAll" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAll">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                    var v = String(x.value);
-                    var checked = currentSelected.has(v);
-                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-                }).join("") + "</div>";
-                var selectAllCb = listEl.querySelector("#erpFilterSelectAll");
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.onchange = function () {
-                        filtered.forEach(function (x) {
-                            if (this.checked) currentSelected.add(String(x.value));
-                            else currentSelected.delete(String(x.value));
-                        }.bind(this));
-                        renderList(searchInp.value);
-                    };
-                }
-                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                    cb.onchange = function () {
-                        if (this.checked) currentSelected.add(this.value);
-                        else currentSelected.delete(this.value);
-                        renderList(searchInp.value);
-                    };
+            if (window.ERP && typeof ERP.initListSelection === "function") {
+                ERP.initListSelection({
+                    rowSelector: "tr[data-fifo-row].erp-list-selectable-row",
+                    movementButtonId: "btnFifoMovement",
+                    movementUrlAttribute: "data-movement-url",
+                    movementTabId: "product-movement-tab",
+                    movementTabTitle: "حركة الصنف",
+                    idAttribute: "data-prod-id"
                 });
-                adjustPanelPosition();
             }
-
-            function applyFilter(applySort, sortDir) {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.delete("filterCol_" + currentCol + "Expr");
-                if (applySort !== undefined && sortDir !== undefined) {
-                    url.searchParams.set("sort", applySort);
-                    url.searchParams.set("dir", sortDir);
-                } else if (currentSortKey) {
-                    var cur = getCurrentSort();
-                    url.searchParams.set("sort", cur.sort);
-                    url.searchParams.set("dir", cur.dir);
-                }
-                var val = Array.from(currentSelected).filter(Boolean).join("|");
-                if (val) url.searchParams.set("filterCol_" + currentCol, val);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-            function clearFilter() {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-
-            document.querySelectorAll(".erp-col-filter-btn").forEach(function (btn) {
-                btn.addEventListener("click", function (e) {
-                    e.stopPropagation();
-                    showPanel(this);
-                });
-            });
-
-            document.addEventListener("click", function (e) {
-                if (e.target.closest(".erp-sort-btn")) {
-                    var sortBtn = e.target.closest(".erp-sort-btn");
-                    if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir);
-                }
-            });
-
-            var fetchDebounce = null;
-            searchInp && searchInp.addEventListener("input", function () {
-                renderList(this.value);
-                if (fetchDebounce) clearTimeout(fetchDebounce);
-                fetchDebounce = setTimeout(function () {
-                    fetchDebounce = null;
-                    if (!currentCol) return;
-                    var url = "/StockFifoMap/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                    fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                        allItems = items;
-                        renderList(searchInp ? searchInp.value : "");
-                    });
-                }, 400);
-            });
-
-            searchInp && searchInp.addEventListener("keydown", function (e) {
-                if (e.key === "Enter") {
-                    e.preventDefault();
-                    applyFilter();
-                }
-            });
-
-            btnOk && btnOk.addEventListener("click", function (e) {
-                e.preventDefault();
-                e.stopPropagation();
-                applyFilter();
-            });
-            btnClear && btnClear.addEventListener("click", clearFilter);
-            btnClose && btnClose.addEventListener("click", function () {
-                panel.classList.add("d-none");
-            });
-
-            document.addEventListener("click", function (e) {
-                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn")) {
-                    panel.classList.add("d-none");
-                }
-            });
-        })();
+        });
     </script>
 }

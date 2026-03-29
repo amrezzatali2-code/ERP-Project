@@ -1,0 +1,9 @@
+<Project>
+  <!-- بعد تضمين SDK: إزالة ملفات مشروع الاختبارات من مشروع الويب فقط -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'ERP'">
+    <Compile Remove="ERP.Tests/**" />
+    <Content Remove="ERP.Tests/**" />
+    <EmbeddedResource Remove="ERP.Tests/**" />
+    <None Remove="ERP.Tests/**" />
+  </ItemGroup>
+</Project>

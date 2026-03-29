@@ -1,10 +1,10 @@
 using System;
-using System.Collections.Generic;             // القوائم List
-using System.Globalization;                   // تنسيق التاريخ فى Export
-using System.IO;                              // MemoryStream لتصدير Excel
-using System.Linq;                            // أوامر LINQ
-using System.Text;                            // StringBuilder و Encoding
-using System.Threading.Tasks;                 // async / await
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using ClosedXML.Excel;                        // تصدير Excel
 using Microsoft.AspNetCore.Mvc;               // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;          // Include, AsNoTracking
@@ -23,96 +23,143 @@ namespace ERP.Controllers
     [RequirePermission("StockTransferLines.Index")]
     public class StockTransferLinesController : Controller
     {
-        private readonly AppDbContext _context;       // كائن الاتصال بقاعدة البيانات
-        private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+        private readonly AppDbContext _context;
+
+        private static string NormalizeArabicDigitsToLatin(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return s;
+            var chars = s.ToCharArray();
+            for (var i = 0; i < chars.Length; i++)
+            {
+                if (chars[i] >= '٠' && chars[i] <= '٩')
+                    chars[i] = (char)('0' + (chars[i] - '٠'));
+            }
+            return new string(chars);
+        }
 
         public StockTransferLinesController(AppDbContext context)
         {
             _context = context;
         }
 
-        // =========================================================
-        // دالة خاصة لتطبيق الفلاتر والترتيب على استعلام السطور
-        // =========================================================
         private IQueryable<StockTransferLine> ApplyFiltersAndSorting(
-            IQueryable<StockTransferLine> query,   // الاستعلام الأساسي
-            string? search,                        // نص البحث
-            string? searchBy,                      // نوع البحث
-            string? sort,                          // عمود الترتيب
-            ref bool descending,                   // اتجاه الترتيب
-            bool useDateRange,                     // فلتر التاريخ
-            DateTime? fromDate,                    // من تاريخ
-            DateTime? toDate,                      // إلى تاريخ
-            int? fromCode,                         // من كود (Id)
-            int? toCode                            // إلى كود (Id)
-        )
+            IQueryable<StockTransferLine> query,
+            string? search,
+            string? searchBy,
+            string? sort,
+            ref bool descending,
+            bool useDateRange,
+            DateTime? fromDate,
+            DateTime? toDate,
+            int? fromCode,
+            int? toCode,
+            string searchMode)
         {
-            // 1) فلتر الكود من / إلى
             if (fromCode.HasValue)
                 query = query.Where(l => l.Id >= fromCode.Value);
 
             if (toCode.HasValue)
                 query = query.Where(l => l.Id <= toCode.Value);
 
-            // 2) فلتر التاريخ (يعتمد على تاريخ التحويل فى الهيدر TransferDate)
-            if (useDateRange)
+            if (useDateRange && fromDate.HasValue && toDate.HasValue)
+            {
+                var from = fromDate.Value.Date;
+                var to = toDate.Value.Date.AddDays(1).AddTicks(-1);
+                query = query.Where(l => l.StockTransfer != null && l.StockTransfer.TransferDate >= from && l.StockTransfer.TransferDate <= to);
+            }
+            else if (useDateRange)
             {
                 if (fromDate.HasValue)
                     query = query.Where(l => l.StockTransfer!.TransferDate >= fromDate.Value);
-
                 if (toDate.HasValue)
                     query = query.Where(l => l.StockTransfer!.TransferDate <= toDate.Value);
             }
 
-            // 3) البحث النصّي
+            var sm = searchMode;
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
             if (!string.IsNullOrWhiteSpace(search))
             {
                 searchBy = (searchBy ?? "all").ToLowerInvariant();
-                string term = search.Trim();
+                string term = NormalizeArabicDigitsToLatin(search.Trim());
+                var termLower = term.ToLowerInvariant();
 
-                query = searchBy switch
+                switch (searchBy)
                 {
-                    "id" => query.Where(l => l.Id.ToString().Contains(term)),
-                    "transfer" => query.Where(l => l.StockTransferId.ToString().Contains(term)),
-                    "product" => query.Where(l => l.ProductId.ToString().Contains(term)),
-                    "note" => query.Where(l => l.Note != null && l.Note.Contains(term)),
-                    _ => query.Where(l =>
-                            l.Id.ToString().Contains(term) ||
-                            l.StockTransferId.ToString().Contains(term) ||
-                            l.ProductId.ToString().Contains(term) ||
-                            (l.Note != null && l.Note.Contains(term)))
-                };
+                    case "id":
+                        if (int.TryParse(term, NumberStyles.Any, CultureInfo.InvariantCulture, out var idVal))
+                            query = query.Where(l => l.Id == idVal);
+                        else
+                            query = sm switch
+                            {
+                                "starts" => query.Where(l => l.Id.ToString().StartsWith(term)),
+                                "ends" => query.Where(l => l.Id.ToString().EndsWith(term)),
+                                _ => query.Where(l => l.Id.ToString().Contains(term))
+                            };
+                        break;
+                    case "transfer":
+                        query = sm switch
+                        {
+                            "starts" => query.Where(l => l.StockTransferId.ToString().StartsWith(term)),
+                            "ends" => query.Where(l => l.StockTransferId.ToString().EndsWith(term)),
+                            _ => query.Where(l => l.StockTransferId.ToString().Contains(term))
+                        };
+                        break;
+                    case "product":
+                        query = sm switch
+                        {
+                            "starts" => query.Where(l => l.ProductId.ToString().StartsWith(term)),
+                            "ends" => query.Where(l => l.ProductId.ToString().EndsWith(term)),
+                            _ => query.Where(l => l.ProductId.ToString().Contains(term))
+                        };
+                        break;
+                    case "note":
+                        query = sm switch
+                        {
+                            "starts" => query.Where(l => l.Note != null && l.Note.ToLower().StartsWith(termLower)),
+                            "ends" => query.Where(l => l.Note != null && l.Note.ToLower().EndsWith(termLower)),
+                            _ => query.Where(l => l.Note != null && l.Note.ToLower().Contains(termLower))
+                        };
+                        break;
+                    default:
+                        query = query.Where(l =>
+                            (sm == "starts" && l.Id.ToString().StartsWith(term)) ||
+                            (sm == "ends" && l.Id.ToString().EndsWith(term)) ||
+                            (sm == "contains" && l.Id.ToString().Contains(term)) ||
+                            (sm == "starts" && l.StockTransferId.ToString().StartsWith(term)) ||
+                            (sm == "ends" && l.StockTransferId.ToString().EndsWith(term)) ||
+                            (sm == "contains" && l.StockTransferId.ToString().Contains(term)) ||
+                            (sm == "starts" && l.ProductId.ToString().StartsWith(term)) ||
+                            (sm == "ends" && l.ProductId.ToString().EndsWith(term)) ||
+                            (sm == "contains" && l.ProductId.ToString().Contains(term)) ||
+                            (l.Note != null && (
+                                (sm == "starts" && l.Note.ToLower().StartsWith(termLower)) ||
+                                (sm == "ends" && l.Note.ToLower().EndsWith(termLower)) ||
+                                (sm == "contains" && l.Note.ToLower().Contains(termLower)))));
+                        break;
+                }
             }
 
-            // 4) الترتيب
             sort = string.IsNullOrWhiteSpace(sort) ? "id" : sort.ToLowerInvariant();
 
             query = (sort, descending) switch
             {
                 ("id", false) => query.OrderBy(l => l.Id),
                 ("id", true) => query.OrderByDescending(l => l.Id),
-
                 ("transfer", false) => query.OrderBy(l => l.StockTransferId).ThenBy(l => l.Id),
                 ("transfer", true) => query.OrderByDescending(l => l.StockTransferId).ThenByDescending(l => l.Id),
-
                 ("product", false) => query.OrderBy(l => l.ProductId).ThenBy(l => l.Id),
                 ("product", true) => query.OrderByDescending(l => l.ProductId).ThenByDescending(l => l.Id),
-
                 ("qty", false) => query.OrderBy(l => l.Qty).ThenBy(l => l.Id),
                 ("qty", true) => query.OrderByDescending(l => l.Qty).ThenByDescending(l => l.Id),
-
                 ("date", false) => query.OrderBy(l => l.StockTransfer!.TransferDate).ThenBy(l => l.Id),
                 ("date", true) => query.OrderByDescending(l => l.StockTransfer!.TransferDate).ThenByDescending(l => l.Id),
-
-                ("fromwh", false) => query.OrderBy(l => l.StockTransfer!.FromWarehouseId).ThenBy(l => l.Id),
-                ("fromwh", true) => query.OrderByDescending(l => l.StockTransfer!.FromWarehouseId).ThenByDescending(l => l.Id),
-
-                ("towh", false) => query.OrderBy(l => l.StockTransfer!.ToWarehouseId).ThenBy(l => l.Id),
-                ("towh", true) => query.OrderByDescending(l => l.StockTransfer!.ToWarehouseId).ThenByDescending(l => l.Id),
-
+                ("fromwh", false) => query.OrderBy(l => l.StockTransfer!.FromWarehouse!.WarehouseName).ThenBy(l => l.Id),
+                ("fromwh", true) => query.OrderByDescending(l => l.StockTransfer!.FromWarehouse!.WarehouseName).ThenByDescending(l => l.Id),
+                ("towh", false) => query.OrderBy(l => l.StockTransfer!.ToWarehouse!.WarehouseName).ThenBy(l => l.Id),
+                ("towh", true) => query.OrderByDescending(l => l.StockTransfer!.ToWarehouse!.WarehouseName).ThenByDescending(l => l.Id),
                 ("note", false) => query.OrderBy(l => l.Note ?? "").ThenBy(l => l.Id),
                 ("note", true) => query.OrderByDescending(l => l.Note ?? "").ThenByDescending(l => l.Id),
-
                 _ when !descending => query.OrderBy(l => l.Id),
                 _ => query.OrderByDescending(l => l.Id)
             };
@@ -120,39 +167,54 @@ namespace ERP.Controllers
             return query;
         }
 
-        // =========================================================
-        // Index — قائمة سطور التحويل بالنظام الموحد
-        // =========================================================
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy,
-            string? sort,
-            string? dir,
+            string? searchBy = "all",
+            string? sort = "id",
+            string? dir = "asc",
+            string? searchMode = "contains",
             int page = 1,
-            int pageSize = 25,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_transfer = null,
+            string? filterCol_transferExpr = null,
             string? filterCol_date = null,
             string? filterCol_fromwh = null,
+            string? filterCol_fromwhExpr = null,
             string? filterCol_towh = null,
+            string? filterCol_towhExpr = null,
             string? filterCol_product = null,
+            string? filterCol_productExpr = null,
             string? filterCol_qty = null,
-            string? filterCol_note = null
-        )
+            string? filterCol_qtyExpr = null,
+            string? filterCol_note = null)
         {
-            bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
 
-            // الاستعلام الأساسي: السطور + الهيدر (للحصول على تاريخ التحويل)
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
+            bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
             IQueryable<StockTransferLine> baseQuery = _context.StockTransferLines
                 .AsNoTracking()
-                .Include(l => l.StockTransfer);
+                .Include(l => l.StockTransfer)
+                    .ThenInclude(st => st!.FromWarehouse)
+                .Include(l => l.StockTransfer)
+                    .ThenInclude(st => st!.ToWarehouse);
 
-            // تطبيق الفلاتر العامة (بحث + كود + تاريخ + ترتيب)
             var query = ApplyFiltersAndSorting(
                 baseQuery,
                 search,
@@ -163,98 +225,54 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                sm);
 
-            // فلاتر الأعمدة بنمط Excel
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
-            {
-                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.Id));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_transfer))
-            {
-                var ids = filterCol_transfer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.StockTransferId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_product))
-            {
-                var ids = filterCol_product.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.ProductId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
-            {
-                var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.Qty));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_note))
-            {
-                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
-                if (vals.Count > 0)
-                    query = query.Where(l => l.Note != null && vals.Contains(l.Note));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_date))
-            {
-                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    query = query.Where(l => l.StockTransfer != null && dates.Contains(l.StockTransfer.TransferDate.Date));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_fromwh))
-            {
-                var ids = filterCol_fromwh.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => l.StockTransfer != null && ids.Contains(l.StockTransfer.FromWarehouseId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_towh))
-            {
-                var ids = filterCol_towh.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => l.StockTransfer != null && ids.Contains(l.StockTransfer.ToWarehouseId));
-            }
-
-            // PagedResult بالنظام الموحد
-            var result = await PagedResult<StockTransferLine>.CreateAsync(
+            query = StockTransferLineColumnFilter.ApplyColumnFilters(
                 query,
-                page,
-                pageSize,
-                search ?? "",
-                descending,
-                sort ?? "id",
-                searchBy ?? "all");
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_transfer,
+                filterCol_transferExpr,
+                filterCol_date,
+                filterCol_fromwh,
+                filterCol_fromwhExpr,
+                filterCol_towh,
+                filterCol_towhExpr,
+                filterCol_product,
+                filterCol_productExpr,
+                filterCol_qty,
+                filterCol_qtyExpr,
+                filterCol_note);
 
-            // تعبئة الخواص المستخدمة في الواجهة
-            result.Search = search ?? "";
-            result.SearchBy = searchBy ?? "all";
-            result.SortColumn = sort ?? "id";
-            result.SortDescending = descending;
-            result.UseDateRange = useDateRange;
-            result.FromDate = fromDate;
-            result.ToDate = toDate;
+            var total = await query.CountAsync();
+            var totalQtyFiltered = await query.SumAsync(l => (long)l.Qty);
+
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = total == 0 ? 10 : Math.Min(total, 100_000);
+                page = 1;
+            }
+
+            var skip = (page - 1) * effectivePageSize;
+            if (total > 0 && skip >= total)
+            {
+                page = Math.Max(1, (int)Math.Ceiling((double)total / effectivePageSize));
+                skip = (page - 1) * effectivePageSize;
+            }
+
+            var items = await query.Skip(skip).Take(effectivePageSize).ToListAsync();
+            var result = new PagedResult<StockTransferLine>(items, page, pageSize, total)
+            {
+                Search = search ?? "",
+                SearchBy = searchBy ?? "all",
+                SortColumn = sort ?? "id",
+                SortDescending = descending,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
@@ -262,18 +280,77 @@ namespace ERP.Controllers
             ViewBag.SearchBy = result.SearchBy;
             ViewBag.Sort = result.SortColumn;
             ViewBag.Dir = result.SortDescending ? "desc" : "asc";
+            ViewBag.SearchMode = sm;
+            ViewBag.PageSize = pageSize;
+            ViewBag.TotalQtyFiltered = totalQtyFiltered;
 
-            // تمرير فلاتر الأعمدة للواجهة
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr ?? string.Empty;
             ViewBag.FilterCol_Transfer = filterCol_transfer;
+            ViewBag.FilterCol_TransferExpr = filterCol_transferExpr ?? string.Empty;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_FromWh = filterCol_fromwh;
+            ViewBag.FilterCol_FromWhExpr = filterCol_fromwhExpr ?? string.Empty;
             ViewBag.FilterCol_ToWh = filterCol_towh;
+            ViewBag.FilterCol_ToWhExpr = filterCol_towhExpr ?? string.Empty;
             ViewBag.FilterCol_Product = filterCol_product;
+            ViewBag.FilterCol_ProductExpr = filterCol_productExpr ?? string.Empty;
             ViewBag.FilterCol_Qty = filterCol_qty;
+            ViewBag.FilterCol_QtyExpr = filterCol_qtyExpr ?? string.Empty;
             ViewBag.FilterCol_Note = filterCol_note;
 
             return View(result);
+        }
+
+        /// <summary>قيم الأعمدة المميزة لفلتر الأعمدة (نصية؛ الأعمدة الرقمية تستخدم Expr من الواجهة).</summary>
+        [HttpGet]
+        public async Task<IActionResult> GetColumnValues(string column, string? search = null)
+        {
+            var searchTerm = (search ?? "").Trim().ToLowerInvariant();
+            var col = column?.Trim().ToLowerInvariant() ?? "";
+
+            IQueryable<StockTransferLine> q = _context.StockTransferLines.AsNoTracking().Include(l => l.StockTransfer);
+
+            List<(string Value, string Display)> items = col switch
+            {
+                "date" => (await q.Where(l => l.StockTransfer != null).Select(l => l.StockTransfer!.TransferDate.Date).Distinct().OrderByDescending(d => d).Take(200).ToListAsync())
+                    .Select(d => (d.ToString("yyyy-MM-dd"), d.ToString("yyyy/MM/dd"))).ToList(),
+                "note" => (await q.Where(l => l.Note != null).Select(l => l.Note!).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                    .Select(v => (v, v)).ToList(),
+                _ => new List<(string Value, string Display)>()
+            };
+
+            if (col == "fromwh")
+            {
+                var whIds = await q.Where(l => l.StockTransfer != null).Select(l => l.StockTransfer!.FromWarehouseId).Distinct().Take(500).ToListAsync();
+                var whRows = await _context.Warehouses.AsNoTracking()
+                    .Where(w => whIds.Contains(w.WarehouseId))
+                    .OrderBy(w => w.WarehouseName)
+                    .Select(w => new { w.WarehouseId, w.WarehouseName })
+                    .Take(300)
+                    .ToListAsync();
+                items = whRows.Select(w => (w.WarehouseId.ToString(CultureInfo.InvariantCulture), $"{w.WarehouseName} ({w.WarehouseId})")).ToList();
+            }
+            else if (col == "towh")
+            {
+                var whIds = await q.Where(l => l.StockTransfer != null).Select(l => l.StockTransfer!.ToWarehouseId).Distinct().Take(500).ToListAsync();
+                var whRows = await _context.Warehouses.AsNoTracking()
+                    .Where(w => whIds.Contains(w.WarehouseId))
+                    .OrderBy(w => w.WarehouseName)
+                    .Select(w => new { w.WarehouseId, w.WarehouseName })
+                    .Take(300)
+                    .ToListAsync();
+                items = whRows.Select(w => (w.WarehouseId.ToString(CultureInfo.InvariantCulture), $"{w.WarehouseName} ({w.WarehouseId})")).ToList();
+            }
+
+            if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
+            {
+                items = items
+                    .Where(x => (x.Display ?? x.Value).ToLowerInvariant().Contains(searchTerm))
+                    .ToList();
+            }
+
+            return Json(items.Select(x => new { value = x.Value, display = x.Display }));
         }
 
         // =========================================================
@@ -466,6 +543,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "id",
             string? dir = "asc",
             bool useDateRange = false,
@@ -474,21 +552,31 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_transfer = null,
+            string? filterCol_transferExpr = null,
             string? filterCol_date = null,
             string? filterCol_fromwh = null,
+            string? filterCol_fromwhExpr = null,
             string? filterCol_towh = null,
+            string? filterCol_towhExpr = null,
             string? filterCol_product = null,
+            string? filterCol_productExpr = null,
             string? filterCol_qty = null,
+            string? filterCol_qtyExpr = null,
             string? filterCol_note = null,
-            string format = "excel"   // excel | csv
-        )
+            string format = "excel")
         {
             bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
             IQueryable<StockTransferLine> baseQuery = _context.StockTransferLines
                 .AsNoTracking()
-                .Include(l => l.StockTransfer);
+                .Include(l => l.StockTransfer)
+                    .ThenInclude(st => st!.FromWarehouse)
+                .Include(l => l.StockTransfer)
+                    .ThenInclude(st => st!.ToWarehouse);
 
             var query = ApplyFiltersAndSorting(
                 baseQuery,
@@ -500,79 +588,25 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                sm);
 
-            // فلاتر الأعمدة مثل Index
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
-            {
-                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.Id));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_transfer))
-            {
-                var ids = filterCol_transfer.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.StockTransferId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_product))
-            {
-                var ids = filterCol_product.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.ProductId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
-            {
-                var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => ids.Contains(l.Qty));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_note))
-            {
-                var vals = filterCol_note.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
-                if (vals.Count > 0)
-                    query = query.Where(l => l.Note != null && vals.Contains(l.Note));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_date))
-            {
-                var dates = filterCol_date.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => DateTime.TryParse(x.Trim(), out var d) ? d.Date : (DateTime?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (dates.Count > 0)
-                    query = query.Where(l => l.StockTransfer != null && dates.Contains(l.StockTransfer.TransferDate.Date));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_fromwh))
-            {
-                var ids = filterCol_fromwh.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => l.StockTransfer != null && ids.Contains(l.StockTransfer.FromWarehouseId));
-            }
-
-            if (!string.IsNullOrWhiteSpace(filterCol_towh))
-            {
-                var ids = filterCol_towh.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
-                    .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
-                    .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0)
-                    query = query.Where(l => l.StockTransfer != null && ids.Contains(l.StockTransfer.ToWarehouseId));
-            }
+            query = StockTransferLineColumnFilter.ApplyColumnFilters(
+                query,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_transfer,
+                filterCol_transferExpr,
+                filterCol_date,
+                filterCol_fromwh,
+                filterCol_fromwhExpr,
+                filterCol_towh,
+                filterCol_towhExpr,
+                filterCol_product,
+                filterCol_productExpr,
+                filterCol_qty,
+                filterCol_qtyExpr,
+                filterCol_note);
 
             var list = await query.ToListAsync();
 
@@ -590,8 +624,8 @@ namespace ERP.Controllers
                     var note = (l.Note ?? "").Replace(",", " ");
                     var date = l.StockTransfer?.TransferDate
                                .ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? "";
-                    var fromWh = l.StockTransfer?.FromWarehouseId.ToString() ?? "";
-                    var toWh = l.StockTransfer?.ToWarehouseId.ToString() ?? "";
+                    var fromWh = (l.StockTransfer?.FromWarehouse?.WarehouseName ?? l.StockTransfer?.FromWarehouseId.ToString() ?? "").Replace(",", " ");
+                    var toWh = (l.StockTransfer?.ToWarehouse?.WarehouseName ?? l.StockTransfer?.ToWarehouseId.ToString() ?? "").Replace(",", " ");
 
                     string line = string.Join(",",
                         l.Id,
@@ -639,8 +673,10 @@ namespace ERP.Controllers
                     ws.Cell(r, 1).Value = l.Id;
                     ws.Cell(r, 2).Value = l.StockTransferId;
                     ws.Cell(r, 3).Value = l.StockTransfer?.TransferDate;
-                    ws.Cell(r, 4).Value = l.StockTransfer?.FromWarehouseId;
-                    ws.Cell(r, 5).Value = l.StockTransfer?.ToWarehouseId;
+                    ws.Cell(r, 4).Value = l.StockTransfer?.FromWarehouse?.WarehouseName
+                        ?? (l.StockTransfer != null ? l.StockTransfer.FromWarehouseId.ToString(CultureInfo.InvariantCulture) : "");
+                    ws.Cell(r, 5).Value = l.StockTransfer?.ToWarehouse?.WarehouseName
+                        ?? (l.StockTransfer != null ? l.StockTransfer.ToWarehouseId.ToString(CultureInfo.InvariantCulture) : "");
                     ws.Cell(r, 6).Value = l.ProductId;
                     ws.Cell(r, 7).Value = l.Qty;
                     ws.Cell(r, 8).Value = l.Note ?? "";

@@ -267,6 +267,11 @@ namespace ERP.Controllers
                 }
 
                 int? fixedCustomerId = customerIdOverride > 0 ? customerIdOverride : null;
+                if (!fixedCustomerId.HasValue && colCustomer <= 0)
+                {
+                    TempData["VpmImportError"] = "يجب اختيار عميل من القائمة أو وجود عمود \"اسم العميل\" في الملف.";
+                    return RedirectToAction(nameof(Import));
+                }
                 var customerByName = await _db.Customers
                     .AsNoTracking()
                     .Where(c => c.IsActive == true)
@@ -284,119 +289,118 @@ namespace ERP.Controllers
                     return sheet.Cells[row, col].Text?.Trim() ?? "";
                 }
 
-                int inserted = 0, updated = 0, skipped = 0;
-                var errors = new List<string>();
-                bool noCustomerColumn = false;
-
-                for (int rowStart = 2; rowStart <= lastRow; rowStart += ImportBatchSize)
+                // استبدال كامل: مسح المطابقات السابقة للعملاء المعنيين ثم إدراج من الملف فقط (آخر صف يفوز عند تكرار نفس العميل+الصنف).
+                if (fixedCustomerId.HasValue)
                 {
-                    int rowEnd = Math.Min(rowStart + ImportBatchSize - 1, lastRow);
-                    var batchRows = new List<(int Row, int CustomerId, int ProductId, string ProductName, string CodeStr, decimal? Price)>();
-
-                    for (int row = rowStart; row <= rowEnd; row++)
+                    var oldFixed = await _db.VendorProductMappings.Where(x => x.CustomerId == fixedCustomerId.Value).ToListAsync();
+                    if (oldFixed.Count > 0)
                     {
-                        string productName = GetCell(row, colProductName);
-                        if (string.IsNullOrWhiteSpace(productName)) { skipped++; continue; }
+                        _db.VendorProductMappings.RemoveRange(oldFixed);
+                        await _db.SaveChangesAsync();
+                    }
+                }
+                else
+                {
+                    var customerIdsToClear = new HashSet<int>();
+                    for (int row = 2; row <= lastRow; row++)
+                    {
+                        var pn = GetCell(row, colProductName);
+                        if (string.IsNullOrWhiteSpace(pn)) continue;
+                        var cn = GetCell(row, colCustomer).Trim();
+                        if (string.IsNullOrWhiteSpace(cn)) continue;
+                        if (customerByName.TryGetValue(cn, out var cid))
+                            customerIdsToClear.Add(cid);
+                    }
+                    if (customerIdsToClear.Count > 0)
+                    {
+                        var oldMulti = await _db.VendorProductMappings.Where(x => customerIdsToClear.Contains(x.CustomerId)).ToListAsync();
+                        if (oldMulti.Count > 0)
+                        {
+                            _db.VendorProductMappings.RemoveRange(oldMulti);
+                            await _db.SaveChangesAsync();
+                        }
+                    }
+                }
 
-                        int customerId;
-                        if (fixedCustomerId.HasValue)
-                            customerId = fixedCustomerId.Value;
-                        else if (colCustomer > 0)
-                        {
-                            string custName = GetCell(row, colCustomer).Trim();
-                            if (string.IsNullOrWhiteSpace(custName))
-                            {
-                                if (errors.Count < ImportMaxErrorsReported) errors.Add($"صف {row}: اسم العميل فارغ");
-                                skipped++;
-                                continue;
-                            }
-                            if (!customerByName.TryGetValue(custName, out customerId))
-                            {
-                                if (errors.Count < ImportMaxErrorsReported) errors.Add("صف " + row + ": عميل غير موجود (\"" + custName + "\")");
-                                skipped++;
-                                continue;
-                            }
-                        }
-                        else
-                        {
-                            noCustomerColumn = true;
-                            break;
-                        }
+                int inserted = 0, skipped = 0;
+                var errors = new List<string>();
+                var fileRows = new Dictionary<(int CustomerId, int ProductId), (int Row, int CustomerId, int ProductId, string ProductName, string CodeStr, decimal? Price)>();
 
-                        string codeStr = colCode > 0 ? GetCell(row, colCode) : "";
-                        decimal? price = null;
-                        if (colPrice > 0)
-                        {
-                            var priceText = GetCell(row, colPrice);
-                            if (decimal.TryParse(priceText, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal p) && p >= 0)
-                                price = p;
-                        }
+                for (int row = 2; row <= lastRow; row++)
+                {
+                    string productName = GetCell(row, colProductName);
+                    if (string.IsNullOrWhiteSpace(productName)) { skipped++; continue; }
 
-                        int productId = 0;
-                        if (!string.IsNullOrWhiteSpace(codeStr))
+                    int customerId;
+                    if (fixedCustomerId.HasValue)
+                        customerId = fixedCustomerId.Value;
+                    else
+                    {
+                        string custName = GetCell(row, colCustomer).Trim();
+                        if (string.IsNullOrWhiteSpace(custName))
                         {
-                            if (int.TryParse(codeStr, out int codeInt) && productsByProdId.TryGetValue(codeInt, out var prod))
-                                productId = prod.ProdId;
-                            else if (productsByExtCode.TryGetValue(codeStr, out int pid))
-                                productId = pid;
-                        }
-                        if (productId == 0)
-                        {
-                            if (errors.Count < ImportMaxErrorsReported) errors.Add("صف " + row + ": الكود \"" + codeStr + "\" لا يطابق صنفاً — تخطي.");
+                            if (errors.Count < ImportMaxErrorsReported) errors.Add($"صف {row}: اسم العميل فارغ");
                             skipped++;
                             continue;
                         }
-
-                        batchRows.Add((row, customerId, productId, productName, codeStr, price));
-                    }
-
-                    if (noCustomerColumn)
-                    {
-                        errors.Add("يجب اختيار عميل من القائمة أو وجود عمود \"اسم العميل\" في الملف.");
-                        break;
-                    }
-
-                    if (batchRows.Count == 0) continue;
-
-                    var customerIdsInBatch = batchRows.Select(b => b.CustomerId).Distinct().ToList();
-                    var existingList = await _db.VendorProductMappings
-                        .Where(x => customerIdsInBatch.Contains(x.CustomerId))
-                        .ToListAsync();
-                    var batchKeys = batchRows.Select(b => (b.CustomerId, b.ProductId)).ToHashSet();
-                    var existingDict = existingList.Where(x => batchKeys.Contains((x.CustomerId, x.ProductId))).ToDictionary(x => (x.CustomerId, x.ProductId));
-
-                    foreach (var (row, customerId, productId, productName, codeStr, price) in batchRows)
-                    {
-                        if (existingDict.TryGetValue((customerId, productId), out var existing))
+                        if (!customerByName.TryGetValue(custName, out customerId))
                         {
-                            existing.VendorProductName = productName;
-                            existing.VendorProductCode = codeStr;
-                            existing.PriceRetail = price;
-                            existing.UpdatedAt = DateTime.UtcNow;
-                            updated++;
-                        }
-                        else
-                        {
-                            _db.VendorProductMappings.Add(new VendorProductMapping
-                            {
-                                CustomerId = customerId,
-                                VendorProductName = productName,
-                                VendorProductCode = codeStr,
-                                ProductId = productId,
-                                PriceRetail = price,
-                                CreatedAt = DateTime.UtcNow
-                            });
-                            inserted++;
+                            if (errors.Count < ImportMaxErrorsReported) errors.Add("صف " + row + ": عميل غير موجود (\"" + custName + "\")");
+                            skipped++;
+                            continue;
                         }
                     }
 
+                    string codeStr = colCode > 0 ? GetCell(row, colCode) : "";
+                    decimal? price = null;
+                    if (colPrice > 0)
+                    {
+                        var priceText = GetCell(row, colPrice);
+                        if (decimal.TryParse(priceText, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal p) && p >= 0)
+                            price = p;
+                    }
+
+                    int productId = 0;
+                    if (!string.IsNullOrWhiteSpace(codeStr))
+                    {
+                        if (int.TryParse(codeStr, out int codeInt) && productsByProdId.TryGetValue(codeInt, out var prod))
+                            productId = prod.ProdId;
+                        else if (productsByExtCode.TryGetValue(codeStr, out int pid))
+                            productId = pid;
+                    }
+                    if (productId == 0)
+                    {
+                        if (errors.Count < ImportMaxErrorsReported) errors.Add("صف " + row + ": الكود \"" + codeStr + "\" لا يطابق صنفاً — تخطي.");
+                        skipped++;
+                        continue;
+                    }
+
+                    fileRows[(customerId, productId)] = (row, customerId, productId, productName, codeStr, price);
+                }
+
+                var rowsToInsert = fileRows.Values.ToList();
+                for (int i = 0; i < rowsToInsert.Count; i += ImportBatchSize)
+                {
+                    foreach (var (_, customerId, productId, productName, codeStr, price) in rowsToInsert.Skip(i).Take(ImportBatchSize))
+                    {
+                        _db.VendorProductMappings.Add(new VendorProductMapping
+                        {
+                            CustomerId = customerId,
+                            VendorProductName = productName,
+                            VendorProductCode = codeStr,
+                            ProductId = productId,
+                            PriceRetail = price,
+                            CreatedAt = DateTime.UtcNow
+                        });
+                        inserted++;
+                    }
                     await _db.SaveChangesAsync();
                     _db.ChangeTracker.Clear();
                 }
 
-                var msg = inserted + updated > 0
-                    ? $"تم استيراد {inserted} سطراً وتحديث {updated} سطراً بنجاح."
-                    : "لم يتم إضافة أو تحديث أي سطر.";
+                var msg = inserted > 0
+                    ? $"تم استيراد {inserted} سطر مطابقة (استبدال كامل للمطابقات السابقة للعملاء المعنيين)."
+                    : "لم يتم إضافة أي سطر صالح.";
                 if (skipped > 0) msg += $" تم تخطي {skipped} صفاً.";
                 if (errors.Count > 0 && errors.Count <= 5)
                     msg += " " + string.Join(" ", errors);

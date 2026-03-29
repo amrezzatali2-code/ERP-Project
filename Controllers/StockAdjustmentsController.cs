@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;          // Dictionary
 using System.Linq;
+using System.Globalization;
 using System.Linq.Expressions;            // Expressions
 using System.Text;                        // StringBuilder للتصدير
 using System.Threading.Tasks;
@@ -29,6 +30,145 @@ namespace ERP.Controllers
         private readonly StockAnalysisService _stockAnalysisService;
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
+
+        /// <summary>
+        /// تطبيع تعبير الفلتر الرقمي (نفس فكرة قائمة الأصناف / أصناف مرتجع البيع):
+        /// أرقام عربية ٠–٩، وفاصلة عشرية واحدة 10,5 → 10.5.
+        /// </summary>
+        private static string? NormalizeNumericFilterExpr(string? raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var chars = raw.Trim().ToCharArray();
+            for (var i = 0; i < chars.Length; i++)
+            {
+                if (chars[i] >= '٠' && chars[i] <= '٩')
+                    chars[i] = (char)('0' + (chars[i] - '٠'));
+            }
+            var s = new string(chars);
+            if (s.Count(c => c == ',') == 1 && s.IndexOf('.') < 0)
+                s = s.Replace(',', '.');
+            return string.IsNullOrWhiteSpace(s) ? null : s;
+        }
+
+        /// <summary>فلتر رقمي على كود التسوية أو كود المخزن (نمط القوائم: Expr).</summary>
+        private static IQueryable<StockAdjustment> ApplyAdjustmentInt32Expr(IQueryable<StockAdjustment> q, string? expr, string field)
+        {
+            expr = NormalizeNumericFilterExpr(expr);
+            if (string.IsNullOrWhiteSpace(expr)) return q;
+            if (expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var maxLe))
+                return field == "id" ? q.Where(x => x.Id <= maxLe) : q.Where(x => x.WarehouseId <= maxLe);
+            if (expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, CultureInfo.InvariantCulture, out var minGe))
+                return field == "id" ? q.Where(x => x.Id >= minGe) : q.Where(x => x.WarehouseId >= minGe);
+            if (expr.StartsWith("<", StringComparison.Ordinal) && !expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var maxLt))
+                return field == "id" ? q.Where(x => x.Id < maxLt) : q.Where(x => x.WarehouseId < maxLt);
+            if (expr.StartsWith(">", StringComparison.Ordinal) && !expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, CultureInfo.InvariantCulture, out var minGt))
+                return field == "id" ? q.Where(x => x.Id > minGt) : q.Where(x => x.WarehouseId > minGt);
+            if ((expr.Contains(':') || expr.IndexOf('-', StringComparison.Ordinal) > 0) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var from) &&
+                    int.TryParse(parts[1].Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return field == "id"
+                        ? q.Where(x => x.Id >= from && x.Id <= to)
+                        : q.Where(x => x.WarehouseId >= from && x.WarehouseId <= to);
+                }
+            }
+            if (int.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out var exact))
+                return field == "id" ? q.Where(x => x.Id == exact) : q.Where(x => x.WarehouseId == exact);
+            return q;
+        }
+
+        private static readonly CultureInfo _inv = CultureInfo.InvariantCulture;
+
+        /// <summary>مجموع كمية قبل/بعد السطور (يطابق عرض الجدول) — صيغ Expr كما في أصناف مرتجع البيع.</summary>
+        private static IQueryable<StockAdjustment> ApplyQtySumExpr(IQueryable<StockAdjustment> q, string? expr, bool qtyBefore)
+        {
+            expr = NormalizeNumericFilterExpr(expr);
+            if (string.IsNullOrWhiteSpace(expr)) return q;
+            if (expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var maxLe))
+                return qtyBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.QtyBefore) <= maxLe)
+                    : q.Where(a => a.Lines.Sum(l => l.QtyAfter) <= maxLe);
+            if (expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 2 && int.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var minGe))
+                return qtyBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.QtyBefore) >= minGe)
+                    : q.Where(a => a.Lines.Sum(l => l.QtyAfter) >= minGe);
+            if (expr.StartsWith("<", StringComparison.Ordinal) && !expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var maxLt))
+                return qtyBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.QtyBefore) < maxLt)
+                    : q.Where(a => a.Lines.Sum(l => l.QtyAfter) < maxLt);
+            if (expr.StartsWith(">", StringComparison.Ordinal) && !expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 1 && int.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var minGt))
+                return qtyBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.QtyBefore) > minGt)
+                    : q.Where(a => a.Lines.Sum(l => l.QtyAfter) > minGt);
+            if ((expr.Contains(':') || expr.IndexOf('-', StringComparison.Ordinal) > 0) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0].Trim(), NumberStyles.Any, _inv, out var from) &&
+                    int.TryParse(parts[1].Trim(), NumberStyles.Any, _inv, out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return qtyBefore
+                        ? q.Where(a => a.Lines.Sum(l => l.QtyBefore) >= from && a.Lines.Sum(l => l.QtyBefore) <= to)
+                        : q.Where(a => a.Lines.Sum(l => l.QtyAfter) >= from && a.Lines.Sum(l => l.QtyAfter) <= to);
+                }
+            }
+            if (int.TryParse(expr, NumberStyles.Any, _inv, out var exact))
+                return qtyBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.QtyBefore) == exact)
+                    : q.Where(a => a.Lines.Sum(l => l.QtyAfter) == exact);
+            return q;
+        }
+
+        /// <summary>مجموع (كمية × تكلفة الوحدة) قبل/بعد — صيغ Expr كما في قائمة الأصناف/مرتجع البيع.</summary>
+        private static IQueryable<StockAdjustment> ApplyCostSumExpr(IQueryable<StockAdjustment> q, string? expr, bool costBefore)
+        {
+            expr = NormalizeNumericFilterExpr(expr);
+            if (string.IsNullOrWhiteSpace(expr)) return q;
+            if (expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var maxLe))
+                return costBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0m) <= maxLe)
+                    : q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0m) <= maxLe);
+            if (expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 2 && decimal.TryParse(expr.AsSpan(2), NumberStyles.Any, _inv, out var minGe))
+                return costBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0m) >= minGe)
+                    : q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0m) >= minGe);
+            if (expr.StartsWith("<", StringComparison.Ordinal) && !expr.StartsWith("<=", StringComparison.Ordinal) && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var maxLt))
+                return costBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0m) < maxLt)
+                    : q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0m) < maxLt);
+            if (expr.StartsWith(">", StringComparison.Ordinal) && !expr.StartsWith(">=", StringComparison.Ordinal) && expr.Length > 1 && decimal.TryParse(expr.AsSpan(1), NumberStyles.Any, _inv, out var minGt))
+                return costBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0m) > minGt)
+                    : q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0m) > minGt);
+            if ((expr.Contains(':') || expr.IndexOf('-', StringComparison.Ordinal) > 0) && !expr.StartsWith("-"))
+            {
+                var sep = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    decimal.TryParse(parts[0].Trim(), NumberStyles.Any, _inv, out var from) &&
+                    decimal.TryParse(parts[1].Trim(), NumberStyles.Any, _inv, out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return costBefore
+                        ? q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0m) >= from
+                                      && a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0m) <= to)
+                        : q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0m) >= from
+                                      && a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0m) <= to);
+                }
+            }
+            if (decimal.TryParse(expr, NumberStyles.Any, _inv, out var exact))
+                return costBefore
+                    ? q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyBefore * l.CostPerUnit.Value : 0m) == exact)
+                    : q.Where(a => a.Lines.Sum(l => l.CostPerUnit.HasValue ? l.QtyAfter * l.CostPerUnit.Value : 0m) == exact);
+            return q;
+        }
 
         public StockAdjustmentsController(AppDbContext context, IUserActivityLogger activityLogger, StockAnalysisService stockAnalysisService)
         {
@@ -50,7 +190,8 @@ namespace ERP.Controllers
             int? toCode,
             bool useDateRange,
             DateTime? fromDate,
-            DateTime? toDate)
+            DateTime? toDate,
+            string? searchMode = null)
         {
             // 1) الاستعلام الأساسي (قراءة فقط)
             IQueryable<StockAdjustment> q =
@@ -109,8 +250,9 @@ namespace ERP.Controllers
                 stringFields,
                 intFields,
                 orderFields,
-                defaultSearchBy: "id",     // البحث الافتراضي بالكود
-                defaultSortBy: "id"        // الترتيب الافتراضي بالكود
+                defaultSearchBy: "all",    // مطابق لقائمة FIFO
+                defaultSortBy: "id",      // الترتيب الافتراضي بالكود
+                searchMode: searchMode
             );
 
             return q;
@@ -121,9 +263,10 @@ namespace ERP.Controllers
         // =========================
         public async Task<IActionResult> Index(
             string? search,
-            string? searchBy = "id",        // id | warehouse | reference | reason
+            string? searchBy = "all",       // all | id | warehouse | reference | reason
             string? sort = "id",            // id | date | warehouse | created
             string? dir = "asc",            // asc | desc
+            string? searchMode = "contains",
             int page = 1,
             int pageSize = 25,
             int? fromCode = null,           // فلتر كود من
@@ -132,12 +275,22 @@ namespace ERP.Controllers
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_reference = null,
             string? filterCol_reason = null,
-            string? filterCol_created = null)
+            string? filterCol_created = null,
+            string? filterCol_products = null,
+            string? filterCol_qtyBeforeExpr = null,
+            string? filterCol_qtyAfterExpr = null,
+            string? filterCol_costBeforeExpr = null,
+            string? filterCol_costAfterExpr = null)
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
+
             // بناء الاستعلام طبقاً للفلاتر العامة (بحث + كود + تاريخ)
             var qBase = BuildAdjustmentsQuery(
                 search,
@@ -148,10 +301,13 @@ namespace ERP.Controllers
                 toCode,
                 useDateRange,
                 fromDate,
-                toDate);
+                toDate,
+                sm);
 
-            // فلاتر الأعمدة (بنمط Excel) على رأس التسوية
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            // فلاتر الأعمدة (بنمط Excel) على رأس التسوية — رقمي Expr له أولوية على قائمة القيم
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                qBase = ApplyAdjustmentInt32Expr(qBase, filterCol_idExpr, "id");
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -160,7 +316,9 @@ namespace ERP.Controllers
                     qBase = qBase.Where(x => ids.Contains(x.Id));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouseExpr))
+                qBase = ApplyAdjustmentInt32Expr(qBase, filterCol_warehouseExpr, "warehouse");
+            else if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
             {
                 var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -203,6 +361,24 @@ namespace ERP.Controllers
                     qBase = qBase.Where(x => x.CreatedAt.Date != DateTime.MinValue && dates.Contains(x.CreatedAt.Date));
             }
 
+            // أعمدة مجمّعة (سطور التسوية): اسم صنف / كميات / تكاليف
+            if (!string.IsNullOrWhiteSpace(filterCol_products))
+            {
+                var names = filterCol_products.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (names.Count > 0)
+                    qBase = qBase.Where(a => a.Lines.Any(l => l.Product != null && l.Product.ProdName != null && names.Contains(l.Product.ProdName)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyBeforeExpr))
+                qBase = ApplyQtySumExpr(qBase, filterCol_qtyBeforeExpr, qtyBefore: true);
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyAfterExpr))
+                qBase = ApplyQtySumExpr(qBase, filterCol_qtyAfterExpr, qtyBefore: false);
+            if (!string.IsNullOrWhiteSpace(filterCol_costBeforeExpr))
+                qBase = ApplyCostSumExpr(qBase, filterCol_costBeforeExpr, costBefore: true);
+            if (!string.IsNullOrWhiteSpace(filterCol_costAfterExpr))
+                qBase = ApplyCostSumExpr(qBase, filterCol_costAfterExpr, costBefore: false);
+
             // تضمين السطور بعد تطبيق الفلاتر
             var q = qBase
                 .Include(a => a.Lines)
@@ -213,7 +389,7 @@ namespace ERP.Controllers
 
             // تعبئة خصائص البحث/الترتيب داخل الموديل (للاستخدام في الواجهة)
             model.Search = search ?? "";
-            model.SearchBy = searchBy ?? "id";
+            model.SearchBy = searchBy ?? "all";
             model.SortColumn = sort ?? "id";
             model.SortDescending = (dir?.ToLower() == "desc");
             model.UseDateRange = useDateRange;
@@ -231,11 +407,19 @@ namespace ERP.Controllers
 
             // تمرير فلاتر الأعمدة إلى الواجهة
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_WarehouseExpr = filterCol_warehouseExpr;
             ViewBag.FilterCol_Reference = filterCol_reference;
             ViewBag.FilterCol_Reason = filterCol_reason;
             ViewBag.FilterCol_Created = filterCol_created;
+            ViewBag.FilterCol_Products = filterCol_products;
+            ViewBag.FilterCol_QtyBeforeExpr = filterCol_qtyBeforeExpr;
+            ViewBag.FilterCol_QtyAfterExpr = filterCol_qtyAfterExpr;
+            ViewBag.FilterCol_CostBeforeExpr = filterCol_costBeforeExpr;
+            ViewBag.FilterCol_CostAfterExpr = filterCol_costAfterExpr;
+            ViewBag.SearchMode = sm;
 
             return View(model);
         }
@@ -249,21 +433,32 @@ namespace ERP.Controllers
             string? searchBy,
             string? sort,
             string? dir,
-            int? codeFrom,
-            int? codeTo,
+            string? searchMode = null,
+            int? codeFrom = null,
+            int? codeTo = null,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_reference = null,
             string? filterCol_reason = null,
             string? filterCol_created = null,
+            string? filterCol_products = null,
+            string? filterCol_qtyBeforeExpr = null,
+            string? filterCol_qtyAfterExpr = null,
+            string? filterCol_costBeforeExpr = null,
+            string? filterCol_costAfterExpr = null,
             string? format = "excel")   // excel | csv (الاثنين CSV حالياً)
         {
             int? fromCode = codeFrom;
             int? toCode = codeTo;
+
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends") sm = "contains";
 
             var qBase = BuildAdjustmentsQuery(
                 search,
@@ -274,10 +469,13 @@ namespace ERP.Controllers
                 toCode,
                 useDateRange,
                 fromDate,
-                toDate);
+                toDate,
+                sm);
 
             // نفس منطق فلاتر الأعمدة المستخدم في Index
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                qBase = ApplyAdjustmentInt32Expr(qBase, filterCol_idExpr, "id");
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -286,7 +484,9 @@ namespace ERP.Controllers
                     qBase = qBase.Where(x => ids.Contains(x.Id));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouseExpr))
+                qBase = ApplyAdjustmentInt32Expr(qBase, filterCol_warehouseExpr, "warehouse");
+            else if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
             {
                 var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -328,6 +528,23 @@ namespace ERP.Controllers
                 if (dates.Count > 0)
                     qBase = qBase.Where(x => x.CreatedAt.Date != DateTime.MinValue && dates.Contains(x.CreatedAt.Date));
             }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_products))
+            {
+                var names = filterCol_products.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                    .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+                if (names.Count > 0)
+                    qBase = qBase.Where(a => a.Lines.Any(l => l.Product != null && l.Product.ProdName != null && names.Contains(l.Product.ProdName)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyBeforeExpr))
+                qBase = ApplyQtySumExpr(qBase, filterCol_qtyBeforeExpr, qtyBefore: true);
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyAfterExpr))
+                qBase = ApplyQtySumExpr(qBase, filterCol_qtyAfterExpr, qtyBefore: false);
+            if (!string.IsNullOrWhiteSpace(filterCol_costBeforeExpr))
+                qBase = ApplyCostSumExpr(qBase, filterCol_costBeforeExpr, costBefore: true);
+            if (!string.IsNullOrWhiteSpace(filterCol_costAfterExpr))
+                qBase = ApplyCostSumExpr(qBase, filterCol_costAfterExpr, costBefore: false);
 
             var q = qBase;
 
@@ -407,6 +624,14 @@ namespace ERP.Controllers
                         .Take(200)
                         .ToListAsync())
                     .Select(d => (d.ToString("yyyy-MM-dd"), d.ToString("yyyy/MM/dd"))).ToList(),
+                "products" => (await _context.StockAdjustmentLines.AsNoTracking()
+                        .Where(l => l.Product != null && l.Product.ProdName != null && l.Product.ProdName != "")
+                        .Select(l => l.Product!.ProdName)
+                        .Distinct()
+                        .OrderBy(n => n)
+                        .Take(400)
+                        .ToListAsync())
+                    .Select(v => (v, v)).ToList(),
                 _ => new List<(string Value, string Display)>()
             };
 

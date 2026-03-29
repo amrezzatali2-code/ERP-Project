@@ -1506,6 +1506,9 @@ namespace ERP.Data
 
                 e.Property(x => x.LastPriceChangeDate); // تاريخ آخر تغيير للسعر
 
+                e.Property(x => x.CartonQuantity);      // كمية الوحدات في الكرتونة (اختياري)
+                e.Property(x => x.PackQuantity);        // كمية الوحدات في الباكو (اختياري)
+
                 // الربط مع الفئات (FK على CategoryId) — حذف الفئة لا يحذف الأصناف
                 e.HasOne(x => x.Category)
                  .WithMany(c => c.Products)

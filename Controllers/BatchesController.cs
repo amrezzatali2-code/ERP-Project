@@ -126,6 +126,7 @@ namespace ERP.Controllers
         private IQueryable<Batch> SearchSortFilter(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange,
@@ -356,6 +357,8 @@ namespace ERP.Controllers
             {
                 string term = search.Trim();
                 string sb = (searchBy ?? "batchno").ToLower();
+                var smRaw = (searchMode ?? "contains").Trim().ToLowerInvariant();
+                string sm = smRaw == "starts" || smRaw == "ends" ? smRaw : "contains";
 
                 switch (sb)
                 {
@@ -364,13 +367,33 @@ namespace ERP.Controllers
                         break;
 
                     case "prod":    // كود الصنف أو اسمه
-                        q = q.Where(b =>
-                            b.ProdId.ToString() == term ||
-                            (b.Product != null && b.Product.ProdName.Contains(term)));
+                        if (sm == "starts")
+                        {
+                            q = q.Where(b =>
+                                b.ProdId.ToString() == term ||
+                                (b.Product != null && b.Product.ProdName != null && b.Product.ProdName.StartsWith(term)));
+                        }
+                        else if (sm == "ends")
+                        {
+                            q = q.Where(b =>
+                                b.ProdId.ToString() == term ||
+                                (b.Product != null && b.Product.ProdName != null && b.Product.ProdName.EndsWith(term)));
+                        }
+                        else
+                        {
+                            q = q.Where(b =>
+                                b.ProdId.ToString() == term ||
+                                (b.Product != null && b.Product.ProdName != null && b.Product.ProdName.Contains(term)));
+                        }
                         break;
 
                     case "prodname":
-                        q = q.Where(b => b.Product != null && b.Product.ProdName.Contains(term));
+                        if (sm == "starts")
+                            q = q.Where(b => b.Product != null && b.Product.ProdName != null && b.Product.ProdName.StartsWith(term));
+                        else if (sm == "ends")
+                            q = q.Where(b => b.Product != null && b.Product.ProdName != null && b.Product.ProdName.EndsWith(term));
+                        else
+                            q = q.Where(b => b.Product != null && b.Product.ProdName != null && b.Product.ProdName.Contains(term));
                         break;
 
                     case "expiry":
@@ -401,7 +424,12 @@ namespace ERP.Controllers
 
                     case "batchno":
                     default:
-                        q = q.Where(b => b.BatchNo.Contains(term));
+                        if (sm == "starts")
+                            q = q.Where(b => b.BatchNo.StartsWith(term));
+                        else if (sm == "ends")
+                            q = q.Where(b => b.BatchNo.EndsWith(term));
+                        else
+                            q = q.Where(b => b.BatchNo.Contains(term));
                         break;
                 }
             }
@@ -471,6 +499,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int page = 1,
@@ -497,6 +526,9 @@ namespace ERP.Controllers
             sort ??= "expiry";           // متغير: عمود الترتيب الافتراضي
             dir ??= "asc";               // متغير: اتجاه الترتيب الافتراضي
 
+            var smNorm = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode.Trim().ToLowerInvariant();
+            if (smNorm != "starts" && smNorm != "ends") smNorm = "contains";
+
             if (page < 1) page = 1;
             if (pageSize <= 0) pageSize = 25;
 
@@ -510,6 +542,7 @@ namespace ERP.Controllers
             var query = SearchSortFilter(
                 search,
                 searchBy,
+                smNorm,
                 sort,
                 dir,
                 useDateRange,
@@ -575,6 +608,7 @@ namespace ERP.Controllers
             // =========================
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy;
+            ViewBag.SearchMode = smNorm;
             ViewBag.Sort = sort;
             ViewBag.Dir = sortDesc ? "desc" : "asc";
 
@@ -880,6 +914,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -889,9 +924,13 @@ namespace ERP.Controllers
             int? toCode = null,
             string format = "excel")
         {
+            var smNorm = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode.Trim().ToLowerInvariant();
+            if (smNorm != "starts" && smNorm != "ends") smNorm = "contains";
+
             var query = SearchSortFilter(
                 search,
                 searchBy,
+                smNorm,
                 sort,
                 dir,
                 useDateRange,

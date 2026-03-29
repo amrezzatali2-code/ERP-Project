@@ -100,6 +100,7 @@ namespace ERP
 
             builder.Services.AddScoped<ILedgerPostingService, LedgerPostingService>();
             builder.Services.AddScoped<ERP.Services.StockAnalysisService>();
+            builder.Services.AddScoped<ERP.Services.SalesFifoCostRepairService>();
             builder.Services.AddScoped<IFullReturnService, FullReturnService>();
             builder.Services.AddScoped<ERP.Services.IPermissionService, ERP.Services.PermissionService>();
             builder.Services.AddScoped<ERP.Services.IUserAccountVisibilityService, ERP.Services.UserAccountVisibilityService>();

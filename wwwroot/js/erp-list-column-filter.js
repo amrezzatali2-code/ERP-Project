@@ -23,6 +23,15 @@
         if (!s) return '';
         return normalizeDigits(String(s).toLowerCase());
     }
+
+    /** تطبيع إدخال البحث الرقمي قبل الإرسال (أرقام عربية + فاصلة عشرية واحدة) — مواءمة مع الخادم */
+    function normalizeNumericExprForSubmit(s) {
+        var t = normalizeDigits(String(s || '').trim());
+        if (!t) return '';
+        if ((t.split(',').length - 1) === 1 && t.indexOf('.') < 0)
+            t = t.replace(',', '.');
+        return t;
+    }
     /** كل كلمات الاستعلام يجب أن تظهر كنص فرعي في العرض (مثل Like %word% على الخادم) */
     function textMatchesColumnFilterSearch(displayOrValue, rawQuery) {
         var q = (rawQuery || '').trim();
@@ -130,8 +139,8 @@
                         '<div class="mb-2">' +
                         '<label class="form-label small mb-1">بحث رقمي:</label>' +
                         '<input type="text" id="erpColumnFilterNumericExpr" class="form-control form-control-sm" ' +
-                        'placeholder="رقم أو &lt;10 أو &gt;100 أو 10:100" value="' + safeVal + '">' +
-                        '<small class="text-muted d-block mt-1">مثال: 53812 أو &lt;10 أو &gt;100 أو 10:100</small>' +
+                        'placeholder="رقم أو &lt;10 أو &gt;100 أو 10:100 أو 10-100" value="' + safeVal + '">' +
+                        '<small class="text-muted d-block mt-1">مثال: 53812 أو &lt;10 أو &gt;100 أو 10:100 أو 10-100 (أرقام عربية ٠–٩ مسموحة)</small>' +
                         '</div>';
                 }
                 adjustPanelPosition();
@@ -253,7 +262,7 @@
 
             if (isNumericCol(currentCol)) {
                 var numInp = document.getElementById('erpColumnFilterNumericExpr');
-                var expr = numInp ? String(numInp.value || '').trim() : '';
+                var expr = numInp ? normalizeNumericExprForSubmit(numInp.value) : '';
                 url.searchParams.delete('filterCol_' + currentCol);
                 url.searchParams.delete('filterCol_' + currentCol + '_contains');
                 if (expr) {

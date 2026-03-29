@@ -213,23 +213,15 @@
         </form>
     </div>
 
-    @* ===== كروت الإجماليات (بين الكارت الأول والجدول) ===== *@
+    @* ===== كروت الإجماليات (بين شريط الفلاتر والجدول) ===== *@
     @if (reportData.Any())
     {
         var n2 = System.Globalization.CultureInfo.InvariantCulture;
         <div class="row g-2 g-md-3 mb-2 mt-3 no-print" id="productBalancesSummaryCards">
             <div class="col-12 col-sm-6 col-md-4 col-lg">
-                <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #6366f1 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
-                    <div class="card-body py-3 px-3">
-                        <div class="small text-muted mb-1">العدد الإجمالي</div>
-                        <div class="h4 mb-0 text-primary fw-bold">@totalCount.ToString("N0", n2)</div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-12 col-sm-6 col-md-4 col-lg">
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #0d6efd !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
-                        <div class="small text-muted mb-1">العدد بعد الفلترة</div>
+                        <div class="small text-muted mb-1">العدد الإجمالي</div>
                         <div class="h4 mb-0 text-info fw-bold" id="productBalancesCardCountAfterFilter">@totalCount.ToString("N0", n2)</div>
                     </div>
                 </div>
@@ -277,14 +269,11 @@
         </div>
     }
 
-    @* ===== عنوان الجدول + إجمالي الأصناف ===== *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 mb-2">
-        <h5 class="mb-0">أرصدة الأصناف</h5>
-        @if (reportData.Any())
-        {
-            <small class="text-muted">إجمالي الأصناف: <span id="productBalancesItemCount">@totalCount</span></small>
-        }
-    </div>
+    @* تحديث عدد الصفوف المرئية (فلترة أعمدة) — مخفي عن العرض *@
+    @if (reportData.Any())
+    {
+        <span id="productBalancesItemCount" class="d-none" aria-hidden="true">@totalCount</span>
+    }
 
     @* ===== جدول البيانات (نفس هيكل Index قائمة الأصناف) ===== *@
     <div class="erp-table-scroll-container mt-2">

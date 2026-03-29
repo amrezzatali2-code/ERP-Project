@@ -8,6 +8,7 @@ using ERP.Filters;
 using ERP.Infrastructure;              // PagedResult
 using ERP.Models;                      // StockBatch / Product / Warehouse
 using ERP.Security;
+using ERP.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,12 +24,107 @@ namespace ERP.Controllers
     public class StockBatchesController : Controller
     {
         private readonly AppDbContext _db; // متغير: DbContext
+        private readonly StockAnalysisService _stockAnalysis;
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        public StockBatchesController(AppDbContext context)
+        /// <summary>
+        /// فلتر رقمي للأعمدة الصحيحة (نفس صيغة قائمة الأصناف: &lt; &gt; &lt;= &gt;= نطاق أو رقم مطابق).
+        /// </summary>
+        private static IQueryable<StockBatch> ApplyInt32ExprFilter(
+            IQueryable<StockBatch> q,
+            string? expr,
+            string field)
+        {
+            if (string.IsNullOrWhiteSpace(expr)) return q;
+            expr = expr.Trim();
+            if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var maxLe))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.Id <= maxLe),
+                    "wh" => q.Where(x => x.WarehouseId <= maxLe),
+                    "prod" => q.Where(x => x.ProdId <= maxLe),
+                    "qty" => q.Where(x => x.QtyOnHand <= maxLe),
+                    "reserved" => q.Where(x => x.QtyReserved <= maxLe),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var minGe))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.Id >= minGe),
+                    "wh" => q.Where(x => x.WarehouseId >= minGe),
+                    "prod" => q.Where(x => x.ProdId >= minGe),
+                    "qty" => q.Where(x => x.QtyOnHand >= minGe),
+                    "reserved" => q.Where(x => x.QtyReserved >= minGe),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var maxLt))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.Id < maxLt),
+                    "wh" => q.Where(x => x.WarehouseId < maxLt),
+                    "prod" => q.Where(x => x.ProdId < maxLt),
+                    "qty" => q.Where(x => x.QtyOnHand < maxLt),
+                    "reserved" => q.Where(x => x.QtyReserved < maxLt),
+                    _ => q
+                };
+            }
+            if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var minGt))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.Id > minGt),
+                    "wh" => q.Where(x => x.WarehouseId > minGt),
+                    "prod" => q.Where(x => x.ProdId > minGt),
+                    "qty" => q.Where(x => x.QtyOnHand > minGt),
+                    "reserved" => q.Where(x => x.QtyReserved > minGt),
+                    _ => q
+                };
+            }
+            if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith('-'))
+            {
+                var separator = expr.Contains(':') ? ':' : '-';
+                var parts = expr.Split(separator, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0].Trim(), out var from) &&
+                    int.TryParse(parts[1].Trim(), out var to))
+                {
+                    if (from > to) (from, to) = (to, from);
+                    return field switch
+                    {
+                        "id" => q.Where(x => x.Id >= from && x.Id <= to),
+                        "wh" => q.Where(x => x.WarehouseId >= from && x.WarehouseId <= to),
+                        "prod" => q.Where(x => x.ProdId >= from && x.ProdId <= to),
+                        "qty" => q.Where(x => x.QtyOnHand >= from && x.QtyOnHand <= to),
+                        "reserved" => q.Where(x => x.QtyReserved >= from && x.QtyReserved <= to),
+                        _ => q
+                    };
+                }
+            }
+            if (int.TryParse(expr, out var exact))
+            {
+                return field switch
+                {
+                    "id" => q.Where(x => x.Id == exact),
+                    "wh" => q.Where(x => x.WarehouseId == exact),
+                    "prod" => q.Where(x => x.ProdId == exact),
+                    "qty" => q.Where(x => x.QtyOnHand == exact),
+                    "reserved" => q.Where(x => x.QtyReserved == exact),
+                    _ => q
+                };
+            }
+            return q;
+        }
+
+        public StockBatchesController(AppDbContext context, StockAnalysisService stockAnalysis)
         {
             _db = context;
+            _stockAnalysis = stockAnalysis;
         }
 
         /// <summary>
@@ -42,36 +138,64 @@ namespace ERP.Controllers
 
             IQueryable<StockBatch> q = _db.Set<StockBatch>().AsNoTracking();
 
-            List<(string Value, string Display)> items = col switch
+            List<(string Value, string Display)> items;
+            if (col == "wh")
             {
-                "id" => (await q.Select(x => x.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
-                    .Select(v => (v.ToString(), v.ToString())).ToList(),
-                "wh" => (await q.Select(x => x.WarehouseId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
-                    .Select(v => (v.ToString(), v.ToString())).ToList(),
-                "prod" => (await q.Select(x => x.ProdId).Distinct().OrderBy(v => v).Take(500).ToListAsync())
-                    .Select(v => (v.ToString(), v.ToString())).ToList(),
-                "batchno" => (await q.Where(x => x.BatchNo != null).Select(x => x.BatchNo!).Distinct().OrderBy(v => v).Take(500).ToListAsync())
-                    .Select(v => (v, v)).ToList(),
-                "expiry" => (await q.Where(x => x.Expiry.HasValue)
-                        .Select(x => new { x.Expiry!.Value.Year, x.Expiry.Value.Month })
-                        .Distinct()
-                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
-                        .Take(200)
-                        .ToListAsync())
-                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
-                "qty" => (await q.Select(x => x.QtyOnHand).Distinct().OrderBy(v => v).Take(200).ToListAsync())
-                    .Select(v => (v.ToString(), v.ToString())).ToList(),
-                "reserved" => (await q.Select(x => x.QtyReserved).Distinct().OrderBy(v => v).Take(200).ToListAsync())
-                    .Select(v => (v.ToString(), v.ToString())).ToList(),
-                "updated" => (await q.Select(x => new { x.UpdatedAt.Year, x.UpdatedAt.Month }).Distinct()
-                        .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
-                        .Take(200)
-                        .ToListAsync())
-                    .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
-                "note" => (await q.Where(x => x.Note != null).Select(x => x.Note!).Distinct().OrderBy(v => v).Take(300).ToListAsync())
-                    .Select(v => (v, v)).ToList(),
-                _ => new List<(string Value, string Display)>()
-            };
+                var whIds = await q.Select(x => x.WarehouseId).Distinct().ToListAsync();
+                var rows = await _db.Warehouses
+                    .AsNoTracking()
+                    .Where(w => whIds.Contains(w.WarehouseId))
+                    .OrderBy(w => w.WarehouseId)
+                    .Take(500)
+                    .Select(w => new { w.WarehouseId, w.WarehouseName })
+                    .ToListAsync();
+                items = rows
+                    .Select(x => (x.WarehouseId.ToString(), (x.WarehouseName ?? "").Trim() + " (" + x.WarehouseId + ")"))
+                    .ToList();
+            }
+            else if (col == "prod")
+            {
+                var prodIds = await q.Select(x => x.ProdId).Distinct().ToListAsync();
+                var rows = await _db.Products
+                    .AsNoTracking()
+                    .Where(p => prodIds.Contains(p.ProdId))
+                    .OrderBy(p => p.ProdId)
+                    .Take(500)
+                    .Select(p => new { p.ProdId, p.ProdName })
+                    .ToListAsync();
+                items = rows
+                    .Select(x => (x.ProdId.ToString(), (x.ProdName ?? "").Trim() + " (" + x.ProdId + ")"))
+                    .ToList();
+            }
+            else
+            {
+                items = col switch
+                {
+                    "id" => (await q.Select(x => x.Id).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                        .Select(v => (v.ToString(), v.ToString())).ToList(),
+                    "batchno" => (await q.Where(x => x.BatchNo != null).Select(x => x.BatchNo!).Distinct().OrderBy(v => v).Take(500).ToListAsync())
+                        .Select(v => (v, v)).ToList(),
+                    "expiry" => (await q.Where(x => x.Expiry.HasValue)
+                            .Select(x => new { x.Expiry!.Value.Year, x.Expiry.Value.Month })
+                            .Distinct()
+                            .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
+                            .Take(200)
+                            .ToListAsync())
+                        .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                    "qty" => (await q.Select(x => x.QtyOnHand).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                        .Select(v => (v.ToString(), v.ToString())).ToList(),
+                    "reserved" => (await q.Select(x => x.QtyReserved).Distinct().OrderBy(v => v).Take(200).ToListAsync())
+                        .Select(v => (v.ToString(), v.ToString())).ToList(),
+                    "updated" => (await q.Select(x => new { x.UpdatedAt.Year, x.UpdatedAt.Month }).Distinct()
+                            .OrderByDescending(x => x.Year).ThenByDescending(x => x.Month)
+                            .Take(200)
+                            .ToListAsync())
+                        .Select(x => ($"{x.Year}-{x.Month:D2}", $"{x.Year}/{x.Month:D2}")).ToList(),
+                    "note" => (await q.Where(x => x.Note != null).Select(x => x.Note!).Distinct().OrderBy(v => v).Take(300).ToListAsync())
+                        .Select(v => (v, v)).ToList(),
+                    _ => new List<(string Value, string Display)>()
+                };
+            }
 
             if (!string.IsNullOrEmpty(searchTerm) && items.Count > 0)
             {
@@ -104,7 +228,13 @@ namespace ERP.Controllers
             string? filterCol_qty = null,
             string? filterCol_reserved = null,
             string? filterCol_updated = null,
-            string? filterCol_note = null)
+            string? filterCol_note = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_whExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_reservedExpr = null,
+            string? searchMode = null)
         {
             // الاستعلام الأساسي (AsNoTracking للسرعة)
             var q = _db.Set<StockBatch>()
@@ -113,8 +243,11 @@ namespace ERP.Controllers
 
             // ------------------------------
             // فلاتر أعمدة بنمط Excel (id, wh, prod, batchno, expiry, qty, reserved, updated, note)
+            // للأعمدة الرقمية: أولوية filterCol_*Expr على قائمة التشيك بوكس
             // ------------------------------
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                q = ApplyInt32ExprFilter(q, filterCol_idExpr, "id");
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -125,7 +258,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ids.Contains(x.Id));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_wh))
+            if (!string.IsNullOrWhiteSpace(filterCol_whExpr))
+                q = ApplyInt32ExprFilter(q, filterCol_whExpr, "wh");
+            else if (!string.IsNullOrWhiteSpace(filterCol_wh))
             {
                 var ids = filterCol_wh.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -136,7 +271,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ids.Contains(x.WarehouseId));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            if (!string.IsNullOrWhiteSpace(filterCol_prodExpr))
+                q = ApplyInt32ExprFilter(q, filterCol_prodExpr, "prod");
+            else if (!string.IsNullOrWhiteSpace(filterCol_prod))
             {
                 var ids = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -183,7 +320,9 @@ namespace ERP.Controllers
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr))
+                q = ApplyInt32ExprFilter(q, filterCol_qtyExpr, "qty");
+            else if (!string.IsNullOrWhiteSpace(filterCol_qty))
             {
                 var ids = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -194,7 +333,9 @@ namespace ERP.Controllers
                     q = q.Where(x => ids.Contains(x.QtyOnHand));
             }
 
-            if (!string.IsNullOrWhiteSpace(filterCol_reserved))
+            if (!string.IsNullOrWhiteSpace(filterCol_reservedExpr))
+                q = ApplyInt32ExprFilter(q, filterCol_reservedExpr, "reserved");
+            else if (!string.IsNullOrWhiteSpace(filterCol_reserved))
             {
                 var ids = filterCol_reserved.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -265,12 +406,15 @@ namespace ERP.Controllers
 
             // ------------------------------
             // البحث
-            // searchBy المقترحة: all | id | warehouse | prod | batchno | expiry
+            // searchMode: starts | contains | ends — يُطبَّق على حقول نصية (تشغيلة، ملاحظة، الكل)
+            // searchBy: all | id | warehouse | prod | batchno | expiry | qty | note
             // ------------------------------
             if (!string.IsNullOrWhiteSpace(search))
             {
                 var term = search.Trim();
-                var sb = (searchBy ?? "all").ToLower();
+                var sb = (searchBy ?? "all").ToLowerInvariant();
+                var sm = (searchMode ?? "contains").ToLowerInvariant();
+                if (sm != "starts" && sm != "ends") sm = "contains";
 
                 switch (sb)
                 {
@@ -287,7 +431,26 @@ namespace ERP.Controllers
                         break;
 
                     case "batchno":
-                        q = q.Where(x => x.BatchNo.Contains(term));
+                        if (sm == "starts")
+                            q = q.Where(x => x.BatchNo != null && x.BatchNo.StartsWith(term));
+                        else if (sm == "ends")
+                            q = q.Where(x => x.BatchNo != null && x.BatchNo.EndsWith(term));
+                        else
+                            q = q.Where(x => x.BatchNo != null && x.BatchNo.Contains(term));
+                        break;
+
+                    case "note":
+                        if (sm == "starts")
+                            q = q.Where(x => x.Note != null && x.Note.StartsWith(term));
+                        else if (sm == "ends")
+                            q = q.Where(x => x.Note != null && x.Note.EndsWith(term));
+                        else
+                            q = q.Where(x => x.Note != null && x.Note.Contains(term));
+                        break;
+
+                    case "qty":
+                        if (int.TryParse(term, out var qtyTerm))
+                            q = q.Where(x => x.QtyOnHand == qtyTerm || x.QtyReserved == qtyTerm);
                         break;
 
                     case "expiry":
@@ -300,9 +463,15 @@ namespace ERP.Controllers
 
                     case "all":
                     default:
-                        // بحث عام سريع: BatchNo + الأكواد + الكميات
                         q = q.Where(x =>
-                            x.BatchNo.Contains(term) ||
+                            (x.BatchNo != null && (
+                                sm == "starts" ? x.BatchNo.StartsWith(term) :
+                                sm == "ends" ? x.BatchNo.EndsWith(term) :
+                                x.BatchNo.Contains(term))) ||
+                            (x.Note != null && (
+                                sm == "starts" ? x.Note.StartsWith(term) :
+                                sm == "ends" ? x.Note.EndsWith(term) :
+                                x.Note.Contains(term))) ||
                             x.Id.ToString() == term ||
                             x.WarehouseId.ToString() == term ||
                             x.ProdId.ToString() == term ||
@@ -366,6 +535,12 @@ namespace ERP.Controllers
                         : q.OrderBy(x => x.UpdatedAt).ThenBy(x => x.Id);
                     break;
 
+                case "note":
+                    ordered = descending
+                        ? q.OrderByDescending(x => x.Note).ThenByDescending(x => x.Id)
+                        : q.OrderBy(x => x.Note).ThenBy(x => x.Id);
+                    break;
+
                 case "id":
                 default:
                     ordered = descending
@@ -388,12 +563,13 @@ namespace ERP.Controllers
             string? sort,
             string? dir,
             int page = 1,
-            int pageSize = 25,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? searchMode = null,
             string? filterCol_id = null,
             string? filterCol_wh = null,
             string? filterCol_prod = null,
@@ -402,17 +578,26 @@ namespace ERP.Controllers
             string? filterCol_qty = null,
             string? filterCol_reserved = null,
             string? filterCol_updated = null,
-            string? filterCol_note = null)
+            string? filterCol_note = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_whExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_reservedExpr = null)
         {
-            // (1) Defaults + حماية paging
-            searchBy ??= "all";
+            searchBy ??= "batchno";
             sort ??= "id";
             dir ??= "asc";
+            searchMode ??= "contains";
+
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
             if (page < 1) page = 1;
-            if (pageSize <= 0) pageSize = 25;
-            if (pageSize < 10) pageSize = 10;
-            if (pageSize > 500) pageSize = 500;
 
             // (2) Query واحد: فلترة + بحث + ترتيب
             var query = SearchSortFilter(
@@ -427,18 +612,37 @@ namespace ERP.Controllers
                 filterCol_qty,
                 filterCol_reserved,
                 filterCol_updated,
-                filterCol_note);
+                filterCol_note,
+                filterCol_idExpr,
+                filterCol_whExpr,
+                filterCol_prodExpr,
+                filterCol_qtyExpr,
+                filterCol_reservedExpr,
+                searchMode);
 
             // (3) Count
             int totalCount = await query.CountAsync();
-            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+
+            int totalPages = pageSize == 0
+                ? 1
+                : (int)Math.Ceiling(totalCount / (double)effectivePageSize);
             if (totalPages < 1) totalPages = 1;
-            if (page > totalPages) page = 1;
+            if (page > totalPages) page = totalPages;
+
+            var skip = pageSize == 0 ? 0 : (page - 1) * effectivePageSize;
+            var take = pageSize == 0 ? effectivePageSize : effectivePageSize;
 
             // (4) Page data
             var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Skip(skip)
+                .Take(take)
                 .ToListAsync();
 
             // (5) تحميل أسماء الأصناف والمخازن للصفحة فقط (سرعة)
@@ -457,8 +661,16 @@ namespace ERP.Controllers
                 .Select(w => new { w.WarehouseId, w.WarehouseName })
                 .ToDictionaryAsync(x => x.WarehouseId, x => x.WarehouseName ?? "");
 
-            ViewBag.ProdNames = prodNames;               // متغير: قاموس أسماء الأصناف
-            ViewBag.WarehouseNames = warehouseNames;     // متغير: قاموس أسماء المخازن
+            ViewBag.ProdNames = prodNames;
+            ViewBag.WarehouseNames = warehouseNames;
+
+            var wdMap = new Dictionary<string, decimal>();
+            foreach (var pair in items.Select(x => (x.ProdId, x.WarehouseId)).Distinct())
+            {
+                var d = await _stockAnalysis.GetWeightedPurchaseDiscountForWarehouseAsync(pair.ProdId, pair.WarehouseId);
+                wdMap[$"{pair.ProdId}|{pair.WarehouseId}"] = d;
+            }
+            ViewBag.WeightedDiscounts = wdMap;
 
             // (6) تجهيز PagedResult
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -471,7 +683,7 @@ namespace ERP.Controllers
                 TotalCount = totalCount,
                 TotalPages = totalPages,
                 HasPrevious = page > 1,
-                HasNext = page < totalPages,
+                HasNext = pageSize == 0 ? false : page < totalPages,
                 Search = search,
                 SortColumn = sort,
                 SortDescending = sortDesc,
@@ -482,6 +694,7 @@ namespace ERP.Controllers
 
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy;
+            ViewBag.SearchMode = searchMode;
             ViewBag.Sort = sort;
             ViewBag.Dir = sortDesc ? "desc" : "asc";
             ViewBag.FromCode = fromCode;
@@ -495,6 +708,12 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Reserved = filterCol_reserved;
             ViewBag.FilterCol_Updated = filterCol_updated;
             ViewBag.FilterCol_Note = filterCol_note;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
+            ViewBag.FilterCol_WhExpr = filterCol_whExpr;
+            ViewBag.FilterCol_ProdExpr = filterCol_prodExpr;
+            ViewBag.FilterCol_QtyExpr = filterCol_qtyExpr;
+            ViewBag.FilterCol_ReservedExpr = filterCol_reservedExpr;
+            ViewBag.PageSize = pageSize;
 
             return View(model);
         }
@@ -568,6 +787,7 @@ namespace ERP.Controllers
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
+            string? searchMode = null,
             string? filterCol_id = null,
             string? filterCol_wh = null,
             string? filterCol_prod = null,
@@ -577,6 +797,11 @@ namespace ERP.Controllers
             string? filterCol_reserved = null,
             string? filterCol_updated = null,
             string? filterCol_note = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_whExpr = null,
+            string? filterCol_prodExpr = null,
+            string? filterCol_qtyExpr = null,
+            string? filterCol_reservedExpr = null,
             string format = "excel")
         {
             var query = SearchSortFilter(
@@ -591,7 +816,13 @@ namespace ERP.Controllers
                 filterCol_qty,
                 filterCol_reserved,
                 filterCol_updated,
-                filterCol_note);
+                filterCol_note,
+                filterCol_idExpr,
+                filterCol_whExpr,
+                filterCol_prodExpr,
+                filterCol_qtyExpr,
+                filterCol_reservedExpr,
+                searchMode);
 
             var data = await query.ToListAsync();
 
@@ -611,15 +842,23 @@ namespace ERP.Controllers
                 .Select(w => new { w.WarehouseId, w.WarehouseName })
                 .ToDictionaryAsync(x => x.WarehouseId, x => x.WarehouseName ?? "");
 
+            var wdMap = new Dictionary<string, decimal>();
+            foreach (var pair in data.Select(x => (x.ProdId, x.WarehouseId)).Distinct())
+            {
+                var d = await _stockAnalysis.GetWeightedPurchaseDiscountForWarehouseAsync(pair.ProdId, pair.WarehouseId);
+                wdMap[$"{pair.ProdId}|{pair.WarehouseId}"] = d;
+            }
+
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("كود السجل,كود المخزن,اسم المخزن,كود الصنف,اسم الصنف,رقم التشغيلة,تاريخ الصلاحية,المتاح,محجوز,آخر تحديث,ملاحظة");
+                sb.AppendLine("كود السجل,كود المخزن,اسم المخزن,كود الصنف,اسم الصنف,الخصم المرجح %,رقم التشغيلة,تاريخ الصلاحية,المتاح,محجوز,آخر تحديث,ملاحظة");
 
                 foreach (var x in data)
                 {
                     var prodName = prodNames.TryGetValue(x.ProdId, out var pn) ? pn : "";
                     var whName = warehouseNames.TryGetValue(x.WarehouseId, out var wn) ? wn : "";
+                    wdMap.TryGetValue($"{x.ProdId}|{x.WarehouseId}", out var wdisc);
 
                     sb.AppendLine(string.Join(",",
                         x.Id,
@@ -627,6 +866,7 @@ namespace ERP.Controllers
                         EscapeCsv(whName),
                         x.ProdId,
                         EscapeCsv(prodName),
+                        wdisc.ToString(System.Globalization.CultureInfo.InvariantCulture),
                         EscapeCsv(x.BatchNo),
                         x.Expiry?.ToString("yyyy-MM-dd") ?? "",
                         x.QtyOnHand,
@@ -650,30 +890,33 @@ namespace ERP.Controllers
                 ws.Cell(1, 3).Value = "اسم المخزن";
                 ws.Cell(1, 4).Value = "كود الصنف";
                 ws.Cell(1, 5).Value = "اسم الصنف";
-                ws.Cell(1, 6).Value = "رقم التشغيلة";
-                ws.Cell(1, 7).Value = "تاريخ الصلاحية";
-                ws.Cell(1, 8).Value = "المتاح";
-                ws.Cell(1, 9).Value = "محجوز";
-                ws.Cell(1, 10).Value = "آخر تحديث";
-                ws.Cell(1, 11).Value = "ملاحظة";
+                ws.Cell(1, 6).Value = "الخصم المرجح %";
+                ws.Cell(1, 7).Value = "رقم التشغيلة";
+                ws.Cell(1, 8).Value = "تاريخ الصلاحية";
+                ws.Cell(1, 9).Value = "المتاح";
+                ws.Cell(1, 10).Value = "محجوز";
+                ws.Cell(1, 11).Value = "آخر تحديث";
+                ws.Cell(1, 12).Value = "ملاحظة";
 
                 int row = 2;
                 foreach (var x in data)
                 {
                     var prodName = prodNames.TryGetValue(x.ProdId, out var pn) ? pn : "";
                     var whName = warehouseNames.TryGetValue(x.WarehouseId, out var wn) ? wn : "";
+                    wdMap.TryGetValue($"{x.ProdId}|{x.WarehouseId}", out var wdisc);
 
                     ws.Cell(row, 1).Value = x.Id;
                     ws.Cell(row, 2).Value = x.WarehouseId;
                     ws.Cell(row, 3).Value = whName;
                     ws.Cell(row, 4).Value = x.ProdId;
                     ws.Cell(row, 5).Value = prodName;
-                    ws.Cell(row, 6).Value = x.BatchNo;
-                    ws.Cell(row, 7).Value = x.Expiry;
-                    ws.Cell(row, 8).Value = x.QtyOnHand;
-                    ws.Cell(row, 9).Value = x.QtyReserved;
-                    ws.Cell(row, 10).Value = x.UpdatedAt;
-                    ws.Cell(row, 11).Value = x.Note ?? "";
+                    ws.Cell(row, 6).Value = wdisc;
+                    ws.Cell(row, 7).Value = x.BatchNo;
+                    ws.Cell(row, 8).Value = x.Expiry;
+                    ws.Cell(row, 9).Value = x.QtyOnHand;
+                    ws.Cell(row, 10).Value = x.QtyReserved;
+                    ws.Cell(row, 11).Value = x.UpdatedAt;
+                    ws.Cell(row, 12).Value = x.Note ?? "";
 
                     row++;
                 }
