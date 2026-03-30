@@ -1,6 +1,7 @@
 // erp-list-selectable.js
 // سكربت مشترك: اختيار صف من الجدول + أزرار عرض/حذف في الشريط (نمط الخزينة)
-// الاستخدام: ERP.initListSelection({ rowSelector?, showButtonId?, showTabId?, editButtonId?, editUrlAttribute?, editTabId?, deleteButtonId?, deleteFormId?, movementButtonId?, movementUrlAttribute?, movementTabTitle?, movementTabId?, idAttribute?, showUrlAttribute?, tabTitleAttribute?, deleteConfirmMessage?, multiSelectCheckboxes? })
+// الاستخدام: ERP.initListSelection({ rowSelector?, showButtonId?, showTabId?, editButtonId?, editUrlAttribute?, editTabId?, editTabTitleAttribute?, deleteButtonId?, deleteFormId?, movementButtonId?, movementUrlAttribute?, movementTabTitle?, movementTabId?, idAttribute?, showUrlAttribute?, tabTitleAttribute?, deleteConfirmMessage?, multiSelectCheckboxes? })
+// editTabTitleAttribute: اسم خاصية عنوان تاب التعديل (افتراضي: نفس tabTitleAttribute)
 // multiSelectCheckboxes: true = خانات التحديد مستقلة (تعدد للحذف الجماعي)، والنقر على الصف يحدد صفاً واحداً لزر العرض فقط دون مسح باقي الخانات
 // showTabId: معرف تاب ثابت لزر العرض (مثل si-show-tab) لإعادة استخدام نفس التاب بدل list-show-{id}
 // movementTabId: نفس الفكرة لزر الحركة (اختياري)
@@ -43,6 +44,9 @@
         var idAttribute = options.idAttribute || 'data-row-id';
         var showUrlAttribute = options.showUrlAttribute || 'data-show-url';
         var tabTitleAttribute = options.tabTitleAttribute || 'data-tab-title';
+        var editTabTitleAttribute = (options.editTabTitleAttribute && String(options.editTabTitleAttribute).trim())
+            ? String(options.editTabTitleAttribute).trim()
+            : tabTitleAttribute;
         var tabIdAttribute = (options.tabIdAttribute && String(options.tabIdAttribute).trim()) ? String(options.tabIdAttribute).trim() : '';
         var showTabIdFixed = (options.showTabId && String(options.showTabId).trim()) ? String(options.showTabId).trim() : '';
         var movementTabIdFixed = (options.movementTabId && String(options.movementTabId).trim()) ? String(options.movementTabId).trim() : '';
@@ -148,7 +152,7 @@
                 var url = selectedRow.getAttribute(editUrlAttribute);
                 if (!url) return;
                 var id = selectedRow.getAttribute(idAttribute) || '';
-                var title = selectedRow.getAttribute(tabTitleAttribute) || '';
+                var title = selectedRow.getAttribute(editTabTitleAttribute) || '';
                 var tabId = editTabIdFixed || ('list-edit-' + id);
                 openInTab(tabId, url, title || 'تعديل');
             });

@@ -44,8 +44,9 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,                      // نص البحث
             string? searchBy,                    // طريقة البحث: all / piid / prod / batch / expiry
-            string? sort,                        // عمود الترتيب: piid / lineno / prod / qty / unitcost / disc / retail / linevalue / batch / expiry / date
-            string? dir,                         // اتجاه الترتيب: asc / desc
+            string? searchMode = null,           // يحتوي / يبدأ / ينتهي
+            string? sort = null,                 // عمود الترتيب: piid / lineno / prod / qty / unitcost / disc / retail / linevalue / batch / expiry / date
+            string? dir = null,                  // اتجاه الترتيب: asc / desc
             bool useDateRange = false,           // تفعيل فلتر التاريخ؟
             DateTime? fromDate = null,           // من تاريخ
             DateTime? toDate = null,             // إلى تاريخ
@@ -53,29 +54,44 @@ namespace ERP.Controllers
             int? fromCode = null,                // من رقم فاتورة (PIId)
             int? toCode = null,                  // إلى رقم فاتورة
             string? filterCol_piid = null,
+            string? filterCol_piidExpr = null,
             string? filterCol_lineno = null,
+            string? filterCol_linenoExpr = null,
             string? filterCol_prod = null,
+            string? filterCol_prodExpr = null,
             string? filterCol_prodname = null,
             string? filterCol_qty = null,
+            string? filterCol_qtyExpr = null,
             string? filterCol_unitcost = null,
+            string? filterCol_unitcostExpr = null,
             string? filterCol_disc = null,
+            string? filterCol_discExpr = null,
             string? filterCol_retail = null,
+            string? filterCol_retailExpr = null,
             string? filterCol_linevalue = null,
+            string? filterCol_linevalueExpr = null,
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
             string? filterCol_date = null,
             int page = 1,                        // رقم الصفحة
-            int pageSize = 25                    // حجم الصفحة
+            int pageSize = 10                    // حجم الصفحة (افتراضي 10؛ 0 = الكل)
         )
         {
-            // قيم افتراضية
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+
             searchBy ??= "all";
             sort ??= "piid";
             dir ??= "asc";
             dateField ??= "PIDate";
+            searchMode = NormalizeSearchMode(searchMode);
 
             if (page < 1) page = 1;
-            if (pageSize <= 0) pageSize = 25;
+            if (pageSize < 0) pageSize = 10;
+            bool pageSizeOk = pageSize == 0 || pageSize == 10 || pageSize == 25 || pageSize == 50 || pageSize == 100 || pageSize == 200;
+            if (pageSize > 0 && !pageSizeOk)
+                pageSize = 10;
 
             // نبدأ بالاستعلام من جدول PILines مع تحميل رأس الفاتورة (PurchaseInvoice)
             IQueryable<PILine> query = _context.PILines
@@ -100,6 +116,7 @@ namespace ERP.Controllers
                 query,
                 search,
                 searchBy,
+                searchMode,
                 finalFromCode,
                 finalToCode,
                 useDateRange,
@@ -108,8 +125,19 @@ namespace ERP.Controllers
                 dateField
             );
 
-            // 1b) تطبيق فلاتر الأعمدة (بنمط Excel)
-            query = ApplyColumnFilters(query, filterCol_piid, filterCol_lineno, filterCol_prod, filterCol_prodname, filterCol_qty, filterCol_unitcost, filterCol_disc, filterCol_retail, filterCol_linevalue, filterCol_batch, filterCol_expiry, filterCol_date);
+            // 1b) تطبيق فلاتر الأعمدة (بنمط Excel + Expr للأعمدة الرقمية)
+            query = ApplyColumnFilters(
+                query,
+                filterCol_piid, filterCol_piidExpr,
+                filterCol_lineno, filterCol_linenoExpr,
+                filterCol_prod, filterCol_prodExpr,
+                filterCol_prodname,
+                filterCol_qty, filterCol_qtyExpr,
+                filterCol_unitcost, filterCol_unitcostExpr,
+                filterCol_disc, filterCol_discExpr,
+                filterCol_retail, filterCol_retailExpr,
+                filterCol_linevalue, filterCol_linevalueExpr,
+                filterCol_batch, filterCol_expiry, filterCol_date);
 
             // 2) تطبيق الترتيب
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -118,21 +146,29 @@ namespace ERP.Controllers
             // =========================================================
             // حساب إجمالي قيمة السطر من نفس الاستعلام (بعد الفلاتر)
             // قيمة السطر = (Qty * PriceRetail) * (1 - PurchaseDiscountPct / 100)
-            // ✅ مهم: لازم قبل الـ Paging علشان ما تتحسبش على الصفحة بس
             // =========================================================
-            decimal totalLineValue = await query.SumAsync(line => 
+            decimal totalLineValue = await query.SumAsync(line =>
                 (decimal?)((line.Qty * line.PriceRetail) * (1m - (line.PurchaseDiscountPct / 100m)))) ?? 0m;
+
+            int totalQtyFiltered = await query.SumAsync(l => l.Qty);
 
             // 3) حساب العدد الكلي بعد الفلاتر
             int totalCount = await query.CountAsync();
 
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+
             // 4) قراءة صفحة واحدة فقط
             var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
                 .ToListAsync();
 
-            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            int totalPages = pageSize == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)effectivePageSize);
 
             // 5) تجهيز PagedResult
             var model = new PagedResult<PILine>
@@ -143,7 +179,7 @@ namespace ERP.Controllers
                 TotalCount = totalCount,
                 TotalPages = totalPages,
                 HasPrevious = page > 1,
-                HasNext = page < totalPages,
+                HasNext = pageSize != 0 && page < totalPages,
                 Search = search,
                 SortColumn = sort,
                 SortDescending = sortDesc,
@@ -155,6 +191,7 @@ namespace ERP.Controllers
             // 6) تمرير القيم للـ ViewBag علشان الواجهة تحفظ الحالة
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy;
+            ViewBag.SearchMode = searchMode;
             ViewBag.Sort = sort;
             ViewBag.Dir = sortDesc ? "desc" : "asc";
             ViewBag.DateField = dateField;
@@ -165,20 +202,28 @@ namespace ERP.Controllers
             ViewBag.CodeTo = finalToCode;
 
             ViewBag.FilterCol_Piid = filterCol_piid;
+            ViewBag.FilterCol_PiidExpr = filterCol_piidExpr;
             ViewBag.FilterCol_Lineno = filterCol_lineno;
+            ViewBag.FilterCol_LinenoExpr = filterCol_linenoExpr;
             ViewBag.FilterCol_Prod = filterCol_prod;
+            ViewBag.FilterCol_ProdExpr = filterCol_prodExpr;
             ViewBag.FilterCol_Prodname = filterCol_prodname;
             ViewBag.FilterCol_Qty = filterCol_qty;
+            ViewBag.FilterCol_QtyExpr = filterCol_qtyExpr;
             ViewBag.FilterCol_Unitcost = filterCol_unitcost;
+            ViewBag.FilterCol_UnitcostExpr = filterCol_unitcostExpr;
             ViewBag.FilterCol_Disc = filterCol_disc;
+            ViewBag.FilterCol_DiscExpr = filterCol_discExpr;
             ViewBag.FilterCol_Retail = filterCol_retail;
+            ViewBag.FilterCol_RetailExpr = filterCol_retailExpr;
             ViewBag.FilterCol_Linevalue = filterCol_linevalue;
+            ViewBag.FilterCol_LinevalueExpr = filterCol_linevalueExpr;
             ViewBag.FilterCol_Batch = filterCol_batch;
             ViewBag.FilterCol_Expiry = filterCol_expiry;
             ViewBag.FilterCol_Date = filterCol_date;
 
-            // إجمالي قيمة السطر (بعد الفلاتر)
             ViewBag.TotalLineValue = totalLineValue;
+            ViewBag.TotalQtyFiltered = totalQtyFiltered;
 
             return View(model);
         }
@@ -356,6 +401,7 @@ namespace ERP.Controllers
             string? format,
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -365,17 +411,25 @@ namespace ERP.Controllers
             int? codeFrom = null,
             int? codeTo = null,
             string? filterCol_piid = null,
+            string? filterCol_piidExpr = null,
             string? filterCol_lineno = null,
+            string? filterCol_linenoExpr = null,
             string? filterCol_prod = null,
+            string? filterCol_prodExpr = null,
             string? filterCol_prodname = null,
             string? filterCol_batch = null,
             string? filterCol_expiry = null,
             string? filterCol_date = null,
             string? filterCol_qty = null,
+            string? filterCol_qtyExpr = null,
             string? filterCol_unitcost = null,
+            string? filterCol_unitcostExpr = null,
             string? filterCol_disc = null,
+            string? filterCol_discExpr = null,
             string? filterCol_retail = null,
-            string? filterCol_linevalue = null
+            string? filterCol_retailExpr = null,
+            string? filterCol_linevalue = null,
+            string? filterCol_linevalueExpr = null
         )
         {
             format = string.IsNullOrWhiteSpace(format) ? "excel" : format.ToLowerInvariant();
@@ -383,6 +437,7 @@ namespace ERP.Controllers
             sort ??= "piid";
             dir ??= "asc";
             dateField ??= "PIDate";
+            searchMode = NormalizeSearchMode(searchMode);
 
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
@@ -395,6 +450,7 @@ namespace ERP.Controllers
                 query,
                 search,
                 searchBy,
+                searchMode,
                 codeFrom,
                 codeTo,
                 useDateRange,
@@ -403,7 +459,18 @@ namespace ERP.Controllers
                 dateField
             );
 
-            query = ApplyColumnFilters(query, filterCol_piid, filterCol_lineno, filterCol_prod, filterCol_prodname, filterCol_qty, filterCol_unitcost, filterCol_disc, filterCol_retail, filterCol_linevalue, filterCol_batch, filterCol_expiry, filterCol_date);
+            query = ApplyColumnFilters(
+                query,
+                filterCol_piid, filterCol_piidExpr,
+                filterCol_lineno, filterCol_linenoExpr,
+                filterCol_prod, filterCol_prodExpr,
+                filterCol_prodname,
+                filterCol_qty, filterCol_qtyExpr,
+                filterCol_unitcost, filterCol_unitcostExpr,
+                filterCol_disc, filterCol_discExpr,
+                filterCol_retail, filterCol_retailExpr,
+                filterCol_linevalue, filterCol_linevalueExpr,
+                filterCol_batch, filterCol_expiry, filterCol_date);
 
             query = ApplySort(query, sort, sortDesc);
 
@@ -496,9 +563,28 @@ namespace ERP.Controllers
 
         #region دوال الفلترة والترتيب والمساعدة
 
+        private static string NormalizeSearchMode(string? mode)
+        {
+            var m = (mode ?? "").Trim().ToLowerInvariant();
+            if (m == "startswith" || m == "starts" || m == "start" || m == "يبدأ") return "startswith";
+            if (m == "endswith" || m == "ends" || m == "end" || m == "ينتهي") return "endswith";
+            return "contains";
+        }
+
+        private static bool MatchSearchText(string? hay, string needle, string searchMode)
+        {
+            if (string.IsNullOrEmpty(needle)) return true;
+            hay ??= "";
+            if (searchMode == "startswith")
+                return hay.StartsWith(needle, StringComparison.OrdinalIgnoreCase);
+            if (searchMode == "endswith")
+                return hay.EndsWith(needle, StringComparison.OrdinalIgnoreCase);
+            return hay.Contains(needle, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// فلترة سطور الفواتير:
-        /// - نص البحث (حسب searchBy)
+        /// - نص البحث (حسب searchBy + searchMode)
         /// - من رقم فاتورة / إلى رقم فاتورة
         /// - فلتر بتاريخ الفاتورة (من PurchaseInvoice.PIDate)
         /// </summary>
@@ -506,6 +592,7 @@ namespace ERP.Controllers
             IQueryable<PILine> query,
             string? search,
             string? searchBy,
+            string? searchMode,
             int? fromCode,
             int? toCode,
             bool useDateRange,
@@ -516,6 +603,7 @@ namespace ERP.Controllers
         {
             searchBy ??= "all";
             dateField ??= "PIDate";
+            searchMode = NormalizeSearchMode(searchMode);
 
             // 1) فلتر نص البحث
             if (!string.IsNullOrWhiteSpace(search))
@@ -525,29 +613,21 @@ namespace ERP.Controllers
                 switch (searchBy.ToLower())
                 {
                     case "piid":
-                        if (int.TryParse(search, out var piIdVal))
-                        {
+                        if (int.TryParse(search, out var piIdVal) && searchMode == "contains" && search == piIdVal.ToString())
                             query = query.Where(l => l.PIId == piIdVal);
-                        }
                         else
-                        {
-                            query = query.Where(l => l.PIId.ToString().Contains(search));
-                        }
+                            query = query.Where(l => MatchSearchText(l.PIId.ToString(), search, searchMode));
                         break;
 
                     case "prod":
-                        if (int.TryParse(search, out var prodIdVal))
-                        {
+                        if (int.TryParse(search, out var prodIdVal) && searchMode == "contains" && search == prodIdVal.ToString())
                             query = query.Where(l => l.ProdId == prodIdVal);
-                        }
                         else
-                        {
-                            query = query.Where(l => l.ProdId.ToString().Contains(search));
-                        }
+                            query = query.Where(l => MatchSearchText(l.ProdId.ToString(), search, searchMode));
                         break;
 
                     case "batch":
-                        query = query.Where(l => l.BatchNo != null && l.BatchNo.Contains(search));
+                        query = query.Where(l => l.BatchNo != null && MatchSearchText(l.BatchNo, search, searchMode));
                         break;
 
                     case "expiry":
@@ -561,11 +641,11 @@ namespace ERP.Controllers
                     case "all":
                     default:
                         query = query.Where(l =>
-                            l.PIId.ToString().Contains(search) ||
-                            l.ProdId.ToString().Contains(search) ||
-                            (l.BatchNo != null && l.BatchNo.Contains(search)) ||
-                            (l.PurchaseInvoice != null &&
-                             l.PurchaseInvoice.PIDate.ToString().Contains(search))
+                            MatchSearchText(l.PIId.ToString(), search, searchMode) ||
+                            MatchSearchText(l.ProdId.ToString(), search, searchMode) ||
+                            (l.BatchNo != null && MatchSearchText(l.BatchNo, search, searchMode)) ||
+                            (l.PurchaseInvoice != null && MatchSearchText(l.PurchaseInvoice.PIDate.ToString(), search, searchMode)) ||
+                            (l.Product != null && l.Product.ProdName != null && MatchSearchText(l.Product.ProdName, search, searchMode))
                         );
                         break;
                 }
@@ -604,25 +684,35 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// تطبيق فلاتر الأعمدة (بنمط Excel) على استعلام سطور فواتير الشراء.
+        /// تطبيق فلاتر الأعمدة (بنمط Excel) على استعلام سطور فواتير الشراء؛ الأعمدة الرقمية تدعم filterCol_*Expr.
         /// </summary>
         private static IQueryable<PILine> ApplyColumnFilters(
             IQueryable<PILine> query,
             string? filterCol_piid,
+            string? filterCol_piidExpr,
             string? filterCol_lineno,
+            string? filterCol_linenoExpr,
             string? filterCol_prod,
+            string? filterCol_prodExpr,
             string? filterCol_prodname,
             string? filterCol_qty,
+            string? filterCol_qtyExpr,
             string? filterCol_unitcost,
+            string? filterCol_unitcostExpr,
             string? filterCol_disc,
+            string? filterCol_discExpr,
             string? filterCol_retail,
+            string? filterCol_retailExpr,
             string? filterCol_linevalue,
+            string? filterCol_linevalueExpr,
             string? filterCol_batch,
             string? filterCol_expiry,
             string? filterCol_date
         )
         {
-            if (!string.IsNullOrWhiteSpace(filterCol_piid))
+            if (!string.IsNullOrWhiteSpace(filterCol_piidExpr))
+                query = PILineListNumericExpr.ApplyPiIdExpr(query, filterCol_piidExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_piid))
             {
                 var ids = filterCol_piid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -630,7 +720,9 @@ namespace ERP.Controllers
                 if (ids.Count > 0)
                     query = query.Where(l => ids.Contains(l.PIId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_lineno))
+            if (!string.IsNullOrWhiteSpace(filterCol_linenoExpr))
+                query = PILineListNumericExpr.ApplyLineNoExpr(query, filterCol_linenoExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_lineno))
             {
                 var nums = filterCol_lineno.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -638,7 +730,9 @@ namespace ERP.Controllers
                 if (nums.Count > 0)
                     query = query.Where(l => nums.Contains(l.LineNo));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_prod))
+            if (!string.IsNullOrWhiteSpace(filterCol_prodExpr))
+                query = PILineListNumericExpr.ApplyProdIdExpr(query, filterCol_prodExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_prod))
             {
                 var ids = filterCol_prod.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -653,7 +747,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(l => l.Product != null && l.Product.ProdName != null && vals.Contains(l.Product.ProdName));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_qty))
+            if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr))
+                query = PILineListNumericExpr.ApplyQtyExpr(query, filterCol_qtyExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_qty))
             {
                 var nums = filterCol_qty.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -661,7 +757,9 @@ namespace ERP.Controllers
                 if (nums.Count > 0)
                     query = query.Where(l => nums.Contains(l.Qty));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_unitcost))
+            if (!string.IsNullOrWhiteSpace(filterCol_unitcostExpr))
+                query = PILineListNumericExpr.ApplyUnitCostExpr(query, filterCol_unitcostExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_unitcost))
             {
                 var vals = filterCol_unitcost.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
@@ -669,7 +767,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(l => vals.Contains(l.UnitCost));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_disc))
+            if (!string.IsNullOrWhiteSpace(filterCol_discExpr))
+                query = PILineListNumericExpr.ApplyDiscExpr(query, filterCol_discExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_disc))
             {
                 var vals = filterCol_disc.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
@@ -677,7 +777,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(l => vals.Contains(l.PurchaseDiscountPct));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_retail))
+            if (!string.IsNullOrWhiteSpace(filterCol_retailExpr))
+                query = PILineListNumericExpr.ApplyRetailExpr(query, filterCol_retailExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_retail))
             {
                 var vals = filterCol_retail.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
@@ -685,7 +787,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(l => vals.Contains(l.PriceRetail));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_linevalue))
+            if (!string.IsNullOrWhiteSpace(filterCol_linevalueExpr))
+                query = PILineListNumericExpr.ApplyLineValueExpr(query, filterCol_linevalueExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_linevalue))
             {
                 var vals = filterCol_linevalue.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), out var v) ? v : (decimal?)null)
