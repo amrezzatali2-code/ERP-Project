@@ -24,6 +24,10 @@
     var totalCustomersUnfiltered = ViewBag.TotalCustomersUnfiltered as int? ?? 0;
     var balanceDiff = totalDebit - totalCredit; // الفرق (مدين - دائن)
 
+    int ps = pageSize;
+    int dispStart = totalCount == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1) + 1);
+    int dispEnd = (ps == 0 || totalCount == 0) ? totalCount : Math.Min(totalCount, page * ps);
+
     // الفلاتر من ViewBag
     var search = ViewBag.Search as string ?? "";
     var partyCategory = ViewBag.PartyCategory as string;
@@ -86,7 +90,7 @@
             includeZeroBalance,
             sortBy,
             sortDir,
-            filterCol_code, filterCol_name, filterCol_category, filterCol_phone,
+            filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_account,
             filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales,
             filterCol_purchases, filterCol_returns, filterCol_availablecredit,
             loadReport = true,
@@ -94,6 +98,30 @@
             pageSize
         }) ?? "#";
     };
+
+    var printUrl = Url.Action("PrintCustomerBalances", "Reports", new
+    {
+        search,
+        partyCategory,
+        governorateId,
+        fromDate,
+        toDate,
+        includeZeroBalance,
+        sortBy,
+        sortDir,
+        filterCol_code,
+        filterCol_name,
+        filterCol_category,
+        filterCol_phone,
+        filterCol_account,
+        filterCol_debit,
+        filterCol_credit,
+        filterCol_creditlimit,
+        filterCol_sales,
+        filterCol_purchases,
+        filterCol_returns,
+        filterCol_availablecredit
+    }) ?? "#";
 }
 
 <div dir="rtl" class="container-fluid">
@@ -184,6 +212,7 @@
                 <div class="col-12 col-lg-auto erp-filter-section">
                     <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                     <div class="d-flex flex-nowrap gap-2 customer-balances-btns">
+                        @* في RTL: أول عنصر في DOM يظهر يميناً — تجميع ← إعادة ← حجم التعامل ← اختيار الأعمدة ← تصدير Excel ← طباعة (أقصى يسار المجموعة) *@
                         <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm customer-balances-btn customer-balances-btn-primary">
                             <span>📊</span> تجميع التقرير
                         </button>
@@ -192,29 +221,18 @@
                         </a>
                         @if (reportData.Any())
                         {
+                            <button type="button" id="btnCbEngagement" class="btn btn-erp btn-erp-secondary btn-erp-sm customer-balances-btn customer-balances-btn-secondary" disabled title="حدّد صفاً أو عميلاً واحداً بالتشيك بوكس">حجم التعامل</button>
+                            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm customer-balances-btn customer-balances-btn-secondary" data-bs-toggle="modal" data-bs-target="#columnsModalCb">اختيار الأعمدة</button>
                             <a href="@Url.Action("ExportCustomerBalances", "Reports", new { search, partyCategory, governorateId, fromDate, toDate, includeZeroBalance, sortBy, sortDir, filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_account, filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales, filterCol_purchases, filterCol_returns, filterCol_availablecredit })"
                                class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none customer-balances-btn customer-balances-btn-success">
                                 <span>📥</span> تصدير Excel
                             </a>
+                            <button type="button" id="btnCustomerBalancesPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm customer-balances-btn customer-balances-btn-secondary" title="طباعة حسب الأعمدة الظاهرة">
+                                <span>🖨️</span> طباعة
+                            </button>
                         }
                     </div>
                 </div>
-                @if (reportData.Any())
-                {
-                    <div class="col-12 col-lg-2 erp-filter-section">
-                        <label class="form-label">حجم الصفحة</label>
-                        <select name="pageSize" class="form-select erp-filter-input" onchange="this.form.submit()">
-                            <option value="25" @(pageSize == 25 ? "selected" : "")>25</option>
-                            <option value="50" @(pageSize == 50 ? "selected" : "")>50</option>
-                            <option value="100" @(pageSize == 100 ? "selected" : "")>100</option>
-                            <option value="200" @(pageSize == 200 ? "selected" : "")>200</option>
-                            <option value="500" @(pageSize == 500 ? "selected" : "")>500</option>
-                            <option value="1000" @(pageSize == 1000 ? "selected" : "")>1000</option>
-                            <option value="5000" @(pageSize == 5000 ? "selected" : "")>5000</option>
-                            <option value="0" @(pageSize == 0 || (totalCount > 0 && pageSize >= totalCount) ? "selected" : "")>الكل</option>
-                        </select>
-                    </div>
-                }
             </div>
         </form>
     </div>
@@ -266,35 +284,45 @@
                 </div>
             </div>
         </div>
+
     }
 
-    @* ===== جدول البيانات (نفس نظام Index) ===== *@
+        @* ===== جدول البيانات (نفس نظام Index) ===== *@
     @if (reportData.Any())
     {
-        <div class="erp-table-wrapper mt-3 erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto;">
+        <div class="erp-table-scroll-container customer-balances-table-scroll">
+        <div id="cbTableScrollWrapper" class="erp-table-wrapper mt-2 erp-print-area" dir="rtl" style="position: relative; max-height: 70vh; overflow-y: auto;">
             <table id="customerBalancesTable" class="table table-striped table-hover erp-table erp-table-sortable">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #f8f9fa !important;">
                     <tr>
-                        <th style="width: 80px;" data-col="code">@filterableCol("code", "code", "الكود")</th>
-                        <th style="width: 90px;" data-col="externalcode">كود الاكسل</th>
-                        <th style="width: 200px;" data-col="name">@filterableCol("name", "name", "اسم العميل")</th>
-                        <th style="min-width: 220px;" data-col="account">@filterableCol("account", "account", "حساب العميل")</th>
+                        <th class="text-center no-print" style="width:42px;" data-col="select" data-col-fixed="true">
+                            <input type="checkbox" id="cbSelectAll" class="form-check-input" title="تحديد الكل في الصفحة" />
+                        </th>
+                        <th style="min-width: 4.5rem; width: auto;" data-col="code">@filterableCol("code", "code", "الكود")</th>
+                        <th style="min-width: 5rem; width: auto;" data-col="externalcode">كود الاكسل</th>
+                        <th style="min-width: 8rem; width: auto;" data-col="name">@filterableCol("name", "name", "اسم العميل")</th>
+                        <th style="min-width: 12rem; width: auto;" data-col="account">@filterableCol("account", "account", "حساب العميل")</th>
                         <th data-col="category">@filterableCol("category", "category", "فئة العميل")</th>
                         <th data-col="phone">@filterableCol("phone", "phone", "الهاتف")</th>
-                        <th class="text-end" style="width: 120px;" data-col="debit">@filterableCol("debit", "debit", "مدين")</th>
-                        <th class="text-end" style="width: 120px;" data-col="credit">@filterableCol("credit", "credit", "دائن")</th>
-                        <th class="text-end" style="width: 120px;" data-col="creditlimit">@filterableCol("creditlimit", "creditlimit", "الحد الائتماني")</th>
-                        <th class="text-end" style="width: 120px;" data-col="sales">@filterableCol("sales", "sales", "المبيعات")</th>
-                        <th class="text-end" style="width: 120px;" data-col="purchases">@filterableCol("purchases", "purchases", "المشتريات")</th>
-                        <th class="text-end" style="width: 120px;" data-col="returns">@filterableCol("returns", "returns", "المرتجعات")</th>
-                        <th class="text-end" style="width: 130px;" data-col="availablecredit">@filterableCol("availablecredit", "availablecredit", "الائتمان المتاح")</th>
-                        <th class="text-nowrap no-print" style="width:120px;" data-col="actions" data-col-fixed="true">حجم تعامل</th>
+                        <th class="text-end" style="min-width: 6.5rem; width: auto;" data-col="debit">@filterableCol("debit", "debit", "مدين")</th>
+                        <th class="text-end" style="min-width: 6.5rem; width: auto;" data-col="credit">@filterableCol("credit", "credit", "دائن")</th>
+                        <th class="text-end" style="min-width: 6.5rem; width: auto;" data-col="creditlimit">@filterableCol("creditlimit", "creditlimit", "الحد الائتماني")</th>
+                        <th class="text-end" style="min-width: 6.5rem; width: auto;" data-col="sales">@filterableCol("sales", "sales", "المبيعات")</th>
+                        <th class="text-end" style="min-width: 6.5rem; width: auto;" data-col="purchases">@filterableCol("purchases", "purchases", "المشتريات")</th>
+                        <th class="text-end" style="min-width: 6.5rem; width: auto;" data-col="returns">@filterableCol("returns", "returns", "المرتجعات")</th>
+                        <th class="text-end" style="min-width: 7rem; width: auto;" data-col="availablecredit">@filterableCol("availablecredit", "availablecredit", "الائتمان المتاح")</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach (var item in reportData)
                     {
-                        <tr>
+                        var _tabTitle = string.IsNullOrWhiteSpace(item.CustomerName) ? ("عميل " + item.CustomerId) : item.CustomerName!;
+                        <tr class="erp-list-selectable-row"
+                            data-customer-id="@item.CustomerId"
+                            data-tab-title="@_tabTitle">
+                            <td class="text-center no-print" data-col="select">
+                                <input type="checkbox" class="row-select" value="@item.CustomerId" />
+                            </td>
                             <td data-col="code"><strong>@item.CustomerCode</strong></td>
                             <td data-col="externalcode"><small>@(item.ExternalCode ?? "—")</small></td>
                             <td data-col="name">@item.CustomerName</td>
@@ -308,22 +336,18 @@
                             <td data-col="purchases" class="text-end">@item.TotalPurchases.ToString("N2", n2)</td>
                             <td data-col="returns" class="text-end">@item.TotalReturns.ToString("N2", n2)</td>
                             <td data-col="availablecredit" class="text-end">@item.AvailableCredit.ToString("N2", n2)</td>
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm app-menu-link"
-                                   asp-controller="Customers"
-                                   asp-action="Show"
-                                   asp-route-id="@item.CustomerId"
-                                   data-tab-id="customer-engagement"
-                                   data-tab-title="حجم تعامل عميل">
-                                    حجم تعامل
-                                </a>
-                            </td>
                         </tr>
                     }
                 </tbody>
                 <tfoot class="table-secondary fw-bold">
                     <tr>
-                        <td colspan="6" class="text-end"><strong>المجموع الإجمالي:</strong></td>
+                        <td class="no-print" data-col="select"></td>
+                        <td data-col="code"></td>
+                        <td data-col="externalcode"></td>
+                        <td data-col="name" class="text-start"><strong>المجموع الإجمالي:</strong></td>
+                        <td data-col="account"></td>
+                        <td data-col="category"></td>
+                        <td data-col="phone"></td>
                         <td data-col="debit" class="text-end"><strong>@totalDebit.ToString("N2", n2)</strong></td>
                         <td data-col="credit" class="text-end"><strong>@totalCredit.ToString("N2", n2)</strong></td>
                         <td data-col="creditlimit" class="text-end"><strong>@totalCreditLimit.ToString("N2", n2)</strong></td>
@@ -333,18 +357,32 @@
                         <td data-col="availablecredit" class="text-end">
                             <strong class="customer-balances-total-value">@totalAvailableCredit.ToString("N2", n2)</strong>
                         </td>
-                        <td class="no-print" data-col="actions"></td>
                     </tr>
                 </tfoot>
             </table>
         </div>
+        </div>
 
-        @* ===== الترقيم وعرض النطاق (تحت الجدول) ===== *@
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mt-2 mb-2 d-print-none" dir="rtl">
-            <small class="text-muted">
-                عرض @((page - 1) * pageSize + 1) - @(Math.Min(page * pageSize, totalCount)) من @totalCount
+        @* ===== شريط سفلي: عرض النطاق + حجم الصفحة (نمط القوائم) ===== *@
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 mb-2 d-print-none" dir="rtl">
+            <small class="text-muted text-start">
+                عرض @dispStart - @dispEnd من @totalCount
             </small>
-            <small class="text-muted">@($"صفحة {page} من {totalPages}")</small>
+            <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                <label class="form-label m-0 text-nowrap small mb-0">حجم الصفحة</label>
+                <select class="form-select form-select-sm" style="width:auto;min-width:4.5rem;" aria-label="حجم الصفحة"
+                        onchange="var u=new URL(window.location.href);u.searchParams.set('pageSize',this.value);u.searchParams.set('page','1');window.location.href=u.toString();">
+                    <option value="10" @(ps == 10 ? "selected" : "")>10</option>
+                    <option value="25" @(ps == 25 ? "selected" : "")>25</option>
+                    <option value="50" @(ps == 50 ? "selected" : "")>50</option>
+                    <option value="100" @(ps == 100 ? "selected" : "")>100</option>
+                    <option value="200" @(ps == 200 ? "selected" : "")>200</option>
+                    <option value="500" @(ps == 500 ? "selected" : "")>500</option>
+                    <option value="1000" @(ps == 1000 ? "selected" : "")>1000</option>
+                    <option value="5000" @(ps == 5000 ? "selected" : "")>5000</option>
+                    <option value="0" @(ps == 0 || (totalCount > 0 && ps >= totalCount) ? "selected" : "")>الكل</option>
+                </select>
+            </div>
         </div>
 
         @* لوحة فلتر العمود (بنمط Excel) *@
@@ -366,6 +404,10 @@
                         <label class="form-label small mb-1 fw-bold">الفلترة:</label>
                         <input type="text" id="erpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
                     </div>
+                    <div id="erpColumnFilterNumericRow" class="d-none">
+                        <label class="form-label small mb-1 fw-bold">بحث رقمي:</label>
+                        <input type="text" id="erpNumericFilterInput" class="form-control form-control-sm mb-0" placeholder="مثال: 10 أو &gt;100 أو 10:200" autocomplete="off" />
+                    </div>
                     <div id="erpColumnFilterList" class="erp-column-filter-list">
                         <div class="text-muted text-center py-3">جاري التحميل...</div>
                     </div>
@@ -377,29 +419,45 @@
             </div>
         </div>
 
-        @* ===== Pagination Controls ===== *@
-        @if (totalPages > 1)
-        {
-            <nav aria-label="pagination" class="mt-3 d-print-none">
-                <ul class="pagination justify-content-center">
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(1)">الأول</a>
-                    </li>
-                    <li class="page-item @(page == 1 ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page - 1)">السابق</a>
-                    </li>
-                    <li class="page-item disabled">
-                        <span class="page-link">@($"صفحة {page} من {totalPages}")</span>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(page + 1)">التالي</a>
-                    </li>
-                    <li class="page-item @(page >= totalPages ? "disabled" : "")">
-                        <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
-                    </li>
-                </ul>
-            </nav>
-        }
+        @* ===== Pagination (دائماً مرئي — نمط القوائم) ===== *@
+        <nav aria-label="pagination" class="mt-2 mb-3 d-print-none">
+            <ul class="pagination justify-content-center flex-wrap mb-0">
+                <li class="page-item @(page <= 1 ? "disabled" : "")">
+                    <a class="page-link" href="@pageUrl(1)">الأول</a>
+                </li>
+                <li class="page-item @(page <= 1 ? "disabled" : "")">
+                    <a class="page-link" href="@pageUrl(Math.Max(1, page - 1))">السابق</a>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">@($"صفحة {page} من {totalPages}")</span>
+                </li>
+                <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                    <a class="page-link" href="@pageUrl(Math.Min(totalPages, page + 1))">التالي</a>
+                </li>
+                <li class="page-item @(page >= totalPages ? "disabled" : "")">
+                    <a class="page-link" href="@pageUrl(totalPages)">الأخير</a>
+                </li>
+            </ul>
+        </nav>
+
+        @* ===== Modal اختيار الأعمدة ===== *@
+        <div class="modal fade no-print erp-columns-modal" id="columnsModalCb" tabindex="-1" aria-labelledby="columnsModalCbLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content" dir="rtl">
+                    <div class="modal-header">
+                        <h5 class="modal-title flex-grow-1" id="columnsModalCbLabel">اختيار الأعمدة الظاهرة</h5>
+                        <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="columnsListCb" class="erp-columns-modal-list"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إغلاق</button>
+                        <button type="button" id="btnApplyColumnsCb" class="btn btn-erp btn-erp-primary">تطبيق</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     }
     else
     {
@@ -412,9 +470,17 @@
 @section Styles {
     <style>
         datalist { display: none; }
+        /* حاوية أفقية ltr حتى يكون scrollLeft=الحد الأقصى = إظهار بداية الجدول (يمين الشاشة في RTL) */
+        .customer-balances-table-scroll { overflow-x: auto; direction: ltr; }
+        #cbTableScrollWrapper { direction: rtl; }
         .erp-column-filter-panel #erpNumericFilterInput { width: 100%; min-width: 0; box-sizing: border-box; }
         .erp-table tfoot { background-color: #f8fafc !important; border-top: 1px solid #e2e8f0; }
         .erp-table tbody tr:hover { background-color: #f8fafc; }
+        /* تثبيت لون التحديد فوق التخطيط المخطط */
+        .erp-table-wrapper .erp-table.table-striped > tbody > tr.erp-list-selectable-row.selected > td {
+            --bs-table-bg-type: transparent !important;
+            background-color: rgba(99, 102, 241, 0.38) !important;
+        }
         .customer-balances-total-value { font-size: 1.05rem; color: #475569 !important; }
         a.text-decoration-none:hover { text-decoration: underline !important; }
 
@@ -454,6 +520,7 @@
 }
 
 @section Scripts {
+    <script src="~/js/erp-list-print.js" asp-append-version="true"></script>
     <script>
         // فلتر الأعمدة بنمط Excel (تقرير أرصدة العملاء)
         (function () {
@@ -467,8 +534,8 @@
             var btnClose = document.getElementById("erpColumnFilterClose");
 
             var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-            var filterColumns = ["code", "name", "account", "category", "phone"];
-            var numericColumns = ["debit", "credit", "creditlimit", "sales", "purchases", "returns", "availablecredit"];
+            // أعمدة رقمية: بحث رقمي (تعبير واحد أو عدة قيم بـ |) — نفس CustomerBalancesNumericFilter على الخادم
+            var numericColumns = ["code", "debit", "credit", "creditlimit", "sales", "purchases", "returns", "availablecredit"];
 
             function getQueryParams() {
                 var url = new URL(window.location.href);
@@ -482,6 +549,13 @@
             function getCurrentSort() {
                 var url = new URL(window.location.href);
                 return { sort: url.searchParams.get("sortBy") || "name", dir: url.searchParams.get("sortDir") || "asc" };
+            }
+            function buildColumnValuesUrl(column, searchTerm) {
+                var params = getQueryParams();
+                var url = "/Reports/GetCustomerBalancesColumnValues?search=" + encodeURIComponent(params.search || "") + "&partyCategory=" + encodeURIComponent(params.partyCategory || "") + "&governorateId=" + encodeURIComponent(params.governorateId || "") + "&column=" + encodeURIComponent(column);
+                var sv = searchTerm !== undefined && searchTerm !== null ? String(searchTerm).trim() : "";
+                if (sv) url += "&searchTerm=" + encodeURIComponent(sv);
+                return url;
             }
             function adjustPanelPosition() {
                 if (!panel || !anchorRect) return;
@@ -500,7 +574,6 @@
                 currentSortKey = btn.dataset.sortKey || currentCol;
                 titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
                 searchInp.value = "";
-                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split("|").filter(Boolean));
                 anchorRect = btn.getBoundingClientRect();
                 panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
                 panel.classList.remove("d-none");
@@ -521,15 +594,25 @@
 
                 if (numericColumns.indexOf(currentCol) >= 0) {
                     document.getElementById("erpColumnFilterSearchRow").classList.add("d-none");
-                    var curVal = getCurrentFilterValue(currentCol);
-                    listEl.innerHTML = '<label class="form-label small mb-1">أدخل قيمة رقمية للفلترة:</label><input type="text" id="erpNumericFilterInput" class="form-control form-control-sm" value="' + (curVal ? curVal.replace(/"/g, "&quot;") : "") + '" placeholder="مثال: 1000" />';
+                    document.getElementById("erpColumnFilterNumericRow").classList.remove("d-none");
+                    listEl.classList.add("d-none");
+                    listEl.innerHTML = "";
+                    var numEl = document.getElementById("erpNumericFilterInput");
+                    if (numEl) {
+                        numEl.value = getCurrentFilterValue(currentCol) || "";
+                        numEl.onkeydown = function (ev) { if (ev.key === "Enter") { ev.preventDefault(); applyFilter(); } };
+                    }
+                    panel.style.minWidth = "min(340px, 92vw)";
+                    setTimeout(function () { if (numEl) numEl.focus(); adjustPanelPosition(); }, 0);
                     return;
                 }
+
+                document.getElementById("erpColumnFilterNumericRow").classList.add("d-none");
                 document.getElementById("erpColumnFilterSearchRow").classList.remove("d-none");
-                var params = getQueryParams();
-                var url = "/Reports/GetCustomerBalancesColumnValues?search=" + encodeURIComponent(params.search || "") + "&partyCategory=" + encodeURIComponent(params.partyCategory || "") + "&governorateId=" + encodeURIComponent(params.governorateId || "") + "&column=" + encodeURIComponent(currentCol);
+                listEl.classList.remove("d-none");
+                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split("|").filter(Boolean));
                 var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&searchTerm=" + encodeURIComponent(searchVal);
+                var url = buildColumnValuesUrl(currentCol, searchVal);
                 listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
                 fetch(url).then(function (r) { return r.json(); }).then(function (items) {
                     allItems = items;
@@ -578,6 +661,7 @@
                     params.sortBy = cur.sort;
                     params.sortDir = cur.dir;
                 }
+                delete params["filterCol_" + currentCol];
                 var val;
                 if (numericColumns.indexOf(currentCol) >= 0) {
                     var numInp = document.getElementById("erpNumericFilterInput");
@@ -610,15 +694,13 @@
             });
             var fetchDebounce = null;
             searchInp && searchInp.addEventListener("input", function () {
+                if (numericColumns.indexOf(currentCol) >= 0) return;
                 renderList(this.value);
                 if (fetchDebounce) clearTimeout(fetchDebounce);
                 fetchDebounce = setTimeout(function () {
                     fetchDebounce = null;
                     if (!currentCol) return;
-                    var params = getQueryParams();
-                    var url = "/Reports/GetCustomerBalancesColumnValues?search=" + encodeURIComponent(params.search || "") + "&partyCategory=" + encodeURIComponent(params.partyCategory || "") + "&governorateId=" + encodeURIComponent(params.governorateId || "") + "&column=" + encodeURIComponent(currentCol);
-                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                    if (searchVal) url += "&searchTerm=" + encodeURIComponent(searchVal);
+                    var url = buildColumnValuesUrl(currentCol, searchInp ? searchInp.value : "");
                     fetch(url).then(function (r) { return r.json(); }).then(function (items) {
                         allItems = items;
                         renderList(searchInp ? searchInp.value : "");
@@ -655,14 +737,15 @@
             }
         });
 
-        // توسيع/تصغير عرض الأعمدة (نفس نظام Index)
+        // توسيع/تصغير عرض الأعمدة (نفس نظام Index) — تخطّي الأعمدة الثابتة
         document.addEventListener('DOMContentLoaded', function () {
-            var wrapper = document.querySelector('.erp-table-wrapper');
+            var wrapper = document.getElementById('cbTableScrollWrapper') || document.querySelector('.erp-table-wrapper');
             if (!wrapper) return;
             var table = wrapper.querySelector('table.erp-table');
             if (!table) return;
             var ths = table.querySelectorAll('thead th');
             ths.forEach(function (th) {
+                if (th.getAttribute("data-col-fixed") === "true") return;
                 th.style.position = 'relative';
                 var handle = document.createElement('div');
                 handle.className = 'erp-col-resize-handle';
@@ -686,6 +769,155 @@
                     document.addEventListener('mousemove', onMouseMove);
                     document.addEventListener('mouseup', onMouseUp);
                 });
+            });
+        });
+
+        // شريط التمرير الأفقي: يفتح من جهة اليمين (بداية الجدول في RTL)
+        function customerBalancesScrollToEnd() {
+            var sc = document.querySelector('.customer-balances-table-scroll');
+            if (!sc) return;
+            requestAnimationFrame(function () {
+                sc.scrollLeft = Math.max(0, sc.scrollWidth - sc.clientWidth);
+            });
+        }
+        document.addEventListener('DOMContentLoaded', customerBalancesScrollToEnd);
+        window.addEventListener('resize', customerBalancesScrollToEnd);
+
+        // تحديد صف (لون ثابت .selected) منفصل عن التشيك بوكس (تعدد للتحديد)
+        document.addEventListener('DOMContentLoaded', function () {
+            var table = document.getElementById("customerBalancesTable");
+            var btnEng = document.getElementById("btnCbEngagement");
+            var chkAll = document.getElementById("cbSelectAll");
+            var showUrlZero = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Url.Action("Show", "Customers", new { id = 0 })));
+
+            function syncEngBtn() {
+                if (!btnEng || !table) return;
+                var checkedCount = table.querySelectorAll("tbody .row-select:checked").length;
+                var selectedRow = table.querySelector("tbody tr.erp-list-selectable-row.selected");
+                btnEng.disabled = !(checkedCount === 1 || (checkedCount === 0 && selectedRow));
+            }
+
+            chkAll?.addEventListener("change", function () {
+                var on = this.checked;
+                table?.querySelectorAll("tbody .row-select").forEach(function (cb) { cb.checked = on; });
+                syncEngBtn();
+            });
+            table?.addEventListener("change", function (e) {
+                const t = e.target;
+                if (t && t.classList.contains("row-select")) {
+                    if (!t.checked && chkAll) chkAll.checked = false;
+                    syncEngBtn();
+                }
+            });
+            table?.querySelectorAll("tbody tr.erp-list-selectable-row").forEach(function (row) {
+                row.addEventListener("click", function (e) {
+                    if (e.target.closest("input") || e.target.closest("label") || e.target.closest("a") || e.target.closest("button")) return;
+                    table.querySelectorAll("tbody tr.erp-list-selectable-row").forEach(function (r) { r.classList.remove("selected"); });
+                    row.classList.add("selected");
+                    syncEngBtn();
+                });
+            });
+            syncEngBtn();
+
+            btnEng?.addEventListener("click", function () {
+                if (!table) return;
+                var checks = Array.from(table.querySelectorAll("tbody .row-select")).filter(function (c) { return c.checked; });
+                var id = null;
+                if (checks.length === 1) id = checks[0].value;
+                else if (checks.length === 0) {
+                    var sel = table.querySelector("tbody tr.erp-list-selectable-row.selected");
+                    if (sel && sel.dataset.customerId) id = String(sel.dataset.customerId);
+                }
+                if (!id) {
+                    alert("اختر عميلاً واحداً من الجدول (صف واحد أو تشيك بوكس واحد) لفتح حجم التعامل.");
+                    return;
+                }
+                var href = String(showUrlZero).replace(/\/0(\?.*)?$/, "/" + id + "$1");
+                var a = document.createElement("a");
+                a.href = href;
+                a.className = "app-menu-link";
+                a.setAttribute("data-tab-id", "customer-engagement-" + id);
+                a.setAttribute("data-tab-title", "حجم تعامل عميل");
+                a.style.display = "none";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            });
+        });
+
+        // إظهار/إخفاء أعمدة (localStorage)
+        document.addEventListener('DOMContentLoaded', function () {
+            var table = document.getElementById("customerBalancesTable");
+            var listEl = document.getElementById("columnsListCb");
+            if (!table || !listEl) return;
+            var storageKey = "customer-balances-columns-visibility";
+            var headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
+            var columns = headerCells.filter(function (th) { return !th.hasAttribute("data-col-fixed"); })
+                .map(function (th) {
+                    var t = th.querySelector(".erp-col-title");
+                    var title = (t ? t.textContent : th.innerText).trim();
+                    return { key: th.getAttribute("data-col"), title: title || th.getAttribute("data-col") };
+                });
+            if (columns.length === 0) return;
+
+            var hidden = [];
+            try {
+                var saved = localStorage.getItem(storageKey);
+                if (saved) hidden = JSON.parse(saved);
+            } catch (e) { hidden = []; }
+
+            function applyVisibility() {
+                columns.forEach(function (col) {
+                    var isHidden = hidden.indexOf(col.key) >= 0;
+                    table.querySelectorAll("[data-col='" + col.key + "']").forEach(function (cell) {
+                        cell.classList.toggle("d-none", isHidden);
+                    });
+                });
+            }
+            applyVisibility();
+
+            listEl.innerHTML = "";
+            columns.forEach(function (col) {
+                var id = "cb_col_" + col.key;
+                var wrap = document.createElement("div");
+                wrap.className = "form-check";
+                var cb = document.createElement("input");
+                cb.type = "checkbox";
+                cb.className = "form-check-input";
+                cb.id = id;
+                cb.checked = hidden.indexOf(col.key) < 0;
+                cb.dataset.colKey = col.key;
+                var lab = document.createElement("label");
+                lab.className = "form-check-label";
+                lab.setAttribute("for", id);
+                lab.textContent = col.title;
+                wrap.appendChild(cb);
+                wrap.appendChild(lab);
+                listEl.appendChild(wrap);
+            });
+
+            document.getElementById("btnApplyColumnsCb")?.addEventListener("click", function () {
+                hidden = [];
+                listEl.querySelectorAll("input[type=checkbox][data-col-key]").forEach(function (c) {
+                    if (!c.checked) hidden.push(c.dataset.colKey);
+                });
+                try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch (e) { }
+                applyVisibility();
+                var modalEl = document.getElementById("columnsModalCb");
+                var modal = bootstrap.Modal.getInstance(modalEl);
+                modal?.hide();
+            });
+        });
+
+        // طباعة: صفحة Print + printCols (نفس قائمة العملاء — ~/js/erp-list-print.js)
+        document.addEventListener("DOMContentLoaded", function () {
+            var printUrlBase = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(printUrl));
+            document.getElementById("btnCustomerBalancesPrint")?.addEventListener("click", function () {
+                if (!printUrlBase || printUrlBase === "#") return;
+                if (window.ERP && typeof ERP.openListPrint === "function")
+                    ERP.openListPrint(printUrlBase, { tableId: "customerBalancesTable", storageKey: "customer-balances-columns-visibility" });
+                else
+                    window.open(printUrlBase, "_blank", "noopener,noreferrer");
             });
         });
     </script>

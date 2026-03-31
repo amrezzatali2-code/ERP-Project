@@ -1,0 +1,40 @@
+# نمط طباعة القوائم (صفحة Print + أعمدة + فلاتر)
+
+## وضعان في المشروع
+
+| الوضع | متى | الآلية |
+|-----|-----|-----|
+| **A — طباعة من نفس الصفحة** | كثير من القوائم (`SalesInvoices`, `Products` مع `print=true`, …) | `window.print()` + `.erp-print-area` + `~/css/erp-print.css` |
+| **B — صفحة طباعة منفصلة** | `Customers/Print` والمرجع للتعميم | `GET .../Print` بنفس فلاتر الـ Index + `printCols` + عرض `Print.cshtml` |
+
+لتوحيد **الاتجاه + ترقيم الصفحات + كل الصفوف المفلترة + الأعمدة الظاهرة** استخدم **الوضع B** أو طوّر الوضع A لاحقاً.
+
+## المكوّنات المشتركة (الوضع B)
+
+| مكوّن | مسار |
+|-----|-----|
+| تحليل `printCols` على الخادم | `Infrastructure/ListPrintColumnParser.cs` — `ParsePrintColumns(printCols, allowedOrder, aliases?)` |
+| بناء الرابط من القائمة | `wwwroot/js/erp-list-print.js` — `ERP.buildListPrintUrl` / `ERP.openListPrint` |
+| تنسيقات طباعة الفواتير/قوائم عامة | `wwwroot/css/erp-print.css` |
+
+## خطوات تعميم قائمة جديدة (الوضع B)
+
+1. **الجدول في Index:** `thead th[data-col]` للأعمدة القابلة للإخفاء؛ ثابتة مثل التحديد: `data-col-fixed`.
+2. **localStorage:** نفس المفتاح المستخدم في «اختيار الأعمدة» (مصفوفة مفاتيح **المخفية**).
+3. **زر الطباعة:** تحميل `erp-list-print.js` ثم:
+   ```javascript
+   ERP.openListPrint(printUrl, { tableId: "جدولك", storageKey: "اسم-المفتاح-columns-visibility" });
+   ```
+4. **الكنترولر:** إجراء `Print` يعيد استخدام نفس استعلام/فلاتر الـ `Index` بدون ترقيم، مع `Take(maxRows)`، ومعامل `string? printCols = null`.
+5. **الخادم:** `ListPrintColumnParser.ParsePrintColumns(printCols, YourColumnOrder, aliases)` → `ViewBag.PrintColumnKeys`.
+6. **View `Print.cshtml`:** `Layout = null`؛ رأس + جدول حلقي على `PrintColumnKeys`؛ شريط اتجاه/طباعة اختياري (مرجع: `Views/Customers/Print.cshtml`).
+
+## الوضع A (بدون صفحة Print)
+
+- تحسين موحّد: تعديل `@page` في `erp-print.css` تحت `@media print` يؤثر على كل القوائم التي تطبع من المتصفح.
+- **أعمدة معروضة:** لا تُرسل تلقائياً للخادم؛ إما طباعة ما يظهر فقط (CSS) أو لاحقاً إضافة الوضع B.
+
+## تدقيق
+
+- [ ] `printCols` يُفلتر بقائمة بيضاء على الخادم (لا تثق بالمدخلات).
+- [ ] تطابق أسماء `data-col` بين القائمة و`Print.cshtml` و`allowedOrder`.

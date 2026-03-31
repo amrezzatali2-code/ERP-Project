@@ -266,6 +266,7 @@ private int? GetCurrentUserId()
                 string? searchBy,                    // متغير: نوع البحث: all / id / customer / warehouse / date / status ...
                 string? sort,                        // متغير: عمود الترتيب: id / date / customer / warehouse / total / status ...
                 string? dir,                         // متغير: اتجاه الترتيب: asc / desc
+                string? searchMode = null,          // يحتوي / يبدأ / ينتهي
                 bool useDateRange = false,           // متغير: هل فلتر التاريخ مفعّل؟
                 DateTime? fromDate = null,           // متغير: من تاريخ/وقت
                 DateTime? toDate = null,             // متغير: إلى تاريخ/وقت
@@ -273,7 +274,7 @@ private int? GetCurrentUserId()
                 int? fromCode = null,                // متغير: من رقم طلب
                 int? toCode = null,                  // متغير: إلى رقم طلب
                 int page = 1,                        // متغير: رقم الصفحة
-                int pageSize = 25,                   // متغير: حجم الصفحة
+                int pageSize = 10,                   // متغير: حجم الصفحة (0 = الكل)
                 string? filterCol_id = null,
                 string? filterCol_date = null,
                 string? filterCol_needby = null,
@@ -287,21 +288,35 @@ private int? GetCurrentUserId()
             // =========================================================
             // (0) قيم افتراضية — البحث الافتراضي على كل الأعمدة
             // =========================================================
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+
             searchBy ??= "all";
             sort ??= "date";
             dir ??= "desc";
             dateField ??= "PRDate";
+            searchMode = NormalizeSearchMode(searchMode);
 
             if (page < 1) page = 1;
-            if (pageSize <= 0) pageSize = 25;
+            if (pageSize < 0) pageSize = 10;
+            bool pageSizeOk = pageSize == 0 || pageSize == 10 || pageSize == 25 || pageSize == 50 || pageSize == 100 || pageSize == 200;
+            if (pageSize > 0 && !pageSizeOk)
+                pageSize = 10;
 
             // =========================================================
-            // (1) الاستعلام الأساسي — Include عند البحث في «الكل» لاستخدام اسم العميل/المخزن
+            // (1) الاستعلام الأساسي — Include للبحث في الأسماء
             // =========================================================
             IQueryable<PurchaseRequest> query = _context.PurchaseRequests.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(search) && string.Equals(searchBy, "all", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrWhiteSpace(search))
             {
-                query = query.Include(pr => pr.Customer).Include(pr => pr.Warehouse);
+                if (string.Equals(searchBy, "all", StringComparison.OrdinalIgnoreCase))
+                    query = query.Include(pr => pr.Customer).Include(pr => pr.Warehouse);
+                else if (string.Equals(searchBy, "customer", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(searchBy, "vendor", StringComparison.OrdinalIgnoreCase))
+                    query = query.Include(pr => pr.Customer);
+                else if (string.Equals(searchBy, "warehouse", StringComparison.OrdinalIgnoreCase))
+                    query = query.Include(pr => pr.Warehouse);
             }
 
             // =========================================================
@@ -323,6 +338,7 @@ private int? GetCurrentUserId()
                 query,
                 search,
                 searchBy,
+                searchMode,
                 finalFromCode,
                 finalToCode,
                 useDateRange,
@@ -434,7 +450,15 @@ private int? GetCurrentUserId()
             // (6) العدد الكلي بعد الفلاتر
             // =========================================================
             int totalCount = await query.CountAsync();
-            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+
+            int totalPages = pageSize == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)effectivePageSize);
 
             // =========================================================
             // (7) قراءة صفحة واحدة فقط (مع تحميل Customer و Warehouse)
@@ -442,8 +466,8 @@ private int? GetCurrentUserId()
             var items = await query
                 .Include(pr => pr.Customer)
                 .Include(pr => pr.Warehouse)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
                 .ToListAsync();
 
             // =========================================================
@@ -457,7 +481,7 @@ private int? GetCurrentUserId()
                 TotalCount = totalCount,
                 TotalPages = totalPages,
                 HasPrevious = page > 1,
-                HasNext = page < totalPages,
+                HasNext = pageSize != 0 && page < totalPages,
 
                 Search = search,
                 SortColumn = sort,
@@ -473,6 +497,7 @@ private int? GetCurrentUserId()
             // =========================================================
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy;
+            ViewBag.SearchMode = searchMode;
             ViewBag.Sort = sort;
             ViewBag.Dir = sortDesc ? "desc" : "asc";
             ViewBag.DateField = dateField;
@@ -3006,6 +3031,7 @@ private async Task PopulateDropDownsAsync(
             string? format,
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -3031,6 +3057,7 @@ private async Task PopulateDropDownsAsync(
             sort ??= "date";
             dir ??= "desc";
             dateField ??= "PRDate";
+            searchMode = NormalizeSearchMode(searchMode);
 
             int? finalFrom = fromCode ?? codeFrom;
             int? finalTo = toCode ?? codeTo;
@@ -3038,10 +3065,18 @@ private async Task PopulateDropDownsAsync(
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
             IQueryable<PurchaseRequest> query = _context.PurchaseRequests.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(search) && string.Equals(searchBy, "all", StringComparison.OrdinalIgnoreCase))
-                query = query.Include(pr => pr.Customer).Include(pr => pr.Warehouse);
+            if (!string.IsNullOrWhiteSpace(search))
+            {
+                if (string.Equals(searchBy, "all", StringComparison.OrdinalIgnoreCase))
+                    query = query.Include(pr => pr.Customer).Include(pr => pr.Warehouse);
+                else if (string.Equals(searchBy, "customer", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(searchBy, "vendor", StringComparison.OrdinalIgnoreCase))
+                    query = query.Include(pr => pr.Customer);
+                else if (string.Equals(searchBy, "warehouse", StringComparison.OrdinalIgnoreCase))
+                    query = query.Include(pr => pr.Warehouse);
+            }
 
-            query = ApplyFilters(query, search, searchBy, finalFrom, finalTo, useDateRange, fromDate, toDate, dateField);
+            query = ApplyFilters(query, search, searchBy, searchMode, finalFrom, finalTo, useDateRange, fromDate, toDate, dateField);
 
             // فلاتر الأعمدة (نفس Index)
             if (!string.IsNullOrWhiteSpace(filterCol_id))
@@ -3178,9 +3213,28 @@ private async Task PopulateDropDownsAsync(
 
 
 
+        private static string NormalizeSearchMode(string? mode)
+        {
+            var m = (mode ?? "").Trim().ToLowerInvariant();
+            if (m == "startswith" || m == "starts" || m == "start" || m == "يبدأ") return "startswith";
+            if (m == "endswith" || m == "ends" || m == "end" || m == "ينتهي") return "endswith";
+            return "contains";
+        }
+
+        private static bool MatchSearchText(string? hay, string needle, string searchMode)
+        {
+            if (string.IsNullOrEmpty(needle)) return true;
+            hay ??= "";
+            if (searchMode == "startswith")
+                return hay.StartsWith(needle, StringComparison.OrdinalIgnoreCase);
+            if (searchMode == "endswith")
+                return hay.EndsWith(needle, StringComparison.OrdinalIgnoreCase);
+            return hay.Contains(needle, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// دالة فلترة موحدة لطلبات الشراء:
-        /// - نص البحث (حسب searchBy)
+        /// - نص البحث (حسب searchBy + searchMode: يحتوي / يبدأ / ينتهي)
         /// - من/إلى كود (PRId)
         /// - فلتر التاريخ (PRDate أو CreatedAt أو UpdatedAt)
         /// </summary>
@@ -3188,6 +3242,7 @@ private async Task PopulateDropDownsAsync(
             IQueryable<PurchaseRequest> query,
             string? search,            // متغير: نص البحث
             string? searchBy,          // متغير: نوع البحث (id / vendor / customer / warehouse / date / status / all)
+            string? searchMode,
             int? fromCode,             // متغير: من رقم طلب
             int? toCode,               // متغير: إلى رقم طلب
             bool useDateRange,         // متغير: تفعيل فلتر التاريخ؟
@@ -3201,6 +3256,7 @@ private async Task PopulateDropDownsAsync(
             // =========================
             searchBy ??= "all";
             dateField = string.IsNullOrWhiteSpace(dateField) ? "PRDate" : dateField;
+            searchMode = NormalizeSearchMode(searchMode);
 
             // =========================
             // 1) فلتر نص البحث
@@ -3212,79 +3268,63 @@ private async Task PopulateDropDownsAsync(
                 switch (searchBy.ToLower())
                 {
                     case "all":
-                        // بحث في كل أعمدة الجدول (يتطلب Include Customer و Warehouse من الـ Index)
                         query = query.Where(p =>
-                            p.PRId.ToString().Contains(search) ||
-                            (p.Customer != null && p.Customer.CustomerName != null && p.Customer.CustomerName.Contains(search)) ||
-                            (p.Warehouse != null && p.Warehouse.WarehouseName != null && p.Warehouse.WarehouseName.Contains(search)) ||
-                            (p.Status != null && p.Status.Contains(search)) ||
-                            p.ExpectedItemsTotal.ToString(System.Globalization.CultureInfo.InvariantCulture).Contains(search) ||
-                            p.PRDate.ToString("yyyy-MM-dd").Contains(search) ||
-                            (p.NeedByDate.HasValue && p.NeedByDate.Value.ToString("yyyy-MM-dd").Contains(search)) ||
-                            p.CreatedAt.ToString("yyyy-MM-dd").Contains(search) ||
-                            p.CustomerId.ToString().Contains(search) ||
-                            p.WarehouseId.ToString().Contains(search));
+                            MatchSearchText(p.PRId.ToString(), search, searchMode) ||
+                            (p.Customer != null && p.Customer.CustomerName != null && MatchSearchText(p.Customer.CustomerName, search, searchMode)) ||
+                            (p.Warehouse != null && p.Warehouse.WarehouseName != null && MatchSearchText(p.Warehouse.WarehouseName, search, searchMode)) ||
+                            (p.Status != null && MatchSearchText(p.Status, search, searchMode)) ||
+                            MatchSearchText(p.ExpectedItemsTotal.ToString(System.Globalization.CultureInfo.InvariantCulture), search, searchMode) ||
+                            MatchSearchText(p.PRDate.ToString("yyyy-MM-dd"), search, searchMode) ||
+                            (p.NeedByDate.HasValue && MatchSearchText(p.NeedByDate.Value.ToString("yyyy-MM-dd"), search, searchMode)) ||
+                            MatchSearchText(p.CreatedAt.ToString("yyyy-MM-dd"), search, searchMode) ||
+                            MatchSearchText(p.CustomerId.ToString(), search, searchMode) ||
+                            MatchSearchText(p.WarehouseId.ToString(), search, searchMode));
                         break;
 
                     case "id":
-                        // بحث برقم الطلب (PRId)
-                        if (int.TryParse(search, out var idVal))
-                        {
+                        if (int.TryParse(search, out var idVal) && searchMode == "contains" && search == idVal.ToString())
                             query = query.Where(p => p.PRId == idVal);
-                        }
                         else
-                        {
-                            query = query.Where(p => p.PRId.ToString().StartsWith(search));
-                        }
+                            query = query.Where(p => MatchSearchText(p.PRId.ToString(), search, searchMode));
                         break;
 
                     case "vendor":
                     case "customer":
-                        // المورد في طلب الشراء = CustomerId (كما عندك)
-                        if (int.TryParse(search, out var custId))
-                        {
+                        if (int.TryParse(search, out var custId) && searchMode == "contains" && search == custId.ToString())
                             query = query.Where(p => p.CustomerId == custId);
-                        }
                         else
-                        {
-                            query = query.Where(p => p.CustomerId.ToString().Contains(search));
-                        }
+                            query = query.Where(p =>
+                                MatchSearchText(p.CustomerId.ToString(), search, searchMode) ||
+                                (p.Customer != null && p.Customer.CustomerName != null && MatchSearchText(p.Customer.CustomerName, search, searchMode)));
                         break;
 
                     case "warehouse":
-                        // المخزن = WarehouseId
-                        if (int.TryParse(search, out var whId))
-                        {
+                        if (int.TryParse(search, out var whId) && searchMode == "contains" && search == whId.ToString())
                             query = query.Where(p => p.WarehouseId == whId);
-                        }
                         else
-                        {
-                            query = query.Where(p => p.WarehouseId.ToString().Contains(search));
-                        }
+                            query = query.Where(p =>
+                                MatchSearchText(p.WarehouseId.ToString(), search, searchMode) ||
+                                (p.Warehouse != null && p.Warehouse.WarehouseName != null && MatchSearchText(p.Warehouse.WarehouseName, search, searchMode)));
                         break;
 
                     case "date":
-                        // بحث بتاريخ طلب الشراء PRDate (بالـ Date فقط)
                         if (DateTime.TryParse(search, out var dateVal))
                         {
-                            var d = dateVal.Date; // متغير: تاريخ فقط بدون وقت
+                            var d = dateVal.Date;
                             query = query.Where(p => p.PRDate.Date == d);
                         }
                         break;
 
                     case "status":
-                        // حالة الطلب (Status)
-                        query = query.Where(p => (p.Status ?? "").Contains(search));
+                        query = query.Where(p => p.Status != null && MatchSearchText(p.Status, search, searchMode));
                         break;
 
                     default:
-                        // بحث عام على أكثر من حقل (طلبات الشراء)
                         query = query.Where(p =>
-                            p.PRId.ToString().Contains(search) ||
-                            p.CustomerId.ToString().Contains(search) ||
-                            p.WarehouseId.ToString().Contains(search) ||
-                            (p.Status ?? "").Contains(search)
-                        );
+                            MatchSearchText(p.PRId.ToString(), search, searchMode) ||
+                            MatchSearchText(p.CustomerId.ToString(), search, searchMode) ||
+                            MatchSearchText(p.WarehouseId.ToString(), search, searchMode) ||
+                            (p.Status != null && MatchSearchText(p.Status, search, searchMode)));
                         break;
                 }
             }

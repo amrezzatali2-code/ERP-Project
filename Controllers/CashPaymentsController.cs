@@ -192,7 +192,8 @@ namespace ERP.Controllers
             int? toCode,
             bool canViewInvestors,
             List<int> hiddenCustomerAccountIds,
-            bool restrictedToAllowedOnly)
+            bool restrictedToAllowedOnly,
+            string? searchMode = null)
         {
             // (1) الاستعلام الأساسي من جدول إذون الدفع مع ربط العميل والحسابات (بدون تتبّع لتحسين الأداء)
             IQueryable<CashPayment> q = _context.CashPayments
@@ -282,8 +283,8 @@ namespace ERP.Controllers
                 intFields: intFields,
                 orderFields: orderFields,
                 defaultSearchBy: "all",          // لو المستخدم لم يحدد نوع البحث
-                defaultSortBy: "PaymentDate"     // الترتيب الافتراضي بتاريخ الإذن (الأحدث أولاً)
-            );
+                defaultSortBy: "PaymentDate",     // الترتيب الافتراضي بتاريخ الإذن (الأحدث أولاً)
+                searchMode: searchMode);
 
             return q;
         }
@@ -300,9 +301,13 @@ namespace ERP.Controllers
             string? filterCol_counterAccount,
             string? filterCol_amount,
             string? filterCol_posted,
-            string? filterCol_desc)
+            string? filterCol_desc,
+            string? filterCol_idExpr,
+            string? filterCol_amountExpr)
         {
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = CashVoucherListNumericExpr.ApplyCashPaymentIdExpr(query, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -348,7 +353,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(p => p.CounterAccount != null && vals.Contains(p.CounterAccount.AccountName));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_amount))
+            if (!string.IsNullOrWhiteSpace(filterCol_amountExpr))
+                query = CashVoucherListNumericExpr.ApplyCashPaymentAmountExpr(query, filterCol_amountExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_amount))
             {
                 var vals = filterCol_amount.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -461,6 +468,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "PaymentDate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -469,17 +477,27 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_number = null,
             string? filterCol_date = null,
             string? filterCol_customer = null,
             string? filterCol_cashAccount = null,
             string? filterCol_counterAccount = null,
             string? filterCol_amount = null,
+            string? filterCol_amountExpr = null,
             string? filterCol_posted = null,
             string? filterCol_desc = null,
             int page = 1,
-            int pageSize = 50)
+            int pageSize = 10)
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psVal))
+                pageSize = psVal;
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
             var canViewInvestors = await CanViewInvestorsAsync();
             var hiddenAccountIds = await _accountVisibilityService.GetHiddenAccountIdsForCurrentUserAsync();
             var hiddenList = hiddenAccountIds.ToList();
@@ -496,36 +514,59 @@ namespace ERP.Controllers
                 toCode,
                 canViewInvestors,
                 hiddenList,
-                restrictedOnly);
+                restrictedOnly,
+                searchMode);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc, filterCol_idExpr, filterCol_amountExpr);
 
             var totalAmount = await q.Select(p => (decimal?)p.Amount).SumAsync() ?? 0m;
-            var model = await PagedResult<CashPayment>.CreateAsync(q, page, pageSize);
+            int totalCount = await q.CountAsync();
 
-            model.UseDateRange = useDateRange;
-            model.FromDate = fromDate;
-            model.ToDate = toDate;
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+
+            bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var items = await q
+                .Skip((page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
+                .ToListAsync();
+
+            var model = new PagedResult<CashPayment>(items, page, pageSize, totalCount)
+            {
+                Search = search,
+                SortColumn = sort,
+                SortDescending = sortDesc,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
 
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode;
             ViewBag.Sort = sort ?? "PaymentDate";
-            ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
+            ViewBag.Dir = sortDesc ? "desc" : "asc";
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Number = filterCol_number;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_Customer = filterCol_customer;
             ViewBag.FilterCol_CashAccount = filterCol_cashAccount;
             ViewBag.FilterCol_CounterAccount = filterCol_counterAccount;
             ViewBag.FilterCol_Amount = filterCol_amount;
+            ViewBag.FilterCol_AmountExpr = filterCol_amountExpr;
             ViewBag.FilterCol_Posted = filterCol_posted;
             ViewBag.FilterCol_Desc = filterCol_desc;
             ViewBag.DateField = "PaymentDate";
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
-            ViewBag.TotalCount = model.TotalCount;
+            ViewBag.TotalCount = totalCount;
             ViewBag.TotalAmount = totalAmount;
 
             return View(model);
@@ -1023,6 +1064,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "PaymentDate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -1031,12 +1073,14 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_number = null,
             string? filterCol_date = null,
             string? filterCol_customer = null,
             string? filterCol_cashAccount = null,
             string? filterCol_counterAccount = null,
             string? filterCol_amount = null,
+            string? filterCol_amountExpr = null,
             string? filterCol_posted = null,
             string? filterCol_desc = null,
             string format = "excel")
@@ -1057,9 +1101,10 @@ namespace ERP.Controllers
                 toCode,
                 canViewInvestors,
                 hiddenList,
-                restrictedOnly);
+                restrictedOnly,
+                searchMode);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_number, filterCol_date, filterCol_customer, filterCol_cashAccount, filterCol_counterAccount, filterCol_amount, filterCol_posted, filterCol_desc, filterCol_idExpr, filterCol_amountExpr);
 
             var list = await q.ToListAsync();
 

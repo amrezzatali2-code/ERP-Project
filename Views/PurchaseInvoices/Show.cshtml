@@ -239,6 +239,8 @@
         .invoice-product-card .pr-card-field label {
             color: #0f172a !important;
             font-weight: 500;
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
         }
         .invoice-product-card .card-body .form-control,
         .invoice-product-card .card-body .form-control-sm,
@@ -252,6 +254,8 @@
         .invoice-Add-card .card-body label {
             color: #0f172a !important;
             font-weight: 500;
+            font-size: 0.8rem;
+            margin-bottom: 0.25rem;
         }
         .invoice-Add-card .card-body .form-control,
         .invoice-Add-card .card-body .form-control-sm,
@@ -264,6 +268,18 @@
         .invoice-totals-card .invoice-summary-item label {
             color: #0f172a !important;
             font-weight: 500;
+        }
+
+        /* تسميات الكارتين 2 و 3 — مطابقة الهيدر؛ #PI_BodyHost + !important تثبت الحجم بعد تحميل frag=body */
+        #PI_BodyHost .invoice-product-card .card-body .form-label,
+        #PI_BodyHost .invoice-product-card .card-body .form-label-sm,
+        #PI_BodyHost .invoice-product-card .card-body label,
+        #PI_BodyHost .invoice-product-card .pr-card-field label,
+        #PI_BodyHost .invoice-Add-card .card-body .form-label,
+        #PI_BodyHost .invoice-Add-card .card-body .form-label-sm,
+        #PI_BodyHost .invoice-Add-card .card-body label {
+            font-size: 0.8rem !important;
+            margin-bottom: 0.25rem !important;
         }
 
         /* انبوتات الكارت الأول (الهيدر): حجم مثل طلب الشراء (0.875rem، padding 0.3rem 0.5rem) */
@@ -292,14 +308,21 @@
             box-shadow: 0 0 0 0.2rem rgba(100,116,139,.2);
         }
 
-        /* انبوتات الكارت الثاني (بيانات الصنف): حجم مثل كارت الإضافة */
+        /* انبوتات الكارت الثاني والثالث — نفس حجم الكارت الأول (0.875rem / padding الهيدر)؛ !important يمنع اختلافاً بعد frag=body */
         #PI_BodyHost .invoice-product-card .card-body .form-control,
         #PI_BodyHost .invoice-product-card .card-body .form-control-sm,
         #PI_BodyHost .invoice-product-card .card-body .form-select,
-        #PI_BodyHost .invoice-product-card .card-body .form-select-sm {
-            padding: 0.4rem 0.55rem;
-            min-height: 2rem;
-            font-size: 0.875rem;
+        #PI_BodyHost .invoice-product-card .card-body .form-select-sm,
+        #PI_BodyHost .invoice-product-card .pr-card-field .form-control-sm,
+        #PI_BodyHost .invoice-Add-card .card-body .form-control,
+        #PI_BodyHost .invoice-Add-card .card-body .form-control-sm,
+        #PI_BodyHost .invoice-Add-card .card-body .form-select,
+        #PI_BodyHost .invoice-Add-card .card-body .form-select-sm,
+        #PI_BodyHost .invoice-Add-card .pi-input {
+            padding: 0.3rem 0.5rem !important;
+            min-height: 2rem !important;
+            font-size: 0.875rem !important;
+            border-radius: 0.375rem;
         }
         #PI_BodyHost .invoice-product-card .form-control,
         #PI_BodyHost .invoice-product-card .form-select,
@@ -308,6 +331,18 @@
         #PI_BodyHost .invoice-totals-card .form-control,
         #PI_BodyHost .invoice-totals-card .form-select {
             border-radius: 0.375rem;
+        }
+        /* بوكس اسم الصنف (داخل product-dropdown): نفس حجم خط الحقول */
+        #PI_BodyHost .invoice-Add-card .product-dropdown-onebox .product-dropdown-input {
+            font-size: 0.875rem !important;
+            padding-top: 0.3rem !important;
+            padding-bottom: 0.3rem !important;
+            padding-right: 0.5rem !important;
+            padding-left: 2.25rem !important;
+            min-height: 2rem !important;
+        }
+        #PI_BodyHost .invoice-Add-card #btnAddInvoiceLine {
+            font-size: 0.875rem !important;
         }
         #PI_BodyHost .invoice-product-card .form-control:focus,
         #PI_BodyHost .invoice-product-card .form-select:focus,
@@ -804,24 +839,6 @@
                                             </div>
                                             <div id="supplierDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
                                         </div>
-
-                                        <datalist id="customersList" hidden aria-hidden="true">
-                                            @if (ViewBag.Customers != null)
-                                            {
-                                                foreach (var c in ViewBag.Customers)
-                                                {
-                                                    <option value="@c.Name"
-                                                            data-id="@c.Id"
-                                                            data-phone="@c.Phone"
-                                                            data-address="@c.Address"
-                                                            data-gov="@c.Gov"
-                                                            data-district="@c.District"
-                                                            data-area="@c.Area"
-                                                            data-credit="@c.Credit">
-                                                    </option>
-                                                }
-                                            }
-                                        </datalist>
                                     </div>
 
                                     <div class="col-lg-1 col-md-6">
@@ -872,18 +889,7 @@
                                                readonly />
                                     </div>
 
-                                    <div class="col-lg-1 col-md-6 col-sm-12">
-                                        <label class="form-label form-label-sm" for="RefPRId">رقم الطلب المحول</label>
-                                        <input id="RefPRId"
-                                               name="RefPRId"
-                                               type="text"
-                                               inputmode="numeric"
-                                               class="form-control form-control-sm text-center"
-                                               value="@(Model.RefPRId?.ToString() ?? Model.RefPurchaseRequest?.PRId.ToString() ?? "")"
-                                               @(Model.IsPosted ? "readonly" : "") />
-                                    </div>
-
-                                    <div class="col-lg-1 col-md-6 col-sm-12">
+                                    <div class="col-lg-2 col-md-6 col-sm-12">
                                         <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
                                         <select asp-for="WarehouseId"
                                                 asp-items="ViewBag.Warehouses"
@@ -934,7 +940,18 @@
                                                />
                                     </div>
 
-                                    <div class="col-lg-6 col-md-6">
+                                    <div class="col-lg-2 col-md-4 col-sm-6">
+                                        <label class="form-label form-label-sm" for="RefPRId">رقم الطلب المحول</label>
+                                        <input id="RefPRId"
+                                               name="RefPRId"
+                                               type="text"
+                                               inputmode="numeric"
+                                               class="form-control form-control-sm text-center"
+                                               value="@(Model.RefPRId?.ToString() ?? Model.RefPurchaseRequest?.PRId.ToString() ?? "")"
+                                               @(Model.IsPosted ? "readonly" : "") />
+                                    </div>
+
+                                    <div class="col-lg-6 col-md-8">
                                         <label class="form-label form-label-sm">العنوان</label>
                                         <input id="CustomerAddress"
                                                class="form-control form-control-sm"
@@ -1028,23 +1045,6 @@
                                         </div>
                                         <div id="productDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
                                     </div>
-
-                                    <datalist id="productsList" hidden aria-hidden="true">
-                                        @if (ViewBag.ProductsAuto != null)
-                                        {
-                                            foreach (var p in ViewBag.ProductsAuto)
-                                            {
-                                                <option value="@p.Name"
-                                                        data-id="@p.Id"
-                                                        data-code="@p.Id"
-                                                        data-generic="@p.GenericName"
-                                                        data-company="@p.Company"
-                                                        data-price="@p.PriceRetail"
-                                                        data-hasquota="@(p.HasQuota ? "true" : "false")">
-                                                </option>
-                                            }
-                                        }
-                                    </datalist>
 
                                     <input type="hidden" id="ProdId" />
                                 </div>
@@ -1289,6 +1289,41 @@
                             <input type="hidden" id="TaxAmountInput" value="0" />
                         </div>
                     </div>
+
+                    @* مصادر أوتوكومبليت الثقيلة — آخر PI_BodyHost حتى يُبنى هيكل الكروت أولاً (docs/فتح الفواتير ككتلة واحدة.md) *@
+                    <datalist id="customersList" hidden aria-hidden="true">
+                        @if (ViewBag.Customers != null)
+                        {
+                            foreach (var c in ViewBag.Customers)
+                            {
+                                <option value="@c.Name"
+                                        data-id="@c.Id"
+                                        data-phone="@c.Phone"
+                                        data-address="@c.Address"
+                                        data-gov="@c.Gov"
+                                        data-district="@c.District"
+                                        data-area="@c.Area"
+                                        data-credit="@c.Credit">
+                                </option>
+                            }
+                        }
+                    </datalist>
+                    <datalist id="productsList" hidden aria-hidden="true">
+                        @if (ViewBag.ProductsAuto != null)
+                        {
+                            foreach (var p in ViewBag.ProductsAuto)
+                            {
+                                <option value="@p.Name"
+                                        data-id="@p.Id"
+                                        data-code="@p.Id"
+                                        data-generic="@p.GenericName"
+                                        data-company="@p.Company"
+                                        data-price="@p.PriceRetail"
+                                        data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                </option>
+                            }
+                        }
+                    </datalist>
 
                 </div> @* ✅ نهاية PI_BodyHost *@
 

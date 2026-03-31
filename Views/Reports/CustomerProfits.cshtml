@@ -1,4 +1,7 @@
 @using ERP.ViewModels
+@using ERP.Infrastructure
+@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.WebUtilities
 @{
     ViewData["Title"] = "تقرير: أرباح العملاء";
 
@@ -9,13 +12,11 @@
     var totalReturnProfit = ViewBag.TotalReturnProfit as decimal? ?? 0m;
     var totalNetProfit = ViewBag.TotalNetProfit as decimal? ?? 0m;
 
-    // Pagination
     var page = ViewBag.Page as int? ?? 1;
-    var pageSize = ViewBag.PageSize as int? ?? 200;
+    var pageSize = ViewBag.PageSize as int? ?? 10;
     var totalPages = ViewBag.TotalPages as int? ?? 1;
     var totalCount = ViewBag.TotalCount as int? ?? 0;
 
-    // الفلاتر من ViewBag
     var search = ViewBag.Search as string ?? "";
     var partyCategory = ViewBag.PartyCategory as string;
     var governorateId = ViewBag.GovernorateId as int?;
@@ -23,62 +24,138 @@
     var toDate = ViewBag.ToDate as DateTime?;
     var includeZeroQty = ViewBag.IncludeZeroQty as bool? ?? false;
     var profitMethod = ViewBag.ProfitMethod as string ?? "both";
-    var sortBy = ViewBag.SortBy as string ?? "name";
-    var sortDir = ViewBag.SortDir as string ?? "asc";
+    var sort = ViewBag.Sort as string ?? "name";
+    var dir = ViewBag.Dir as string ?? "asc";
+    var filterCol_code = ViewBag.FilterCol_Code as string;
+    var filterCol_name = ViewBag.FilterCol_Name as string;
+    var filterCol_category = ViewBag.FilterCol_Category as string;
+    var filterCol_phone = ViewBag.FilterCol_Phone as string;
+    var filterCol_salesrevenueExpr = ViewBag.FilterCol_SalesrevenueExpr as string;
+    var filterCol_salescostExpr = ViewBag.FilterCol_SalescostExpr as string;
+    var filterCol_salesprofitExpr = ViewBag.FilterCol_SalesprofitExpr as string;
+    var filterCol_salesprofitpctExpr = ViewBag.FilterCol_SalesprofitpctExpr as string;
+    var filterCol_returnprofitExpr = ViewBag.FilterCol_ReturnprofitExpr as string;
+    var filterCol_netprofitExpr = ViewBag.FilterCol_NetprofitExpr as string;
 
-    // القوائم المنسدلة
     var governorates = ViewBag.Governorates as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
 
-    // دالة إنشاء رابط الترتيب
-    Func<string, string, string> sortUrl = (col, direction) =>
+    int ps = pageSize;
+    int start = totalCount == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || totalCount == 0) ? totalCount : Math.Min(totalCount, page * ps);
+    int first = 1, last = Math.Max(1, totalPages);
+    int prev = Math.Max(first, page - 1);
+    int next = Math.Min(last, page + 1);
+
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
+
+    string? FilterForCol(string colKey) =>
+        colKey == "code" ? filterCol_code
+        : colKey == "name" ? filterCol_name
+        : colKey == "category" ? filterCol_category
+        : colKey == "phone" ? filterCol_phone
+        : colKey == "salesrevenue" ? filterCol_salesrevenueExpr
+        : colKey == "salescost" ? filterCol_salescostExpr
+        : colKey == "salesprofit" ? filterCol_salesprofitExpr
+        : colKey == "salesprofitpct" ? filterCol_salesprofitpctExpr
+        : colKey == "returnprofit" ? filterCol_returnprofitExpr
+        : colKey == "netprofit" ? filterCol_netprofitExpr
+        : null;
+
+    Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
-        return Url.Action("CustomerProfits", "Reports", new
-        {
-            search,
-            partyCategory,
-            governorateId,
-            fromDate,
-            toDate,
-            includeZeroQty,
-            profitMethod,
-            sortBy = col,
-            sortDir = direction,
-            loadReport = true,
-            page,
-            pageSize
-        }) ?? "#";
+        string? currentFilter = FilterForCol(colKey);
+        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
+        var sortDir = isCurrentSort ? dir : "asc";
+        var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
+        return new HtmlString($@"
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"">
+                <span class=""erp-col-title"">{caption}</span>
+                <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
+                        data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
+                        data-current-sort=""{sortKey}"" data-current-dir=""{sortDir}""
+                        title=""ترتيب وفلتر العمود"" style=""min-width:22px;"">
+                    <svg xmlns=""http://www.w3.org/2000/svg"" width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""currentColor"">
+                        <path d=""M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z""/>
+                        <path d=""M7 8l4-4 4 4H7zm0 8l4 4 4-4H7z"" opacity=""0.3""/>
+                    </svg>
+                </button>
+            </div>");
     };
 
-    // دالة إنشاء رابط Pagination
-    Func<int, string> pageUrl = (p) =>
+    string Link(int p) => Url.Action("CustomerProfits", "Reports", new
     {
-        return Url.Action("CustomerProfits", "Reports", new
-        {
-            search,
-            partyCategory,
-            governorateId,
-            fromDate,
-            toDate,
-            includeZeroQty,
-            profitMethod,
-            sortBy,
-            sortDir,
-            loadReport = true,
-            page = p,
-            pageSize
-        }) ?? "#";
+        search,
+        partyCategory,
+        governorateId,
+        fromDate,
+        toDate,
+        includeZeroQty,
+        profitMethod,
+        sort,
+        dir,
+        filterCol_code,
+        filterCol_name,
+        filterCol_category,
+        filterCol_phone,
+        filterCol_salesrevenueExpr,
+        filterCol_salescostExpr,
+        filterCol_salesprofitExpr,
+        filterCol_salesprofitpctExpr,
+        filterCol_returnprofitExpr,
+        filterCol_netprofitExpr,
+        loadReport = true,
+        page = p,
+        pageSize = ps
+    })!;
+
+    var colValsDict = new Dictionary<string, string?>
+    {
+        ["loadReport"] = "true",
+        ["mainSearch"] = search,
+        ["partyCategory"] = partyCategory,
+        ["governorateId"] = governorateId?.ToString(),
+        ["fromDate"] = fromDate?.ToString("yyyy-MM-dd"),
+        ["toDate"] = toDate?.ToString("yyyy-MM-dd"),
+        ["includeZeroQty"] = includeZeroQty ? "true" : "false",
+        ["profitMethod"] = profitMethod,
+        ["sort"] = sort,
+        ["dir"] = dir,
+        ["filterCol_code"] = filterCol_code,
+        ["filterCol_name"] = filterCol_name,
+        ["filterCol_category"] = filterCol_category,
+        ["filterCol_phone"] = filterCol_phone,
+        ["filterCol_salesrevenueExpr"] = filterCol_salesrevenueExpr,
+        ["filterCol_salescostExpr"] = filterCol_salescostExpr,
+        ["filterCol_salesprofitExpr"] = filterCol_salesprofitExpr,
+        ["filterCol_salesprofitpctExpr"] = filterCol_salesprofitpctExpr,
+        ["filterCol_returnprofitExpr"] = filterCol_returnprofitExpr,
+        ["filterCol_netprofitExpr"] = filterCol_netprofitExpr
     };
+    var colValuesUrl = QueryHelpers.AddQueryString(Url.Action("GetCustomerProfitsColumnValues", "Reports")!, colValsDict.Where(kv => !string.IsNullOrEmpty(kv.Value)).ToDictionary(kv => kv.Key, kv => (string?)kv.Value));
 }
 
 <div dir="rtl" class="container-fluid">
-    @* ===== شريط الفلاتر (نفس تنسيق قائمة الأصناف) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <form method="get" asp-action="CustomerProfits" asp-controller="Reports" id="filtersForm">
             <input type="hidden" name="loadReport" value="true" />
-            <div class="row g-3 align-items-end">
+            <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
+            <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
+            <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
+            <input type="hidden" name="filterCol_phone" value="@(filterCol_phone ?? "")" />
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
+            <input type="hidden" name="sort" value="@sort" />
+            <input type="hidden" name="dir" value="@dir" />
+            <input type="hidden" name="profitMethod" value="@profitMethod" />
+            <div class="row g-3 align-items-end flex-nowrap">
                 <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">بحث</label>
-                    <input type="text" name="search" class="form-control erp-filter-input" placeholder="اسم العميل أو جزء منه..." autocomplete="off" value="@search" />
+                    <input type="text" name="search" class="form-control erp-filter-input" placeholder="اسم العميل أو الهاتف أو الكود..." autocomplete="off" value="@search" />
                 </div>
                 <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">فئة العميل</label>
@@ -102,20 +179,17 @@
                     <label class="form-label">إلى تاريخ</label>
                     <input type="date" name="toDate" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section d-flex align-items-end">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
-                        <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
+                <div class="col-12 col-lg-auto erp-filter-section d-flex align-items-end">
+                    <div class="form-check border rounded px-2 py-1 bg-light d-flex align-items-center gap-2 flex-nowrap" style="max-width: 240px;">
+                        <input class="form-check-input flex-shrink-0 m-0" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") style="width: 1.05rem; height: 1.05rem;" />
+                        <label class="form-check-label small mb-0 lh-sm" for="includeZeroQty">عملاء بلا حركة في الفترة</label>
                     </div>
-                </div>
-                <div class="col-12 col-lg-auto erp-filter-section ms-lg-auto d-flex flex-wrap gap-2 align-items-end">
-                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
-                    <a href="@Url.Action("CustomerProfits", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none"><span>🔄</span> إعادة تعيين</a>
                 </div>
             </div>
         </form>
-        <div class="row g-3 align-items-end mt-0">
-            <div class="col-12 col-lg-auto erp-filter-section d-flex flex-wrap gap-2 align-items-end">
+        <div class="erp-toolbar-two-rows mt-2">
+            <div class="erp-toolbar-row flex-wrap gap-2 justify-content-end">
+                <button type="submit" form="filtersForm" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
                 <form method="get" asp-action="CustomerProfits" asp-controller="Reports" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
                     <input type="hidden" name="loadReport" value="true" />
                     <input type="hidden" name="search" value="@search" />
@@ -125,33 +199,79 @@
                     <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
                     <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
                     <input type="hidden" name="profitMethod" value="@profitMethod" />
-                    <input type="hidden" name="sortBy" value="@sortBy" />
-                    <input type="hidden" name="sortDir" value="@sortDir" />
-                    <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
+                    <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
+                    <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
+                    <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
+                    <input type="hidden" name="filterCol_phone" value="@(filterCol_phone ?? "")" />
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
+                    <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="صيغة التصدير">
                         <option value="excel" selected>Excel</option>
                         <option value="csv">CSV</option>
                     </select>
                     <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                 </form>
+                <a href="@Url.Action("CustomerProfits", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none"><span>🔄</span> إعادة تعيين</a>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="btnColumnsCp" data-bs-toggle="modal" data-bs-target="#columnsModalCp">اختيار الأعمدة</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="btnMovementCp" disabled title="حدد صفاً في الجدول">دفتر العميل</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="btnPrintCp">طباعة</button>
             </div>
         </div>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-2 mb-1">
-        <h5 class="mb-0">أرباح العملاء</h5>
-        @if (reportData.Any())
-        {
-            <small class="text-muted">إجمالي العملاء: <span id="customerProfitsItemCount">@totalCount</span></small>
-        }
-    </div>
+    <h5 class="mb-2 fs-6 text-secondary d-print-none">أرباح العملاء</h5>
 
-    @* ===== جدول البيانات (نفس تنسيق قائمة الأصناف + ترتيب من الهيدر) ===== *@
+    @if (reportData.Any())
+    {
+        <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mb-2" dir="rtl">
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">عدد العملاء (بعد الفلترة)</div>
+                        <div class="h5 mb-0 text-primary fw-bold">@totalCount.ToString("N0", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي الإيرادات</div>
+                        <div class="h5 mb-0 text-success fw-bold">@totalSalesRevenue.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #b45309 !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي التكلفة</div>
+                        <div class="h5 mb-0 fw-bold">@totalSalesCost.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #6366f1 !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">صافي الربح (مجموع)</div>
+                        <div class="h5 mb-0 text-primary fw-bold">@totalNetProfit.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (reportData.Any())
     {
         <div class="erp-table-scroll-container mt-2" dir="rtl">
             <div id="customerProfitsTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
-                <table id="customerProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable erp-cp-table-fixed" data-current-sort="@sortBy" data-current-dir="@sortDir">
+                <table id="customerProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sort" data-current-dir="@dir" style="min-width: 1100px; table-layout: fixed;">
                     <colgroup>
+                        <col style="width: 44px;" />
                         <col style="width: 80px;" />
                         <col style="width: 200px;" />
                         <col style="width: 100px;" />
@@ -160,189 +280,129 @@
                         <col style="width: 120px;" />
                         <col style="width: 120px;" />
                         <col style="width: 100px;" />
+                        <col style="width: 120px;" />
                         <col style="width: 140px;" />
-                        <col style="width: 130px;" />
                     </colgroup>
                     <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                         <tr>
-                            <th style="width: 80px; min-width: 80px;" data-col="code">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span>الكود</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="code" data-sort-key="code" data-col-title="الكود" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
+                            <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
+                                <input type="checkbox" id="chkAllRowsCp" title="تحديد الكل في الصفحة" />
                             </th>
-                            <th style="width: 200px; min-width: 200px;" data-col="name">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span>اسم العميل</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="name" data-sort-key="name" data-col-title="اسم العميل" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th style="width: 100px; min-width: 100px;" data-col="category">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span>فئة العميل</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="category" data-sort-key="category" data-col-title="فئة العميل" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th style="width: 100px; min-width: 100px;" data-col="phone">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span>الهاتف</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="phone" data-sort-key="phone" data-col-title="الهاتف" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="width: 120px; min-width: 120px;" data-col="salesrevenue">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>الإيرادات</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="salesrevenue" data-sort-key="salesrevenue" data-col-title="الإيرادات" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="width: 120px; min-width: 120px;" data-col="salescost">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>التكلفة</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="salescost" data-sort-key="salescost" data-col-title="التكلفة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="width: 120px; min-width: 120px;" data-col="salesprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>الربح</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="salesprofit" data-sort-key="salesprofit" data-col-title="الربح" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="width: 100px; min-width: 100px;" data-col="salesprofitpct">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>نسبة الربح %</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="salesprofitpct" data-sort-key="salesprofitpct" data-col-title="نسبة الربح %" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="width: 140px; min-width: 140px;" data-col="returnprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>ربح المرتجعات (يُخصم من ربح البيع)</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="returnprofit" data-sort-key="returnprofit" data-col-title="ربح المرتجعات" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="width: 130px; min-width: 130px;" data-col="netprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>صافي الربح</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-cp-col-filter-btn" data-col="netprofit" data-sort-key="netprofit" data-col-title="صافي الربح" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
+                            <th style="min-width: 80px;" data-col="code">@filterableCol("code", "code", "الكود")</th>
+                            <th style="min-width: 200px;" data-col="name">@filterableCol("name", "name", "اسم العميل")</th>
+                            <th style="min-width: 100px;" data-col="category">@filterableCol("category", "category", "فئة العميل")</th>
+                            <th style="min-width: 100px;" data-col="phone">@filterableCol("phone", "phone", "الهاتف")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salesrevenue">@filterableCol("salesrevenue", "salesrevenue", "الإيرادات")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salescost">@filterableCol("salescost", "salescost", "التكلفة")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salesprofit">@filterableCol("salesprofit", "salesprofit", "الربح")</th>
+                            <th class="text-end" style="min-width: 100px;" data-col="salesprofitpct">@filterableCol("salesprofitpct", "salesprofitpct", "نسبة الربح %")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="returnprofit">@filterableCol("returnprofit", "returnprofit", "ربح المرتجعات")</th>
+                            <th class="text-end" style="min-width: 140px;" data-col="netprofit">@filterableCol("netprofit", "netprofit", "صافي الربح")</th>
                         </tr>
                     </thead>
-                        <tbody>
-                            @foreach (var item in reportData)
-                            {
-                                <tr>
-                                    <td><strong>@item.CustomerCode</strong></td>
-                                    <td>@item.CustomerName</td>
-                                    <td><small class="text-muted">@(string.IsNullOrEmpty(item.PartyCategory) ? "—" : PartyCategoryDisplay.ToArabic(item.PartyCategory))</small></td>
-                                    <td><small class="text-muted">@item.Phone1</small></td>
-                                    
-                                    @* الربح من البيع فقط *@
-                                    <td class="text-end">@item.SalesRevenue.ToString("N2")</td>
-                                    <td class="text-end">@item.SalesCost.ToString("N2")</td>
-                                    <td class="text-end">
-                                        <strong class="@(item.SalesProfit >= 0 ? "text-success" : "text-danger")">
-                                            @item.SalesProfit.ToString("N2")
-                                        </strong>
-                                    </td>
-                                    <td class="text-end">
-                                        <span class="@(item.SalesProfitPercent >= 0 ? "text-success" : "text-danger")">
-                                            @item.SalesProfitPercent.ToString("N2")%
-                                        </span>
-                                    </td>
-
-                                    @* ربح المرتجعات *@
-                                    <td class="text-end">
-                                        <strong class="@(item.ReturnProfit >= 0 ? "text-success" : "text-danger")">
-                                            @item.ReturnProfit.ToString("N2")
-                                        </strong>
-                                    </td>
-
-                                    @* صافي الربح *@
-                                    <td class="text-end">
-                                        <strong class="@(item.NetProfit >= 0 ? "text-success" : "text-danger")">
-                                            @item.NetProfit.ToString("N2")
-                                        </strong>
-                                    </td>
-                                </tr>
-                            }
-                        </tbody>
-                        <tfoot class="table-light fw-bold text-start">
-                            <tr>
-                                <td class="text-start" data-col="code" style="width:80px;min-width:80px;"><strong>المجموع الإجمالي:</strong></td>
-                                <td data-col="name" style="width:200px;min-width:200px;"></td>
-                                <td data-col="category" style="width:100px;min-width:100px;"></td>
-                                <td data-col="phone" style="width:100px;min-width:100px;"></td>
-                                <td class="text-end" data-col="salesrevenue" style="width:120px;min-width:120px;"><strong>@totalSalesRevenue.ToString("N2")</strong></td>
-                                <td class="text-end" data-col="salescost" style="width:120px;min-width:120px;"><strong>@totalSalesCost.ToString("N2")</strong></td>
-                                <td class="text-end" data-col="salesprofit" style="width:120px;min-width:120px;">
-                                    <strong class="@(totalSalesProfit >= 0 ? "text-success" : "text-danger")">
-                                        @totalSalesProfit.ToString("N2")
-                                    </strong>
+                    <tbody>
+                        @foreach (var item in reportData)
+                        {
+                            var movUrl = Url.Action("Index", "CustomerLedger", new { customerId = item.CustomerId });
+                            <tr class="erp-list-selectable-row" data-customer-id="@item.CustomerId" data-movement-url="@movUrl" data-tab-title="@item.CustomerName">
+                                <td class="text-center no-print" data-col="select">
+                                    <input type="checkbox" class="row-select" value="@item.CustomerId" />
                                 </td>
-                                <td class="text-end" data-col="salesprofitpct" style="width:100px;min-width:100px;">
-                                    <strong>
-                                        @((totalSalesRevenue > 0 ? (totalSalesProfit / totalSalesRevenue * 100) : 0).ToString("N2"))%
-                                    </strong>
+                                <td data-col="code"><strong>@item.CustomerCode</strong></td>
+                                <td data-col="name">@item.CustomerName</td>
+                                <td data-col="category"><small class="text-muted">@(string.IsNullOrEmpty(item.PartyCategory) ? "—" : PartyCategoryDisplay.ToArabic(item.PartyCategory))</small></td>
+                                <td data-col="phone"><small class="text-muted">@(string.IsNullOrWhiteSpace(item.Phone1) ? "—" : item.Phone1)</small></td>
+                                <td class="text-end" data-col="salesrevenue">@item.SalesRevenue.ToString("N2")</td>
+                                <td class="text-end" data-col="salescost">@item.SalesCost.ToString("N2")</td>
+                                <td class="text-end" data-col="salesprofit">
+                                    <strong class="@(item.SalesProfit >= 0 ? "text-success" : "text-danger")">@item.SalesProfit.ToString("N2")</strong>
                                 </td>
-                                <td class="text-end" data-col="returnprofit" style="width:140px;min-width:140px;">
-                                    <strong class="@(totalReturnProfit >= 0 ? "text-success" : "text-danger")">
-                                        @totalReturnProfit.ToString("N2")
-                                    </strong>
+                                <td class="text-end" data-col="salesprofitpct">
+                                    <span class="@(item.SalesProfitPercent >= 0 ? "text-success" : "text-danger")">@item.SalesProfitPercent.ToString("N2")%</span>
                                 </td>
-                                <td class="text-end" data-col="netprofit" style="width:130px;min-width:130px;">
-                                    <strong class="text-primary">
-                                        @totalNetProfit.ToString("N2")
-                                    </strong>
+                                <td class="text-end" data-col="returnprofit">
+                                    <strong class="@(item.ReturnProfit >= 0 ? "text-success" : "text-danger")">@item.ReturnProfit.ToString("N2")</strong>
+                                </td>
+                                <td class="text-end" data-col="netprofit">
+                                    <strong class="@(item.NetProfit >= 0 ? "text-success" : "text-danger")">@item.NetProfit.ToString("N2")</strong>
                                 </td>
                             </tr>
-                        </tfoot>
+                        }
+                    </tbody>
+                    <tfoot class="table-light fw-bold text-start">
+                        <tr>
+                            <td data-col="select" class="no-print"></td>
+                            <td data-col="code" class="text-start"><strong>المجموع الإجمالي:</strong></td>
+                            <td data-col="name"></td>
+                            <td data-col="category"></td>
+                            <td data-col="phone"></td>
+                            <td data-col="salesrevenue" class="text-end"><strong>@totalSalesRevenue.ToString("N2")</strong></td>
+                            <td data-col="salescost" class="text-end"><strong>@totalSalesCost.ToString("N2")</strong></td>
+                            <td data-col="salesprofit" class="text-end">
+                                <strong class="@(totalSalesProfit >= 0 ? "text-success" : "text-danger")">@totalSalesProfit.ToString("N2")</strong>
+                            </td>
+                            <td data-col="salesprofitpct" class="text-end">
+                                <strong>@((totalSalesRevenue > 0 ? (totalSalesProfit / totalSalesRevenue * 100) : 0).ToString("N2"))%</strong>
+                            </td>
+                            <td data-col="returnprofit" class="text-end">
+                                <strong class="@(totalReturnProfit >= 0 ? "text-success" : "text-danger")">@totalReturnProfit.ToString("N2")</strong>
+                            </td>
+                            <td data-col="netprofit" class="text-end">
+                                <strong class="text-primary">@totalNetProfit.ToString("N2")</strong>
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
 
-        @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة + الترقيم (محاذاة لليمين) ===== *@
-        @if (reportData.Any())
-        {
-            var startRow = totalCount == 0 ? 0 : ((page - 1) * pageSize) + 1;
-            var endRow = Math.Min(totalCount, page * pageSize);
-            <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
-                <small class="text-muted">عرض @startRow - @endRow من @totalCount</small>
-                <form method="get" asp-action="CustomerProfits" asp-controller="Reports" class="d-flex align-items-center gap-2">
-                    <input type="hidden" name="loadReport" value="true" />
-                    <input type="hidden" name="search" value="@search" />
-                    <input type="hidden" name="partyCategory" value="@(partyCategory ?? "")" />
-                    <input type="hidden" name="governorateId" value="@(governorateId?.ToString() ?? "")" />
-                    <input type="hidden" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                    <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                    <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
-                    <input type="hidden" name="profitMethod" value="@profitMethod" />
-                    <input type="hidden" name="sortBy" value="@sortBy" />
-                    <input type="hidden" name="sortDir" value="@sortDir" />
-                    <input type="hidden" name="page" value="1" />
-                    <label class="form-label m-0 nowrap">حجم الصفحة</label>
-                    <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="50"@Html.Raw(pageSize == 50 ? " selected" : "")>50</option>
-                        <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
-                        <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
-                        <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
-                        <option value="5000"@Html.Raw(pageSize == 5000 ? " selected" : "")>5000</option>
-                        <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
-                    </select>
-                </form>
-                @if (totalPages > 1)
-                {
-                    <nav aria-label="pagination">
-                        <ul class="pagination pagination-sm mb-0">
-                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(1)">الأول</a></li>
-                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(Math.Max(1, page - 1))">السابق</a></li>
-                            <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(totalPages)</span></li>
-                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(page + 1)">التالي</a></li>
-                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(totalPages)">الأخير</a></li>
-                        </ul>
-                    </nav>
-                }
-            </div>
-        }
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+            <small class="text-muted order-1">عرض @start - @end من @totalCount</small>
+            <form method="get" asp-action="CustomerProfits" asp-controller="Reports" class="d-flex align-items-center gap-2 order-2">
+                <input type="hidden" name="loadReport" value="true" />
+                <input type="hidden" name="search" value="@search" />
+                <input type="hidden" name="partyCategory" value="@(partyCategory ?? "")" />
+                <input type="hidden" name="governorateId" value="@(governorateId?.ToString() ?? "")" />
+                <input type="hidden" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
+                <input type="hidden" name="profitMethod" value="@profitMethod" />
+                <input type="hidden" name="sort" value="@sort" />
+                <input type="hidden" name="dir" value="@dir" />
+                <input type="hidden" name="page" value="1" />
+                <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
+                <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
+                <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
+                <input type="hidden" name="filterCol_phone" value="@(filterCol_phone ?? "")" />
+                @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
+                <label class="form-label m-0 nowrap">حجم الصفحة</label>
+                <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                    <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
+                    <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                    <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                    <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                    <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                    <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
+                </select>
+            </form>
+            @if (totalPages > 1)
+            {
+                <nav class="order-3" aria-label="pagination">
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@Link(1)">الأول</a></li>
+                        <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@Link(prev)">السابق</a></li>
+                        <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(totalPages)</span></li>
+                        <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@Link(next)">التالي</a></li>
+                        <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
+                    </ul>
+                </nav>
+            }
+        </div>
     }
     else
     {
@@ -352,31 +412,48 @@
     }
 </div>
 
-@* لوحة ترتيب وفلتر العمود (نفس نمط باقي الجداول: ترتيب + عناصر العمود) *@
-<div id="erpCpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+<div id="erpColumnFilterPanelCp" class="erp-column-filter-panel d-none" dir="rtl">
     <div class="erp-column-filter-header">
-        <span id="erpCpColumnFilterTitle">ترتيب وفلتر</span>
-        <button type="button" class="btn-close btn-sm" id="erpCpColumnFilterClose" aria-label="إغلاق"></button>
+        <span>ترتيب وفلتر</span>
+        <button type="button" class="btn-close btn-sm" aria-label="إغلاق"></button>
     </div>
     <div class="erp-column-filter-body">
         <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
-            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
             <div class="d-flex flex-column gap-1">
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-cp-sort-btn" data-sort-dir="asc"><span class="me-2">▲</span> ترتيب تصاعدي</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-cp-sort-btn" data-sort-dir="desc"><span class="me-2">▼</span> ترتيب تنازلي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc"><span class="erp-sort-arrow">▲</span> ترتيب تصاعدي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc"><span class="erp-sort-arrow">▼</span> ترتيب تنازلي</button>
             </div>
         </div>
-        <div class="erp-filter-section erp-cp-filter-content">
-            <div id="erpCpColumnFilterSearchRow">
-                <label class="form-label small mb-1 fw-bold">عناصر العمود:</label>
-                <input type="text" id="erpCpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+        <div class="erp-filter-section">
+            <div id="erpColumnFilterSearchRow">
+                <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                <input type="text" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
             </div>
-            <div id="erpCpColumnFilterList" class="erp-column-filter-list">
-                <div class="text-muted text-center py-3 small">اختر العمود لعرض عناصره</div>
+            <div class="erp-column-filter-list">
+                <div class="text-muted text-center py-3">جاري التحميل...</div>
             </div>
         </div>
-        <div class="erp-column-filter-actions mt-2 flex-shrink-0">
-            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpCpColumnFilterOk">تطبيق</button>
+        <div class="erp-column-filter-actions">
+            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح الفلتر</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade no-print erp-columns-modal" id="columnsModalCp" tabindex="-1" aria-labelledby="columnsModalCpLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" dir="rtl">
+            <div class="modal-header">
+                <h5 class="modal-title flex-grow-1" id="columnsModalCpLabel">اختيار الأعمدة الظاهرة</h5>
+                <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <div id="columnsListCp" class="erp-columns-modal-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <button type="button" id="btnApplyColumnsCp" class="btn btn-erp btn-erp-primary">تطبيق</button>
+            </div>
         </div>
     </div>
 </div>
@@ -385,171 +462,45 @@
     <style>
         #customerProfitsTable thead th { background-color: #fafbfc !important; color: #212529; border-bottom: 1px solid #dee2e6; font-weight: 600; }
         #customerProfitsTable tfoot { background-color: #e9ecef !important; border-top: 1px solid #dee2e6; }
-        .erp-cp-col-filter-btn { color: #64748b; }
-        .erp-cp-col-filter-btn:hover { color: #475569; }
-        .erp-cp-col-filter-btn.erp-cp-filter-active { color: #0d6efd !important; }
-        #erpCpColumnFilterPanel.erp-column-filter-panel { min-width: 280px; max-width: min(340px, 92vw); width: auto; max-height: 90vh; display: flex; flex-direction: column; }
-        #erpCpColumnFilterPanel .erp-column-filter-body { display: flex; flex-direction: column; max-height: 75vh; min-height: 0; overflow: hidden; }
-        #erpCpColumnFilterPanel .erp-cp-filter-content { flex: 1; min-height: 0; overflow-y: auto; }
-        #erpCpColumnFilterList .erp-filter-items { max-height: 220px; overflow-y: auto; }
-        /* ضبط محاذاة صف الإجماليات مع الأعمدة */
-        table.erp-cp-table-fixed { table-layout: fixed; width: 100%; }
-        table.erp-cp-table-fixed thead th,
-        table.erp-cp-table-fixed tbody td,
-        table.erp-cp-table-fixed tfoot td { box-sizing: border-box; }
-        table.erp-cp-table-fixed tfoot td { overflow: hidden; text-overflow: ellipsis; }
-        table.erp-cp-table-fixed tfoot td:first-child { white-space: nowrap; }
+        .erp-col-filter-btn { color: #64748b; }
+        #erpColumnFilterPanelCp.erp-column-filter-panel { min-width: 280px; max-width: min(380px, 92vw); z-index: 1055; }
     </style>
 }
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
         (function () {
-            var panel = document.getElementById('erpCpColumnFilterPanel');
-            var titleEl = document.getElementById('erpCpColumnFilterTitle');
-            var listEl = document.getElementById('erpCpColumnFilterList');
-            var searchInp = document.getElementById('erpCpColumnFilterSearch');
-            var btnOk = document.getElementById('erpCpColumnFilterOk');
-            var btnClose = document.getElementById('erpCpColumnFilterClose');
-            var form = document.getElementById('filtersForm');
-            var currentSortKey = 'name';
-            var allItems = [];
-            var currentSelected = new Set();
-
-            function buildItemsForColumn(colKey) {
-                allItems = [];
-                var table = document.getElementById('customerProfitsTable');
-                if (!table || !table.tHead || !table.tBodies.length) return;
-                var headerCells = table.tHead.rows[0].cells;
-                var colIndex = -1;
-                for (var i = 0; i < headerCells.length; i++) {
-                    if ((headerCells[i].getAttribute('data-col') || '') === colKey) {
-                        colIndex = i;
-                        break;
-                    }
-                }
-                if (colIndex === -1) return;
-                var rows = table.tBodies[0].rows;
-                var valuesSet = new Set();
-                for (var r = 0; r < rows.length; r++) {
-                    var cell = rows[r].cells[colIndex];
-                    if (!cell) continue;
-                    var val = (cell.textContent || '').trim();
-                    if (!val) continue;
-                    if (!valuesSet.has(val)) {
-                        valuesSet.add(val);
-                        allItems.push({ value: val, display: val });
-                    }
-                }
-            }
-
-            function renderList(search) {
-                var term = (search || '').toLowerCase();
-                var filtered = term
-                    ? allItems.filter(function (x) { return (x.display || x.value || '').toLowerCase().indexOf(term) >= 0; })
-                    : allItems.slice();
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-                if (!listEl) return;
-                listEl.innerHTML = filtered.length === 0
-                    ? '<div class="small text-muted py-2">لا توجد عناصر.</div>'
-                    : '<div class="form-check mb-1">' +
-                        '<input type="checkbox" class="form-check-input" id="erpCpFilterSelectAll" ' + (allChecked ? 'checked' : '') + '>' +
-                        '<label class="form-check-label small" for="erpCpFilterSelectAll">(تحديد الكل)</label>' +
-                      '</div>' +
-                      '<div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' +
-                        filtered.map(function (x) {
-                            var v = String(x.value);
-                            var escLabel = (x.display || v).replace(/</g, '&lt;').replace(/"/g, '&quot;');
-                            var escVal = v.replace(/"/g, '&quot;');
-                            var checked = currentSelected.has(v);
-                            return '<div class="form-check small py-1">' +
-                                '<input type="checkbox" class="form-check-input erp-cp-filter-item" value="' + escVal + '" ' + (checked ? 'checked' : '') + '>' +
-                                '<label class="form-check-label small">' + escLabel + '</label>' +
-                                '</div>';
-                        }).join('') +
-                      '</div>';
-                var selectAllCb = listEl.querySelector('#erpCpFilterSelectAll');
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.addEventListener('change', function () {
-                        filtered.forEach(function (x) {
-                            var v = String(x.value);
-                            if (selectAllCb.checked) currentSelected.add(v);
-                            else currentSelected.delete(v);
-                        });
-                        renderList(searchInp ? searchInp.value : '');
-                    });
-                }
-                listEl.querySelectorAll('.erp-cp-filter-item').forEach(function (cb) {
-                    cb.addEventListener('change', function () {
-                        var v = cb.value;
-                        if (cb.checked) currentSelected.add(v);
-                        else currentSelected.delete(v);
-                    });
-                });
-            }
-
-            function openPanel(btn) {
-                currentSortKey = btn.getAttribute('data-sort-key') || 'name';
-                var currentCol = btn.getAttribute('data-col') || '';
-                titleEl.textContent = btn.getAttribute('data-col-title') || 'ترتيب وفلتر';
-                document.querySelectorAll('.erp-cp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-cp-filter-active'); });
-                btn.classList.add('erp-cp-filter-active');
-                var table = document.getElementById('customerProfitsTable');
-                var currentDir = (table && table.getAttribute('data-current-dir')) || 'asc';
-                document.querySelectorAll('.erp-cp-sort-btn').forEach(function (b) {
-                    b.classList.toggle('active', b.getAttribute('data-sort-dir') === currentDir);
-                });
-                currentSelected = new Set();
-                buildItemsForColumn(currentCol);
-                if (searchInp) searchInp.value = '';
-                renderList('');
-                panel.classList.remove('d-none');
-                var rect = btn.getBoundingClientRect();
-                panel.style.position = 'fixed';
-                panel.style.left = (rect.left - (panel.offsetWidth || 280) - 4) + 'px';
-                panel.style.top = Math.max(8, rect.top) + 'px';
-                panel.style.zIndex = '1050';
-            }
-            function closePanel() {
-                panel.classList.add('d-none');
-                document.querySelectorAll('.erp-cp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-cp-filter-active'); });
-            }
-            function applySort() {
-                var sortDirBtn = document.querySelector('.erp-cp-sort-btn.active');
-                var dir = sortDirBtn ? sortDirBtn.getAttribute('data-sort-dir') : 'asc';
-                var params = new URLSearchParams(new FormData(form));
-                params.set('loadReport', 'true');
-                params.set('sortBy', currentSortKey);
-                params.set('sortDir', dir);
-                params.set('page', '1');
-                window.location.href = (form.action || window.location.pathname) + '?' + params.toString();
-            }
-            document.querySelectorAll('.erp-cp-col-filter-btn').forEach(function (btn) {
-                btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openPanel(btn); });
-            });
-            document.querySelectorAll('.erp-cp-sort-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    document.querySelectorAll('.erp-cp-sort-btn').forEach(function (b) { b.classList.remove('active'); });
-                    btn.classList.add('active');
-                });
-            });
-            if (searchInp) {
-                searchInp.addEventListener('input', function () { renderList(searchInp.value); });
-                searchInp.addEventListener('keydown', function (e) {
-                    if (e.key === 'Enter') { e.preventDefault(); applySort(); }
-                });
-            }
-            if (btnOk) btnOk.addEventListener('click', applySort);
-            if (btnClose) btnClose.addEventListener('click', closePanel);
-            document.addEventListener('click', function (e) {
-                if (panel && !panel.classList.contains('d-none') && !panel.contains(e.target) && !e.target.closest('.erp-cp-col-filter-btn'))
-                    closePanel();
-            });
+            var el = document.getElementById('customerProfitsTableScrollWrapper');
+            if (el) requestAnimationFrame(function () { el.scrollLeft = el.scrollWidth - el.clientWidth; });
         })();
 
-        // ضمان إرسال includeZeroQty عند إرسال الفورم (عرض الصفر)
+        if (typeof ERP !== 'undefined' && ERP.initListColumnFilter) {
+            ERP.initListColumnFilter({
+                panelId: 'erpColumnFilterPanelCp',
+                tableId: 'customerProfitsTable',
+                wrapperId: 'customerProfitsTableScrollWrapper',
+                getColumnValuesUrl: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(colValuesUrl)),
+                defaultSort: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(sort ?? "name")),
+                defaultDir: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(dir ?? "asc")),
+                numericColumns: ['salesrevenue', 'salescost', 'salesprofit', 'salesprofitpct', 'returnprofit', 'netprofit']
+            });
+        }
+
+        if (typeof ERP !== 'undefined' && ERP.initListSelection) {
+            ERP.initListSelection({
+                rowSelector: '.erp-list-selectable-row',
+                movementButtonId: 'btnMovementCp',
+                movementUrlAttribute: 'data-movement-url',
+                movementTabTitle: 'دفتر العميل',
+                movementTabId: 'customer-profit-ledger-tab',
+                idAttribute: 'data-customer-id'
+            });
+        }
+
+        document.getElementById('btnPrintCp')?.addEventListener('click', function () { window.print(); });
+
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('filtersForm');
             var includeZeroCb = document.getElementById('includeZeroQty');
@@ -566,6 +517,77 @@
                     }
                 });
             }
+
+            var table = document.getElementById('customerProfitsTable');
+            var chkAll = document.getElementById('chkAllRowsCp');
+            if (table && chkAll) {
+                chkAll.addEventListener('change', function () {
+                    table.querySelectorAll('tbody .row-select').forEach(function (cb) { cb.checked = chkAll.checked; });
+                });
+            }
+
+            var storageKey = 'customer-profits-columns-visibility';
+            if (!table) return;
+            var headerCells = Array.from(table.querySelectorAll('thead th[data-col]'));
+            var columns = headerCells
+                .filter(function (th) { return !th.hasAttribute('data-col-fixed'); })
+                .map(function (th) {
+                    return {
+                        key: th.getAttribute('data-col'),
+                        title: (th.querySelector('.erp-col-title') && th.querySelector('.erp-col-title').textContent) || th.innerText || ''
+                    };
+                });
+            if (columns.length === 0) return;
+
+            var hidden = [];
+            try {
+                var saved = localStorage.getItem(storageKey);
+                if (saved) hidden = JSON.parse(saved);
+            } catch (e) { hidden = []; }
+
+            function applyVisibility() {
+                columns.forEach(function (col) {
+                    var isHidden = hidden.indexOf(col.key) >= 0;
+                    table.querySelectorAll("[data-col='" + col.key + "']").forEach(function (cell) {
+                        cell.classList.toggle('d-none', isHidden);
+                    });
+                });
+            }
+            applyVisibility();
+
+            var listContainer = document.getElementById('columnsListCp');
+            var btnApply = document.getElementById('btnApplyColumnsCp');
+            if (listContainer) {
+                listContainer.innerHTML = '';
+                columns.forEach(function (col) {
+                    var id = 'col_cp_' + col.key;
+                    var wrapper = document.createElement('div');
+                    wrapper.className = 'form-check mb-1';
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'form-check-input ms-2';
+                    cb.id = id;
+                    cb.checked = hidden.indexOf(col.key) < 0;
+                    cb.dataset.colKey = col.key;
+                    var label = document.createElement('label');
+                    label.className = 'form-check-label';
+                    label.htmlFor = id;
+                    label.textContent = (col.title || col.key).trim();
+                    wrapper.appendChild(cb);
+                    wrapper.appendChild(label);
+                    listContainer.appendChild(wrapper);
+                });
+            }
+            btnApply?.addEventListener('click', function () {
+                hidden = [];
+                listContainer?.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+                    if (!cb.checked) hidden.push(cb.dataset.colKey || '');
+                });
+                try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch (e) { }
+                applyVisibility();
+                var modal = document.getElementById('columnsModalCp');
+                if (modal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modal).hide();
+            });
         });
     </script>
 }

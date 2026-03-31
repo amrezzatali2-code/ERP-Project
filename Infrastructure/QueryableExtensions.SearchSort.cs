@@ -27,7 +27,8 @@ namespace ERP.Infrastructure
             IDictionary<string, Expression<Func<T, object>>>? orderFields = null,
             string defaultSearchBy = "all",
             string defaultSortBy = "name",
-            string? searchMode = null)
+            string? searchMode = null,
+            bool applyOrdering = true)
         {
             // تجهيز القواميس (بحساسية أحرف غير مهمة)
             stringFields ??= new Dictionary<string, Expression<Func<T, string?>>>(StringComparer.OrdinalIgnoreCase);
@@ -51,21 +52,17 @@ namespace ERP.Infrastructure
                 // --- بحث "الكل": OR على كل stringFields (+ كل intFields لو النص رقم)
                 if (sb == "all")
                 {
-                    // x => (x.Field1.Contains(text) || x.Field2.Contains(text) || ... || x.IntField == n)
+                    // x => (Field1 match(text) || ... || IntField == n)
                     var param = Expression.Parameter(typeof(T), "x");
                     Expression? orExpr = null;
 
-                    // نصوص: Field != null && Field.Contains(text)
+                    // نصوص: Field != null && مطابقة حسب searchMode (starts/contains/ends)
                     foreach (var sel in stringFields.Values)
                     {
                         var body = new ReplaceParam(sel.Parameters[0], param).Visit(sel.Body)!; // string?
                         var notNull = Expression.NotEqual(body, Expression.Constant(null, typeof(string)));
-                        var contains = Expression.Call(
-                            body,
-                            typeof(string).GetMethod(nameof(string.Contains), new[] { typeof(string) })!,
-                            Expression.Constant(text)
-                        );
-                        var expr = Expression.AndAlso(notNull, contains);
+                        var match = BuildStringSearchMatch(body, text, mode);
+                        var expr = Expression.AndAlso(notNull, match);
                         orExpr = orExpr == null ? expr : Expression.OrElse(orExpr, expr);
                     }
 
@@ -116,24 +113,28 @@ namespace ERP.Infrastructure
             }
 
             // ===== الترتيب =====
-            if (!orderFields.TryGetValue(srt, out var orderExpr))
+            if (applyOrdering)
             {
-                // جرّب الافتراضي، ثم أول متاح
-                if (!orderFields.TryGetValue(defaultSortBy, out orderExpr))
+                if (!orderFields.TryGetValue(srt, out var orderExpr))
                 {
-                    orderExpr =
-                        orderFields.Values.FirstOrDefault()
-                        ?? stringFields.Values.Select(e =>
-                            Expression.Lambda<Func<T, object>>(Expression.Convert(e.Body, typeof(object)), e.Parameters))
-                           .FirstOrDefault()
-                        ?? intFields.Values.Select(e =>
-                            Expression.Lambda<Func<T, object>>(Expression.Convert(e.Body, typeof(object)), e.Parameters))
-                           .FirstOrDefault()
-                        ?? throw new InvalidOperationException("لا يوجد أي حقل مهيأ للترتيب.");
+                    // جرّب الافتراضي، ثم أول متاح
+                    if (!orderFields.TryGetValue(defaultSortBy, out orderExpr))
+                    {
+                        orderExpr =
+                            orderFields.Values.FirstOrDefault()
+                            ?? stringFields.Values.Select(e =>
+                                Expression.Lambda<Func<T, object>>(Expression.Convert(e.Body, typeof(object)), e.Parameters))
+                               .FirstOrDefault()
+                            ?? intFields.Values.Select(e =>
+                                Expression.Lambda<Func<T, object>>(Expression.Convert(e.Body, typeof(object)), e.Parameters))
+                               .FirstOrDefault()
+                            ?? throw new InvalidOperationException("لا يوجد أي حقل مهيأ للترتيب.");
+                    }
                 }
+
+                q = isDesc ? q.OrderByDescending(orderExpr) : q.OrderBy(orderExpr);
             }
 
-            q = isDesc ? q.OrderByDescending(orderExpr) : q.OrderBy(orderExpr);
             return q;
         }
 

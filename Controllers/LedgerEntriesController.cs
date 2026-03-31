@@ -62,7 +62,8 @@ namespace ERP.Controllers
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
-            int? toCode)
+            int? toCode,
+            string? searchMode = null)
         {
             // (1) الاستعلام الأساسي من جدول القيود مع الحساب والعميل (بدون تتبّع لتحسين الأداء)
             // فلترة «من يرى أي قيد» تُطبَّق عبر IUserAccountVisibilityService.ApplyLedgerEntryListVisibilityFilterAsync بعد BuildQuery
@@ -135,8 +136,8 @@ namespace ERP.Controllers
                 intFields: intFields,
                 orderFields: orderFields,
                 defaultSearchBy: "all",          // لو المستخدم لم يحدد نوع البحث
-                defaultSortBy: "EntryDate"       // الترتيب الافتراضي بتاريخ القيد (الأحدث أولاً)
-            );
+                defaultSortBy: "EntryDate",       // الترتيب الافتراضي بتاريخ القيد (الأحدث أولاً)
+                searchMode: searchMode);
 
             return q;
         }
@@ -146,18 +147,26 @@ namespace ERP.Controllers
         private static IQueryable<LedgerEntry> ApplyColumnFilters(
             IQueryable<LedgerEntry> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_date,
             string? filterCol_source,
             string? filterCol_postVersion,
+            string? filterCol_postVersionExpr,
             string? filterCol_sourceId,
+            string? filterCol_sourceIdExpr,
             string? filterCol_accId,
+            string? filterCol_accIdExpr,
             string? filterCol_accName,
             string? filterCol_customer,
             string? filterCol_debit,
+            string? filterCol_debitExpr,
             string? filterCol_credit,
+            string? filterCol_creditExpr,
             string? filterCol_desc)
         {
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = LedgerEntryListNumericExpr.ApplyIdExpr(query, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -183,21 +192,27 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(e => vals.Contains(e.SourceType.ToString()));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_postVersion))
+            if (!string.IsNullOrWhiteSpace(filterCol_postVersionExpr))
+                query = LedgerEntryListNumericExpr.ApplyPostVersionExpr(query, filterCol_postVersionExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_postVersion))
             {
                 var vals = filterCol_postVersion.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (vals.Count > 0) query = query.Where(e => vals.Contains(e.PostVersion));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_sourceId))
+            if (!string.IsNullOrWhiteSpace(filterCol_sourceIdExpr))
+                query = LedgerEntryListNumericExpr.ApplySourceIdExpr(query, filterCol_sourceIdExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_sourceId))
             {
                 var vals = filterCol_sourceId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (vals.Count > 0) query = query.Where(e => e.SourceId.HasValue && vals.Contains(e.SourceId.Value));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_accId))
+            if (!string.IsNullOrWhiteSpace(filterCol_accIdExpr))
+                query = LedgerEntryListNumericExpr.ApplyAccountIdExpr(query, filterCol_accIdExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_accId))
             {
                 var vals = filterCol_accId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -218,14 +233,18 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(e => e.Customer != null && vals.Contains(e.Customer.CustomerName));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_debit))
+            if (!string.IsNullOrWhiteSpace(filterCol_debitExpr))
+                query = LedgerEntryListNumericExpr.ApplyDebitExpr(query, filterCol_debitExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_debit))
             {
                 var vals = filterCol_debit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (vals.Count > 0) query = query.Where(e => vals.Contains(e.Debit));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_credit))
+            if (!string.IsNullOrWhiteSpace(filterCol_creditExpr))
+                query = LedgerEntryListNumericExpr.ApplyCreditExpr(query, filterCol_creditExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_credit))
             {
                 var vals = filterCol_credit.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -326,6 +345,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "EntryDate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -334,19 +354,34 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_source = null,
             string? filterCol_postVersion = null,
+            string? filterCol_postVersionExpr = null,
             string? filterCol_sourceId = null,
+            string? filterCol_sourceIdExpr = null,
             string? filterCol_accId = null,
+            string? filterCol_accIdExpr = null,
             string? filterCol_accName = null,
             string? filterCol_customer = null,
             string? filterCol_debit = null,
+            string? filterCol_debitExpr = null,
             string? filterCol_credit = null,
+            string? filterCol_creditExpr = null,
             string? filterCol_desc = null,
             int page = 1,
-            int pageSize = 50)
+            int pageSize = 10)
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psVal))
+                pageSize = psVal;
+
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
             var canViewInvestors = await CanViewInvestorsAsync();
             var q = BuildQuery(
                 search,
@@ -357,10 +392,11 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                searchMode);
             q = await _accountVisibilityService.ApplyLedgerEntryListVisibilityFilterAsync(q, canViewInvestors);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_sourceId, filterCol_accId, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_credit, filterCol_desc);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_postVersionExpr, filterCol_sourceId, filterCol_sourceIdExpr, filterCol_accId, filterCol_accIdExpr, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_debitExpr, filterCol_credit, filterCol_creditExpr, filterCol_desc);
 
             // =========================================================
             // 2) حساب الإجماليات من نفس الاستعلام (بعد الفلاتر)
@@ -394,53 +430,81 @@ namespace ERP.Controllers
                 .CountAsync();
 
             // =========================================================
-            // 3) إنشاء موديل التقسيم PagedResult (يعرض صفحة فقط)
+            // 3) الترقيم (0 = الكل — نمط موحّد)
             // =========================================================
-            var model = await PagedResult<LedgerEntry>.CreateAsync(q, page, pageSize);
+            var totalCount = await q.CountAsync();
+
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+
+            var totalPages = pageSize == 0 ? 1 : Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+
+            var items = await q
+                .Skip((page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
+                .ToListAsync();
+
+            var sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var model = new PagedResult<LedgerEntry>(items, page, pageSize, totalCount)
+            {
+                TotalPages = totalPages,
+                HasPrevious = page > 1,
+                HasNext = pageSize != 0 && page * pageSize < totalCount,
+                Search = search,
+                SearchBy = searchBy,
+                SortColumn = sort,
+                SortDescending = sortDesc,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
 
             // =========================================================
-            // 4) حفظ قيم الفلاتر داخل الموديل (لنظام القوائم الموحد)
-            // =========================================================
-            model.UseDateRange = useDateRange;
-            model.FromDate = fromDate;
-            model.ToDate = toDate;
-
-            // =========================================================
-            // 5) تمرير القيم للواجهة
+            // 4) تمرير القيم للواجهة
             // =========================================================
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = string.IsNullOrWhiteSpace(searchMode) ? "contains" : searchMode.Trim().ToLowerInvariant();
             ViewBag.Sort = sort ?? "EntryDate";
             ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_Source = filterCol_source;
             ViewBag.FilterCol_PostVersion = filterCol_postVersion;
+            ViewBag.FilterCol_PostVersionExpr = filterCol_postVersionExpr;
             ViewBag.FilterCol_SourceId = filterCol_sourceId;
+            ViewBag.FilterCol_SourceIdExpr = filterCol_sourceIdExpr;
             ViewBag.FilterCol_AccId = filterCol_accId;
+            ViewBag.FilterCol_AccIdExpr = filterCol_accIdExpr;
             ViewBag.FilterCol_AccName = filterCol_accName;
             ViewBag.FilterCol_Customer = filterCol_customer;
             ViewBag.FilterCol_Debit = filterCol_debit;
+            ViewBag.FilterCol_DebitExpr = filterCol_debitExpr;
             ViewBag.FilterCol_Credit = filterCol_credit;
+            ViewBag.FilterCol_CreditExpr = filterCol_creditExpr;
             ViewBag.FilterCol_Desc = filterCol_desc;
 
             ViewBag.DateField = "EntryDate";
-            ViewBag.Page = page;                   // متغير: رقم الصفحة الحالية
-            ViewBag.PageSize = pageSize;           // متغير: حجم الصفحة
+            ViewBag.Page = page;
+            ViewBag.PageSize = pageSize;
 
-            ViewBag.TotalCount = model.TotalCount; // متغير: إجمالي عدد القيود بعد الفلاتر
+            ViewBag.TotalCount = model.TotalCount;
 
-            // ✅ الإجماليات التي نريد التأكد منها
-            ViewBag.TotalDebit = totalDebit;       // متغير: إجمالي المدين بعد الفلاتر
-            ViewBag.TotalCredit = totalCredit;     // متغير: إجمالي الدائن بعد الفلاتر
-            ViewBag.NetBalance = netBalance;       // متغير: صافي الحركة داخل الفلتر
+            ViewBag.TotalDebit = totalDebit;
+            ViewBag.TotalCredit = totalCredit;
+            ViewBag.NetBalance = netBalance;
             ViewBag.TreasuryNetBalance = treasuryNetBalance;
             ViewBag.DistinctCustomerCount = distinctCustomerCount;
 
-            return View(model); // يعرض Views/LedgerEntries/Index.cshtml
+            return View(model);
         }
 
 
@@ -487,6 +551,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "EntryDate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -495,15 +560,21 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_source = null,
             string? filterCol_postVersion = null,
+            string? filterCol_postVersionExpr = null,
             string? filterCol_sourceId = null,
+            string? filterCol_sourceIdExpr = null,
             string? filterCol_accId = null,
+            string? filterCol_accIdExpr = null,
             string? filterCol_accName = null,
             string? filterCol_customer = null,
             string? filterCol_debit = null,
+            string? filterCol_debitExpr = null,
             string? filterCol_credit = null,
+            string? filterCol_creditExpr = null,
             string? filterCol_desc = null,
             string format = "excel")
         {
@@ -517,10 +588,11 @@ namespace ERP.Controllers
                 fromDate,
                 toDate,
                 fromCode,
-                toCode);
+                toCode,
+                searchMode);
             q = await _accountVisibilityService.ApplyLedgerEntryListVisibilityFilterAsync(q, canViewInvestors);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_sourceId, filterCol_accId, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_credit, filterCol_desc);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_date, filterCol_source, filterCol_postVersion, filterCol_postVersionExpr, filterCol_sourceId, filterCol_sourceIdExpr, filterCol_accId, filterCol_accIdExpr, filterCol_accName, filterCol_customer, filterCol_debit, filterCol_debitExpr, filterCol_credit, filterCol_creditExpr, filterCol_desc);
 
             var list = await q.ToListAsync();
 

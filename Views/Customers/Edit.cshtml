@@ -4,222 +4,186 @@
     ViewData["Title"] = "تعديل بيانات عميل";
 }
 
-<div class="container mt-3" dir="rtl">
-    <h2 class="mb-3">تعديل بيانات عميل</h2>
+<div class="container product-form-page mt-3" dir="rtl">
+    <h3 class="mb-3">@ViewData["Title"]</h3>
 
-    <div asp-validation-summary="ModelOnly" class="text-danger"></div>
-
-    <form asp-action="Edit" method="post">
+    <form asp-action="Edit" method="post" class="row g-3">
         @Html.AntiForgeryToken()
 
-        @* كود العميل مخفي (مفتاح أساسي) *@
+        <div class="col-12">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+        </div>
+
         <input type="hidden" asp-for="CustomerId" />
 
-        @* اسم العميل *@
-        <div class="mb-3">
-            <label asp-for="CustomerName" class="form-label"></label>
-            <input asp-for="CustomerName" class="form-control" />
-            <span asp-validation-for="CustomerName" class="text-danger"></span>
-        </div>
+        @* كارت 1: بيانات أساسية *@
+        <div class="col-12">
+            <div class="card product-form-card">
+                <div class="card-header bg-light py-2"><strong>بيانات أساسية</strong></div>
+                <div class="card-body row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">كود العميل</label>
+                        <input type="text" class="form-control" value="@Model.CustomerId" disabled readonly />
+                    </div>
+                    <div class="col-md-9">
+                        <label asp-for="CustomerName" class="form-label"></label>
+                        <input asp-for="CustomerName" class="form-control" />
+                        <span asp-validation-for="CustomerName" class="text-danger"></span>
+                    </div>
 
-        @* هواتف وواتساب *@
-        <div class="row">
-            <div class="col-md-4 mb-3">
-                <label asp-for="Phone1" class="form-label"></label>
-                <input asp-for="Phone1" class="form-control" />
-                <span asp-validation-for="Phone1" class="text-danger"></span>
-            </div>
-            <div class="col-md-4 mb-3">
-                <label asp-for="Phone2" class="form-label"></label>
-                <input asp-for="Phone2" class="form-control" />
-                <span asp-validation-for="Phone2" class="text-danger"></span>
-            </div>
-            <div class="col-md-4 mb-3">
-                <label asp-for="Whatsapp" class="form-label"></label>
-                <input asp-for="Whatsapp" class="form-control" />
-                <span asp-validation-for="Whatsapp" class="text-danger"></span>
-            </div>
-        </div>
+                    <div class="col-md-6">
+                        <label asp-for="PolicyId" class="form-label">سياسة العميل</label>
+                        <select asp-for="PolicyId" class="form-select" asp-items="ViewBag.PolicyList">
+                            <option value="">-- بدون سياسة محددة --</option>
+                        </select>
+                        <span asp-validation-for="PolicyId" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="CreditLimit" class="form-label"></label>
+                        <input type="number" step="0.01" name="CreditLimit" id="CreditLimit" value="@(Model.CreditLimit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))" class="form-control" />
+                        <span asp-validation-for="CreditLimit" class="text-danger"></span>
+                    </div>
 
-        @* العنوان *@
-        <div class="mb-3">
-            <label asp-for="Address" class="form-label"></label>
-            <input asp-for="Address" class="form-control" />
-            <span asp-validation-for="Address" class="text-danger"></span>
-        </div>
+                    <div class="col-md-4">
+                        <label asp-for="Phone1" class="form-label"></label>
+                        <input asp-for="Phone1" class="form-control" />
+                        <span asp-validation-for="Phone1" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="Phone2" class="form-label"></label>
+                        <input asp-for="Phone2" class="form-control" />
+                        <span asp-validation-for="Phone2" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="Whatsapp" class="form-label"></label>
+                        <input asp-for="Whatsapp" class="form-control" />
+                        <span asp-validation-for="Whatsapp" class="text-danger"></span>
+                    </div>
 
+                    <div class="col-md-6">
+                        <label asp-for="OrderContactName" class="form-label">مسئول الطلب</label>
+                        <input asp-for="OrderContactName" class="form-control" />
+                        <span asp-validation-for="OrderContactName" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="OrderContactPhone" class="form-label">هاتف مسئول الطلب</label>
+                        <input asp-for="OrderContactPhone" class="form-control" />
+                        <span asp-validation-for="OrderContactPhone" class="text-danger"></span>
+                    </div>
 
+                    <div class="col-md-6">
+                        <label class="form-label">نوع الطرف</label>
+                        <select asp-for="PartyCategory" class="form-select" id="PartyCategorySelect">
+                            <option value=""> اختر</option>
+                            <option value="Customer">عميل</option>
+                            <option value="Supplier">مورد</option>
+                            <option value="Employee">موظف</option>
+                            <option value="Investor">مستثمر</option>
+                            <option value="Bank">بنك</option>
+                            <option value="Expense">مصروف</option>
+                            <option value="Owner">مالك / شريك</option>
+                        </select>
+                        <span asp-validation-for="PartyCategory" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-6">
+                        <label asp-for="AccountId" class="form-label"></label>
+                        <select asp-for="AccountId" class="form-select" asp-items="ViewBag.AccountId" id="AccountId"></select>
+                        <span asp-validation-for="AccountId" class="text-danger"></span>
+                    </div>
 
-        @* ===== الربط الجغرافي: المحافظة / الحي / المنطقة (متسلسلة) ===== *@
-        <div class="row">
-            <div class="col-md-4 mb-3">
-                <label asp-for="GovernorateId" class="form-label"></label>
-                <select asp-for="GovernorateId"
-                        class="form-select"
-                        asp-items="ViewBag.GovernorateId"
-                        id="GovernorateId">
-                    <option value="">-- اختر المحافظة --</option>
-                </select>
-                <span asp-validation-for="GovernorateId" class="text-danger"></span>
-            </div>
+                    <div class="col-12">
+                        <label asp-for="UserId" class="form-label">المستخدم المسئول (المندوب)</label>
+                        <select asp-for="UserId" class="form-select" asp-items="ViewBag.UserList">
+                            <option value="">-- بدون ربط بمستخدم --</option>
+                        </select>
+                        <span asp-validation-for="UserId" class="text-danger"></span>
+                    </div>
 
-            <div class="col-md-4 mb-3">
-                <label asp-for="DistrictId" class="form-label"></label>
-                <select asp-for="DistrictId"
-                        class="form-select"
-                        asp-items="ViewBag.DistrictId"
-                        id="DistrictId">
-                    <option value="">-- اختر الحي / المركز --</option>
-                </select>
-                <span asp-validation-for="DistrictId" class="text-danger"></span>
-            </div>
+                    <div class="col-12">
+                        <div class="product-form-check-inline">
+                            <input asp-for="IsActive" class="form-check-input" id="IsActive" />
+                            <label asp-for="IsActive" class="form-check-label" for="IsActive"></label>
+                        </div>
+                    </div>
 
-            <div class="col-md-4 mb-3">
-                <label asp-for="AreaId" class="form-label"></label>
-                <select asp-for="AreaId"
-                        class="form-select"
-                        asp-items="ViewBag.AreaId"
-                        id="AreaId">
-                    <option value="">-- اختر المنطقة --</option>
-                </select>
-                <span asp-validation-for="AreaId" class="text-danger"></span>
-            </div>
-        </div>
+                    <div class="col-12">
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <div class="product-form-check-inline">
+                                    <input asp-for="IsQuotaMultiplierEnabled" class="form-check-input" id="IsQuotaMultiplierEnabled" />
+                                    <label class="form-check-label" for="IsQuotaMultiplierEnabled">مضاعفة الكوتة؟</label>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <label asp-for="QuotaMultiplier" class="form-label">رقم المضاعفة</label>
+                                <select asp-for="QuotaMultiplier" class="form-select">
+                                    <option value="1">1 × (بدون مضاعفة)</option>
+                                    <option value="2">2 ×</option>
+                                    <option value="3">3 ×</option>
+                                    <option value="4">4 ×</option>
+                                    <option value="5">5 ×</option>
+                                </select>
+                                <span asp-validation-for="QuotaMultiplier" class="text-danger"></span>
+                            </div>
+                        </div>
+                    </div>
 
-        @* خط السير *@
-        <div class="row">
-            <div class="col-md-4 mb-3">
-                <label asp-for="RouteId" class="form-label"></label>
-                <select asp-for="RouteId"
-                        asp-items="ViewBag.RouteId"
-                        class="form-select form-select-sm">
-                    <option value="">-- لا خط سير --</option>
-                </select>
-            </div>
-        </div>
-
-        @* نوع الطرف (عميل / مورد / موظف / مستثمر ) / الحساب المحاسبي *@
-
-        <div class="row">
-
-            <div class="col-md-6 mb-3">
-
-                <label class="form-label">نوع الطرف</label>
-                <select asp-for="PartyCategory"
-                        class="form-select"
-                        id="PartyCategorySelect">
-                    <option value=""> اختر</option>
-
-                    @* نفس القيم التي نستخدمها في الداتا بيز والكنترولر *@
-                    <option value="Customer">عميل</option>
-                    <option value="Supplier">مورد</option>
-                    <option value="Employee">موظف</option>
-                    <option value="Investor">مستثمر</option>
-                    <option value="Bank">بنك</option>
-                    <option value="Expense">مصروف</option>
-                    <option value="Owner">مالك / شريك</option>
-                </select>
-                <span asp-validation-for="PartyCategory" class="text-danger"></span>
-            </div>
-
-
-            @* الحساب المحاسبي *@
-            <div class="col-md-6 mb-3">
-                <label asp-for="AccountId" class="form-label"></label>
-
-                <select asp-for="AccountId"
-                        class="form-select"
-                        asp-items="ViewBag.AccountId">
-                    @* <option value="">-- بدون ربط محاسبي (مؤقتًا</option> *@
-                </select>
-
-                <span asp-validation-for="AccountId" class="text-danger"></span>
-            </div>
-
-        </div>
-
-      
-
-
-
-        @* سياسة العميل + المستخدم المسئول *@
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label asp-for="PolicyId" class="form-label">سياسة العميل</label>
-                <select asp-for="PolicyId"
-                        class="form-select"
-                        asp-items="ViewBag.PolicyList">
-                    <option value="">-- بدون سياسة محددة --</option>
-                </select>
-                <span asp-validation-for="PolicyId" class="text-danger"></span>
-            </div>
-            <div class="col-md-6 mb-3">
-                <label asp-for="UserId" class="form-label">المستخدم المسئول (المندوب)</label>
-                <select asp-for="UserId"
-                        class="form-select"
-                        asp-items="ViewBag.UserList">
-                    <option value="">-- بدون ربط بمستخدم --</option>
-                </select>
-                <span asp-validation-for="UserId" class="text-danger"></span>
-            </div>
-        </div>
-
-        @* بيانات مسئول الطلب *@
-        <div class="row">
-            <div class="col-md-6 mb-3">
-                <label asp-for="OrderContactName" class="form-label">اسم مسئول الطلب</label>
-                <input asp-for="OrderContactName" class="form-control" />
-                <span asp-validation-for="OrderContactName" class="text-danger"></span>
-            </div>
-            <div class="col-md-6 mb-3">
-                <label asp-for="OrderContactPhone" class="form-label">هاتف مسئول الطلب</label>
-                <input asp-for="OrderContactPhone" class="form-control" />
-                <span asp-validation-for="OrderContactPhone" class="text-danger"></span>
-            </div>
-        </div>
-
-        @* الحد الائتماني + الحالة + مضاعفة الكوتة — تنسيق عددي ثابت (نقطة) لتفادي خطأ "must be a number" *@
-        <div class="row">
-            <div class="col-md-4 mb-3">
-                <label asp-for="CreditLimit" class="form-label"></label>
-                <input type="number" step="0.01" name="CreditLimit" id="CreditLimit" value="@(Model.CreditLimit.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture))" class="form-control" />
-                <span asp-validation-for="CreditLimit" class="text-danger"></span>
-            </div>
-            <div class="col-md-4 mb-3">
-                <div class="form-check mt-4" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: nowrap;">
-                    <label asp-for="IsActive" class="form-check-label mb-0" for="IsActive" style="order: 1;">نشط؟</label>
-                    <input asp-for="IsActive" class="form-check-input flex-shrink-0" id="IsActive" style="order: 2;" />
+                    <div class="col-12">
+                        <label asp-for="Notes" class="form-label"></label>
+                        <textarea asp-for="Notes" class="form-control" rows="3"></textarea>
+                        <span asp-validation-for="Notes" class="text-danger"></span>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-4 mb-3">
-                <div class="form-check mt-2 mb-2">
-                    <input asp-for="IsQuotaMultiplierEnabled" class="form-check-input" />
-                    <label asp-for="IsQuotaMultiplierEnabled" class="form-check-label">
-                        مضاعفة الكوتة؟
-                    </label>
-                </div>
+        </div>
 
-                <label asp-for="QuotaMultiplier" class="form-label">رقم المضاعفة</label>
-                <select asp-for="QuotaMultiplier" class="form-select">
-                    <option value="1">1 × (بدون مضاعفة)</option>
-                    <option value="2">2 ×</option>
-                    <option value="3">3 ×</option>
-                    <option value="4">4 ×</option>
-                    <option value="5">5 ×</option>
-                </select>
-                <span asp-validation-for="QuotaMultiplier" class="text-danger"></span>
+        @* كارت 2: العنوان والمنطقة *@
+        <div class="col-12">
+            <div class="card product-form-card">
+                <div class="card-header bg-light py-2"><strong>العنوان والمنطقة</strong></div>
+                <div class="card-body row g-3">
+                    <div class="col-12">
+                        <label asp-for="Address" class="form-label"></label>
+                        <input asp-for="Address" class="form-control" />
+                        <span asp-validation-for="Address" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label asp-for="GovernorateId" class="form-label"></label>
+                        <select asp-for="GovernorateId" class="form-select" asp-items="ViewBag.GovernorateId" id="GovernorateId">
+                            <option value="">-- اختر المحافظة --</option>
+                        </select>
+                        <span asp-validation-for="GovernorateId" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="DistrictId" class="form-label"></label>
+                        <select asp-for="DistrictId" class="form-select" asp-items="ViewBag.DistrictId" id="DistrictId">
+                            <option value="">-- اختر الحي / المركز --</option>
+                        </select>
+                        <span asp-validation-for="DistrictId" class="text-danger"></span>
+                    </div>
+                    <div class="col-md-4">
+                        <label asp-for="AreaId" class="form-label"></label>
+                        <select asp-for="AreaId" class="form-select" asp-items="ViewBag.AreaId" id="AreaId">
+                            <option value="">-- اختر المنطقة --</option>
+                        </select>
+                        <span asp-validation-for="AreaId" class="text-danger"></span>
+                    </div>
+
+                    <div class="col-md-6">
+                        <label asp-for="RouteId" class="form-label">خط السير</label>
+                        <select asp-for="RouteId" asp-items="ViewBag.RouteId" class="form-select">
+                            <option value="">-- لا خط سير --</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
 
-        @* ملاحظات *@
-        <div class="mb-3">
-            <label asp-for="Notes" class="form-label"></label>
-            <textarea asp-for="Notes" class="form-control"></textarea>
-            <span asp-validation-for="Notes" class="text-danger"></span>
+        <div class="col-12">
+            <button type="submit" class="btn btn-success">حفظ التعديلات</button>
+            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
         </div>
-
-        <button type="submit" class="btn btn-success">حفظ التعديلات</button>
-        <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
     </form>
 </div>
 
@@ -236,9 +200,7 @@
             const districtSelect = document.getElementById('DistrictId');
             const areaSelect = document.getElementById('AreaId');
 
-            // ——— ربط نوع الطرف ↔ الحساب المحاسبي (اتجاهين) ———
             if (partySelect && accountSelect) {
-                // عند تغيير نوع الطرف → تحديث الحساب الافتراضي
                 function setDefaultAccount(forceChange) {
                     const party = partySelect.value;
                     if (!party) return;
@@ -254,7 +216,6 @@
                 partySelect.addEventListener('change', function () { setDefaultAccount(true); });
                 setDefaultAccount(false);
 
-                // عند تغيير الحساب المحاسبي → تحديث نوع الطرف إن وُجد تطابق
                 accountSelect.addEventListener('change', function () {
                     const accountId = this.value;
                     if (!accountId) return;
@@ -268,7 +229,6 @@
                 });
             }
 
-            // ——— تعبئة متسلسلة: المحافظة → الحي → المنطقة ———
             if (governorateSelect && districtSelect && areaSelect) {
                 const districtPlaceholder = '-- اختر الحي / المركز --';
                 const areaPlaceholder = '-- اختر المنطقة --';

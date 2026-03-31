@@ -1,6 +1,5 @@
 using System;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
@@ -11,6 +10,7 @@ using ERP.Infrastructure;
 using ERP.Models;
 using ERP.Security;
 using ERP.Services;
+using ERP.ViewModels;
 
 namespace ERP.Controllers
 {
@@ -81,12 +81,18 @@ namespace ERP.Controllers
             var sep = new[] { '|', ',' };
             var custQueryLedger = _context.Customers.AsNoTracking();
             custQueryLedger = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(custQueryLedger);
-            // تجهيز قائمة العملاء للأوتوكومبليت (مثل فاتورة البيع / حجم التعامل)
-            var customersList = await custQueryLedger
+            // تجهيز قائمة العملاء — نفس مصدر حجم التعامل (datalist + بحث متعدد الكلمات)
+            var customersVolume = await custQueryLedger
                 .OrderBy(c => c.CustomerName)
-                .Select(c => new { id = c.CustomerId, code = c.CustomerId.ToString(), name = c.CustomerName })
+                .Select(c => new CustomerVolumeDropdownItem
+                {
+                    Id = c.CustomerId,
+                    Name = c.CustomerName ?? "",
+                    Phone = c.Phone1 ?? "",
+                    IsActive = c.IsActive
+                })
                 .ToListAsync();
-            ViewBag.CustomersJson = JsonSerializer.Serialize(customersList);
+            ViewBag.CustomersVolumeDropdown = customersVolume;
 
             if (!customerId.HasValue || customerId.Value <= 0)
             {

@@ -641,7 +641,8 @@
     <script>
         (function () {
             var params = new URLSearchParams(window.location.search);
-            var ps = params.get('pageSize');
+            var all = params.getAll('pageSize');
+            var ps = all.length ? all[all.length - 1] : null;
             var sel = document.querySelector('form select[name="pageSize"]');
             if (sel && ps !== null && ps !== '') sel.value = ps;
         })();

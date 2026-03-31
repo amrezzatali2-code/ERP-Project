@@ -6,30 +6,27 @@
 @{
     ViewData["Title"] = "شجرة الحسابات";
 
-    // أسماء الأكشن/الكنترولر الحالية
     var action = Convert.ToString(ViewContext.RouteData.Values["action"]) ?? "Index";
     var controller = Convert.ToString(ViewContext.RouteData.Values["controller"]) ?? "Accounts";
 
-    // قيم البحث/الترتيب الحالية
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
-    var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "AccountCode";
+    var searchMode = (string?)ViewBag.SearchMode ?? "contains";
+    var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "code";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
-    // بيانات الترقيم
     int ps = Model.PageSize;
     int total = Model.TotalCount;
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
     int next = Math.Min(last, page + 1);
 
-    // فلتر كود من/إلى (على AccountId)
     int? fromCode = ViewBag.FromCode as int?;
     int? toCode = ViewBag.ToCode as int?;
 
@@ -39,23 +36,42 @@
     var dateField = (string?)ViewBag.DateField ?? "CreatedAt";
 
     string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string;
     string? filterCol_code = ViewBag.FilterCol_Code as string;
     string? filterCol_name = ViewBag.FilterCol_Name as string;
     string? filterCol_type = ViewBag.FilterCol_Type as string;
     string? filterCol_level = ViewBag.FilterCol_Level as string;
+    string? filterCol_levelExpr = ViewBag.FilterCol_LevelExpr as string;
     string? filterCol_leaf = ViewBag.FilterCol_Leaf as string;
     string? filterCol_active = ViewBag.FilterCol_Active as string;
     string? filterCol_created = ViewBag.FilterCol_Created as string;
     string? filterCol_updated = ViewBag.FilterCol_Updated as string;
     string? filterCol_notes = ViewBag.FilterCol_Notes as string;
 
-    string Link(int p) => Url.Action(action, controller, new
+    int leafCount = ViewBag.LeafCountFiltered != null ? (int)ViewBag.LeafCountFiltered : 0;
+    int activeCount = ViewBag.ActiveCountFiltered != null ? (int)ViewBag.ActiveCountFiltered : 0;
+
+    string? FilterForCol(string colKey) =>
+        colKey == "id" ? (!string.IsNullOrWhiteSpace(filterCol_idExpr) ? filterCol_idExpr : filterCol_id)
+        : colKey == "level" ? (!string.IsNullOrWhiteSpace(filterCol_levelExpr) ? filterCol_levelExpr : filterCol_level)
+        : colKey == "code" ? filterCol_code
+        : colKey == "name" ? filterCol_name
+        : colKey == "type" ? filterCol_type
+        : colKey == "leaf" ? filterCol_leaf
+        : colKey == "active" ? filterCol_active
+        : colKey == "created" ? filterCol_created
+        : colKey == "updated" ? filterCol_updated
+        : colKey == "notes" ? filterCol_notes
+        : null;
+
+    object AccRouteValues(int? pageNum = null, string? sortCol = null, string? sortDir = null) => new
     {
         search,
         searchBy,
-        sort,
-        dir,
-        page = p,
+        searchMode,
+        sort = sortCol ?? sort,
+        dir = sortDir ?? dir,
+        page = pageNum ?? page,
         pageSize = ps,
         useDateRange,
         fromDate,
@@ -64,54 +80,26 @@
         fromCode,
         toCode,
         filterCol_id,
+        filterCol_idExpr,
         filterCol_code,
         filterCol_name,
         filterCol_type,
         filterCol_level,
+        filterCol_levelExpr,
         filterCol_leaf,
         filterCol_active,
         filterCol_created,
         filterCol_updated,
         filterCol_notes
-    })!;
-
-    Func<string, string, IHtmlContent> sortLink = (col, caption) =>
-    {
-        var isCurrent = string.Equals(sort, col, StringComparison.OrdinalIgnoreCase);
-        var newDir = (isCurrent && dir == "asc") ? "desc" : "asc";
-        var url = Url.Action(action, controller, new
-        {
-            search,
-            searchBy,
-            sort = col,
-            dir = newDir,
-            page = 1,
-            pageSize = ps,
-            useDateRange,
-            fromDate,
-            toDate,
-            dateField,
-            fromCode,
-            toCode,
-            filterCol_id,
-            filterCol_code,
-            filterCol_name,
-            filterCol_type,
-            filterCol_level,
-            filterCol_leaf,
-            filterCol_active,
-            filterCol_created,
-            filterCol_updated,
-            filterCol_notes
-        }) ?? "#";
-        string icon = "⇅";
-        if (isCurrent) icon = dir == "asc" ? "▲" : "▼";
-        return new HtmlString($@"<a href=""{url}"">{caption}<span class=""erp-sort-icon"">{icon}</span></a>");
     };
+
+    string Link(int p) => Url.Action(action, controller, AccRouteValues(pageNum: p))!;
+
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
 
     Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
-        string? currentFilter = colKey == "id" ? filterCol_id : colKey == "code" ? filterCol_code : colKey == "name" ? filterCol_name : colKey == "type" ? filterCol_type : colKey == "level" ? filterCol_level : colKey == "leaf" ? filterCol_leaf : colKey == "active" ? filterCol_active : colKey == "created" ? filterCol_created : colKey == "updated" ? filterCol_updated : colKey == "notes" ? filterCol_notes : null;
+        string? currentFilter = FilterForCol(colKey);
         bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
         var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
         var sortDir = isCurrentSort ? dir : "asc";
@@ -136,7 +124,6 @@
 
     <div class="d-flex justify-content-between align-items-center mb-2">
         <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">إجمالي الحسابات: @total</small>
     </div>
 
     @* ===== شريط الفلاتر الموحد (نمط قائمة القوائم) ===== *@
@@ -147,7 +134,7 @@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في الحسابات</label>
-                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
@@ -158,8 +145,15 @@
                             <option value="notes"@Html.Raw(searchBy == "notes" ? " selected" : "")>الملاحظات</option>
                             <option value="level"@Html.Raw(searchBy == "level" ? " selected" : "")>مستوى الحساب</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">عرض</button>
-                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0" href="@Url.Action(action, controller)">إلغاء</a>
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:100px" title="طريقة المطابقة">
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي</option>
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 justify-content-center w-100 mt-2">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
@@ -172,10 +166,12 @@
                     @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                     @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_code)) { <input type="hidden" name="filterCol_code" value="@filterCol_code" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_type)) { <input type="hidden" name="filterCol_type" value="@filterCol_type" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_level)) { <input type="hidden" name="filterCol_level" value="@filterCol_level" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_levelExpr)) { <input type="hidden" name="filterCol_levelExpr" value="@filterCol_levelExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_leaf)) { <input type="hidden" name="filterCol_leaf" value="@filterCol_leaf" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
@@ -204,6 +200,9 @@
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalAccounts">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalAccounts">اختيار الأعمدة</button>
                         <button type="button" id="btnPrintAccounts" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات الحساب المحدد">
+                            <button type="button" id="btnAccEdit" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="تعديل">تعديل</button>
+                        </span>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
                         <div class="dropdown d-inline">
@@ -217,6 +216,7 @@
                         <form method="get" asp-action="Export" asp-controller="Accounts" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
@@ -225,10 +225,12 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_code)) { <input type="hidden" name="filterCol_code" value="@filterCol_code" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_type)) { <input type="hidden" name="filterCol_type" value="@filterCol_type" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_level)) { <input type="hidden" name="filterCol_level" value="@filterCol_level" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_levelExpr)) { <input type="hidden" name="filterCol_levelExpr" value="@filterCol_levelExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_leaf)) { <input type="hidden" name="filterCol_leaf" value="@filterCol_leaf" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
@@ -248,6 +250,33 @@
         </div>
     </div>
 
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي العدد (بعد الفلترة)</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #0369a1 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">حسابات تفصيلية</div>
+                    <div class="h4 mb-0 fw-bold" style="color:#0369a1;">@leafCount.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">حسابات نشطة</div>
+                    <div class="h4 mb-0 text-success fw-bold">@activeCount.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* ===== جدول شجرة الحسابات (حاوية تمرير + رأس ثابت) ===== *@
     <div class="erp-table-scroll-container mt-3 ps-0 pe-0" dir="rtl">
         <div id="accountsTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
@@ -255,7 +284,7 @@
             <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
                     <th class="text-center no-print" data-col="select" data-col-fixed="true" style="width:40px;">
-                        <input type="checkbox" id="selectAll" class="form-check-input" />
+                        <input type="checkbox" id="chkAllRowsAccounts" class="form-check-input" />
                     </th>
                     <th data-col="id">@filterableCol("id", "id", "رقم الحساب")</th>
                     <th data-col="code">@filterableCol("code", "code", "كود الحساب")</th>
@@ -267,14 +296,13 @@
                     <th data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
                     <th data-col="updated">@filterableCol("updated", "updated", "آخر تعديل")</th>
                     <th data-col="notes">@filterableCol("notes", "notes", "ملاحظات")</th>
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:180px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="12" class="text-center text-muted py-4">
+                        <td colspan="11" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -285,7 +313,12 @@
                     {
                         var notes = a.Notes ?? "";
                         var notesShort = notes.Length > 80 ? notes.Substring(0, 80) + "…" : notes;
-                        <tr>
+                        var editUrl = Url.Action("Edit", "Accounts", new { id = a.AccountId }) ?? "";
+                        var tabTitle = $"حساب {a.AccountCode}";
+                        <tr class="erp-list-selectable-row"
+                            data-row-id="@a.AccountId"
+                            data-edit-url="@editUrl"
+                            data-tab-title="@tabTitle">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox" class="form-check-input row-select" value="@a.AccountId" />
                             </td>
@@ -299,11 +332,6 @@
                             <td data-col="created">@a.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
                             <td data-col="updated">@(a.UpdatedAt.HasValue ? a.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
                             <td data-col="notes">@notesShort</td>
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm ms-1" asp-action="Show" asp-route-id="@a.AccountId">تفاصيل</a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm ms-1" asp-action="Edit" asp-route-id="@a.AccountId">تعديل</a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm" asp-action="Delete" asp-route-id="@a.AccountId">حذف</a>
-                            </td>
                         </tr>
                     }
                 }
@@ -312,47 +340,40 @@
         </div>
     </div>
 
-    @* لوحة فلتر العمود (بنمط Excel) *@
     <div id="erpColumnFilterPanelAccounts" class="erp-column-filter-panel d-none" dir="rtl">
         <div class="erp-column-filter-header">
-            <span id="erpColumnFilterTitleAccounts">ترتيب وفلتر</span>
-            <button type="button" class="btn-close btn-sm" id="erpColumnFilterCloseAccounts" aria-label="إغلاق"></button>
+            <span>ترتيب وفلتر</span>
+            <button type="button" class="btn-close btn-sm" aria-label="إغلاق"></button>
         </div>
         <div class="erp-column-filter-body">
             <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
-                <label class="form-label small mb-1 fw-bold">الترتيب:</label>
                 <div class="d-flex flex-column gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc"><span class="erp-sort-arrow">▲</span> ترتيب تصاعدي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc"><span class="erp-sort-arrow">▼</span> ترتيب تنازلي</button>
                 </div>
             </div>
             <div class="erp-filter-section">
-                <div id="erpColumnFilterSearchRowAccounts">
+                <div id="erpColumnFilterSearchRow">
                     <label class="form-label small mb-1 fw-bold">الفلترة:</label>
-                    <input type="text" id="erpColumnFilterSearchAccounts" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+                    <input type="text" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
                 </div>
-                <div id="erpColumnFilterListAccounts" class="erp-column-filter-list">
+                <div class="erp-column-filter-list">
                     <div class="text-muted text-center py-3">جاري التحميل...</div>
                 </div>
             </div>
             <div class="erp-column-filter-actions">
-                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpColumnFilterOkAccounts">تطبيق</button>
-                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpColumnFilterClearAccounts">مسح الفلتر</button>
+                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح الفلتر</button>
             </div>
         </div>
     </div>
 
-    @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة (محاذاة RTL) ===== *@
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted order-1">
-            عرض @start - @end من @total
-        </small>
-
-        <form method="get"
-              action="@Url.Action(action, controller)"
-              class="d-flex align-items-center gap-2 order-2">
+        <small class="text-muted order-1">عرض @start - @end من @total</small>
+        <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2 order-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -363,10 +384,12 @@
             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_code)) { <input type="hidden" name="filterCol_code" value="@filterCol_code" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_type)) { <input type="hidden" name="filterCol_type" value="@filterCol_type" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_level)) { <input type="hidden" name="filterCol_level" value="@filterCol_level" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_levelExpr)) { <input type="hidden" name="filterCol_levelExpr" value="@filterCol_levelExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_leaf)) { <input type="hidden" name="filterCol_leaf" value="@filterCol_leaf" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
@@ -374,10 +397,12 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_notes)) { <input type="hidden" name="filterCol_notes" value="@filterCol_notes" /> }
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
     </div>
@@ -428,6 +453,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -436,10 +462,12 @@
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_code)) { <input type="hidden" name="filterCol_code" value="@filterCol_code" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_type)) { <input type="hidden" name="filterCol_type" value="@filterCol_type" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_level)) { <input type="hidden" name="filterCol_level" value="@filterCol_level" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_levelExpr)) { <input type="hidden" name="filterCol_levelExpr" value="@filterCol_levelExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_leaf)) { <input type="hidden" name="filterCol_leaf" value="@filterCol_leaf" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_active)) { <input type="hidden" name="filterCol_active" value="@filterCol_active" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
@@ -530,23 +558,15 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
-        // =========================
-        // زر الطباعة — يطبع الجدول فقط
-        // =========================
-        document.getElementById("btnPrintAccounts")?.addEventListener("click", function () {
-            window.print();
-        });
+        document.getElementById("btnPrintAccounts")?.addEventListener("click", function () { window.print(); });
 
-        // =========================
-        // اختيار الأعمدة + حفظها في localStorage
-        // =========================
         (function () {
             const table = document.getElementById("accountsTable");
             if (!table) return;
-
             const storageKey = "accounts-columns-visibility";
-
             const headerCells = Array.from(table.querySelectorAll("thead th[data-col]"));
             const columns = headerCells
                 .filter(th => !th.hasAttribute("data-col-fixed"))
@@ -554,27 +574,19 @@
                     key: th.getAttribute("data-col"),
                     title: (th.querySelector(".erp-col-title")?.textContent || th.innerText || "").trim()
                 }));
-
             if (columns.length === 0) return;
-
             let hidden = [];
             try {
                 const saved = localStorage.getItem(storageKey);
                 if (saved) hidden = JSON.parse(saved);
             } catch { hidden = []; }
-
             function applyVisibility() {
                 columns.forEach(col => {
                     const isHidden = hidden.includes(col.key);
-                    table.querySelectorAll("[data-col='" + col.key + "']")
-                        .forEach(cell => {
-                            cell.classList.toggle("d-none", isHidden);
-                        });
+                    table.querySelectorAll("[data-col='" + col.key + "']").forEach(cell => cell.classList.toggle("d-none", isHidden));
                 });
             }
-
             applyVisibility();
-
             const listContainer = document.getElementById("columnsListAccounts");
             if (listContainer) {
                 listContainer.innerHTML = "";
@@ -582,327 +594,90 @@
                     const id = "col_acc_" + col.key;
                     const wrapper = document.createElement("div");
                     wrapper.className = "form-check mb-1";
-
                     const cb = document.createElement("input");
                     cb.type = "checkbox";
                     cb.className = "form-check-input ms-2";
                     cb.id = id;
                     cb.checked = !hidden.includes(col.key);
                     cb.dataset.colKey = col.key;
-
                     const label = document.createElement("label");
                     label.className = "form-check-label";
                     label.setAttribute("for", id);
                     label.innerText = col.title;
-
                     wrapper.appendChild(cb);
                     wrapper.appendChild(label);
                     listContainer.appendChild(wrapper);
                 });
             }
-
-            document.getElementById("btnApplyColumnsAccounts")
-                ?.addEventListener("click", function () {
-                    const checks = listContainer.querySelectorAll("input[type='checkbox'][data-col-key]");
-                    hidden = [];
-                    checks.forEach(cb => {
-                        const key = cb.dataset.colKey;
-                        if (!cb.checked) hidden.push(key);
-                    });
-
-                    try {
-                        localStorage.setItem(storageKey, JSON.stringify(hidden));
-                    } catch { }
-
-                    applyVisibility();
-
-                    const modalEl = document.getElementById("columnsModalAccounts");
-                    const modal   = bootstrap.Modal.getInstance(modalEl);
-                    modal?.hide();
-                });
+            document.getElementById("btnApplyColumnsAccounts")?.addEventListener("click", function () {
+                const checks = listContainer.querySelectorAll("input[type='checkbox'][data-col-key]");
+                hidden = [];
+                checks.forEach(cb => { if (!cb.checked) hidden.push(cb.dataset.colKey); });
+                try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch { }
+                applyVisibility();
+                const modalEl = document.getElementById("columnsModalAccounts");
+                bootstrap.Modal.getInstance(modalEl)?.hide();
+            });
         })();
 
-        // =========================
-        // تحديد الكل + الحذف الجماعي (BulkDelete)
-        // =========================
         (function () {
-            const selectAll = document.getElementById("selectAll");
-            const bulkBtn   = document.getElementById("btnBulkDelete");
-            const bulkForm  = document.getElementById("formBulkDelete");
-
-            function getRowCheckboxes() {
-                return Array.from(document.querySelectorAll(".row-select"));
-            }
-
-            // تحديد/إلغاء تحديد كل الصفوف
-            selectAll?.addEventListener("change", function () {
-                const checked = this.checked;
-                getRowCheckboxes().forEach(cb => cb.checked = checked);
-            });
-
-            // الحذف الجماعي
+            const chkAll = document.getElementById("chkAllRowsAccounts");
+            const bulkBtn = document.getElementById("btnBulkDelete");
+            const bulkForm = document.getElementById("formBulkDelete");
+            const rowsChk = () => document.querySelectorAll("#accountsTable tbody .row-select");
+            chkAll?.addEventListener("change", function () { rowsChk().forEach(cb => cb.checked = chkAll.checked); });
             bulkBtn?.addEventListener("click", function () {
-                const checks = getRowCheckboxes().filter(cb => cb.checked);
-                if (checks.length === 0) {
-                    alert("من فضلك اختر على الأقل حساب واحد للحذف.");
-                    return;
-                }
-
-                if (!confirm("هل أنت متأكد من حذف الحسابات المحددة؟")) {
-                    return;
-                }
-
-                // إزالة أى hidden قديمة
-                const oldHidden = bulkForm.querySelectorAll("input[type='hidden'][name='ids']");
-                oldHidden.forEach(h => h.remove());
-
-                // إضافة hidden input لكل رقم حساب
+                const checks = Array.from(rowsChk()).filter(cb => cb.checked);
+                if (checks.length === 0) { alert("من فضلك اختر على الأقل حساب واحد للحذف."); return; }
+                if (!confirm("هل أنت متأكد من حذف الحسابات المحددة؟")) return;
+                bulkForm.querySelectorAll("input[type='hidden'][name='ids']").forEach(h => h.remove());
                 checks.forEach(cb => {
                     const input = document.createElement("input");
-                    input.type  = "hidden";
-                    input.name  = "ids";
-                    input.value = cb.value;   // AccountId
+                    input.type = "hidden";
+                    input.name = "ids";
+                    input.value = cb.value;
                     bulkForm.appendChild(input);
                 });
-
                 bulkForm.submit();
             });
-
-            const btnDeleteAll = document.getElementById("btnDeleteAll");
-            const deleteAllForm = document.getElementById("formDeleteAll");
-            btnDeleteAll?.addEventListener("click", function () {
+            document.getElementById("btnDeleteAll")?.addEventListener("click", function () {
                 if (!confirm("هل أنت متأكد من حذف جميع الحسابات؟ يُنصح باستخدام هذا في بيئة تجريبية فقط.")) return;
-                deleteAllForm.submit();
+                document.getElementById("formDeleteAll")?.submit();
             });
         })();
 
-        // =========================
-        // فلتر الكود من/إلى (AccountId)
-        // =========================
         (function () {
             const btnApply = document.getElementById("btnApplyCodeFilter");
             const btnClear = document.getElementById("btnClearCodeFilter");
-            const fromInp  = document.getElementById("codeFromInput");
-            const toInp    = document.getElementById("codeToInput");
-
+            const fromInp = document.getElementById("codeFromInput");
+            const toInp = document.getElementById("codeToInput");
             function buildUrl(codeFrom, codeTo) {
                 const url = new URL(window.location.href);
-                if (codeFrom) url.searchParams.set("fromCode", codeFrom);
-                else          url.searchParams.delete("fromCode");
-                if (codeTo)   url.searchParams.set("toCode", codeTo);
-                else          url.searchParams.delete("toCode");
+                if (codeFrom) url.searchParams.set("fromCode", codeFrom); else url.searchParams.delete("fromCode");
+                if (codeTo) url.searchParams.set("toCode", codeTo); else url.searchParams.delete("toCode");
                 url.searchParams.set("page", "1");
                 return url.toString();
             }
-
-            btnApply?.addEventListener("click", function () {
-                const cf = fromInp.value.trim();
-                const ct = toInp.value.trim();
-                window.location.href = buildUrl(cf, ct);
-            });
-
-            btnClear?.addEventListener("click", function () {
-                fromInp.value = "";
-                toInp.value   = "";
-                window.location.href = buildUrl("", "");
-            });
+            btnApply?.addEventListener("click", function () { window.location.href = buildUrl(fromInp.value.trim(), toInp.value.trim()); });
+            btnClear?.addEventListener("click", function () { fromInp.value = ""; toInp.value = ""; window.location.href = buildUrl("", ""); });
         })();
 
-        // =========================
-        // فلتر الأعمدة بنمط Excel (ترتيب + فلترة) — الحسابات
-        // =========================
-        (function () {
-            var panel = document.getElementById("erpColumnFilterPanelAccounts");
-            if (!panel) return;
-            var titleEl = document.getElementById("erpColumnFilterTitleAccounts");
-            var searchInp = document.getElementById("erpColumnFilterSearchAccounts");
-            var listEl = document.getElementById("erpColumnFilterListAccounts");
-            var btnOk = document.getElementById("erpColumnFilterOkAccounts");
-            var btnClear = document.getElementById("erpColumnFilterClearAccounts");
-            var btnClose = document.getElementById("erpColumnFilterCloseAccounts");
+        ERP.initListColumnFilter({
+            panelId: 'erpColumnFilterPanelAccounts',
+            tableId: 'accountsTable',
+            wrapperId: 'accountsTableScrollWrapper',
+            getColumnValuesUrl: '@Url.Action("GetColumnValues", "Accounts")',
+            defaultSort: 'code',
+            defaultDir: 'asc',
+            numericColumns: ['id', 'level']
+        });
 
-            var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-
-            function getCurrentFilterValue(col) {
-                return new URL(window.location.href).searchParams.get("filterCol_" + col) || "";
-            }
-            function getCurrentSort() {
-                var url = new URL(window.location.href);
-                return { sort: url.searchParams.get("sort") || "name", dir: url.searchParams.get("dir") || "asc" };
-            }
-            function adjustPanelPosition() {
-                if (!panel || !anchorRect) return;
-                setTimeout(function () {
-                    var r = panel.getBoundingClientRect();
-                    var top = anchorRect.bottom + 4, left = anchorRect.left;
-                    if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                    if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                    panel.style.top = top + "px";
-                    panel.style.left = left + "px";
-                }, 50);
-            }
-
-            function showPanel(btn) {
-                currentCol = btn.dataset.col;
-                currentSortKey = btn.dataset.sortKey || currentCol;
-                titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-                searchInp.value = "";
-                currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split(/[|,;]/).filter(Boolean));
-                anchorRect = btn.getBoundingClientRect();
-                panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
-                panel.classList.remove("d-none");
-
-                var currentSort = getCurrentSort();
-                var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-                var currentDir = isCurrent ? currentSort.dir : "asc";
-                panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                    if (isCurrent && b.dataset.sortDir === currentDir) {
-                        b.classList.add("active", "btn-primary");
-                        b.classList.remove("btn-outline-secondary");
-                    } else {
-                        b.classList.remove("active", "btn-primary");
-                        b.classList.add("btn-outline-secondary");
-                    }
-                });
-                adjustPanelPosition();
-                document.getElementById("erpColumnFilterSearchRowAccounts").classList.remove("d-none");
-                listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-                var url = "/Accounts/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                    allItems = items;
-                    renderList(searchInp ? searchInp.value : "");
-                }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
-            }
-
-            function renderList(search) {
-                var term = (search || "").toLowerCase();
-                var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-                listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAllAccounts" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAllAccounts">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                    var v = String(x.value);
-                    var checked = currentSelected.has(v);
-                    return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-                }).join("") + "</div>";
-                var selectAllCb = listEl.querySelector("#erpFilterSelectAllAccounts");
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.onchange = function () {
-                        filtered.forEach(function (x) { if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value)); }.bind(this));
-                        renderList(searchInp.value);
-                    };
-                }
-                listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                    cb.onchange = function () { if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value); renderList(searchInp.value); };
-                });
-                adjustPanelPosition();
-            }
-
-            function applyFilter(applySort, sortDir) {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.delete("filterCol_" + currentCol + "Expr");
-                if (applySort !== undefined && sortDir !== undefined) {
-                    url.searchParams.set("sort", applySort);
-                    url.searchParams.set("dir", sortDir);
-                } else if (currentSortKey) {
-                    var cur = getCurrentSort();
-                    url.searchParams.set("sort", cur.sort);
-                    url.searchParams.set("dir", cur.dir);
-                }
-                var val = Array.from(currentSelected).filter(Boolean).join("|");
-                if (val) url.searchParams.set("filterCol_" + currentCol, val);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-            function clearFilter() {
-                if (!currentCol) return;
-                var url = new URL(window.location.href);
-                url.searchParams.delete("filterCol_" + currentCol);
-                url.searchParams.set("page", "1");
-                window.location.href = url.toString();
-            }
-
-            document.querySelectorAll("#accountsTable .erp-col-filter-btn").forEach(function (btn) {
-                btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); });
-            });
-            document.addEventListener("click", function (e) {
-                if (e.target.closest(".erp-sort-btn")) {
-                    var sortBtn = e.target.closest(".erp-sort-btn");
-                    if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir);
-                }
-            });
-            var fetchDebounce = null;
-            searchInp && searchInp.addEventListener("input", function () {
-                renderList(this.value);
-                if (fetchDebounce) clearTimeout(fetchDebounce);
-                fetchDebounce = setTimeout(function () {
-                    fetchDebounce = null;
-                    if (!currentCol) return;
-                    var url = "/Accounts/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                    var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                    if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                    fetch(url).then(function (r) { return r.json(); }).then(function (items) {
-                        allItems = items;
-                        renderList(searchInp ? searchInp.value : "");
-                    });
-                }, 400);
-            });
-            searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
-            btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
-            btnClear && btnClear.addEventListener("click", clearFilter);
-            btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
-            document.addEventListener("click", function (e) {
-                if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn"))
-                    panel.classList.add("d-none");
-            });
-        })();
-
-        // =========================
-        // توسيع/تضييق عرض الأعمدة (مقبض السحب)
-        // =========================
-        document.addEventListener("DOMContentLoaded", function () {
-            var wrapper = document.querySelector("#accountsTableScrollWrapper");
-            if (!wrapper) wrapper = document.querySelector(".erp-table-wrapper");
-            if (!wrapper) return;
-            var table = wrapper.querySelector("table.erp-table");
-            if (!table) return;
-
-            var ths = table.querySelectorAll("thead th");
-            ths.forEach(function (th) {
-                th.style.position = "relative";
-                var handle = document.createElement("div");
-                handle.className = "erp-col-resize-handle";
-                th.appendChild(handle);
-
-                var startX, startWidth;
-                handle.addEventListener("mousedown", function (e) {
-                    e.preventDefault();
-                    startX = e.pageX;
-                    startWidth = th.offsetWidth;
-                    function onMouseMove(eMove) {
-                        var diffX = eMove.pageX - startX;
-                        var newWidth = startWidth + diffX;
-                        if (newWidth < 50) newWidth = 50;
-                        th.style.width = newWidth + "px";
-                    }
-                    function onMouseUp() {
-                        document.removeEventListener("mousemove", onMouseMove);
-                        document.removeEventListener("mouseup", onMouseUp);
-                    }
-                    document.addEventListener("mousemove", onMouseMove);
-                    document.addEventListener("mouseup", onMouseUp);
-                });
-            });
-
-            // عند فتح الصفحة: التمرير الأفقي لأقصى اليمين (RTL)
-            setTimeout(function () {
-                if (wrapper.scrollWidth > wrapper.clientWidth)
-                    wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
-            }, 50);
-        })();
+        ERP.initListSelection({
+            editButtonId: 'btnAccEdit',
+            editUrlAttribute: 'data-edit-url',
+            editTabId: 'acc-edit-tab',
+            tabTitleAttribute: 'data-tab-title',
+            multiSelectCheckboxes: true
+        });
     </script>
 }

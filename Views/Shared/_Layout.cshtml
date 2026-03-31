@@ -457,7 +457,7 @@
                                        asp-action="CustomerBalances"
                                        data-tab-id="customer-balances-report"
                                        data-tab-title="كشف حساب العملاء">
-                                        📊 كشف حساب العملاء العملاء
+                                        📊 كشف حساب العملاء 
                                     </a>
                                 </li>
                             
@@ -770,6 +770,7 @@
 
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="PurchaseRequests" asp-action="Create"
+                                       asp-route-frame="1"
                                        data-tab-id="pr-show-tab"
                                        data-tab-title="طلب شراء">
                                         طلب شراء جديد
@@ -789,6 +790,7 @@
                                 <li>
                                     <a class="dropdown-item app-menu-link"
                                        asp-controller="PurchaseReturns" asp-action="Create"
+                                       asp-route-frame="1"
                                        data-tab-id="pr-ret-show-tab"
                                        data-tab-title="مرتجع مشتريات">
                                         مرتجع مشتريات جديد

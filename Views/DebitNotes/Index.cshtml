@@ -11,6 +11,7 @@
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var searchMode = (string?)ViewBag.SearchMode ?? "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "NoteDate";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
 
@@ -19,8 +20,8 @@
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || total == 0) ? total : System.Math.Min(total, page * ps);
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -34,23 +35,43 @@
     DateTime? toDate = Model.ToDate;
     var dateField = (string?)ViewBag.DateField ?? "NoteDate";
 
-    decimal totalAmount = ViewBag.TotalAmount is decimal totalAmt ? totalAmt : 0m;
+    decimal totalAmount = ViewBag.TotalAmount is decimal totAmt ? totAmt : 0m;
 
     string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string;
     string? filterCol_number = ViewBag.FilterCol_Number as string;
     string? filterCol_date = ViewBag.FilterCol_Date as string;
     string? filterCol_customer = ViewBag.FilterCol_Customer as string;
     string? filterCol_account = ViewBag.FilterCol_Account as string;
     string? filterCol_offset = ViewBag.FilterCol_Offset as string;
     string? filterCol_amount = ViewBag.FilterCol_Amount as string;
+    string? filterCol_amountExpr = ViewBag.FilterCol_AmountExpr as string;
     string? filterCol_posted = ViewBag.FilterCol_Posted as string;
     string? filterCol_reason = ViewBag.FilterCol_Reason as string;
+    string? filterCol_created = ViewBag.FilterCol_Created as string;
+    string? filterCol_updated = ViewBag.FilterCol_Updated as string;
     string? filterCol_desc = ViewBag.FilterCol_Desc as string;
+
+    string? FilterForCol(string colKey) =>
+        colKey == "id" ? (!string.IsNullOrWhiteSpace(filterCol_idExpr) ? filterCol_idExpr : filterCol_id)
+        : colKey == "amount" ? (!string.IsNullOrWhiteSpace(filterCol_amountExpr) ? filterCol_amountExpr : filterCol_amount)
+        : colKey == "number" ? filterCol_number
+        : colKey == "date" ? filterCol_date
+        : colKey == "customer" ? filterCol_customer
+        : colKey == "account" ? filterCol_account
+        : colKey == "offset" ? filterCol_offset
+        : colKey == "posted" ? filterCol_posted
+        : colKey == "reason" ? filterCol_reason
+        : colKey == "created" ? filterCol_created
+        : colKey == "updated" ? filterCol_updated
+        : colKey == "desc" ? filterCol_desc
+        : null;
 
     string Link(int p) => Url.Action(action, controller, new
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -62,20 +83,24 @@
         fromCode,
         toCode,
         filterCol_id,
+        filterCol_idExpr,
         filterCol_number,
         filterCol_date,
         filterCol_customer,
         filterCol_account,
         filterCol_offset,
         filterCol_amount,
+        filterCol_amountExpr,
         filterCol_posted,
         filterCol_reason,
+        filterCol_created,
+        filterCol_updated,
         filterCol_desc
     })!;
 
     Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
-        string? currentFilter = colKey == "id" ? filterCol_id : colKey == "number" ? filterCol_number : colKey == "date" ? filterCol_date : colKey == "customer" ? filterCol_customer : colKey == "account" ? filterCol_account : colKey == "offset" ? filterCol_offset : colKey == "amount" ? filterCol_amount : colKey == "posted" ? filterCol_posted : colKey == "reason" ? filterCol_reason : colKey == "desc" ? filterCol_desc : null;
+        string? currentFilter = FilterForCol(colKey);
         bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
         var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
         var sortDir = isCurrentSort ? dir : "asc";
@@ -85,6 +110,7 @@
                 <span class=""erp-col-title"">{caption}</span>
                 <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
                         data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
+                        data-current-sort=""{sortKey}"" data-current-dir=""{sortDir}""
                         title=""ترتيب وفلتر العمود"" style=""min-width:22px;"">
                     <svg xmlns=""http://www.w3.org/2000/svg"" width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""currentColor"">
                         <path d=""M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z""/>
@@ -113,8 +139,7 @@
     }
 
     <div class="d-flex justify-content-between align-items-center mb-2">
-        <h4 class="mb-0">@ViewData["Title"]</h4>
-        <small class="text-muted d-none d-md-inline">إجمالي الإشعارات: @total — إجمالي المبلغ: @totalAmount.ToString("N2")</small>
+        <h5 class="mb-0 fs-6 text-secondary">@ViewData["Title"]</h5>
     </div>
 
     <div class="erp-list-filter-bar d-print-none mt-2">
@@ -123,8 +148,13 @@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في إشعارات الخصم</label>
-                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100 flex-wrap">
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:90px" title="نمط مطابقة النص">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>رقم الإشعار</option>
@@ -142,7 +172,6 @@
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
-                    <input type="hidden" name="pageSize" value="@ps" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     <input type="hidden" name="useDateRange" value="@(useDateRange ? "true" : "false")" />
                     @if (fromDate.HasValue) { <input type="hidden" name="fromDate" value="@fromDate.Value.ToString("o")" /> }
@@ -150,14 +179,18 @@
                     @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                     @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_number)) { <input type="hidden" name="filterCol_number" value="@filterCol_number" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_offset)) { <input type="hidden" name="filterCol_offset" value="@filterCol_offset" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_amountExpr)) { <input type="hidden" name="filterCol_amountExpr" value="@filterCol_amountExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_posted)) { <input type="hidden" name="filterCol_posted" value="@filterCol_posted" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_reason)) { <input type="hidden" name="filterCol_reason" value="@filterCol_reason" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
                 </form>
             </div>
@@ -172,17 +205,21 @@
                 </div>
             </div>
 
-            @* أزرار التحكم — نفس تنسيق قائمة أذون الدفع (صفان: علوي أخضر + ثانوي، سفلي حذف + Excel + تصدير) *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
-                <div class="erp-toolbar erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
-                    <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
+                <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
                         <a asp-action="Create" asp-controller="DebitNotes" class="btn btn-erp btn-erp-success btn-erp-sm">إشعار خصم جديد</a>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalDebitNotes">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalDebitNotes">اختيار الأعمدة</button>
-                        <button type="button" id="btnPrintDebitNotes" class="btn btn-erp btn-erp-secondary btn-erp-sm erp-btn-print"><span class="erp-icon-print">🖨️</span> طباعة</button>
+                        <button type="button" id="btnPrintDebitNotes" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات السجل المحدد">
+                            <button type="button" id="btnShowDn" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض">عرض</button>
+                            <button type="button" id="btnEditDn" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="تعديل">تعديل</button>
+                            <button type="button" id="btnDeleteDn" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حذف (تأكيد)">حذف</button>
+                        </span>
                     </div>
-                    <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center" dir="rtl">
                         <div class="btn-group">
                             <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end">
@@ -193,6 +230,7 @@
                         <form method="get" asp-action="Export" asp-controller="DebitNotes" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="dateField" value="@dateField" />
@@ -202,16 +240,20 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_number)) { <input type="hidden" name="filterCol_number" value="@filterCol_number" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_offset)) { <input type="hidden" name="filterCol_offset" value="@filterCol_offset" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_amountExpr)) { <input type="hidden" name="filterCol_amountExpr" value="@filterCol_amountExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_posted)) { <input type="hidden" name="filterCol_posted" value="@filterCol_posted" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_reason)) { <input type="hidden" name="filterCol_reason" value="@filterCol_reason" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
-                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
+                            <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;">
                                 <option value="excel" selected>Excel</option>
                                 <option value="csv">CSV</option>
                             </select>
@@ -223,12 +265,34 @@
         </div>
     </div>
 
-    <div class="erp-table-scroll-container mt-3 ps-0 pe-0" dir="rtl">
+    @{
+        var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    }
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="min-width: 200px; border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">عدد الإشعارات (بعد الفلترة)</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="min-width: 200px; border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي المبالغ</div>
+                    <div class="h4 mb-0 text-success fw-bold">@totalAmount.ToString("N2", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="erp-list-table-frame erp-table-scroll-container erp-list-table-after-summary mt-3 ps-0 pe-0" dir="rtl">
         <div id="debitNotesTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="debitNotesTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
-                    <th class="no-print text-center" data-col="select" data-col-fixed="true" style="width:42px; min-width:42px;" title="تحديد"><input type="checkbox" id="selectAll" class="form-check-input" aria-label="تحديد الكل" /></th>
+                    <th class="no-print text-center" data-col="select" data-col-fixed="true" style="width:42px; min-width:42px;"><input type="checkbox" id="selectAll" class="form-check-input" aria-label="تحديد الكل" /></th>
                     <th data-col="id">@filterableCol("id", "DebitNoteId", "رقم الإشعار")</th>
                     <th data-col="number">@filterableCol("number", "DebitNoteId", "رقم المستند")</th>
                     <th data-col="date">@filterableCol("date", "NoteDate", "تاريخ الإشعار")</th>
@@ -241,14 +305,13 @@
                     <th data-col="updated">@filterableCol("updated", "UpdatedAt", "آخر تعديل")</th>
                     <th data-col="reason">@filterableCol("reason", "Reason", "السبب")</th>
                     <th data-col="desc">@filterableCol("desc", "Description", "البيان")</th>
-                    <th class="text-center no-print" data-col="actions" data-col-fixed="true" style="width:200px;">إجراءات</th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="15" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                        <td colspan="13" class="text-center text-muted py-4">لا توجد بيانات.</td>
                     </tr>
                 }
                 else
@@ -259,7 +322,10 @@
                         var desc = d.Description ?? "";
                         var reasonShort = reason.Length > 50 ? reason.Substring(0, 50) + "…" : reason;
                         var descShort = desc.Length > 80 ? desc.Substring(0, 80) + "…" : desc;
-                        <tr>
+                        var showU = Url.Action("Show", "DebitNotes", new { id = d.DebitNoteId }) + "?frame=1";
+                        var editU = Url.Action("Edit", "DebitNotes", new { id = d.DebitNoteId }) + "?frame=1";
+                        var delU = Url.Action("Delete", "DebitNotes", new { id = d.DebitNoteId });
+                        <tr class="erp-list-selectable-row" data-row-id="@d.DebitNoteId" data-show-url="@showU" data-edit-url="@editU" data-delete-url="@delU" data-tab-title="إشعار خصم @d.DebitNoteId">
                             <td class="no-print text-center" data-col="select"><input type="checkbox" class="form-check-input row-select" value="@d.DebitNoteId" aria-label="تحديد" /></td>
                             <td data-col="id">@d.DebitNoteId</td>
                             <td data-col="number">@d.DebitNoteId</td>
@@ -273,33 +339,10 @@
                             <td data-col="updated">@(d.UpdatedAt.HasValue ? d.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")</td>
                             <td data-col="reason">@reasonShort</td>
                             <td data-col="desc">@descShort</td>
-                            <td class="text-nowrap no-print text-start" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm ms-1" asp-action="Show" asp-route-id="@d.DebitNoteId">عرض</a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm ms-1" asp-action="Edit" asp-route-id="@d.DebitNoteId">تعديل</a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm" asp-action="Delete" asp-route-id="@d.DebitNoteId">حذف</a>
-                            </td>
                         </tr>
                     }
                 }
             </tbody>
-            <tfoot class="table-light">
-                <tr class="fw-bold text-start">
-                    <td data-col="select"></td>
-                    <td data-col="id" class="text-muted">إجمالي</td>
-                    <td data-col="number"></td>
-                    <td data-col="date"></td>
-                    <td data-col="customer"></td>
-                    <td data-col="account"></td>
-                    <td data-col="offset"></td>
-                    <td data-col="amount">@totalAmount.ToString("N2")</td>
-                    <td data-col="posted"></td>
-                    <td data-col="created"></td>
-                    <td data-col="updated"></td>
-                    <td data-col="reason"></td>
-                    <td data-col="desc"></td>
-                    <td data-col="actions"></td>
-                </tr>
-            </tfoot>
         </table>
         </div>
     </div>
@@ -311,14 +354,13 @@
         </div>
         <div class="erp-column-filter-body">
             <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
-                <label class="form-label small mb-1 fw-bold">الترتيب:</label>
                 <div class="d-flex flex-column gap-1">
-                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc"><span class="erp-sort-arrow">▲</span> ترتيب تصاعدي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc"><span class="erp-sort-arrow">▼</span> ترتيب تنازلي</button>
                 </div>
             </div>
             <div class="erp-filter-section">
-                <div id="erpColumnFilterSearchRowDebitNotes">
+                <div id="erpColumnFilterSearchRowDn">
                     <label class="form-label small mb-1 fw-bold">الفلترة:</label>
                     <input type="text" id="erpColumnFilterSearchDebitNotes" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
                 </div>
@@ -333,11 +375,12 @@
         </div>
     </div>
 
-    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted">عرض @start - @end من @total</small>
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted text-start">عرض @start - @end من @total</small>
         <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -348,33 +391,40 @@
             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_number)) { <input type="hidden" name="filterCol_number" value="@filterCol_number" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_offset)) { <input type="hidden" name="filterCol_offset" value="@filterCol_offset" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_amountExpr)) { <input type="hidden" name="filterCol_amountExpr" value="@filterCol_amountExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_posted)) { <input type="hidden" name="filterCol_posted" value="@filterCol_posted" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_reason)) { <input type="hidden" name="filterCol_reason" value="@filterCol_reason" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
-        <nav aria-label="pagination">
-            <ul class="pagination pagination-sm mb-0">
-                <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
-                <li class="page-item @(Model.HasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
-                <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
-                <li class="page-item @(Model.HasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
-                <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
-            </ul>
-        </nav>
     </div>
+
+    <nav aria-label="pagination" class="mt-3 no-print">
+        <ul class="pagination justify-content-center">
+            <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
+            <li class="page-item @(Model.HasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
+            <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
+            <li class="page-item @(Model.HasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
+            <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
+        </ul>
+    </nav>
 </div>
 
 <div class="modal fade no-print" id="dateFilterModalDebitNotes" tabindex="-1" aria-labelledby="dateFilterModalDebitNotesLabel" aria-hidden="true">
@@ -388,6 +438,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -396,14 +447,18 @@
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_number)) { <input type="hidden" name="filterCol_number" value="@filterCol_number" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_date)) { <input type="hidden" name="filterCol_date" value="@filterCol_date" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_customer)) { <input type="hidden" name="filterCol_customer" value="@filterCol_customer" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_offset)) { <input type="hidden" name="filterCol_offset" value="@filterCol_offset" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_amount)) { <input type="hidden" name="filterCol_amount" value="@filterCol_amount" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_amountExpr)) { <input type="hidden" name="filterCol_amountExpr" value="@filterCol_amountExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_posted)) { <input type="hidden" name="filterCol_posted" value="@filterCol_posted" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_reason)) { <input type="hidden" name="filterCol_reason" value="@filterCol_reason" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
                     <div class="mb-3">
                         <div class="form-check d-flex align-items-center">
@@ -455,8 +510,38 @@
 </form>
 
 @section Scripts {
+<script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
+<script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
 <script>
     document.getElementById("btnPrintDebitNotes")?.addEventListener("click", function () { window.print(); });
+
+    ERP.initListColumnFilter({
+        panelId: 'erpColumnFilterPanelDebitNotes',
+        tableId: 'debitNotesTable',
+        wrapperId: 'debitNotesTableScrollWrapper',
+        getColumnValuesUrl: '@Url.Action("GetColumnValues", "DebitNotes")',
+        defaultSort: 'NoteDate',
+        defaultDir: 'desc',
+        numericColumns: ['id', 'amount']
+    });
+
+    ERP.initListSelection({
+        rowSelector: '.erp-list-selectable-row',
+        showButtonId: 'btnShowDn',
+        editButtonId: 'btnEditDn',
+        idAttribute: 'data-row-id',
+        showUrlAttribute: 'data-show-url',
+        editUrlAttribute: 'data-edit-url',
+        tabTitleAttribute: 'data-tab-title',
+        multiSelectCheckboxes: true
+    });
+
+    document.getElementById('btnDeleteDn')?.addEventListener('click', function () {
+        var row = document.querySelector('.erp-list-selectable-row.selected');
+        if (!row) return;
+        var url = row.getAttribute('data-delete-url');
+        if (url) window.location.href = url;
+    });
 
     (function () {
         const table = document.getElementById("debitNotesTable");
@@ -501,11 +586,13 @@
         const deleteAllBtn = document.getElementById("btnDeleteAll");
         const bulkForm = document.getElementById("formBulkDelete");
         const deleteAllForm = document.getElementById("formDeleteAll");
+
         function getRowCheckboxes() { return Array.from(document.querySelectorAll(".row-select")); }
         selectAll?.addEventListener("change", function () { const checked = this.checked; getRowCheckboxes().forEach(cb => cb.checked = checked); });
+
         function doBulkDelete() {
             const checks = getRowCheckboxes().filter(cb => cb.checked);
-            if (checks.length === 0) { alert("من فضلك اختر على الأقل إشعار واحد للحذف."); return; }
+            if (checks.length === 0) { alert("من فضلك اختر على الأقل إشعاراً واحداً للحذف."); return; }
             if (!confirm("هل أنت متأكد من حذف الإشعارات المحددة؟")) return;
             bulkForm.querySelectorAll("input[type='hidden'][name='ids']").forEach(h => h.remove());
             checks.forEach(cb => { const input = document.createElement("input"); input.type = "hidden"; input.name = "ids"; input.value = cb.value; bulkForm.appendChild(input); });
@@ -515,6 +602,7 @@
             if (!confirm("هل أنت متأكد من حذف جميع إشعارات الخصم؟ يُنصح باستخدام هذا في بيئة تجريبية فقط.")) return;
             deleteAllForm.submit();
         }
+
         if (bulkBtn) bulkBtn.addEventListener("click", doBulkDelete);
         if (deleteAllBtn) deleteAllBtn.addEventListener("click", doDeleteAll);
     })();
@@ -536,151 +624,12 @@
     })();
 
     (function () {
-        var panel = document.getElementById("erpColumnFilterPanelDebitNotes");
-        if (!panel) return;
-        var titleEl = document.getElementById("erpColumnFilterTitleDebitNotes");
-        var searchInp = document.getElementById("erpColumnFilterSearchDebitNotes");
-        var listEl = document.getElementById("erpColumnFilterListDebitNotes");
-        var btnOk = document.getElementById("erpColumnFilterOkDebitNotes");
-        var btnClear = document.getElementById("erpColumnFilterClearDebitNotes");
-        var btnClose = document.getElementById("erpColumnFilterCloseDebitNotes");
-        var currentCol = null, currentSortKey = null, allItems = [], currentSelected = new Set(), anchorRect = null;
-        function getCurrentFilterValue(col) { return new URL(window.location.href).searchParams.get("filterCol_" + col) || ""; }
-        function getCurrentSort() { var url = new URL(window.location.href); return { sort: url.searchParams.get("sort") || "NoteDate", dir: url.searchParams.get("dir") || "desc" }; }
-        function adjustPanelPosition() {
-            if (!panel || !anchorRect) return;
-            setTimeout(function () {
-                var r = panel.getBoundingClientRect();
-                var top = anchorRect.bottom + 4, left = anchorRect.left;
-                if (top + r.height > window.innerHeight - 8) top = Math.max(8, window.innerHeight - 8 - r.height);
-                if (left + r.width > window.innerWidth - 8) left = Math.max(8, window.innerWidth - 8 - r.width);
-                panel.style.top = top + "px"; panel.style.left = left + "px";
-            }, 50);
+        function syncDeleteBtn() {
+            var row = document.querySelector('.erp-list-selectable-row.selected');
+            var btn = document.getElementById('btnDeleteDn');
+            if (btn) btn.disabled = !row;
         }
-        function showPanel(btn) {
-            currentCol = btn.dataset.col;
-            currentSortKey = btn.dataset.sortKey || currentCol;
-            titleEl.textContent = "ترتيب وفلتر: " + (btn.dataset.colTitle || currentCol);
-            searchInp.value = "";
-            currentSelected = new Set((getCurrentFilterValue(currentCol) || "").split(/[|,;]/).filter(Boolean));
-            anchorRect = btn.getBoundingClientRect();
-            panel.style.minWidth = Math.max(250, anchorRect.width) + "px";
-            panel.classList.remove("d-none");
-            var currentSort = getCurrentSort();
-            var isCurrent = currentSort.sort.toLowerCase() === (currentSortKey || "").toLowerCase();
-            var currentDir = isCurrent ? currentSort.dir : "asc";
-            panel.querySelectorAll(".erp-sort-btn").forEach(function (b) {
-                if (isCurrent && b.dataset.sortDir === currentDir) { b.classList.add("active", "btn-primary"); b.classList.remove("btn-outline-secondary"); }
-                else { b.classList.remove("active", "btn-primary"); b.classList.add("btn-outline-secondary"); }
-            });
-            adjustPanelPosition();
-            document.getElementById("erpColumnFilterSearchRowDebitNotes").classList.remove("d-none");
-            listEl.innerHTML = '<div class="text-muted text-center py-3">جاري التحميل...</div>';
-            var url = "/DebitNotes/GetColumnValues?column=" + encodeURIComponent(currentCol);
-            var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-            if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-            fetch(url).then(function (r) { return r.json(); }).then(function (items) { allItems = items; renderList(searchInp ? searchInp.value : ""); }).catch(function () { listEl.innerHTML = '<div class="text-danger text-center py-2">فشل التحميل</div>'; });
-        }
-        function renderList(search) {
-            var term = (search || "").toLowerCase();
-            var filtered = term ? allItems.filter(function (x) { return (x.display || x.value || "").toLowerCase().indexOf(term) >= 0; }) : allItems;
-            var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-            var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-            listEl.innerHTML = '<div class="form-check mb-1"><input type="checkbox" class="form-check-input" id="erpFilterSelectAllDN" ' + (allChecked ? "checked" : "") + '><label class="form-check-label small" for="erpFilterSelectAllDN">(تحديد الكل)</label></div><div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' + filtered.map(function (x) {
-                var v = String(x.value);
-                var checked = currentSelected.has(v);
-                return '<div class="form-check"><input type="checkbox" class="form-check-input erp-filter-item" value="' + v.replace(/"/g, "&quot;") + '" ' + (checked ? "checked" : "") + '><label class="form-check-label small">' + (x.display || v).replace(/</g, "&lt;") + '</label></div>';
-            }).join("") + "</div>";
-            var selectAllCb = listEl.querySelector("#erpFilterSelectAllDN");
-            if (selectAllCb) {
-                selectAllCb.indeterminate = someChecked && !allChecked;
-                selectAllCb.onchange = function () { filtered.forEach(function (x) { if (this.checked) currentSelected.add(String(x.value)); else currentSelected.delete(String(x.value)); }.bind(this)); renderList(searchInp.value); };
-            }
-            listEl.querySelectorAll(".erp-filter-item").forEach(function (cb) {
-                cb.onchange = function () { if (this.checked) currentSelected.add(this.value); else currentSelected.delete(this.value); renderList(searchInp.value); };
-            });
-            adjustPanelPosition();
-        }
-        function applyFilter(applySort, sortDir) {
-            if (!currentCol) return;
-            var url = new URL(window.location.href);
-            url.searchParams.delete("filterCol_" + currentCol);
-            url.searchParams.delete("filterCol_" + currentCol + "Expr");
-            if (applySort !== undefined && sortDir !== undefined) { url.searchParams.set("sort", applySort); url.searchParams.set("dir", sortDir); }
-            else if (currentSortKey) { var cur = getCurrentSort(); url.searchParams.set("sort", cur.sort); url.searchParams.set("dir", cur.dir); }
-            var val = Array.from(currentSelected).filter(Boolean).join("|");
-            if (val) url.searchParams.set("filterCol_" + currentCol, val);
-            url.searchParams.set("page", "1");
-            window.location.href = url.toString();
-        }
-        function clearFilter() {
-            if (!currentCol) return;
-            var url = new URL(window.location.href);
-            url.searchParams.delete("filterCol_" + currentCol);
-            url.searchParams.set("page", "1");
-            window.location.href = url.toString();
-        }
-        document.querySelectorAll("#debitNotesTable .erp-col-filter-btn").forEach(function (btn) { btn.addEventListener("click", function (e) { e.stopPropagation(); showPanel(this); }); });
-        document.addEventListener("click", function (e) {
-            if (e.target.closest(".erp-sort-btn") && panel && !panel.classList.contains("d-none")) { var sortBtn = e.target.closest(".erp-sort-btn"); if (currentSortKey) applyFilter(currentSortKey, sortBtn.dataset.sortDir); }
-        });
-        var fetchDebounce = null;
-        searchInp && searchInp.addEventListener("input", function () {
-            renderList(this.value);
-            if (fetchDebounce) clearTimeout(fetchDebounce);
-            fetchDebounce = setTimeout(function () {
-                fetchDebounce = null;
-                if (!currentCol) return;
-                var url = "/DebitNotes/GetColumnValues?column=" + encodeURIComponent(currentCol);
-                var searchVal = (searchInp && searchInp.value) ? searchInp.value.trim() : "";
-                if (searchVal) url += "&search=" + encodeURIComponent(searchVal);
-                fetch(url).then(function (r) { return r.json(); }).then(function (items) { allItems = items; renderList(searchInp ? searchInp.value : ""); });
-            }, 400);
-        });
-        searchInp && searchInp.addEventListener("keydown", function (e) { if (e.key === "Enter") { e.preventDefault(); applyFilter(); } });
-        btnOk && btnOk.addEventListener("click", function (e) { e.preventDefault(); e.stopPropagation(); applyFilter(); });
-        btnClear && btnClear.addEventListener("click", clearFilter);
-        btnClose && btnClose.addEventListener("click", function () { panel.classList.add("d-none"); });
-        document.addEventListener("click", function (e) {
-            if (panel && !panel.classList.contains("d-none") && !panel.contains(e.target) && !e.target.closest(".erp-col-filter-btn")) panel.classList.add("d-none");
-        });
+        document.getElementById('debitNotesTable')?.addEventListener('click', function () { setTimeout(syncDeleteBtn, 0); });
     })();
-
-    document.addEventListener("DOMContentLoaded", function () {
-        var wrapper = document.getElementById("debitNotesTableScrollWrapper");
-        if (!wrapper) return;
-        var table = wrapper.querySelector("table#debitNotesTable");
-        if (table) {
-            var ths = table.querySelectorAll("thead th");
-            ths.forEach(function (th) {
-                if (th.hasAttribute("data-col-fixed")) return;
-                th.style.position = "relative";
-                var handle = document.createElement("div");
-                handle.className = "erp-col-resize-handle";
-                th.appendChild(handle);
-                var startX, startWidth;
-                handle.addEventListener("mousedown", function (e) {
-                    e.preventDefault();
-                    startX = e.pageX;
-                    startWidth = th.offsetWidth;
-                    function onMouseMove(eMove) {
-                        var diffX = eMove.pageX - startX;
-                        var newWidth = startWidth + diffX;
-                        if (newWidth < 50) newWidth = 50;
-                        th.style.minWidth = newWidth + "px";
-                        th.style.width = newWidth + "px";
-                    }
-                    function onMouseUp() {
-                        document.removeEventListener("mousemove", onMouseMove);
-                        document.removeEventListener("mouseup", onMouseUp);
-                    }
-                    document.addEventListener("mousemove", onMouseMove);
-                    document.addEventListener("mouseup", onMouseUp);
-                });
-            });
-        }
-        if (wrapper.scrollWidth > wrapper.clientWidth)
-            wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
-    });
 </script>
 }

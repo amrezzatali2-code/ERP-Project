@@ -210,6 +210,7 @@ namespace ERP.Controllers
             string? searchBy,                    // نوع البحث: id / vendor / warehouse / date / status
             string? sort,                        // عمود الترتيب: id / date / vendor / warehouse / net / status / posted ...
             string? dir,                         // اتجاه الترتيب: asc / desc
+            string? searchMode = null,           // يحتوي / يبدأ / ينتهي
             bool useDateRange = false,           // هل فلتر التاريخ مفعّل؟
             DateTime? fromDate = null,           // من تاريخ/وقت
             DateTime? toDate = null,             // إلى تاريخ/وقت
@@ -217,30 +218,44 @@ namespace ERP.Controllers
             int? fromCode = null,                // من رقم فاتورة
             int? toCode = null,                  // إلى رقم فاتورة
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_status = null,
             string? filterCol_vendor = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_refprid = null,
+            string? filterCol_refpridExpr = null,
             string? filterCol_pidate = null,
             string? filterCol_customerid = null,
+            string? filterCol_customeridExpr = null,
             string? filterCol_itemstotal = null,
+            string? filterCol_itemstotalExpr = null,
             string? filterCol_discounttotal = null,
+            string? filterCol_discounttotalExpr = null,
             string? filterCol_nettotal = null,
+            string? filterCol_nettotalExpr = null,
             string? filterCol_isposted = null,
             string? filterCol_postedby = null,
             string? filterCol_createdby = null,
             int page = 1,                        // رقم الصفحة
-            int pageSize = 25                    // حجم الصفحة
+            int pageSize = 10                    // حجم الصفحة (افتراضي 10 — نمط القوائم)
         )
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psVal))
+                pageSize = psVal;
+
             // قيم افتراضية لو مش جاية من الكويري
             searchBy ??= "id";
+            searchMode = NormalizeSearchMode(searchMode);
             sort ??= "PIDate";
             dir ??= "desc";
             dateField ??= "PIDate";
 
             if (page < 1) page = 1;
-            if (pageSize <= 0) pageSize = 25;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
 
             // نبدأ بالاستعلام الأساسي مع تحميل المورد (للعرض ولفلتر العمود vendor)
             IQueryable<PurchaseInvoice> query = _context.PurchaseInvoices
@@ -265,6 +280,7 @@ namespace ERP.Controllers
                 query,
                 search,
                 searchBy,
+                searchMode,
                 finalFromCode,
                 finalToCode,
                 useDateRange,
@@ -273,29 +289,44 @@ namespace ERP.Controllers
                 dateField
             );
 
-            // 1b) تطبيق فلاتر الأعمدة (بنمط Excel)
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_status, filterCol_vendor, filterCol_warehouse, filterCol_refprid, filterCol_pidate, filterCol_customerid, filterCol_itemstotal, filterCol_discounttotal, filterCol_nettotal, filterCol_isposted, filterCol_postedby, filterCol_createdby);
+            // 1b) تطبيق فلاتر الأعمدة (بنمط Excel + Expr للأعمدة الرقمية)
+            query = ApplyColumnFilters(
+                query,
+                filterCol_id, filterCol_idExpr,
+                filterCol_status, filterCol_vendor,
+                filterCol_warehouse, filterCol_warehouseExpr,
+                filterCol_refprid, filterCol_refpridExpr,
+                filterCol_pidate,
+                filterCol_customerid, filterCol_customeridExpr,
+                filterCol_itemstotal, filterCol_itemstotalExpr,
+                filterCol_discounttotal, filterCol_discounttotalExpr,
+                filterCol_nettotal, filterCol_nettotalExpr,
+                filterCol_isposted, filterCol_postedby, filterCol_createdby);
 
-            // 2) تطبيق الترتيب
+            // =========================================================
+            // إجماليات وعدد قبل الترتيب (نمط قائمة المبيعات)
+            // =========================================================
+            decimal totalNet = await query.SumAsync(pi => (decimal?)pi.NetTotal) ?? 0m;
+            decimal totalItemsSum = await query.SumAsync(pi => (decimal?)pi.ItemsTotal) ?? 0m;
+            int totalCount = await query.CountAsync();
+
+            // 2) تطبيق الترتيب ثم الترقيم
             bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             query = ApplySort(query, sort, sortDesc);
 
-            // =========================================================
-            // حساب إجمالي الصافي من نفس الاستعلام (بعد الفلاتر)
-            // ✅ مهم: لازم قبل الـ Paging علشان ما تتحسبش على الصفحة بس
-            // =========================================================
-            decimal totalNet = await query.SumAsync(pi => (decimal?)pi.NetTotal) ?? 0m;
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
 
-            // 3) حساب العدد الكلي بعد الفلاتر
-            int totalCount = await query.CountAsync();
-
-            // 4) قراءة صفحة واحدة فقط (Skip/Take)
             var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+                .Skip((page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
                 .ToListAsync();
 
-            int totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
+            int totalPages = pageSize == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);
 
             // 5) تجهيز الموديل الخاص بالتقسيم PagedResult
             var model = new PagedResult<PurchaseInvoice>
@@ -308,6 +339,7 @@ namespace ERP.Controllers
                 HasPrevious = page > 1,
                 HasNext = page < totalPages,
                 Search = search,
+                SearchBy = searchBy,
                 SortColumn = sort,
                 SortDescending = sortDesc,
                 UseDateRange = useDateRange,
@@ -318,6 +350,7 @@ namespace ERP.Controllers
             // 6) تمرير قيم للـ ViewBag علشان الواجهة تحفظ الحالة الحالية
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy;
+            ViewBag.SearchMode = searchMode;
             ViewBag.Sort = sort;
             ViewBag.Dir = sortDesc ? "desc" : "asc";
             ViewBag.DateField = dateField;
@@ -328,21 +361,28 @@ namespace ERP.Controllers
             ViewBag.CodeTo = finalToCode;
 
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Status = filterCol_status;
             ViewBag.FilterCol_Vendor = filterCol_vendor;
             ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_WarehouseExpr = filterCol_warehouseExpr;
             ViewBag.FilterCol_Refprid = filterCol_refprid;
+            ViewBag.FilterCol_RefpridExpr = filterCol_refpridExpr;
             ViewBag.FilterCol_Pidate = filterCol_pidate;
             ViewBag.FilterCol_Customerid = filterCol_customerid;
+            ViewBag.FilterCol_CustomeridExpr = filterCol_customeridExpr;
             ViewBag.FilterCol_Itemstotal = filterCol_itemstotal;
+            ViewBag.FilterCol_ItemstotalExpr = filterCol_itemstotalExpr;
             ViewBag.FilterCol_Discounttotal = filterCol_discounttotal;
+            ViewBag.FilterCol_DiscounttotalExpr = filterCol_discounttotalExpr;
             ViewBag.FilterCol_Nettotal = filterCol_nettotal;
+            ViewBag.FilterCol_NettotalExpr = filterCol_nettotalExpr;
             ViewBag.FilterCol_Isposted = filterCol_isposted;
             ViewBag.FilterCol_Postedby = filterCol_postedby;
             ViewBag.FilterCol_Createdby = filterCol_createdby;
 
-            // إجمالي الصافي
             ViewBag.TotalNet = totalNet;
+            ViewBag.TotalItemsSum = totalItemsSum;
 
             return View(model);
         }
@@ -2803,6 +2843,7 @@ namespace ERP.Controllers
             string? format,
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -2812,15 +2853,22 @@ namespace ERP.Controllers
             int? codeFrom = null,
             int? codeTo = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_status = null,
             string? filterCol_vendor = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_refprid = null,
+            string? filterCol_refpridExpr = null,
             string? filterCol_pidate = null,
             string? filterCol_customerid = null,
+            string? filterCol_customeridExpr = null,
             string? filterCol_itemstotal = null,
+            string? filterCol_itemstotalExpr = null,
             string? filterCol_discounttotal = null,
+            string? filterCol_discounttotalExpr = null,
             string? filterCol_nettotal = null,
+            string? filterCol_nettotalExpr = null,
             string? filterCol_isposted = null,
             string? filterCol_postedby = null,
             string? filterCol_createdby = null
@@ -2829,6 +2877,7 @@ namespace ERP.Controllers
             // ✅ تجهيز القيم الافتراضية
             format = string.IsNullOrWhiteSpace(format) ? "excel" : format.ToLowerInvariant();
             searchBy ??= "id";
+            searchMode = NormalizeSearchMode(searchMode);
             sort ??= "PIDate";
             dir ??= "desc";
             dateField ??= "PIDate";
@@ -2843,6 +2892,7 @@ namespace ERP.Controllers
                 query,
                 search,
                 searchBy,
+                searchMode,
                 codeFrom,
                 codeTo,
                 useDateRange,
@@ -2850,7 +2900,18 @@ namespace ERP.Controllers
                 toDate,
                 dateField
             );
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_status, filterCol_vendor, filterCol_warehouse, filterCol_refprid, filterCol_pidate, filterCol_customerid, filterCol_itemstotal, filterCol_discounttotal, filterCol_nettotal, filterCol_isposted, filterCol_postedby, filterCol_createdby);
+            query = ApplyColumnFilters(
+                query,
+                filterCol_id, filterCol_idExpr,
+                filterCol_status, filterCol_vendor,
+                filterCol_warehouse, filterCol_warehouseExpr,
+                filterCol_refprid, filterCol_refpridExpr,
+                filterCol_pidate,
+                filterCol_customerid, filterCol_customeridExpr,
+                filterCol_itemstotal, filterCol_itemstotalExpr,
+                filterCol_discounttotal, filterCol_discounttotalExpr,
+                filterCol_nettotal, filterCol_nettotalExpr,
+                filterCol_isposted, filterCol_postedby, filterCol_createdby);
 
             // ✅ تطبيق نفس الترتيب
             query = ApplySort(query, sort, sortDesc);
@@ -2909,6 +2970,25 @@ namespace ERP.Controllers
 
 
 
+        private static string NormalizeSearchMode(string? mode)
+        {
+            var m = (mode ?? "").Trim().ToLowerInvariant();
+            if (m == "startswith" || m == "starts" || m == "start" || m == "يبدأ") return "startswith";
+            if (m == "endswith" || m == "ends" || m == "end" || m == "ينتهي") return "endswith";
+            return "contains";
+        }
+
+        private static bool MatchSearchText(string? hay, string needle, string searchMode)
+        {
+            if (string.IsNullOrEmpty(needle)) return true;
+            hay ??= "";
+            if (searchMode == "startswith")
+                return hay.StartsWith(needle, StringComparison.OrdinalIgnoreCase);
+            if (searchMode == "endswith")
+                return hay.EndsWith(needle, StringComparison.OrdinalIgnoreCase);
+            return hay.Contains(needle, StringComparison.OrdinalIgnoreCase);
+        }
+
         /// <summary>
         /// دالة فلترة موحدة: نص البحث + من/إلى كود + فلتر التاريخ.
         /// </summary>
@@ -2916,6 +2996,7 @@ namespace ERP.Controllers
             IQueryable<PurchaseInvoice> query,
             string? search,
             string? searchBy,
+            string? searchMode,
             int? fromCode,
             int? toCode,
             bool useDateRange,
@@ -2926,6 +3007,7 @@ namespace ERP.Controllers
         {
             searchBy ??= "id";
             dateField ??= "PIDate";
+            searchMode = NormalizeSearchMode(searchMode);
 
             // 1) فلتر نص البحث
             if (!string.IsNullOrWhiteSpace(search))
@@ -2934,42 +3016,30 @@ namespace ERP.Controllers
                 switch (searchBy.ToLower())
                 {
                     case "id":
-                        if (int.TryParse(search, out var idVal))
-                        {
+                        if (int.TryParse(search, out var idVal) && searchMode == "contains" && search == idVal.ToString())
                             query = query.Where(p => p.PIId == idVal);
-                        }
                         else
-                        {
-                            query = query.Where(p => p.PIId.ToString().StartsWith(search));
-                        }
+                            query = query.Where(p => MatchSearchText(p.PIId.ToString(), search, searchMode));
                         break;
 
-                    // vendor/customer → نفس الحقل CustomerId (هو المورد في المشتريات)
                     case "vendor":
                     case "customer":
-                        if (int.TryParse(search, out var custId))
-                        {
+                        if (int.TryParse(search, out var custId) && searchMode == "contains" && search == custId.ToString())
                             query = query.Where(p => p.CustomerId == custId);
-                        }
                         else
                         {
                             query = query.Where(p =>
-                                p.CustomerId.ToString().Contains(search)
-                            );
+                                MatchSearchText(p.CustomerId.ToString(), search, searchMode)
+                                || (p.Customer != null && p.Customer.CustomerName != null &&
+                                    MatchSearchText(p.Customer.CustomerName, search, searchMode)));
                         }
                         break;
 
                     case "warehouse":
-                        if (int.TryParse(search, out var whId))
-                        {
+                        if (int.TryParse(search, out var whId) && searchMode == "contains" && search == whId.ToString())
                             query = query.Where(p => p.WarehouseId == whId);
-                        }
                         else
-                        {
-                            query = query.Where(p =>
-                                p.WarehouseId.ToString().Contains(search)
-                            );
-                        }
+                            query = query.Where(p => MatchSearchText(p.WarehouseId.ToString(), search, searchMode));
                         break;
 
                     case "date":
@@ -2981,17 +3051,15 @@ namespace ERP.Controllers
                         break;
 
                     case "status":
-                        query = query.Where(p => p.Status.Contains(search));
+                        query = query.Where(p => p.Status != null && MatchSearchText(p.Status, search, searchMode));
                         break;
 
-                    // بحث عام على أكثر من حقل
                     default:
                         query = query.Where(p =>
-                            p.PIId.ToString().Contains(search) ||
-                            p.CustomerId.ToString().Contains(search) ||
-                            p.WarehouseId.ToString().Contains(search) ||
-                            p.Status.Contains(search)
-                        );
+                            MatchSearchText(p.PIId.ToString(), search, searchMode) ||
+                            MatchSearchText(p.CustomerId.ToString(), search, searchMode) ||
+                            MatchSearchText(p.WarehouseId.ToString(), search, searchMode) ||
+                            (p.Status != null && MatchSearchText(p.Status, search, searchMode)));
                         break;
                 }
             }
@@ -3034,21 +3102,30 @@ namespace ERP.Controllers
         private static IQueryable<PurchaseInvoice> ApplyColumnFilters(
             IQueryable<PurchaseInvoice> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_status,
             string? filterCol_vendor,
             string? filterCol_warehouse,
+            string? filterCol_warehouseExpr,
             string? filterCol_refprid,
+            string? filterCol_refpridExpr,
             string? filterCol_pidate,
             string? filterCol_customerid,
+            string? filterCol_customeridExpr,
             string? filterCol_itemstotal,
+            string? filterCol_itemstotalExpr,
             string? filterCol_discounttotal,
+            string? filterCol_discounttotalExpr,
             string? filterCol_nettotal,
+            string? filterCol_nettotalExpr,
             string? filterCol_isposted,
             string? filterCol_postedby,
             string? filterCol_createdby
         )
         {
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = PurchaseInvoiceListNumericExpr.ApplyPiIdExpr(query, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -3076,7 +3153,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(p => p.Customer != null && p.Customer.CustomerName != null && vals.Contains(p.Customer.CustomerName));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouseExpr))
+                query = PurchaseInvoiceListNumericExpr.ApplyWarehouseIdExpr(query, filterCol_warehouseExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
             {
                 var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -3086,7 +3165,9 @@ namespace ERP.Controllers
                 if (ids.Count > 0)
                     query = query.Where(p => ids.Contains(p.WarehouseId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_refprid))
+            if (!string.IsNullOrWhiteSpace(filterCol_refpridExpr))
+                query = PurchaseInvoiceListNumericExpr.ApplyRefPrIdExpr(query, filterCol_refpridExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_refprid))
             {
                 var ids = filterCol_refprid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -3112,7 +3193,9 @@ namespace ERP.Controllers
                         query = query.Where(pi => dates.Contains(pi.PIDate.Date));
                 }
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_customerid))
+            if (!string.IsNullOrWhiteSpace(filterCol_customeridExpr))
+                query = PurchaseInvoiceListNumericExpr.ApplyCustomerIdExpr(query, filterCol_customeridExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_customerid))
             {
                 var ids = filterCol_customerid.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -3122,7 +3205,9 @@ namespace ERP.Controllers
                 if (ids.Count > 0)
                     query = query.Where(p => ids.Contains(p.CustomerId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_itemstotal))
+            if (!string.IsNullOrWhiteSpace(filterCol_itemstotalExpr))
+                query = PurchaseInvoiceListNumericExpr.ApplyItemsTotalExpr(query, filterCol_itemstotalExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_itemstotal))
             {
                 var vals = filterCol_itemstotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -3132,7 +3217,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(p => vals.Contains(p.ItemsTotal));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_discounttotal))
+            if (!string.IsNullOrWhiteSpace(filterCol_discounttotalExpr))
+                query = PurchaseInvoiceListNumericExpr.ApplyDiscountTotalExpr(query, filterCol_discounttotalExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_discounttotal))
             {
                 var vals = filterCol_discounttotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -3142,7 +3229,9 @@ namespace ERP.Controllers
                 if (vals.Count > 0)
                     query = query.Where(p => vals.Contains(p.DiscountTotal));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_nettotal))
+            if (!string.IsNullOrWhiteSpace(filterCol_nettotalExpr))
+                query = PurchaseInvoiceListNumericExpr.ApplyNetTotalExpr(query, filterCol_nettotalExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_nettotal))
             {
                 var vals = filterCol_nettotal.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)

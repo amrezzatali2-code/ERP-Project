@@ -11,8 +11,23 @@
 @section Styles {
     <link rel="stylesheet" href="@Url.Content("~/css/invoice-cards.css")" />
     <style>
-        /* تنسيق مرتجع الشراء — مطبّق مباشرة لضمان الظهور (حتى داخل التاب/iframe) */
+        /* مرتجع مشتريات — نفس تصميم مرتجع المبيعات + حاوية PI_BodyHost شفافة (كتلة واحدة) */
         .invoice-page { background-color: #f3f6fb; min-height: 100vh; padding-bottom: 2rem; }
+        #PI_BodyHost,
+        div#PI_BodyHost,
+        .invoice-page div#PI_BodyHost {
+            display: block !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            padding: 0 !important;
+        }
+        .invoice-page .col-lg-10.order-first {
+            background: transparent !important;
+            border: none !important;
+            padding: 0 0.5rem;
+        }
         div.card.invoice-side-card,
         div.card.invoice-header-card,
         div.card.invoice-product-card,
@@ -23,6 +38,14 @@
             border-radius: 12px !important;
             box-shadow: 0 1px 3px rgba(59,130,246,.12) !important;
             overflow: hidden;
+        }
+        .invoice-page .invoice-lines-container {
+            border: 1px solid #a5b4fc !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(59,130,246,.12) !important;
+            background: #fff !important;
+            overflow: hidden;
+            margin-bottom: 0.85rem;
         }
         .invoice-header-bar {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
@@ -42,12 +65,6 @@
         }
         .invoice-product-card .card-header h6,
         .invoice-side-card .card-header h6 { color: #fff !important; margin-bottom: 0; }
-        .invoice-lines-header,
-        .invoice-lines-header th {
-            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
-            color: #fff !important;
-        }
-        .invoice-lines-header th { border-color: #0b5ed7 !important; }
         .invoice-page .invoice-header-card .form-control,
         .invoice-page .invoice-header-card .form-select,
         .invoice-page .invoice-product-card .form-control,
@@ -57,547 +74,177 @@
         .invoice-page .invoice-totals-card .form-control,
         .invoice-page .invoice-totals-card .form-select { border-color: #94a3b8 !important; }
         .return-line-field { max-width: 5.5rem; }
+        /* تاريخ الصلاحية: أعرض قليلاً من باقي الحقول المضغوطة */
+        .invoice-page .invoice-Add-card #ReturnExpiryDisplay.return-line-field {
+            max-width: 7.75rem;
+            min-width: 6.75rem;
+        }
+        .invoice-page .product-dropdown-onebox {
+            position: relative;
+            display: flex;
+            align-items: stretch;
+            border: 1px solid #94a3b8;
+            border-radius: 0.375rem;
+            background: #fff;
+        }
+        .invoice-page .product-dropdown-arrow-inside {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 0.45rem;
+            cursor: pointer;
+            user-select: none;
+            color: #64748b;
+            font-size: 0.65rem;
+            border-inline-end: 1px solid #e2e8f0;
+        }
+        .invoice-page .product-dropdown-arrow-inside:hover { color: #0f172a; background: #f8fafc; }
+        .invoice-page .product-dropdown-onebox .product-dropdown-input {
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            flex: 1;
+            min-width: 0;
+        }
+        .invoice-page .product-dropdown-list {
+            position: fixed;
+            z-index: 3060;
+            max-height: 260px;
+            overflow-y: auto;
+            background: #fff;
+            border: 1px solid #94a3b8;
+            border-radius: 0.375rem;
+            box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+        }
+        .invoice-page .product-dropdown-list[data-open="false"] { display: none !important; }
+        .invoice-page .product-dropdown-list[data-open="true"] { display: block !important; }
+        .invoice-totals-card .invoice-summary-item.invoice-summary-box {
+            flex: 1 1 0;
+            min-width: 0;
+            max-width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 0.15rem;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 0.25rem 0.35rem;
+            background: #f8fafc;
+            border: 1px solid #64748b;
+            border-radius: 6px;
+        }
+        .invoice-totals-card .invoice-summary-label {
+            font-size: 0.8rem;
+            line-height: 1.2;
+            color: #64748b;
+            margin-bottom: 0;
+        }
+        .invoice-totals-card .invoice-summary-value {
+            font-size: 1rem;
+            font-weight: 500;
+            color: #0f172a;
+        }
+        .invoice-totals-card .invoice-summary-value-main {
+            font-size: 1.05rem;
+            color: #fff !important;
+        }
+        .invoice-summary-box-main {
+            background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+            border-color: #0284c7 !important;
+        }
+        .invoice-summary-box-main .invoice-summary-label { color: rgba(255,255,255,.9); }
+        .invoice-summary-row {
+            flex-wrap: wrap;
+            gap: 0.35rem 0.5rem;
+            align-items: stretch;
+            justify-content: space-between;
+        }
+        #prToastContainer {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.35rem;
+            pointer-events: none;
+        }
+        #prToastContainer .pr-toast {
+            padding: 0.6rem 1.2rem;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,.12);
+            transition: opacity 0.25s ease;
+        }
+        #prToastContainer .pr-toast.text-success { background: #d1fae5; color: #065f46; border: 1px solid #6ee7b7; }
+        #prToastContainer .pr-toast.text-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+        #prToastContainer .pr-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        #prToastContainer .pr-toast.text-muted { background: #f1f5f9; color: #334155; border: 1px solid #64748b; }
+        .pr-header-card-body .pr-hdr-compact .form-control,
+        .pr-header-card-body .pr-hdr-compact .form-select {
+            min-width: 0;
+            padding-inline: 0.3rem;
+            font-size: 0.8rem;
+        }
+        .pr-header-card-body .pr-hdr-compact .invoice-small-input { max-width: 100%; }
+        .invoice-page .invoice-Add-card select#InvoiceItemSelect.pr-invoice-item-select {
+            padding-left: 2.85rem !important;
+            padding-right: 0.55rem !important;
+            text-align: center;
+            text-align-last: center;
+        }
+        .invoice-page .invoice-lines-container .erp-table tbody td,
+        .invoice-page .invoice-lines-container .erp-table tbody th { padding: 0.45rem 0.55rem; }
+        .invoice-page .invoice-lines-container .erp-table thead th { padding: 0.5rem 0.55rem; }
+        .invoice-page .invoice-lines-container .erp-table-wrapper .erp-table > thead.sr-return-lines-thead > tr > th {
+            background: linear-gradient(180deg, #e8edf3 0%, #f1f5f9 50%, #f8fafc 100%) !important;
+            color: #1e293b !important;
+            font-weight: 600;
+            border-top: 2px solid #64748b !important;
+            border-bottom: 1px solid #cbd5e1 !important;
+            border-inline-end: 1px solid #e2e8f0 !important;
+            box-shadow: none !important;
+        }
+        .invoice-page .invoice-lines-container .erp-table-wrapper .erp-table > thead.sr-return-lines-thead > tr > th:first-child {
+            border-inline-start: 1px solid #e2e8f0 !important;
+        }
         .badge-status-draft { background-color: #6f42c1; }
         .badge-status-notposted { background-color: #343a40; }
+        .invoice-page .product-dropdown-item { cursor: pointer; font-size: 0.875rem; text-align: right; }
+        .invoice-page .product-dropdown-item:hover { background: #f1f5f9; }
+        .invoice-page .product-dropdown-item-active { background: #e0f2fe !important; }
+        .pr-invoice-no-wrap { max-width: 7.5rem; }
+        .pr-invoice-no-wrap .form-control { max-width: 7rem; margin-inline: auto; }
+        .pr-line-deleted-flash {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 10060;
+            display: flex; align-items: center; gap: 0.65rem; padding: 0.9rem 1.35rem;
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%); color: #065f46;
+            border: 1px solid #6ee7b7; border-radius: 14px; font-size: 0.95rem; font-weight: 600;
+            box-shadow: 0 10px 38px rgba(6, 95, 70, 0.18); pointer-events: none; opacity: 1; transition: opacity 0.28s ease;
+        }
+        .pr-line-deleted-flash .pr-line-deleted-flash__icon {
+            width: 1.75rem; height: 1.75rem; border-radius: 50%; background: #059669; color: #fff;
+            display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0;
+        }
+        @@media print {
+            .invoice-page { background: #fff !important; }
+            .invoice-page .erp-print-area .erp-table-wrapper {
+                max-height: none !important;
+                overflow: visible !important;
+            }
+        }
     </style>
 }
 
 <div class="invoice-page" dir="rtl">
+    <div id="prToastContainer" aria-live="polite"></div>
     <div class="container-fluid pt-3">
 
-        <div class="row g-3">
+        <div class="row g-3 align-items-start">
 
-            @* =========================
-               العمود الرئيسي (الهيدر + المورد + الأصناف + الإجماليات)
-               ========================= *@
-            <div class="col-lg-10">
-
-                @* ====================================================
-                   1) كارت بيانات مرتجع المشتريات + المورد + المخزن
-                   ==================================================== *@
-                <div class="card shadow-sm mb-2 invoice-header-card">
-
-                    @{
-                        // متغير: هل المرتجع جديد ولا موجود فعلاً
-                        bool isNewReturn = Model == null || Model.PRetId == 0;
-                        bool hasReturn = !isNewReturn;
-
-                        // متغير: نص تاريخ المرتجع
-                        string returnDateText = hasReturn
-                        ? Model.PRetDate.ToString("d/M/yyyy")
-                        : "";
-
-                        // متغير: وقت الإنشاء من CreatedAt
-                        string returnTimeText = hasReturn
-                        ? Model.CreatedAt.ToLocalTime().ToString("HH:mm")
-                        : "";
-                    }
-
-                    <div class="invoice-header-bar d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        @* الجزء الأيسر: عنوان المرتجع + المستخدم *@
-                        <div>
-                            <h5 class="mb-1">
-                                @if (isNewReturn)
-                                {
-                                    @:مرتجع مشتريات
-                                }
-                                else
-                                {
-                                    @:مرتجع مشتريات
-                                    <span class="small opacity-100">رقم @Model.PRetId</span>
-                                }
-                            </h5>
-
-                            @if (!isNewReturn && !string.IsNullOrWhiteSpace(Model.CreatedBy))
-                            {
-                                <div class="small opacity-100">
-                                    أُنشئ بواسطة:
-                                    <span class="fw-semibold">@Model.CreatedBy</span>
-                                </div>
-                            }
-                        </div>
-
-                        @* الجزء الأيمن: حالة المرتجع *@
-                        <div class="text-end">
-                            @if (isNewReturn)
-                            {
-                                <span class="text-white fw-semibold">
-                                    اضغط على "مرتجع جديد".
-                                </span>
-                            }
-                            else if (string.Equals(Model.Status, "Posted", StringComparison.OrdinalIgnoreCase))
-                            {
-                                <span class="text-white fw-semibold">
-                                    مرتجع مرحّل
-                                </span>
-                            }
-                            else if (string.Equals(Model.Status, "Cancelled", StringComparison.OrdinalIgnoreCase))
-                            {
-                                <span class="text-white fw-semibold">
-                                    مرتجع ملغى
-                                </span>
-                            }
-                            else
-                            {
-                                <span class="text-white fw-semibold">
-                                    مرتجع مفتوح
-                                </span>
-                            }
-                        </div>
-                    </div>
-
-                    <div class="card-body">
-
-                        <div class="row g-3 align-items-start">
-
-                            @* كود المورد *@
-                            <div class="col-lg-2 col-md-3">
-                                <label class="form-label form-label-sm">كود المورد</label>
-                                <input id="CustomerCodeDisplay"
-                                       class="form-control form-control-sm text-center invoice-small-input"
-                                       readonly />
-
-                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
-                                <input type="hidden" id="PRetId" value="@Model.PRetId" />
-                            </div>
-
-                            @* اسم المورد + أوتوكومبليت (نفس فكرة فاتورة المشتريات) *@
-                            <div class="col-lg-5 col-md-6">
-                                <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
-                                <input id="CustomerNameInput"
-                                       class="form-control form-control-sm"
-                                       placeholder="اكتب اسم المورد أو جزء منه للبحث..."
-                                       list="customersList"
-                                       autocomplete="off"
-                                       data-lock-posted="1" />
-
-                                <datalist id="customersList">
-                                    @* هتتملي من الكونترولر بنفس طريقة فاتورة المشتريات *@
-                                    @if (ViewBag.Customers != null)
-                                    {
-                                        foreach (var c in ViewBag.Customers)
-                                        {
-                                            <option value="@c.Name"
-                                                    data-id="@c.Id"
-                                                    data-user="@c.UserName"
-                                                    data-phone="@c.Phone"
-                                                    data-address="@c.Address">
-                                            </option>
-                                        }
-                                    }
-                                </datalist>
-
-                                <small id="CustomerSummaryText"
-                                       class="text-muted customer-summary-line d-block mt-1">
-                                    @* سيتم ملؤه بجملة مختصرة عن المورد *@
-                                </small>
-                            </div>
-
-                           
-
-                            @* المخزن *@
-                            <div class="col-lg-2 col-md-3">
-                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
-                                <select asp-for="WarehouseId"
-                                        asp-items="ViewBag.Warehouses"
-                                        class="form-select form-select-sm"
-                                        data-lock-posted="1">
-                                    <option value="">اختر المخزن...</option>
-                                </select>
-                            </div>
-
-                            @* التاريخ والوقت *@
-                            <div class="col-lg-3 col-md-6">
-                                <div class="row g-2">
-                                    <div class="col-6">
-                                        <label class="form-label form-label-sm">تاريخ المرتجع</label>
-                                        <input id="ReturnDateDisplay" class="form-control form-control-sm text-center"
-                                               value="@returnDateText"
-                                               readonly />
-                                    </div>
-                                    <div class="col-6">
-                                        <label class="form-label form-label-sm">وقت الإنشاء</label>
-                                        <input id="ReturnTimeDisplay" class="form-control form-control-sm text-center"
-                                               value="@returnTimeText"
-                                               readonly />
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
-
-                        <br />
-
-                        <div class="row g-3">
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">رقم المرتجع</label>
-                                <input id="ReturnNumberDisplay" class="form-control form-control-sm text-center fw-semibold"
-                                       value="@(Model.PRetId > 0 ? Model.PRetId.ToString() : "—")" readonly />
-                            </div>
-                            <div class="col-lg-3 col-md-4">
-                                <label class="form-label form-label-sm">حالة المرتجع</label>
-                                @{
-                                    int? stage = ViewBag.ReturnStage as int?;
-                                    string statusDisplayValue = Model.Status switch
-                                    {
-                                        "Draft" => "غير مرحلة",
-                                        "Posted" => (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل"),
-                                        "Cancelled" => "ملغى",
-                                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stage.HasValue ? $"مرحلة {stage.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
-                                    };
-                                }
-                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@statusDisplayValue" readonly />
-                            </div>
-                            <div class="col-lg-2 col-md-4">
-                                <label class="form-label form-label-sm">مرحّل؟</label>
-                                <input id="ReturnIsPostedDisplay" class="form-control form-control-sm text-center"
-                                       value="@(Model.IsPosted ? "نعم" : "لا")" readonly />
-                            </div>
-                            <div class="col-lg-4 col-md-4">
-                                <label class="form-label form-label-sm">رقم فاتورة الشراء</label>
-                                <input type="number" id="PurchaseInvoiceIdInput" class="form-control form-control-sm text-center"
-                                       value="@(Model.RefPIId?.ToString() ?? "")" placeholder="أدخل رقم الفاتورة"
-                                       data-lock-posted="1" />
-                                <input type="hidden" asp-for="RefPIId" id="RefPIId" />
-                            </div>
-                        </div>
-
-                        <div class="row g-3 mt-2">
-                            <div class="col-lg-4 col-md-4">
-                                <label class="form-label form-label-sm">الهاتف</label>
-                                <input id="CustomerPhone" class="form-control form-control-sm" readonly />
-                            </div>
-                            <div class="col-lg-4 col-md-4">
-                                <label class="form-label form-label-sm">المحافظة</label>
-                                <input id="CustomerGovernorate" class="form-control form-control-sm" readonly />
-                            </div>
-                            <div class="col-lg-8 col-md-8">
-                                <label class="form-label form-label-sm">العنوان</label>
-                                <input id="CustomerAddress" class="form-control form-control-sm" readonly />
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                @* =====================================================
-                   2) كارت بيانات الصنف (مخزون + سياسة شراء) — حدود الكارت فقط مثل طلب الشراء
-                   ===================================================== *@
-                <div class="card shadow-sm mb-3 invoice-product-card">
-                    <div class="card-body">
-
-                        @* الصف العلوي: أرقام سريعة عن الصنف *@
-                        <div class="row g-3 mb-3">
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">الكمية المتاحة في هذا المخزن</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="0"
-                                       readonly />
-                            </div>
-
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">إجمالي الكمية في كل المخازن</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="0"
-                                       readonly />
-                            </div>
-
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">الصنف عليه كوتة؟</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="بدون كوتة"
-                                       readonly />
-                            </div>
-
-                            <div class="col-md-3 col-sm-6">
-                                <label class="form-label form-label-sm">الخصم المرجّح للصنف %</label>
-                                <input type="text"
-                                       class="form-control form-control-sm text-center"
-                                       value="0"
-                                       readonly />
-                            </div>
-                        </div>
-
-                        <br />
-
-                        <div class="row g-3 align-items-end">
-                            <div class="col-md-6">
-                                <label class="form-label form-label-sm d-block">فترة حركة الصنف</label>
-                                <div class="d-flex gap-2">
-                                    <input type="date"
-                                           id="prodReportFrom"
-                                           class="form-control form-control-sm" />
-                                    <input type="date"
-                                           id="prodReportTo"
-                                           class="form-control form-control-sm" />
-                                </div>
-                            </div>
-
-                            <div class="col-md-6">
-                                <label class="form-label form-label-sm d-block text-md-end">
-                                    تقارير سريعة للصنف
-                                </label>
-
-                                <div class="d-flex flex-wrap gap-2 justify-content-md-end">
-                                    <button type="button"
-                                            class="btn btn-outline-secondary btn-sm"
-                                            id="btnShowSalesReport">
-                                        مبيعات الصنف
-                                    </button>
-
-                                    <button type="button"
-                                            class="btn btn-outline-secondary btn-sm"
-                                            id="btnShowPRReport">
-                                        طلبات الشراء للصنف
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-
-                @* =====================================================
-                   4) كارت إدخال الصنف + جدول السطور (بدون هيدر — حدود الكارت فقط)
-                   ===================================================== *@
-                <div class="card shadow-sm mb-3 invoice-Add-card">
-                    <div class="card-body">
-                        <div class="row g-2 align-items-end mb-3">
-                            <div class="col-lg-5 col-md-4">
-                                <label class="form-label form-label-sm">اختر صنف من فاتورة الشراء</label>
-                                <select id="InvoiceItemSelect"
-                                        class="form-select form-select-sm"
-                                        data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")">
-                                    <option value="">-- اختر صنف من الفاتورة --</option>
-                                </select>
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">الكمية المرتجعة</label>
-                                <input type="number"
-                                       id="ReturnQtyInput"
-                                       class="form-control form-control-sm text-center return-line-field"
-                                       placeholder="0"
-                                       min="1"
-                                       data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")" />
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">الكمية في الفاتورة</label>
-                                <input type="number"
-                                       id="InvoiceQtyDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">التشغيلة</label>
-                                <input type="text"
-                                       id="ReturnBatchDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
-
-                            <div class="col-auto">
-                                <label class="form-label form-label-sm">تاريخ الصلاحية</label>
-                                <input type="text"
-                                       id="ReturnExpiryDisplay"
-                                       class="form-control form-control-sm text-center bg-light return-line-field"
-                                       readonly />
-                            </div>
-
-                            <div class="col-lg-2 col-md-4 d-grid">
-                                <label class="form-label form-label-sm">&nbsp;</label>
-                                <button type="button"
-                                        id="btnAddReturnLine"
-                                        class="btn btn-primary btn-sm"
-                                        data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")">
-                                    إضافة
-                                </button>
-                            </div>
-                        </div>
-
-                        <div class="erp-table-wrapper mb-0">
-                            <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                                <thead class="invoice-lines-header">
-                                    <tr>
-                                        <th class="text-center">#</th>
-                                        <th>اسم الصنف</th>
-                                        <th class="text-center">الكمية</th>
-                                        <th class="text-center">تكلفة الوحدة</th>
-                                        <th class="text-center">سعر الجمهور</th>
-                                        <th class="text-center">قيمة السطر</th>
-                                        <th class="text-center">مسح</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="PurchaseReturnLinesTableBody">
-                                    @if (Model.Lines != null && Model.Lines.Any())
-                                    {
-                                        var _prProdNames = ViewBag.ProdNames as Dictionary<int, string>;
-                                        foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
-                                        {
-                                            var prodName = (_prProdNames != null && _prProdNames.TryGetValue(line.ProdId, out var _pn)) ? _pn : line.ProdId.ToString();
-                                            <tr data-line-no="@line.LineNo" data-prodid="@line.ProdId">
-                                                <td class="text-center">@line.LineNo</td>
-                                                <td>@prodName</td>
-                                                <td class="text-center">@line.Qty</td>
-                                                <td class="text-center">@line.UnitCost.ToString("0.00")</td>
-                                                <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
-                                                <td class="text-center">@((line.Qty * line.UnitCost).ToString("0.00"))</td>
-                                                <td class="text-center">
-                                                    <button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine"
-                                                            data-line-no="@line.LineNo" data-pret-id="@Model.PRetId"
-                                                            data-lock-posted="@((Model?.IsPosted == true) ? "1" : "0")" title="مسح السطر">🗑</button>
-                                                </td>
-                                            </tr>
-                                        }
-                                    }
-                                    else
-                                    {
-                                        <tr id="PurchaseReturnLinesEmptyRow">
-                                            <td colspan="7" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع.</td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-
-                @* ====================================
-                   6) ملخص المرتجع (الإجماليات)
-                   ==================================== *@
-                @{
-                    // عدد السطور
-                    int totalLines = Model.Lines?.Count ?? 0;
-
-                    // عدد الأصناف المميزة
-                    int totalItems = 0;
-                    if (Model.Lines != null)
-                    {
-                        var prodIds = new HashSet<int>();
-                        foreach (var line in Model.Lines)
-                        {
-                            var propProd = line.GetType().GetProperty("ProdId");
-                            if (propProd != null)
-                            {
-                                var val = propProd.GetValue(line);
-                                if (val is int pid)
-                                    prodIds.Add(pid);
-                            }
-                        }
-                        totalItems = prodIds.Count;
-                    }
-
-                    // إجمالي الكمية (Qty أو QtyRequested)
-                    int totalQty = 0;
-                    if (Model.Lines != null)
-                    {
-                        foreach (var line in Model.Lines)
-                        {
-                            var pQty = line.GetType().GetProperty("Qty")
-                            ?? line.GetType().GetProperty("QtyRequested");
-
-                            if (pQty != null)
-                            {
-                                var val = pQty.GetValue(line);
-                                if (val is int q)
-                                    totalQty += q;
-                            }
-                        }
-                    }
-
-                    // إجماليات من الهيدر
-                    decimal totalRetail = Model.ItemsTotal;                // إجمالي قبل الخصم
-                    decimal totalAfterDiscount = Model.ItemsTotal - Model.DiscountTotal;
-                    decimal taxAmount = Model.TaxTotal;
-                    decimal totalAfterDiscountAndTax = totalAfterDiscount + taxAmount;
-                    decimal netTotal = Model.NetTotal;                     // صافي المرتجع
-                }
-
-                <div class="card shadow-sm invoice-totals-card">
-                    <div class="card-body">
-
-                        <div class="row g-3 align-items-center mb-2">
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">عدد السطور</span>
-                                    <span class="badge bg-light text-dark summary-badge">
-                                        @totalLines
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">عدد الأصناف</span>
-                                    <span class="badge bg-light text-dark summary-badge">
-                                        @totalItems
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي الكمية المرتجعة</span>
-                                    <span class="badge bg-light text-dark summary-badge">
-                                        @totalQty
-                                    </span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">إجمالي قبل الخصم</span>
-                                    <span id="ItemsTotalBadge" class="badge bg-light text-dark summary-badge">@totalRetail.ToString("0.00")</span>
-                                </div>
-                            </div>
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">الإجمالي بعد الخصم</span>
-                                    <span id="AfterDiscountBadge" class="badge bg-light text-dark summary-badge">@totalAfterDiscount.ToString("0.00")</span>
-                                </div>
-                            </div>
-
-                            <div class="col-md-2">
-                                <div class="d-flex flex-column">
-                                    <span class="small text-muted">قيمة الضريبة</span>
-                                    <span id="TaxAmountBadge" class="badge bg-info text-dark summary-badge">@taxAmount.ToString("0.00")</span>
-                                </div>
-                            </div>
-                        </div>
-                        <hr class="my-3" />
-                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <div>
-                                <span class="small text-muted d-block">الصافي النهائي للمرتجع</span>
-                                <h3 id="NetTotalBadge" class="mb-0 text-success">@netTotal.ToString("0.00")</h3>
-                            </div>
-
-                            <div class="text-end small text-muted">
-                                @if (Model.UpdatedAt.HasValue)
-                                {
-                                    <div>
-                                        آخر تعديل:
-                                        <span class="fw-semibold">
-                                            @Model.UpdatedAt.Value.ToLocalTime().ToString("d/M/yyyy HH:mm")
-                                        </span>
-                                    </div>
-                                }
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-            </div>  @* نهاية العمود الرئيسي *@
-
-
-            @* =========================
-               العمود الجانبي (أزرار الحركة) — بنفس ترتيب مرتجع البيع
-               ========================= *@
-            <div class="col-lg-2">
+            @* كارت الإجراءات أولاً في الـ HTML مع order — مثل مرتجع المبيعات *@
+            <div class="col-lg-2 order-last no-print">
                 <div class="card shadow-sm invoice-side-card sticky-top" style="top: 40px;">
                     <div class="card-header py-2 text-center">
                         <h6 class="mb-0">إجراءات مرتجع المشتريات</h6>
@@ -605,7 +252,6 @@
 
                     <input type="hidden" id="ReturnIsPostedFlag" value="@(Model.IsPosted ? "1" : "0")" />
 
-                    <div class="card-body">
                     <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
                         @{
                             int? navFirst = ViewBag.NavFirstId == null ? (int?)null : (int)ViewBag.NavFirstId;
@@ -666,6 +312,14 @@
 
                         <div id="postReturnMsg" class="small mt-2"></div>
 
+                        <button type="button"
+                                class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
+                                id="btnDeleteSelectedReturnLine"
+                                data-lock-posted="1"
+                                title="اختر سطراً في الجدول ثم اضغط لمسحه">
+                            🗑️ مسح السطر المحدد
+                        </button>
+
                         <button type="button" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnOpenReturn">
                             ⏪ فتح المرتجع
                         </button>
@@ -680,18 +334,256 @@
                             <a href="@Url.Action("ExportShowExcel", "PurchaseReturns", new { id = Model.PRetId })" target="_blank" rel="noopener" class="btn btn-erp btn-erp-success btn-erp-sm w-100 text-decoration-none">📥 تصدير Excel</a>
                         }
 
-                        <button type="button" id="btnPrintReturn" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" onclick="window.print()">
-                            🖨️ طباعة المرتجع
+                        <button type="button" id="btnOpenProductMovement" class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100" title="يفتح حركة المخزون للصنف المحدد في الجدول أو المختار من قائمة الأصناف">
+                            📊 حركة الصنف
                         </button>
 
-                        <hr class="my-1" />
+                        <a href="#"
+                           id="btnCustomerEngagement"
+                           class="btn btn-erp btn-erp-outline-secondary btn-erp-sm open-same-tab w-100 text-decoration-none"
+                           data-tab-id="customer-engagement"
+                           data-tab-title="حجم تعامل عميل"
+                           data-base-url="@Url.Action("Show", "Customers", new { frame = 1 })"
+                           data-keep-active-posted="1">
+                            📊 حجم التعامل
+                        </a>
 
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" asp-action="Index">⬅️ الرجوع لقائمة مرتجعات المشتريات</a>
-
-                        <a class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" id="btnEditReturn" asp-action="Edit" asp-route-id="@Model.PRetId">✏️ تعديل المرتجع</a>
-                    </div>
+                        <button type="button" id="btnPrintReturn" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100" title="ضبط الطباعة: يطبع الهيدر وجدول السطور والإجماليات دون شريط الإجراءات">
+                            🖨️ طباعة المرتجع
+                        </button>
                     </div>
                 </div>
+            </div>
+
+            @* العمود الرئيسي — نفس ترتيب مرتجع المبيعات (منطقة الطباعة) *@
+            <div class="col-lg-10 order-first erp-print-area">
+                <div id="PI_BodyHost" data-pr-show-base="@Url.Action("Edit", "PurchaseReturns", new { frame = 1 })">
+
+                @{
+                    bool isNewReturn = Model == null || Model.PRetId == 0;
+                    bool hasReturn = !isNewReturn;
+                    string returnDateText = hasReturn ? Model.PRetDate.ToString("d/M/yyyy") : "";
+                    string returnTimeText = hasReturn ? Model.CreatedAt.ToLocalTime().ToString("HH:mm") : "";
+                    int? stagePr = ViewBag.ReturnStage as int?;
+                    string statusDisplayValue = Model.Status switch
+                    {
+                        "Draft" => "غير مرحلة",
+                        "Posted" => (stagePr.HasValue ? $"مرحلة {stagePr.Value}" : "مرحّل"),
+                        "Cancelled" => "ملغى",
+                        _ => string.IsNullOrWhiteSpace(Model.Status) ? (Model.IsPosted ? (stagePr.HasValue ? $"مرحلة {stagePr.Value}" : "مرحّل") : "غير مرحلة") : Model.Status
+                    };
+                    decimal netBeforeTaxInit = Model.ItemsTotal - Model.DiscountTotal;
+                }
+
+                <div class="card shadow-sm mb-2 invoice-header-card">
+                    <div class="invoice-header-bar">
+                        <h6 class="mb-0">مرتجع مشتريات</h6>
+                    </div>
+                    <div class="card-body pr-header-card-body">
+                        <div class="row g-2 g-lg-3 align-items-end mb-2 pr-hdr-compact">
+                            <div class="col-auto pr-invoice-no-wrap text-center">
+                                <label for="PurchaseInvoiceIdInput" class="form-label form-label-sm">رقم فاتورة الشراء</label>
+                                <input type="number" id="PurchaseInvoiceIdInput" class="form-control form-control-sm text-center"
+                                       value="@(Model.RefPIId?.ToString() ?? "")" placeholder="رقم" data-lock-posted="1"
+                                       @(isNewReturn ? Html.Raw("autofocus") : Html.Raw("")) />
+                                <input type="hidden" asp-for="RefPIId" id="RefPIId" />
+                            </div>
+                            <div class="col-auto" style="max-width: 5.5rem;">
+                                <label class="form-label form-label-sm">كود المورد</label>
+                                <input id="CustomerCodeDisplay" class="form-control form-control-sm text-center invoice-small-input" readonly />
+                                <input type="hidden" asp-for="CustomerId" id="CustomerId" />
+                                <input type="hidden" id="PRetId" value="@Model.PRetId" />
+                            </div>
+                            <div class="col-lg-5 col-md-6 min-w-0">
+                                <label for="CustomerNameInput" class="form-label form-label-sm">اسم المورد</label>
+                                <div class="position-relative" id="prCustomerDropdownWrap">
+                                    <div class="product-dropdown-onebox" id="prCustomerDropdownInputGroup">
+                                        <span class="product-dropdown-arrow-inside" id="prCustomerDropdownArrow" title="افتح القائمة">▼</span>
+                                        <input id="CustomerNameInput" type="text" class="form-control form-control-sm product-dropdown-input"
+                                               placeholder="اكتب اسم المورد" autocomplete="off" data-lock-posted="1" />
+                                    </div>
+                                    <div id="prCustomerDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
+                                </div>
+                                <small id="CustomerSummaryText" class="text-muted d-block mt-1"></small>
+                            </div>
+                            <div class="col-auto" style="max-width: 5.5rem;">
+                                <label class="form-label form-label-sm">رقم المرتجع</label>
+                                <input id="ReturnNumberDisplay" class="form-control form-control-sm text-center fw-semibold invoice-small-input"
+                                       value="@(Model.PRetId > 0 ? Model.PRetId.ToString() : "—")" readonly />
+                            </div>
+                            <div class="col-lg-2 col-md-4">
+                                <div class="row g-2">
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">تاريخ المرتجع</label>
+                                        <input id="ReturnDateDisplay" class="form-control form-control-sm text-center" value="@returnDateText" readonly />
+                                    </div>
+                                    <div class="col-6">
+                                        <label class="form-label form-label-sm">وقت الإنشاء</label>
+                                        <input id="ReturnTimeDisplay" class="form-control form-control-sm text-center" value="@returnTimeText" readonly />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-3 align-items-end">
+                            <div class="col-lg-2 col-md-3">
+                                <label class="form-label form-label-sm">حالة المرتجع</label>
+                                <input id="ReturnStatusDisplay" class="form-control form-control-sm text-center" value="@statusDisplayValue" readonly />
+                            </div>
+                            <div class="col-lg-4 col-md-6">
+                                <label class="form-label form-label-sm" for="WarehouseId">المخزن</label>
+                                <select asp-for="WarehouseId" asp-items="ViewBag.Warehouses" class="form-select form-select-sm" data-lock-posted="1" data-is-posted="@(Model.IsPosted ? "1" : "0")">
+                                    <option value="">اختر المخزن...</option>
+                                </select>
+                            </div>
+                            <div class="col-lg-2 col-md-3">
+                                <label class="form-label form-label-sm">مرحّل؟</label>
+                                <input id="ReturnIsPostedDisplay" class="form-control form-control-sm text-center" value="@(Model.IsPosted ? "نعم" : "لا")" readonly />
+                            </div>
+                        </div>
+                        <div class="row g-2 mt-2">
+                            <div class="col-md-4">
+                                <label class="form-label form-label-sm">الهاتف</label>
+                                <input id="CustomerPhone" class="form-control form-control-sm" readonly />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label form-label-sm">المحافظة</label>
+                                <input id="CustomerGovernorate" class="form-control form-control-sm" readonly />
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label form-label-sm">العنوان</label>
+                                <input id="CustomerAddress" class="form-control form-control-sm" readonly />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm mb-3 invoice-Add-card">
+                    <div class="card-body">
+                        <div id="prInvoiceAddPanel">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-lg-5 col-md-4">
+                                    <label class="form-label form-label-sm">اختر صنف من فاتورة الشراء</label>
+                                    <select id="InvoiceItemSelect" class="form-select form-select-sm pr-invoice-item-select"
+                                            data-lock-posted="@(Model.IsPosted ? "1" : "0")">
+                                        <option value="">-- اختر صنف من الفاتورة --</option>
+                                    </select>
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">الكمية المرتجعة</label>
+                                    <input type="number" id="ReturnQtyInput" class="form-control form-control-sm text-center return-line-field" placeholder="0" min="1" data-lock-posted="@(Model.IsPosted ? "1" : "0")" />
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">الكمية في الفاتورة</label>
+                                    <input type="number" id="InvoiceQtyDisplay" class="form-control form-control-sm text-center bg-light return-line-field" readonly />
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">التشغيلة</label>
+                                    <input type="text" id="ReturnBatchDisplay" class="form-control form-control-sm text-center bg-light return-line-field" readonly />
+                                </div>
+                                <div class="col-auto">
+                                    <label class="form-label form-label-sm">تاريخ الصلاحية</label>
+                                    <input type="text" id="ReturnExpiryDisplay" class="form-control form-control-sm text-center bg-light return-line-field" readonly />
+                                </div>
+                                <div class="col-lg-2 col-md-4 d-grid">
+                                    <label class="form-label form-label-sm">&nbsp;</label>
+                                    <button type="button" id="btnAddReturnLine" class="btn btn-primary btn-sm w-100" data-lock-posted="@(Model.IsPosted ? "1" : "0")">إضافة</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="invoice-lines-container">
+                    <div class="erp-table-wrapper mb-0">
+                        <table id="PurchaseReturnLinesTable" class="table table-sm table-striped table-hover mb-0 erp-table">
+                            <thead class="sr-return-lines-thead">
+                                <tr>
+                                    <th class="text-center">#</th>
+                                    <th class="text-center">الموقع</th>
+                                    <th>اسم الصنف</th>
+                                    <th class="text-center">التشغيلة</th>
+                                    <th class="text-center">الصلاحية</th>
+                                    <th class="text-center">الكمية</th>
+                                    <th class="text-center">تكلفة الوحدة</th>
+                                    <th class="text-center">سعر الجمهور</th>
+                                    <th class="text-center">خصم شراء %</th>
+                                    <th class="text-center">قيمة السطر</th>
+                                </tr>
+                            </thead>
+                            <tbody id="PurchaseReturnLinesTableBody">
+                                @if (Model.Lines != null && Model.Lines.Any())
+                                {
+                                    var _prProdNames = ViewBag.ProdNames as Dictionary<int, string>;
+                                    var _prProdLocs = ViewBag.ProdLocations as Dictionary<int, string>;
+                                    foreach (var line in Model.Lines.OrderBy(l => l.LineNo))
+                                    {
+                                        var prodName = (_prProdNames != null && _prProdNames.TryGetValue(line.ProdId, out var _pn)) ? _pn : ("صنف #" + line.ProdId);
+                                        var locDisp = (_prProdLocs != null && _prProdLocs.TryGetValue(line.ProdId, out var _pl) && !string.IsNullOrWhiteSpace(_pl)) ? _pl : "—";
+                                        <tr class="erp-list-selectable-row" data-line-no="@line.LineNo" data-prodid="@line.ProdId">
+                                            <td class="text-center">@line.LineNo</td>
+                                            <td class="text-center text-muted small">@locDisp</td>
+                                            <td><strong>@prodName</strong></td>
+                                            <td class="text-center">@(line.BatchNo ?? "")</td>
+                                            <td class="text-center">@(line.Expiry.HasValue ? line.Expiry.Value.ToString("yyyy-MM-dd") : "")</td>
+                                            <td class="text-center">@line.Qty</td>
+                                            <td class="text-center">@line.UnitCost.ToString("0.00")</td>
+                                            <td class="text-center">@line.PriceRetail.ToString("0.00")</td>
+                                            <td class="text-center">@line.PurchaseDiscountPct.ToString("0.##")</td>
+                                            <td class="text-center">@((line.Qty * line.UnitCost).ToString("0.00"))</td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr id="PurchaseReturnLinesEmptyRow">
+                                        <td colspan="10" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card shadow-sm invoice-totals-card mb-2">
+                    <div class="card-body">
+                        <div class="d-flex flex-wrap align-items-stretch justify-content-between gap-2 invoice-summary-row">
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">الإجمالي قبل الضريبة</span>
+                                <span id="TotalBeforeTaxBadge" class="invoice-summary-value">@netBeforeTaxInit.ToString("0.00")</span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box">
+                                <span class="invoice-summary-label">قيمة الضريبة</span>
+                                <span id="TaxAmountBadge" class="invoice-summary-value">@Model.TaxTotal.ToString("0.00")</span>
+                            </div>
+                            <div class="invoice-summary-item invoice-summary-box invoice-summary-box-main">
+                                <span class="invoice-summary-label">الإجمالي بعد الضريبة</span>
+                                <span id="NetTotalBadge" class="invoice-summary-value invoice-summary-value-main fw-bold">@Model.NetTotal.ToString("0.00")</span>
+                            </div>
+                        </div>
+                        @if (Model.UpdatedAt.HasValue)
+                        {
+                            <div class="text-end small text-muted mt-2">آخر تعديل: <span class="fw-semibold">@Model.UpdatedAt.Value.ToLocalTime().ToString("d/M/yyyy HH:mm")</span></div>
+                        }
+                    </div>
+                </div>
+
+                <datalist id="customersList" hidden aria-hidden="true">
+                    @if (ViewBag.Customers != null)
+                    {
+                        foreach (var c in ViewBag.Customers)
+                        {
+                            <option value="@c.Name"
+                                    data-id="@c.Id"
+                                    data-is-active="1"
+                                    data-user="@c.UserName"
+                                    data-phone="@c.Phone"
+                                    data-address="@c.Address">
+                            </option>
+                        }
+                    }
+                </datalist>
+
+                </div> @* PI_BodyHost *@
             </div>
 
         </div>
@@ -701,42 +593,67 @@
 
 @section Scripts {
     <script>
-        // دالة مساعدة: تملأ الحقول من option معين في الـ datalist
-        function fillCustomerFromOption(opt) {
-            // متغيرات: عناصر الشاشة الخاصة بالمورد
-            var idInput = document.getElementById('CustomerId');              // كود المورد (للحفظ)
-            var codeDisplay = document.getElementById('CustomerCodeDisplay'); // كود المورد المعروض
-            var phoneInput = document.getElementById('CustomerPhone');        // الهاتف
-            var addressInput = document.getElementById('CustomerAddress');    // العنوان
-            var summary = document.getElementById('CustomerSummaryText');     // سطر ملخّص صغير
+        function updatePrCustomerEngagementLink() {
+            var btn = document.getElementById('btnCustomerEngagement');
+            if (!btn) return;
+            var cid = parseInt((document.getElementById('CustomerId') && document.getElementById('CustomerId').value) || '0', 10) || 0;
+            var volBase = btn.getAttribute('data-base-url') || '';
+            var volUrl = cid > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + encodeURIComponent(String(cid))) : '#';
+            btn.href = volUrl;
+            btn.setAttribute('data-url', volUrl);
+        }
 
-            if (!opt) {
-                idInput.value = '';
-                codeDisplay.value = '';
-                phoneInput.value = '';
-                addressInput.value = '';
-                summary.textContent = '';
+        function fillCustomerFromRecord(rec) {
+            var idInput = document.getElementById('CustomerId');
+            var codeDisplay = document.getElementById('CustomerCodeDisplay');
+            var phoneInput = document.getElementById('CustomerPhone');
+            var addressInput = document.getElementById('CustomerAddress');
+            var govInput = document.getElementById('CustomerGovernorate');
+            var summary = document.getElementById('CustomerSummaryText');
+            if (!rec) {
+                if (idInput) idInput.value = '';
+                if (codeDisplay) codeDisplay.value = '';
+                if (phoneInput) phoneInput.value = '';
+                if (addressInput) addressInput.value = '';
+                if (govInput) govInput.value = '';
+                if (summary) summary.textContent = '';
+                updatePrCustomerEngagementLink();
                 return;
             }
+            var id = (rec.id || '').toString();
+            var user = (rec.user || '').toString();
+            var phone = (rec.phone || '').toString();
+            var address = (rec.address || '').toString();
+            if (idInput) idInput.value = id;
+            if (codeDisplay) codeDisplay.value = id;
+            if (phoneInput) phoneInput.value = phone;
+            if (addressInput) addressInput.value = address;
+            if (govInput) govInput.value = '';
+            if (summary) {
+                var parts = [];
+                if (user) parts.push('مستخدم مرتبط: ' + user);
+                if (phone) parts.push('هاتف: ' + phone);
+                summary.textContent = parts.join(' — ');
+            }
+            updatePrCustomerEngagementLink();
+        }
 
-            // متغيرات: البيانات المخزنة في option داخل الـ datalist
-            var id = opt.getAttribute('data-id') || '';
-            var user = opt.getAttribute('data-user') || '';
-            var phone = opt.getAttribute('data-phone') || '';
-            var address = opt.getAttribute('data-address') || '';
-
-            idInput.value = id;
-            codeDisplay.value = id;
-            phoneInput.value = phone;
-            addressInput.value = address;
-
-            var parts = [];
-            if (user) parts.push('مستخدم مرتبط: ' + user);
-            if (phone) parts.push('هاتف: ' + phone);
-            summary.textContent = parts.join(' — ');
+        function fillCustomerFromOption(opt) {
+            if (!opt) {
+                fillCustomerFromRecord(null);
+                return;
+            }
+            fillCustomerFromRecord({
+                id: opt.getAttribute('data-id') || '',
+                user: opt.getAttribute('data-user') || '',
+                phone: opt.getAttribute('data-phone') || '',
+                address: opt.getAttribute('data-address') || ''
+            });
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+
+            updatePrCustomerEngagementLink();
 
             // =========================================================
             // دوال مساعدة: إدارة حالة الترحيل (مثل مرتجع البيع)
@@ -749,6 +666,18 @@
                 const flag = document.getElementById("ReturnIsPostedFlag");
                 if (flag) flag.value = posted ? "1" : "0";
             }
+            function syncDeleteSelectedReturnLineButton() {
+                var btn = document.getElementById('btnDeleteSelectedReturnLine');
+                var tbody = document.getElementById('PurchaseReturnLinesTableBody');
+                if (!btn || !tbody) return;
+                if (typeof isReturnPosted === 'function' && isReturnPosted()) {
+                    btn.disabled = true;
+                    return;
+                }
+                var sel = tbody.querySelector('tr.erp-list-selectable-row.selected');
+                btn.disabled = !sel;
+            }
+
             function applyPostedUiLock() {
                 const posted = isReturnPosted();
                 const lockables = document.querySelectorAll('[data-lock-posted="1"]');
@@ -765,6 +694,7 @@
                         else { const orig = el.dataset.origTabIndex; if (orig === "") el.removeAttribute("tabindex"); else el.setAttribute("tabindex", orig); }
                     }
                 });
+                syncDeleteSelectedReturnLineButton();
             }
             function getReturnStatusDisplay(status) {
                 if (!status) return 'غير مرحلة';
@@ -776,45 +706,288 @@
                 if (posted === true && typeof setReturnPosted === "function") { setReturnPosted(true); if (typeof applyPostedUiLock === "function") applyPostedUiLock(); }
             })();
 
-            // متغيرات: عناصر الأوتوكومبليت الخاصة بالمورد
-            var customerInput = document.getElementById('CustomerNameInput');
-            var dataList = document.getElementById('customersList');
-
-            function findOptionByName(name) {
-                if (!name) return null;
-                var options = dataList.options;
-                for (var i = 0; i < options.length; i++) {
-                    if (options[i].value === name) return options[i];
-                }
-                return null;
-            }
-
             function findOptionById(id) {
                 if (!id) return null;
-                var options = dataList.options;
+                var dl = document.getElementById('customersList');
+                if (!dl || !dl.options) return null;
+                var options = dl.options;
                 for (var i = 0; i < options.length; i++) {
-                    if (options[i].getAttribute('data-id') == id) {
-                        return options[i];
-                    }
+                    if (options[i].getAttribute('data-id') == id) return options[i];
                 }
                 return null;
             }
 
-            // عند اختيار اسم مورد من الأوتوكومبليت
-            customerInput.addEventListener('change', function () {
-                var opt = findOptionByName(customerInput.value);
-                fillCustomerFromOption(opt);
-            });
-
-            // تهيئة الشاشة عند الفتح – لو في كود مورد محفوظ في المرتجع
-            var initialCustomerId = '@Model.CustomerId';
-            if (initialCustomerId) {
-                var opt = findOptionById(initialCustomerId);
-                if (opt) {
-                    customerInput.value = opt.value;
-                    fillCustomerFromOption(opt);
-                }
+            function showPrLineDeletedFlash() {
+                var el = document.createElement('div');
+                el.className = 'pr-line-deleted-flash';
+                el.setAttribute('role', 'status');
+                el.innerHTML = '<span class="pr-line-deleted-flash__icon" aria-hidden="true">✓</span><span>تم مسح السطر بنجاح</span>';
+                document.body.appendChild(el);
+                setTimeout(function () {
+                    el.style.opacity = '0';
+                    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 280);
+                }, 1000);
             }
+
+            // أوتوكومبليت المورد — نفس منطق مرتجع المبيعات (قائمة مخصصة)
+            (function () {
+                var custNameInput = document.getElementById('CustomerNameInput');
+                var custDataList = document.getElementById('customersList');
+                if (!custNameInput || !custDataList) return;
+
+                var CUSTOMER_LIST_MAX = 80;
+
+                var allCustomers = Array.from(custDataList.options || []).map(function (opt) {
+                    return {
+                        id: (opt.getAttribute('data-id') || '').toString(),
+                        name: (opt.value || '').toString(),
+                        phone: (opt.getAttribute('data-phone') || '').toString(),
+                        address: (opt.getAttribute('data-address') || '').toString(),
+                        user: (opt.getAttribute('data-user') || '').toString()
+                    };
+                });
+
+                function normalizeDigits(s) {
+                    if (!s) return '';
+                    var map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                        '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                    var out = '';
+                    for (var i = 0; i < s.length; i++) {
+                        var c = s[i];
+                        out += map[c] !== undefined ? map[c] : c;
+                    }
+                    return out;
+                }
+                function normalizeWord(w) {
+                    return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+                }
+                function normalizeText(txt) {
+                    return (txt || '').trim().toLowerCase().split(/\s+/).filter(Boolean).map(function (w) { return normalizeWord(w); }).filter(Boolean).join(' ').replace(/\s+/g, ' ');
+                }
+                function wordMatchesQueryWord(nameWord, queryWord) {
+                    var nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                    var qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                    var nw = nw0.replace(/^[اأإآ]/u, '');
+                    var qw = qw0.replace(/^[اأإآ]/u, '');
+                    if (!qw) return true;
+                    return nw === qw || nw.indexOf(qw) === 0;
+                }
+                function customerNameMatchesSearch(customerName, rawSearch) {
+                    var raw = (rawSearch || '').trim();
+                    var qWords = raw.split(/\s+/).filter(Boolean);
+                    var nWords = (customerName || '').trim().split(/\s+/).filter(Boolean);
+                    if (qWords.length === 0) return true;
+                    return qWords.every(function (qw) {
+                        return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                    });
+                }
+                function customerSearchRank(name, rawSearch) {
+                    var raw = (rawSearch || '').trim();
+                    var nm = (name || '').trim();
+                    if (!raw) return 50;
+                    if (nm === raw) return 0;
+                    if (nm.indexOf(raw) === 0) return 1;
+                    var rawWords = raw.split(/\s+/).filter(Boolean);
+                    var firstQ = rawWords[0] || '';
+                    var nmWords = nm.split(/\s+/).filter(Boolean);
+                    if (firstQ && nmWords.length) {
+                        if (nmWords[0].indexOf(firstQ) === 0) return 2;
+                        var nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                        var qw0 = normalizeDigits(firstQ.toLowerCase());
+                        var nw = nw0.replace(/^[اأإآ]/u, '');
+                        var qw = qw0.replace(/^[اأإآ]/u, '');
+                        if (qw && (nw === qw || nw.indexOf(qw) === 0)) return 3;
+                    }
+                    return 4;
+                }
+                function findByName(name) {
+                    var raw = (name || '').trim();
+                    var search = normalizeText(raw);
+                    if (!search) return null;
+                    for (var i = 0; i < allCustomers.length; i++) {
+                        if (normalizeText(allCustomers[i].name) === search) return allCustomers[i];
+                    }
+                    for (var j = 0; j < allCustomers.length; j++) {
+                        if ((allCustomers[j].name || '').trim() === raw) return allCustomers[j];
+                    }
+                    return null;
+                }
+                function getFilteredCustomerOptions(search, max) {
+                    if (!allCustomers || !allCustomers.length) return [];
+                    var limit = max || CUSTOMER_LIST_MAX;
+                    var rawTrim = (search || '').trim();
+                    if (!rawTrim) return allCustomers.slice(0, limit);
+                    var qNorm = normalizeText(rawTrim);
+                    var words = rawTrim.split(/\s+/).filter(Boolean);
+                    var matched = [];
+                    for (var i = 0; i < allCustomers.length; i++) {
+                        var c = allCustomers[i];
+                        var idStr = (c.id || '').toString().trim();
+                        var nameOk = qNorm ? customerNameMatchesSearch(c.name || '', rawTrim) : true;
+                        var idOk = words.length > 0 && words.some(function (w) { return idStr.indexOf(w) !== -1; });
+                        var codeRawOk = idStr && idStr.indexOf(rawTrim) !== -1;
+                        if (nameOk || idOk || codeRawOk) matched.push(c);
+                    }
+                    matched.sort(function (a, b) {
+                        var ra = customerSearchRank(a.name || '', rawTrim);
+                        var rb = customerSearchRank(b.name || '', rawTrim);
+                        if (ra !== rb) return ra - rb;
+                        return (a.name || '').localeCompare(b.name || '', 'ar');
+                    });
+                    return matched.slice(0, limit);
+                }
+
+                var customerDropdownWrap = document.getElementById('prCustomerDropdownWrap');
+                var customerDropdownList = document.getElementById('prCustomerDropdownList');
+                var customerDropdownArrow = document.getElementById('prCustomerDropdownArrow');
+                var customerDropdownHighlightedIndex = -1;
+                var customerDropdownSelectableCustomers = [];
+
+                function positionCustomerDropdownList() {
+                    if (!customerDropdownList || !customerDropdownWrap) return;
+                    if (customerDropdownList.getAttribute('data-open') !== 'true') return;
+                    var r = customerDropdownWrap.getBoundingClientRect();
+                    customerDropdownList.style.width = r.width + 'px';
+                    customerDropdownList.style.top = r.bottom + 'px';
+                    customerDropdownList.style.left = r.left + 'px';
+                }
+                function closeCustomerDropdown() {
+                    if (customerDropdownList) {
+                        customerDropdownList.setAttribute('data-open', 'false');
+                        customerDropdownList.innerHTML = '';
+                    }
+                    customerDropdownHighlightedIndex = -1;
+                    customerDropdownSelectableCustomers = [];
+                }
+                function setCustomerDropdownHighlight(idx) {
+                    if (!customerDropdownList) return;
+                    if (idx < 0 || idx >= customerDropdownSelectableCustomers.length) return;
+                    var children = customerDropdownList.querySelectorAll('.product-dropdown-item');
+                    children.forEach(function (el, i) {
+                        el.classList.toggle('product-dropdown-item-active', i === idx);
+                    });
+                    customerDropdownHighlightedIndex = idx;
+                    try { children[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) { }
+                }
+                function openCustomerDropdown() {
+                    if (!customerDropdownList || !customerDropdownWrap || !custNameInput) return;
+                    var searchTermRaw = (custNameInput.value || '').trim();
+                    var list = getFilteredCustomerOptions(searchTermRaw, CUSTOMER_LIST_MAX);
+                    customerDropdownList.innerHTML = '';
+                    customerDropdownSelectableCustomers = [];
+                    var highlightIdx = 0;
+                    var currentVal = (custNameInput.value || '').trim();
+                    if (list.length > 0) {
+                        for (var i = 0; i < list.length; i++) {
+                            if (normalizeText(list[i].name || '').trim() === normalizeText(currentVal)) {
+                                highlightIdx = i;
+                                break;
+                            }
+                        }
+                    }
+                    if (list.length === 0) {
+                        var empty = document.createElement('div');
+                        empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
+                        empty.textContent = searchTermRaw ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + CUSTOMER_LIST_MAX + ' كحد أقصى)');
+                        customerDropdownList.appendChild(empty);
+                        customerDropdownHighlightedIndex = -1;
+                    } else {
+                        list.forEach(function (c, idx) {
+                            var it = document.createElement('div');
+                            it.className = 'product-dropdown-item py-2 px-3' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
+                            it.setAttribute('role', 'option');
+                            it.textContent = (c.name || '').trim();
+                            it.addEventListener('click', function (e) {
+                                e.preventDefault();
+                                fillCustomerFromRecord(c);
+                                custNameInput.value = (c.name || '').trim();
+                                closeCustomerDropdown();
+                            });
+                            customerDropdownList.appendChild(it);
+                            customerDropdownSelectableCustomers.push(c);
+                        });
+                        customerDropdownHighlightedIndex = highlightIdx;
+                    }
+                    customerDropdownList.setAttribute('data-open', 'true');
+                    positionCustomerDropdownList();
+                }
+                function selectHighlightedCustomer(keepOpen) {
+                    if (customerDropdownHighlightedIndex < 0 || customerDropdownHighlightedIndex >= customerDropdownSelectableCustomers.length) return false;
+                    var selected = customerDropdownSelectableCustomers[customerDropdownHighlightedIndex];
+                    if (!selected) return false;
+                    fillCustomerFromRecord(selected);
+                    custNameInput.value = (selected.name || '').trim();
+                    if (!keepOpen) closeCustomerDropdown();
+                    return true;
+                }
+
+                custNameInput.addEventListener('input', function () { openCustomerDropdown(); });
+                if (customerDropdownWrap && !customerDropdownWrap.dataset.boundPrCustomerDropdownClick) {
+                    customerDropdownWrap.dataset.boundPrCustomerDropdownClick = '1';
+                    customerDropdownWrap.addEventListener('click', function (ev) {
+                        if (ev.target && ev.target.closest('#prCustomerDropdownList')) return;
+                    });
+                }
+                document.body.addEventListener('click', function (ev) {
+                    if (!customerDropdownWrap) return;
+                    if (!customerDropdownWrap.contains(ev.target)) closeCustomerDropdown();
+                });
+                if (customerDropdownArrow) {
+                    customerDropdownArrow.addEventListener('click', function (ev) {
+                        ev.preventDefault();
+                        if (custNameInput) custNameInput.focus();
+                        openCustomerDropdown();
+                    });
+                }
+                custNameInput.addEventListener('keydown', function (e) {
+                    var isOpen = customerDropdownList && customerDropdownList.getAttribute('data-open') === 'true';
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        if (!isOpen) openCustomerDropdown();
+                        if (isOpen && customerDropdownSelectableCustomers.length > 0) {
+                            var next = Math.min(customerDropdownHighlightedIndex + 1, customerDropdownSelectableCustomers.length - 1);
+                            setCustomerDropdownHighlight(next);
+                        } else if (customerDropdownSelectableCustomers.length > 0) {
+                            setCustomerDropdownHighlight(0);
+                        }
+                        return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        if (!isOpen) openCustomerDropdown();
+                        if (isOpen && customerDropdownSelectableCustomers.length > 0) {
+                            var prev = Math.max(customerDropdownHighlightedIndex - 1, 0);
+                            setCustomerDropdownHighlight(prev);
+                        } else if (customerDropdownSelectableCustomers.length > 0) {
+                            setCustomerDropdownHighlight(0);
+                        }
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (isOpen && customerDropdownHighlightedIndex >= 0 && customerDropdownSelectableCustomers.length > 0) {
+                            selectHighlightedCustomer(false);
+                            return;
+                        }
+                        fillCustomerFromRecord(findByName(custNameInput.value));
+                    }
+                });
+                custNameInput.addEventListener('blur', function () {
+                    try {
+                        closeCustomerDropdown();
+                        fillCustomerFromRecord(findByName(custNameInput.value));
+                    } catch (ex) { }
+                });
+
+                var initialCustomerId = parseInt('@Model.CustomerId', 10);
+                if (!isNaN(initialCustomerId) && initialCustomerId > 0) {
+                    var opt0 = findOptionById(String(initialCustomerId));
+                    if (opt0) {
+                        custNameInput.value = opt0.value;
+                        fillCustomerFromOption(opt0);
+                    }
+                }
+            })();
 
             // =========================================================
             // جلب أصناف فاتورة الشراء عند إدخال رقم الفاتورة
@@ -829,6 +1002,7 @@
             var btnAddReturnLine = document.getElementById('btnAddReturnLine');
 
             var invoiceItems = []; // متغير: قائمة أصناف الفاتورة
+            var prGetInvoiceItemsUrl = '@Url.Action("GetInvoiceItems", "PurchaseReturns")';
 
             async function loadInvoiceByNumber() {
                 var invoiceId = parseInt(invoiceIdInput.value || '0', 10);
@@ -841,8 +1015,28 @@
                 }
 
                 try {
-                    var response = await fetch(`/PurchaseReturns/GetInvoiceItems?invoiceId=${invoiceId}`);
-                    var data = await response.json();
+                    var url = prGetInvoiceItemsUrl + (prGetInvoiceItemsUrl.indexOf('?') >= 0 ? '&' : '?') + 'invoiceId=' + encodeURIComponent(String(invoiceId));
+                    var response = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    });
+                    var rawText = await response.text();
+                    var data = null;
+                    if (rawText) {
+                        try { data = JSON.parse(rawText); } catch (parseErr) {
+                            console.error('GetInvoiceItems: non-JSON', parseErr, rawText ? rawText.substring(0, 300) : '');
+                            alert('استجابة غير متوقعة من الخادم. تحقق من الصلاحيات أو سجّل الدخول.');
+                            return;
+                        }
+                    }
+                    if (!response.ok || !data) {
+                        alert((data && data.message) ? data.message : ('تعذر جلب الفاتورة (رمز ' + response.status + ').'));
+                        return;
+                    }
 
                     if (!data.ok) {
                         alert(data.message || 'حدث خطأ في جلب بيانات الفاتورة.');
@@ -858,7 +1052,8 @@
                         document.getElementById('CustomerCodeDisplay').value = data.customerId;
                         var opt = findOptionById(data.customerId.toString());
                         if (opt) {
-                            customerInput.value = opt.value;
+                            var nameEl = document.getElementById('CustomerNameInput');
+                            if (nameEl) nameEl.value = opt.value;
                             fillCustomerFromOption(opt);
                         }
                     }
@@ -893,7 +1088,8 @@
                         var option = document.createElement('option');
                         option.value = index.toString();
                         var remaining = (item.remaining != null) ? item.remaining : (item.qty - (item.alreadyReturned || 0));
-                        option.textContent = item.prodName + ' - كمية في الفاتورة: ' + item.qty + ' - متبقي للمرتجع: ' + remaining + ' - تشغيلة: ' + (item.batchNo || 'بدون');
+                        option.textContent = (item.prodName != null && String(item.prodName).trim() !== '') ? String(item.prodName).trim() : ('صنف #' + item.prodId);
+                        option.setAttribute('title', 'كمية الفاتورة: ' + item.qty + ' — متبقي للمرتجع: ' + remaining + (item.batchNo ? (' — تشغيلة: ' + item.batchNo) : ''));
                         option.setAttribute('data-prodId', item.prodId);
                         option.setAttribute('data-lineNo', item.lineNo);
                         option.setAttribute('data-qty', item.qty);
@@ -911,6 +1107,12 @@
                     invoiceQtyDisplay.value = '';
                     returnBatchDisplay.value = '';
                     returnExpiryDisplay.value = '';
+
+                    // بعد عرض بيانات الفاتورة: الانتقال بلوحة المفاتيح إلى «حفظ المرتجع» ثم Enter يحفظ وينتقل للأصناف (منطق الحفظ موجود)
+                    var btnSaveHdr = document.getElementById('btnSaveReturnHeader');
+                    if (btnSaveHdr && typeof btnSaveHdr.focus === 'function') {
+                        setTimeout(function () { btnSaveHdr.focus(); }, 0);
+                    }
 
                 } catch (error) {
                     console.error('Error loading invoice items:', error);
@@ -982,31 +1184,44 @@
                 var totals = (data && data.totals) ? data.totals : {};
                 while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
                 if (lines.length === 0) {
-                    var tr = document.createElement('tr');
-                    tr.id = 'PurchaseReturnLinesEmptyRow';
-                    tr.innerHTML = '<td colspan="7" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع.</td>';
-                    tbody.appendChild(tr);
+                    var trEmpty = document.createElement('tr');
+                    trEmpty.id = 'PurchaseReturnLinesEmptyRow';
+                    trEmpty.innerHTML = '<td colspan="10" class="text-center text-muted py-4">لا توجد سطور مسجَّلة لهذا المرتجع في هذه المرحلة.</td>';
+                    tbody.appendChild(trEmpty);
                 } else {
-                    var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
-                    var lockPosted = (typeof isReturnPosted === "function" && isReturnPosted()) ? '1' : '0';
                     lines.forEach(function(l) {
                         var tr = document.createElement('tr');
+                        tr.className = 'erp-list-selectable-row';
                         tr.setAttribute('data-line-no', l.lineNo);
                         tr.setAttribute('data-prodid', l.prodId);
-                        var btn = '<button type="button" class="btn btn-danger btn-sm btnRemoveReturnLine" data-line-no="' + l.lineNo + '" data-pret-id="' + pretId + '" data-lock-posted="' + lockPosted + '" title="مسح السطر">\uD83D\uDDD1</button>';
-                        var lv = (l.lineValue != null) ? Number(l.lineValue).toFixed(2) : (l.qty && l.unitCost != null) ? (l.qty * l.unitCost).toFixed(2) : '';
-                        tr.innerHTML = '<td class="text-center">' + l.lineNo + '</td><td>' + (l.prodName || '') + '</td><td class="text-center">' + l.qty + '</td><td class="text-center">' + (l.unitCost != null ? Number(l.unitCost).toFixed(2) : '') + '</td><td class="text-center">' + (l.priceRetail != null ? Number(l.priceRetail).toFixed(2) : '') + '</td><td class="text-center">' + lv + '</td><td class="text-center">' + btn + '</td>';
+                        var loc = (l.location != null && String(l.location).trim() !== '') ? String(l.location) : '—';
+                        var exp = (l.expiry != null && String(l.expiry).trim() !== '') ? String(l.expiry) : '';
+                        var batch = (l.batchNo != null) ? String(l.batchNo) : '';
+                        var lv = (l.lineValue != null) ? Number(l.lineValue).toFixed(2) : (l.qty != null && l.unitCost != null) ? (Number(l.qty) * Number(l.unitCost)).toFixed(2) : '';
+                        var disc = (l.purchaseDiscountPct != null) ? Number(l.purchaseDiscountPct).toFixed(2) : '';
+                        tr.innerHTML =
+                            '<td class="text-center">' + l.lineNo + '</td>' +
+                            '<td class="text-center text-muted small">' + loc + '</td>' +
+                            '<td><strong>' + (l.prodName || '') + '</strong></td>' +
+                            '<td class="text-center">' + batch + '</td>' +
+                            '<td class="text-center">' + exp + '</td>' +
+                            '<td class="text-center">' + l.qty + '</td>' +
+                            '<td class="text-center">' + (l.unitCost != null ? Number(l.unitCost).toFixed(2) : '') + '</td>' +
+                            '<td class="text-center">' + (l.priceRetail != null ? Number(l.priceRetail).toFixed(2) : '') + '</td>' +
+                            '<td class="text-center">' + disc + '</td>' +
+                            '<td class="text-center">' + lv + '</td>';
                         tbody.appendChild(tr);
                     });
                 }
-                var b = document.getElementById('ItemsTotalBadge');
-                if (b && totals.itemsTotal != null) b.textContent = Number(totals.itemsTotal).toFixed(2);
-                b = document.getElementById('AfterDiscountBadge');
-                if (b && totals.itemsTotal != null && totals.discountTotal != null) b.textContent = (Number(totals.itemsTotal) - Number(totals.discountTotal)).toFixed(2);
-                b = document.getElementById('TaxAmountBadge');
-                if (b && totals.taxTotal != null) b.textContent = Number(totals.taxTotal).toFixed(2);
-                b = document.getElementById('NetTotalBadge');
-                if (b && totals.netTotal != null) b.textContent = Number(totals.netTotal).toFixed(2);
+                var tb = document.getElementById('TotalBeforeTaxBadge');
+                if (tb && totals.itemsTotal != null && totals.discountTotal != null) {
+                    tb.textContent = (Number(totals.itemsTotal) - Number(totals.discountTotal)).toFixed(2);
+                }
+                var taxEl = document.getElementById('TaxAmountBadge');
+                if (taxEl && totals.taxTotal != null) taxEl.textContent = Number(totals.taxTotal).toFixed(2);
+                var netEl = document.getElementById('NetTotalBadge');
+                if (netEl && totals.netTotal != null) netEl.textContent = Number(totals.netTotal).toFixed(2);
+                syncDeleteSelectedReturnLineButton();
             }
 
             // عند إضافة سطر للمرتجع
@@ -1084,7 +1299,6 @@
             // زر حفظ المرتجع (SaveHeader) — يحفظ الهيدر ويسجّل رقم المرتجع
             // =========================================================
             var btnSaveReturn = document.getElementById('btnSaveReturnHeader');
-            var editBaseUrl = '@Url.Action("Edit", "PurchaseReturns")';
             if (btnSaveReturn) {
                 btnSaveReturn.addEventListener('click', async function () {
                     var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
@@ -1127,8 +1341,6 @@
                         var timeEl = document.getElementById('ReturnTimeDisplay');
                         if (dateEl && data.returnDate) dateEl.value = data.returnDate;
                         if (timeEl && data.returnTime) timeEl.value = data.returnTime;
-                        var editLink = document.getElementById('btnEditReturn');
-                        if (editLink) editLink.href = editBaseUrl + '/' + newId;
                         var clearBtn = document.getElementById('btnClearReturnLines');
                         if (clearBtn) clearBtn.setAttribute('data-pret-id', newId.toString());
                         var numDisp = document.getElementById('ReturnNumberDisplay');
@@ -1147,26 +1359,74 @@
                 });
             }
 
-            document.addEventListener('click', async function(ev) {
-                var btn = ev.target.closest('.btnRemoveReturnLine');
-                if (!btn) return;
-                ev.preventDefault();
-                var pretId = parseInt(btn.getAttribute('data-pret-id') || '0', 10);
-                var lineNo = parseInt(btn.getAttribute('data-line-no') || '0', 10);
-                if (pretId <= 0 || lineNo <= 0) return;
-                if (typeof isReturnPosted === "function" && isReturnPosted()) { alert('المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً.'); return; }
-                if (!confirm('هل تريد مسح هذا السطر؟ (مسح سطر المرتجع يزيد المخزون — عكس الشراء)')) return;
-                btn.disabled = true;
+            var linesTableBody = document.getElementById('PurchaseReturnLinesTableBody');
+            if (linesTableBody) {
+                linesTableBody.addEventListener('click', function (ev) {
+                    var tr = ev.target.closest('tr.erp-list-selectable-row');
+                    if (!tr || !linesTableBody.contains(tr)) return;
+                    linesTableBody.querySelectorAll('tr.erp-list-selectable-row.selected').forEach(function (r) { r.classList.remove('selected'); });
+                    tr.classList.add('selected');
+                    syncDeleteSelectedReturnLineButton();
+                });
+            }
+
+            async function executeRemoveReturnLinePR(pretId, lineNo) {
+                var delBtn = document.getElementById('btnDeleteSelectedReturnLine');
+                if (delBtn) delBtn.disabled = true;
                 try {
                     var res = await fetch('@Url.Action("RemoveLineJson", "PurchaseReturns")', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ PRetId: pretId, LineNo: lineNo }) });
                     var txt = await res.text();
                     var data = null;
                     if (txt) { try { data = JSON.parse(txt); } catch (e) {} }
-                    if (!res.ok || !data || !data.ok) { alert((data && data.message) ? data.message : 'فشل مسح السطر.'); return; }
+                    if (!res.ok || !data || !data.ok) {
+                        alert((data && data.message) ? data.message : 'فشل مسح السطر.');
+                        return;
+                    }
                     refreshReturnLinesAndTotals(data);
-                } catch (e) { console.error(e); alert('حدث خطأ أثناء مسح السطر.'); }
-                finally { btn.disabled = false; }
-            });
+                    showPrLineDeletedFlash();
+                    try {
+                        if (typeof loadInvoiceByNumber === 'function') await loadInvoiceByNumber();
+                    } catch (reSyncEx) { console.warn(reSyncEx); }
+                } catch (e) {
+                    console.error(e);
+                    alert('حدث خطأ أثناء مسح السطر.');
+                } finally {
+                    syncDeleteSelectedReturnLineButton();
+                }
+            }
+
+            var btnDeleteSelectedLine = document.getElementById('btnDeleteSelectedReturnLine');
+            if (btnDeleteSelectedLine) {
+                btnDeleteSelectedLine.addEventListener('click', async function () {
+                    if (btnDeleteSelectedLine.disabled) return;
+                    var tbody = document.getElementById('PurchaseReturnLinesTableBody');
+                    var sel = tbody && tbody.querySelector('tr.erp-list-selectable-row.selected');
+                    var lineNo = sel ? parseInt(sel.getAttribute('data-line-no') || '0', 10) : 0;
+                    var pretId = parseInt(document.getElementById('PRetId').value || '0', 10);
+                    if (pretId <= 0 || lineNo <= 0) {
+                        alert('اختر سطراً في الجدول أولاً.');
+                        return;
+                    }
+                    if (typeof isReturnPosted === 'function' && isReturnPosted()) {
+                        alert('المرتجع مترحّل ومقفول. استخدم زر (فتح المرتجع) أولاً.');
+                        return;
+                    }
+                    var msg = 'هل تريد مسح السطر رقم (' + lineNo + ')؟\n\nمسح سطر المرتجع يزيد المخزون — عكس الشراء';
+                    var okDelete = false;
+                    if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                        okDelete = await ERP.showConfirmModal({
+                            title: 'مسح سطر من المرتجع',
+                            message: msg.replace(/\n\n/g, ' '),
+                            confirmText: 'مسح',
+                            cancelText: 'إلغاء'
+                        });
+                    } else {
+                        okDelete = confirm(msg.replace(/\n\n/g, ' '));
+                    }
+                    if (!okDelete) return;
+                    await executeRemoveReturnLinePR(pretId, lineNo);
+                });
+            }
 
             var btnClear = document.getElementById('btnClearReturnLines');
             if (btnClear) {
@@ -1348,6 +1608,86 @@
             searchBtnPR?.addEventListener('click', (e) => { e.preventDefault(); doSearchPR(); });
             searchInputPR?.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); doSearchPR(); }
+            });
+
+            // =========================================================
+            // حركة الصنف + حجم التعامل + طباعة (منطقة erp-print-area)
+            // =========================================================
+            function openPrTabFromFrame(url, tabId, title) {
+                try {
+                    if (window.top && window.top !== window) {
+                        window.top.postMessage({ type: 'erp-open-tab', tabId: tabId || '', title: title || '', url: url }, '*');
+                        return;
+                    }
+                } catch (e) { console.error(e); }
+                if (window.erpTabs && typeof window.erpTabs.openTab === 'function') {
+                    window.erpTabs.openTab(tabId, url, title);
+                } else {
+                    window.location.href = url;
+                }
+            }
+
+            var movementBaseUrlPr = '@Url.Action("Show", "Products")';
+            function buildPrMovementUrl(id) {
+                var base = movementBaseUrlPr;
+                var params = new URLSearchParams();
+                params.set('prodId', String(id));
+                params.set('frame', '1');
+                var sep = base.indexOf('?') >= 0 ? '&' : '?';
+                return base + sep + params.toString();
+            }
+
+            function getPrCurrentProdIdForMovement() {
+                var tbody = document.getElementById('PurchaseReturnLinesTableBody');
+                var sel = tbody && tbody.querySelector('tr.erp-list-selectable-row.selected');
+                if (sel) {
+                    var pid = sel.getAttribute('data-prodid');
+                    if (pid) return String(pid).trim();
+                }
+                var itemSelectEl = document.getElementById('InvoiceItemSelect');
+                var selIdx = itemSelectEl ? parseInt(itemSelectEl.value || '-1', 10) : -1;
+                if (selIdx >= 0 && typeof invoiceItems !== 'undefined' && invoiceItems && invoiceItems[selIdx]) {
+                    return String(invoiceItems[selIdx].prodId || '').trim();
+                }
+                return '';
+            }
+
+            var btnProdMove = document.getElementById('btnOpenProductMovement');
+            if (btnProdMove && !btnProdMove.dataset.boundPrMove) {
+                btnProdMove.dataset.boundPrMove = '1';
+                btnProdMove.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    var id = getPrCurrentProdIdForMovement();
+                    if (!id) {
+                        alert('اختر سطراً في الجدول أو صنفاً من قائمة «اختر صنف من فاتورة الشراء» أولاً.');
+                        var ise = document.getElementById('InvoiceItemSelect');
+                        if (ise) { ise.focus(); }
+                        return;
+                    }
+                    openPrTabFromFrame(buildPrMovementUrl(id), 'product-movement-tab', 'حركة الصنف');
+                });
+            }
+
+            var btnPrintPr = document.getElementById('btnPrintReturn');
+            if (btnPrintPr && !btnPrintPr.dataset.boundPrPrint) {
+                btnPrintPr.dataset.boundPrPrint = '1';
+                var printingPr = false;
+                btnPrintPr.addEventListener('click', function () {
+                    if (printingPr) return;
+                    printingPr = true;
+                    setTimeout(function () {
+                        if (typeof window.print === 'function') window.print();
+                    }, 50);
+                });
+                window.addEventListener('afterprint', function () { printingPr = false; });
+            }
+
+            document.getElementById('btnCustomerEngagement')?.addEventListener('click', function (e) {
+                var cid = parseInt((document.getElementById('CustomerId')?.value || '0'), 10) || 0;
+                if (cid <= 0) {
+                    e.preventDefault();
+                    alert('لا يوجد طرف (مورد) للعرض. اختر مورداً أو حمّل فاتورة شراء.');
+                }
             });
 
             window.__ERP_REFRESH__ = function () {

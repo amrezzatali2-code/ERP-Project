@@ -104,12 +104,13 @@ namespace ERP.Controllers
             await PopulateDropDownsAsync();
 
             var prodIds = model.Lines.Select(l => l.ProdId).Distinct().ToList();
-            var prodNames = await _context.Products
+            var prodRows = await _context.Products
                 .AsNoTracking()
                 .Where(p => prodIds.Contains(p.ProdId))
-                .Select(p => new { p.ProdId, p.ProdName })
+                .Select(p => new { p.ProdId, p.ProdName, p.Location })
                 .ToListAsync();
-            ViewBag.ProdNames = prodNames.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+            ViewBag.ProdNames = prodRows.ToDictionary(x => x.ProdId, x => x.ProdName ?? "");
+            ViewBag.ProdLocations = prodRows.ToDictionary(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
 
             if (model.IsPosted)
             {
@@ -259,12 +260,17 @@ namespace ERP.Controllers
         private static IQueryable<PurchaseReturn> ApplyColumnFilters(
             IQueryable<PurchaseReturn> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_date,
             string? filterCol_customerId,
+            string? filterCol_customerIdExpr,
             string? filterCol_customer,
             string? filterCol_warehouse,
+            string? filterCol_warehouseExpr,
             string? filterCol_refpi,
+            string? filterCol_refpiExpr,
             string? filterCol_net,
+            string? filterCol_netExpr,
             string? filterCol_status,
             string? filterCol_posted,
             string? filterCol_postedAt,
@@ -272,7 +278,9 @@ namespace ERP.Controllers
             string? filterCol_createdAt,
             string? filterCol_updatedAt)
         {
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = PurchaseReturnListNumericExpr.ApplyPRetIdExpr(query, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -291,7 +299,9 @@ namespace ERP.Controllers
                     if (dates.Count > 0) query = query.Where(pr => dates.Contains(pr.PRetDate.Date));
                 }
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_customerId))
+            if (!string.IsNullOrWhiteSpace(filterCol_customerIdExpr))
+                query = PurchaseReturnListNumericExpr.ApplyCustomerIdExpr(query, filterCol_customerIdExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_customerId))
             {
                 var ids = filterCol_customerId.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -304,21 +314,27 @@ namespace ERP.Controllers
                     .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
                 if (vals.Count > 0) query = query.Where(pr => pr.Customer != null && pr.Customer.CustomerName != null && vals.Contains(pr.Customer.CustomerName));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
+            if (!string.IsNullOrWhiteSpace(filterCol_warehouseExpr))
+                query = PurchaseReturnListNumericExpr.ApplyWarehouseIdExpr(query, filterCol_warehouseExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_warehouse))
             {
                 var ids = filterCol_warehouse.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0) query = query.Where(pr => ids.Contains(pr.WarehouseId));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_refpi))
+            if (!string.IsNullOrWhiteSpace(filterCol_refpiExpr))
+                query = PurchaseReturnListNumericExpr.ApplyRefPIIdExpr(query, filterCol_refpiExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_refpi))
             {
                 var ids = filterCol_refpi.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0) query = query.Where(pr => pr.RefPIId.HasValue && ids.Contains(pr.RefPIId!.Value));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_net))
+            if (!string.IsNullOrWhiteSpace(filterCol_netExpr))
+                query = PurchaseReturnListNumericExpr.ApplyNetTotalExpr(query, filterCol_netExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_net))
             {
                 var vals = filterCol_net.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => decimal.TryParse(x.Trim(), NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : (decimal?)null)
@@ -426,7 +442,25 @@ namespace ERP.Controllers
             {
                 var ids = await _context.PurchaseReturns.AsNoTracking()
                     .Select(p => p.WarehouseId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
-                return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
+                var names = await _context.Warehouses.AsNoTracking()
+                    .Where(w => ids.Contains(w.WarehouseId))
+                    .ToDictionaryAsync(w => w.WarehouseId, w => w.WarehouseName ?? "");
+
+                var rows = ids.Select(id =>
+                {
+                    var name = names.TryGetValue(id, out var n) ? n : "";
+                    var disp = string.IsNullOrWhiteSpace(name) ? id.ToString() : $"{name} ({id})";
+                    return new { value = id.ToString(), display = disp };
+                }).ToList();
+
+                if (!string.IsNullOrEmpty(searchTerm))
+                {
+                    rows = rows.Where(r =>
+                        (r.display ?? "").ToLowerInvariant().Contains(searchTerm) ||
+                        (r.value ?? "").Contains(searchTerm, StringComparison.Ordinal)).ToList();
+                }
+
+                return Json(rows);
             }
             if (columnLower == "refpi")
             {
@@ -487,6 +521,7 @@ namespace ERP.Controllers
         private IQueryable<PurchaseReturn> BuildQuery(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange,
@@ -495,10 +530,11 @@ namespace ERP.Controllers
             int? fromCode,
             int? toCode)
         {
-            // (1) الاستعلام الأساسي من جدول المرتجعات + الجهة (Customer)
+            // (1) الاستعلام الأساسي من جدول المرتجعات + الجهة + المخزن
             IQueryable<PurchaseReturn> q =
                 _context.PurchaseReturns
-                        .Include(pr => pr.Customer)   // لعرض اسم الجهة
+                        .Include(pr => pr.Customer)
+                        .Include(pr => pr.Warehouse)
                         .AsNoTracking();
 
             // (2) فلتر رقم المرتجع من/إلى
@@ -549,7 +585,7 @@ namespace ERP.Controllers
                     ["UpdatedAt"] = pr => pr.UpdatedAt ?? pr.CreatedAt       // آخر تعديل
                 };
 
-            // (5) تطبيق منظومة البحث/الترتيب الموحدة
+            // (5) بحث موحّد — بدون ترتيب هنا (الترتيب بعد فلاتر الأعمدة والإجماليات)
             q = q.ApplySearchSort(
                 search: search,
                 searchBy: searchBy,
@@ -559,10 +595,39 @@ namespace ERP.Controllers
                 intFields: intFields,
                 orderFields: orderFields,
                 defaultSearchBy: "all",
-                defaultSortBy: "PRetDate"
-            );
+                defaultSortBy: "PRetDate",
+                searchMode: searchMode,
+                applyOrdering: false);
 
             return q;
+        }
+
+        /// <summary>
+        /// ترتيب قائمة مرتجعات المشتريات (بعد الفلاتر).
+        /// </summary>
+        private static IQueryable<PurchaseReturn> ApplyPurchaseReturnSort(IQueryable<PurchaseReturn> query, string? sort, string? dir)
+        {
+            var key = (sort ?? "PRetDate").Trim();
+            var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            return key.ToLowerInvariant() switch
+            {
+                "pretid" => desc ? query.OrderByDescending(pr => pr.PRetId) : query.OrderBy(pr => pr.PRetId),
+                "pretdate" => desc ? query.OrderByDescending(pr => pr.PRetDate) : query.OrderBy(pr => pr.PRetDate),
+                "customerid" => desc ? query.OrderByDescending(pr => pr.CustomerId) : query.OrderBy(pr => pr.CustomerId),
+                "customer" => desc
+                    ? query.OrderByDescending(pr => pr.Customer != null ? pr.Customer.CustomerName ?? "" : "")
+                    : query.OrderBy(pr => pr.Customer != null ? pr.Customer.CustomerName ?? "" : ""),
+                "warehouseid" => desc ? query.OrderByDescending(pr => pr.WarehouseId) : query.OrderBy(pr => pr.WarehouseId),
+                "refpiid" => desc ? query.OrderByDescending(pr => pr.RefPIId ?? 0) : query.OrderBy(pr => pr.RefPIId ?? 0),
+                "nettotal" => desc ? query.OrderByDescending(pr => pr.NetTotal) : query.OrderBy(pr => pr.NetTotal),
+                "status" => desc ? query.OrderByDescending(pr => pr.Status ?? "") : query.OrderBy(pr => pr.Status ?? ""),
+                "isposted" => desc ? query.OrderByDescending(pr => pr.IsPosted) : query.OrderBy(pr => pr.IsPosted),
+                "postedat" => desc ? query.OrderByDescending(pr => pr.PostedAt ?? pr.CreatedAt) : query.OrderBy(pr => pr.PostedAt ?? pr.CreatedAt),
+                "createdby" => desc ? query.OrderByDescending(pr => pr.CreatedBy ?? "") : query.OrderBy(pr => pr.CreatedBy ?? ""),
+                "createdat" => desc ? query.OrderByDescending(pr => pr.CreatedAt) : query.OrderBy(pr => pr.CreatedAt),
+                "updatedat" => desc ? query.OrderByDescending(pr => pr.UpdatedAt ?? pr.CreatedAt) : query.OrderBy(pr => pr.UpdatedAt ?? pr.CreatedAt),
+                _ => desc ? query.OrderByDescending(pr => pr.PRetDate) : query.OrderBy(pr => pr.PRetDate),
+            };
         }
 
         // =========================================================
@@ -572,6 +637,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "PRetDate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -580,12 +646,17 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_customerId = null,
+            string? filterCol_customerIdExpr = null,
             string? filterCol_customer = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_refpi = null,
+            string? filterCol_refpiExpr = null,
             string? filterCol_net = null,
+            string? filterCol_netExpr = null,
             string? filterCol_status = null,
             string? filterCol_posted = null,
             string? filterCol_postedAt = null,
@@ -593,41 +664,106 @@ namespace ERP.Controllers
             string? filterCol_createdAt = null,
             string? filterCol_updatedAt = null,
             int page = 1,
-            int pageSize = 50)
+            int pageSize = 10)
         {
-            // تجهيز الاستعلام الموحد
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psVal))
+                pageSize = psVal;
+
+            var pageQuery = Request.Query["page"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageQuery) && int.TryParse(pageQuery.Trim(), out var pVal))
+                page = pVal;
+
+            searchBy ??= "all";
+            sort ??= "PRetDate";
+            dir ??= "desc";
+            searchMode ??= "contains";
+
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
             var q = BuildQuery(
-                search, searchBy, sort, dir,
+                search, searchBy, searchMode, sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_customerId, filterCol_customer, filterCol_warehouse, filterCol_refpi, filterCol_net, filterCol_status, filterCol_posted, filterCol_postedAt, filterCol_createdBy, filterCol_createdAt, filterCol_updatedAt);
+            q = ApplyColumnFilters(q,
+                filterCol_id, filterCol_idExpr, filterCol_date,
+                filterCol_customerId, filterCol_customerIdExpr, filterCol_customer,
+                filterCol_warehouse, filterCol_warehouseExpr,
+                filterCol_refpi, filterCol_refpiExpr,
+                filterCol_net, filterCol_netExpr,
+                filterCol_status, filterCol_posted, filterCol_postedAt,
+                filterCol_createdBy, filterCol_createdAt, filterCol_updatedAt);
 
-            // إنشاء نتيجة مقسّمة صفحات
-            var model = await PagedResult<PurchaseReturn>.CreateAsync(q, page, pageSize);
+            decimal totalNetFiltered = await q.SumAsync(pr => (decimal?)pr.NetTotal) ?? 0m;
+            int totalCount = await q.CountAsync();
 
-            // تمرير حالة فلتر التاريخ للموديل (لاستخدامها في الواجهة)
-            model.UseDateRange = useDateRange;
-            model.FromDate = fromDate;
-            model.ToDate = toDate;
+            bool sortDesc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            q = ApplyPurchaseReturnSort(q, sort, dir);
 
-            // ViewBag للفلاتر
+            if (totalCount > 0 && pageSize > 0)
+            {
+                var maxPage = (int)Math.Ceiling(totalCount / (double)pageSize);
+                if (page > maxPage) page = Math.Max(1, maxPage);
+            }
+
+            int effectivePageSize = pageSize;
+            if (pageSize == 0)
+            {
+                effectivePageSize = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+            }
+
+            var items = await q
+                .Skip((page - 1) * effectivePageSize)
+                .Take(effectivePageSize)
+                .ToListAsync();
+
+            int totalPages = pageSize == 0 ? 1 : (int)Math.Ceiling(totalCount / (double)pageSize);
+
+            var model = new PagedResult<PurchaseReturn>
+            {
+                Items = items,
+                PageNumber = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = totalPages,
+                HasPrevious = page > 1,
+                HasNext = pageSize != 0 && page < totalPages,
+                Search = search,
+                SearchBy = searchBy,
+                SortColumn = sort,
+                SortDescending = sortDesc,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate
+            };
+
             ViewBag.Search = search ?? "";
-            ViewBag.SearchBy = searchBy ?? "all";
-            ViewBag.Sort = sort ?? "PRetDate";
-            ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
+            ViewBag.SearchBy = searchBy;
+            ViewBag.SearchMode = searchMode;
+            ViewBag.Sort = sort;
+            ViewBag.Dir = sortDesc ? "desc" : "asc";
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = "PRetDate";
 
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Date = filterCol_date;
             ViewBag.FilterCol_CustomerId = filterCol_customerId;
+            ViewBag.FilterCol_CustomerIdExpr = filterCol_customerIdExpr;
             ViewBag.FilterCol_Customer = filterCol_customer;
             ViewBag.FilterCol_Warehouse = filterCol_warehouse;
+            ViewBag.FilterCol_WarehouseExpr = filterCol_warehouseExpr;
             ViewBag.FilterCol_Refpi = filterCol_refpi;
+            ViewBag.FilterCol_RefpiExpr = filterCol_refpiExpr;
             ViewBag.FilterCol_Net = filterCol_net;
+            ViewBag.FilterCol_NetExpr = filterCol_netExpr;
             ViewBag.FilterCol_Status = filterCol_status;
             ViewBag.FilterCol_Posted = filterCol_posted;
             ViewBag.FilterCol_PostedAt = filterCol_postedAt;
@@ -635,30 +771,9 @@ namespace ERP.Controllers
             ViewBag.FilterCol_CreatedAt = filterCol_createdAt;
             ViewBag.FilterCol_UpdatedAt = filterCol_updatedAt;
 
-            ViewBag.Page = page;
-            ViewBag.PageSize = pageSize;
-            ViewBag.TotalCount = model.TotalCount;
+            ViewBag.TotalNetFiltered = totalNetFiltered;
 
-            // خيارات البحث (لو حبيت تستخدمها في واجهة أخرى)
-            ViewBag.SearchOptions = new List<SelectListItem>
-            {
-                new("الكل",          "all")      { Selected = (ViewBag.SearchBy == "all")      },
-                new("رقم المرتجع",   "id")       { Selected = (ViewBag.SearchBy == "id")       },
-                new("اسم الجهة",     "customer") { Selected = (ViewBag.SearchBy == "customer") },
-                new("الحالة",        "status")   { Selected = (ViewBag.SearchBy == "status")   },
-            };
-
-            // خيارات الترتيب
-            ViewBag.SortOptions = new List<SelectListItem>
-            {
-                new("تاريخ المرتجع", "PRetDate") { Selected = (ViewBag.Sort == "PRetDate") },
-                new("رقم المرتجع",   "PRetId")   { Selected = (ViewBag.Sort == "PRetId")   },
-                new("اسم الجهة",     "Customer") { Selected = (ViewBag.Sort == "Customer") },
-                new("الحالة",        "Status")   { Selected = (ViewBag.Sort == "Status")   },
-                new("تاريخ الإنشاء", "CreatedAt"){ Selected = (ViewBag.Sort == "CreatedAt")}
-            };
-
-            return View(model);   // يعرض Views/PurchaseReturns/Index.cshtml
+            return View(model);
         }
 
         // فتح شاشة "مرتجع شراء جديد" — سياسة الصلاحيات: صلاحية View (قائمة مرتجعات الشراء) خاصة بفتح الشاشات
@@ -746,6 +861,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "PRetDate",
             string? dir = "desc",
             bool useDateRange = false,
@@ -754,12 +870,17 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_date = null,
             string? filterCol_customerId = null,
+            string? filterCol_customerIdExpr = null,
             string? filterCol_customer = null,
             string? filterCol_warehouse = null,
+            string? filterCol_warehouseExpr = null,
             string? filterCol_refpi = null,
+            string? filterCol_refpiExpr = null,
             string? filterCol_net = null,
+            string? filterCol_netExpr = null,
             string? filterCol_status = null,
             string? filterCol_posted = null,
             string? filterCol_postedAt = null,
@@ -769,11 +890,20 @@ namespace ERP.Controllers
             string format = "excel")  // excel | csv (حالياً الاتنين CSV)
         {
             var q = BuildQuery(
-                search, searchBy, sort, dir,
+                search, searchBy, searchMode, sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_date, filterCol_customerId, filterCol_customer, filterCol_warehouse, filterCol_refpi, filterCol_net, filterCol_status, filterCol_posted, filterCol_postedAt, filterCol_createdBy, filterCol_createdAt, filterCol_updatedAt);
+            q = ApplyColumnFilters(q,
+                filterCol_id, filterCol_idExpr, filterCol_date,
+                filterCol_customerId, filterCol_customerIdExpr, filterCol_customer,
+                filterCol_warehouse, filterCol_warehouseExpr,
+                filterCol_refpi, filterCol_refpiExpr,
+                filterCol_net, filterCol_netExpr,
+                filterCol_status, filterCol_posted, filterCol_postedAt,
+                filterCol_createdBy, filterCol_createdAt, filterCol_updatedAt);
+
+            q = ApplyPurchaseReturnSort(q, sort, dir);
 
             var list = await q.ToListAsync();
 
@@ -1032,7 +1162,7 @@ namespace ERP.Controllers
         // =========================================================
         // API: جلب أصناف فاتورة الشراء عند إدخال رقم الفاتورة
         // =========================================================
-        [RequirePermission("PurchaseReturns.Create")]
+        [RequirePermission("PurchaseReturns.Index")]
         [HttpGet]
         public async Task<IActionResult> GetInvoiceItems(int invoiceId)
         {
@@ -1246,7 +1376,8 @@ namespace ERP.Controllers
             var linesNow = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
             var prodMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
-            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
+            var locMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.Location }).ToDictionaryAsync(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", location = locMap.TryGetValue(l.ProdId, out var loc) ? loc : "—", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, purchaseDiscountPct = l.PurchaseDiscountPct, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
             var h = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId);
             return Json(new { ok = true, message = "تمت إضافة السطر.", lines = linesDto, totals = new { itemsTotal = h.ItemsTotal, discountTotal = h.DiscountTotal, taxTotal = h.TaxTotal, netTotal = h.NetTotal } });
         }
@@ -1292,7 +1423,8 @@ namespace ERP.Controllers
             var linesNow = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
             var prodMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
-            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
+            var locMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.Location }).ToDictionaryAsync(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", location = locMap.TryGetValue(l.ProdId, out var loc) ? loc : "—", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, purchaseDiscountPct = l.PurchaseDiscountPct, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
             var h = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId);
             return Json(new { ok = true, message = "تم حذف السطر.", lines = linesDto, totals = new { itemsTotal = h.ItemsTotal, discountTotal = h.DiscountTotal, taxTotal = h.TaxTotal, netTotal = h.NetTotal } });
         }
@@ -1338,7 +1470,8 @@ namespace ERP.Controllers
             var linesNow = await _context.PurchaseReturnLines.Where(l => l.PRetId == dto.PRetId).OrderBy(l => l.LineNo).ToListAsync();
             var prodIds = linesNow.Select(l => l.ProdId).Distinct().ToList();
             var prodMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.ProdName }).ToDictionaryAsync(x => x.ProdId, x => x.ProdName ?? "");
-            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
+            var locMap = await _context.Products.AsNoTracking().Where(p => prodIds.Contains(p.ProdId)).Select(p => new { p.ProdId, p.Location }).ToDictionaryAsync(x => x.ProdId, x => string.IsNullOrWhiteSpace(x.Location) ? "—" : x.Location!.Trim());
+            var linesDto = linesNow.Select(l => new { lineNo = l.LineNo, prodId = l.ProdId, prodName = prodMap.TryGetValue(l.ProdId, out var n) ? n : "", location = locMap.TryGetValue(l.ProdId, out var loc) ? loc : "—", qty = l.Qty, unitCost = l.UnitCost, priceRetail = l.PriceRetail, purchaseDiscountPct = l.PurchaseDiscountPct, batchNo = l.BatchNo, expiry = l.Expiry?.ToString("yyyy-MM-dd"), lineValue = l.Qty * l.UnitCost }).ToList();
             var h = await _context.PurchaseReturns.AsNoTracking().FirstAsync(pr => pr.PRetId == dto.PRetId);
             return Json(new { ok = true, message = "تم مسح كل الأصناف.", lines = linesDto, totals = new { itemsTotal = h.ItemsTotal, discountTotal = h.DiscountTotal, taxTotal = h.TaxTotal, netTotal = h.NetTotal } });
         }

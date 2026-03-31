@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;                    // القوائم List
 using System.Globalization;                          // NumberStyles لفلتر الأعمدة
 using System.Linq;                                   // استعلامات LINQ
+using System.Linq.Expressions;                       // Expression لـ ApplySearchSort
 using System.Text;                                   // بناء ملف CSV
 using System.Threading.Tasks;                        // async / await
 using Microsoft.AspNetCore.Mvc;                      // الكنترولر و IActionResult
@@ -39,17 +40,21 @@ namespace ERP.Controllers
         private static IQueryable<Account> ApplyColumnFilters(
             IQueryable<Account> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_code,
             string? filterCol_name,
             string? filterCol_type,
             string? filterCol_level,
+            string? filterCol_levelExpr,
             string? filterCol_leaf,
             string? filterCol_active,
             string? filterCol_created,
             string? filterCol_updated,
             string? filterCol_notes)
         {
-            if (!string.IsNullOrWhiteSpace(filterCol_id))
+            if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = AccountListNumericExpr.ApplyAccountIdExpr(query, filterCol_idExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
                 var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -74,7 +79,9 @@ namespace ERP.Controllers
                     .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
                 if (vals.Count > 0) query = query.Where(a => vals.Contains(a.AccountType.ToString()));
             }
-            if (!string.IsNullOrWhiteSpace(filterCol_level))
+            if (!string.IsNullOrWhiteSpace(filterCol_levelExpr))
+                query = AccountListNumericExpr.ApplyLevelExpr(query, filterCol_levelExpr);
+            else if (!string.IsNullOrWhiteSpace(filterCol_level))
             {
                 var ids = filterCol_level.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
@@ -126,6 +133,113 @@ namespace ERP.Controllers
                 }
             }
             return query;
+        }
+
+        /// <summary>استعلام الحسابات: بحث موحّد + فلاتر أساسية (بدون ترتيب نهائي).</summary>
+        private IQueryable<Account> BuildAccountsQuery(
+            bool hideInvestorAccount,
+            string? search,
+            string? searchBy,
+            string? searchMode,
+            string? sort,
+            string? dir,
+            bool useDateRange,
+            DateTime? fromDate,
+            DateTime? toDate,
+            string? dateField,
+            int? fromCode,
+            int? toCode)
+        {
+            IQueryable<Account> q = _context.Accounts.AsNoTracking();
+            if (hideInvestorAccount)
+                q = q.Where(a => a.AccountCode != InvestorAccountCode);
+
+            if (fromCode.HasValue)
+                q = q.Where(a => a.AccountId >= fromCode.Value);
+            if (toCode.HasValue)
+                q = q.Where(a => a.AccountId <= toCode.Value);
+
+            if (useDateRange)
+            {
+                if (fromDate.HasValue)
+                {
+                    if (string.Equals(dateField, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(a => a.UpdatedAt >= fromDate.Value);
+                    else
+                        q = q.Where(a => a.CreatedAt >= fromDate.Value);
+                }
+                if (toDate.HasValue)
+                {
+                    if (string.Equals(dateField, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
+                        q = q.Where(a => a.UpdatedAt <= toDate.Value);
+                    else
+                        q = q.Where(a => a.CreatedAt <= toDate.Value);
+                }
+            }
+
+            var stringFields =
+                new Dictionary<string, Expression<Func<Account, string?>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["name"] = a => a.AccountName,
+                    ["code"] = a => a.AccountCode,
+                    ["type"] = a => a.AccountType.ToString(),
+                    ["notes"] = a => a.Notes
+                };
+            var intFields =
+                new Dictionary<string, Expression<Func<Account, int>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["id"] = a => a.AccountId,
+                    ["level"] = a => a.Level
+                };
+            var orderFields =
+                new Dictionary<string, Expression<Func<Account, object>>>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["name"] = a => a.AccountName,
+                    ["code"] = a => a.AccountCode,
+                    ["id"] = a => a.AccountId,
+                    ["type"] = a => a.AccountType,
+                    ["level"] = a => a.Level,
+                    ["leaf"] = a => a.IsLeaf,
+                    ["active"] = a => a.IsActive,
+                    ["created"] = a => a.CreatedAt,
+                    ["updated"] = a => a.UpdatedAt ?? a.CreatedAt,
+                    ["notes"] = a => a.Notes ?? ""
+                };
+
+            q = q.ApplySearchSort(
+                search,
+                searchBy,
+                sort,
+                dir,
+                stringFields,
+                intFields,
+                orderFields,
+                defaultSearchBy: "all",
+                defaultSortBy: "code",
+                searchMode: searchMode,
+                applyOrdering: false);
+
+            return q;
+        }
+
+        private static IQueryable<Account> ApplyAccountSort(IQueryable<Account> query, string? sort, string? dir)
+        {
+            var key = (sort ?? "code").Trim();
+            var desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            return key.ToLowerInvariant() switch
+            {
+                "code" => desc ? query.OrderByDescending(a => a.AccountCode) : query.OrderBy(a => a.AccountCode),
+                "id" => desc ? query.OrderByDescending(a => a.AccountId) : query.OrderBy(a => a.AccountId),
+                "name" => desc ? query.OrderByDescending(a => a.AccountName) : query.OrderBy(a => a.AccountName),
+                "type" => desc ? query.OrderByDescending(a => a.AccountType) : query.OrderBy(a => a.AccountType),
+                "level" => desc ? query.OrderByDescending(a => a.Level) : query.OrderBy(a => a.Level),
+                "leaf" => desc ? query.OrderByDescending(a => a.IsLeaf) : query.OrderBy(a => a.IsLeaf),
+                "active" => desc ? query.OrderByDescending(a => a.IsActive) : query.OrderBy(a => a.IsActive),
+                "created" => desc ? query.OrderByDescending(a => a.CreatedAt) : query.OrderBy(a => a.CreatedAt),
+                "updated" => desc ? query.OrderByDescending(a => a.UpdatedAt) : query.OrderBy(a => a.UpdatedAt),
+                "notes" => desc ? query.OrderByDescending(a => a.Notes ?? "") : query.OrderBy(a => a.Notes ?? ""),
+                _ => desc ? query.OrderByDescending(a => a.AccountCode) : query.OrderBy(a => a.AccountCode),
+            };
         }
 
         /// <summary>API: جلب القيم المميزة لعمود (للفلترة بنمط Excel).</summary>
@@ -205,6 +319,24 @@ namespace ERP.Controllers
         }
 
         // =========================================================
+        // GET: تفاصيل حساب
+        // =========================================================
+        [HttpGet]
+        [RequirePermission("Accounts.Index")]
+        public async Task<IActionResult> Details(int id)
+        {
+            var account = await _context.Accounts
+                .AsNoTracking()
+                .Include(a => a.ParentAccount)
+                .FirstOrDefaultAsync(a => a.AccountId == id);
+            if (account == null)
+                return NotFound();
+            if (account.AccountCode == InvestorAccountCode && !await CanViewInvestorsAsync())
+                return NotFound();
+            return View(account);
+        }
+
+        // =========================================================
         // دالة مساعدة: ملء القوائم المنسدلة في فورم إضافة/تعديل حساب
         // =========================================================
         private void FillAccountDropdowns(Account? model = null)
@@ -257,7 +389,8 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
-            string? sort = "name",
+            string? searchMode = "contains",
+            string? sort = "code",
             string? dir = "asc",
             bool useDateRange = false,
             DateTime? fromDate = null,
@@ -266,218 +399,132 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_code = null,
             string? filterCol_name = null,
             string? filterCol_type = null,
             string? filterCol_level = null,
+            string? filterCol_levelExpr = null,
             string? filterCol_leaf = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string? filterCol_updated = null,
             string? filterCol_notes = null,
             int page = 1,
-            int pageSize = 50)
+            int pageSize = 10)
         {
-            IQueryable<Account> q = _context.Accounts.AsNoTracking();
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery.Trim(), out var psVal))
+                pageSize = psVal;
 
-            // منع ظهور حسابات المستثمرين لغير المسموح لهم
-            if (!await CanViewInvestorsAsync())
-                q = q.Where(a => a.AccountCode != InvestorAccountCode);
+            var pageQuery = Request.Query["page"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageQuery) && int.TryParse(pageQuery.Trim(), out var pVal))
+                page = pVal;
 
-            // تنظيف قيم البحث والترتيب
-            var s = (search ?? string.Empty).Trim();                 // نص البحث
-            var sb = (searchBy ?? "all").Trim().ToLowerInvariant(); // نوع البحث
-            var so = (sort ?? "name").Trim().ToLowerInvariant();    // عمود الترتيب
-            bool descending = string.Equals(dir, "desc",
-                StringComparison.OrdinalIgnoreCase);                // ترتيب تنازلي؟
+            searchBy ??= "all";
+            sort ??= "code";
+            dir ??= "asc";
+            searchMode ??= "contains";
 
-            // ============= 1) فلترة من/إلى رقم الحساب (AccountId) =============
-            if (fromCode.HasValue)
-            {
-                int fc = fromCode.Value;                            // متغير: من كود
-                q = q.Where(a => a.AccountId >= fc);
-            }
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends" && sm != "contains")
+                sm = "contains";
 
-            if (toCode.HasValue)
-            {
-                int tc = toCode.Value;                              // متغير: إلى كود
-                q = q.Where(a => a.AccountId <= tc);
-            }
+            var s = (search ?? string.Empty).Trim();
+            var sb = (searchBy ?? "all").Trim().ToLowerInvariant();
+            var so = (sort ?? "code").Trim().ToLowerInvariant();
+            bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
 
-            // ============= 2) فلترة بالتاريخ (CreatedAt / UpdatedAt) ===========
-            if (useDateRange)
-            {
-                if (fromDate.HasValue)
-                {
-                    DateTime f = fromDate.Value;                    // متغير: من تاريخ
-                    if (string.Equals(dateField, "UpdatedAt",
-                        StringComparison.OrdinalIgnoreCase))
-                    {
-                        q = q.Where(a => a.UpdatedAt >= f);
-                    }
-                    else
-                    {
-                        q = q.Where(a => a.CreatedAt >= f);
-                    }
-                }
-
-                if (toDate.HasValue)
-                {
-                    DateTime t = toDate.Value;                      // متغير: إلى تاريخ
-                    if (string.Equals(dateField, "UpdatedAt",
-                        StringComparison.OrdinalIgnoreCase))
-                    {
-                        q = q.Where(a => a.UpdatedAt <= t);
-                    }
-                    else
-                    {
-                        q = q.Where(a => a.CreatedAt <= t);
-                    }
-                }
-            }
-
-            // ============= 3) البحث حسب نوع الحقل =============================
-            if (!string.IsNullOrWhiteSpace(s))
-            {
-                switch (sb)
-                {
-                    case "name":    // اسم الحساب
-                        q = q.Where(a => a.AccountName.Contains(s));
-                        break;
-
-                    case "code":    // كود الحساب
-                        q = q.Where(a => a.AccountCode.Contains(s));
-                        break;
-
-                    case "id":      // رقم الحساب (AccountId)
-                        if (int.TryParse(s, out int idVal))
-                        {
-                            q = q.Where(a => a.AccountId == idVal);
-                        }
-                        else
-                        {
-                            q = q.Where(a => a.AccountId.ToString().Contains(s));
-                        }
-                        break;
-
-                    case "type":    // نوع الحساب (Asset / Liability ...)
-                        q = q.Where(a => a.AccountType.ToString().Contains(s));
-                        break;
-
-                    case "notes":   // الملاحظات
-                        q = q.Where(a => a.Notes != null && a.Notes.Contains(s));
-                        break;
-
-                    case "level":   // مستوى الحساب
-                        if (int.TryParse(s, out int lvlVal))
-                        {
-                            q = q.Where(a => a.Level == lvlVal);
-                        }
-                        else
-                        {
-                            q = q.Where(a => a.Level.ToString().Contains(s));
-                        }
-                        break;
-
-                    case "all":
-                    default:        // البحث في الكل
-                        q = q.Where(a =>
-                            a.AccountName.Contains(s) ||
-                            a.AccountCode.Contains(s) ||
-                            a.AccountId.ToString().Contains(s) ||
-                            a.AccountType.ToString().Contains(s) ||
-                            (a.Notes != null && a.Notes.Contains(s)) ||
-                            a.Level.ToString().Contains(s));
-                        break;
-                }
-            }
-
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_code, filterCol_name, filterCol_type, filterCol_level, filterCol_leaf, filterCol_active, filterCol_created, filterCol_updated, filterCol_notes);
-
-            // ============= 4) الترتيب حسب العمود ===============================
-            q = so switch
-            {
-                "code" => (descending
-                    ? q.OrderByDescending(a => a.AccountCode)
-                    : q.OrderBy(a => a.AccountCode)),
-
-                "id" => (descending
-                    ? q.OrderByDescending(a => a.AccountId)
-                    : q.OrderBy(a => a.AccountId)),
-
-                "type" => (descending
-                    ? q.OrderByDescending(a => a.AccountType)
-                    : q.OrderBy(a => a.AccountType)),
-
-                "level" => (descending
-                    ? q.OrderByDescending(a => a.Level)
-                    : q.OrderBy(a => a.Level)),
-
-                "created" => (descending
-                    ? q.OrderByDescending(a => a.CreatedAt)
-                    : q.OrderBy(a => a.CreatedAt)),
-
-                "updated" => (descending
-                    ? q.OrderByDescending(a => a.UpdatedAt)
-                    : q.OrderBy(a => a.UpdatedAt)),
-
-                "leaf" => (descending ? q.OrderByDescending(a => a.IsLeaf) : q.OrderBy(a => a.IsLeaf)),
-                "active" => (descending ? q.OrderByDescending(a => a.IsActive) : q.OrderBy(a => a.IsActive)),
-                "notes" => (descending ? q.OrderByDescending(a => a.Notes ?? "") : q.OrderBy(a => a.Notes ?? "")),
-
-                "name" or _ => (descending
-                    ? q.OrderByDescending(a => a.AccountName)
-                    : q.OrderBy(a => a.AccountName)),
-            };
-
-            // ============= 5) الترقيم (Paging) ================================
             if (page < 1) page = 1;
-            if (pageSize < 1) pageSize = 50;
 
-            int totalCount = await q.CountAsync();                  // إجمالي السجلات
-            int totalPages = Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
-            if (page > totalPages) page = totalPages;
+            var hideInvestor = !await CanViewInvestorsAsync();
 
-            var items = await q
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();                                     // بيانات الصفحة الحالية
+            IQueryable<Account> q = BuildAccountsQuery(
+                hideInvestor, s, sb, sm, so, dir,
+                useDateRange, fromDate, toDate, dateField, fromCode, toCode);
+
+            q = ApplyColumnFilters(
+                q,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_code,
+                filterCol_name,
+                filterCol_type,
+                filterCol_level,
+                filterCol_levelExpr,
+                filterCol_leaf,
+                filterCol_active,
+                filterCol_created,
+                filterCol_updated,
+                filterCol_notes);
+
+            int totalCount = await q.CountAsync();
+            int leafCountFiltered = await q.CountAsync(a => a.IsLeaf);
+            int activeCountFiltered = await q.CountAsync(a => a.IsActive);
+
+            q = ApplyAccountSort(q, so, dir);
+
+            if (pageSize < 0) pageSize = 10;
+            var allowedSizes = new[] { 10, 25, 50, 100, 200, 0 };
+            if (pageSize != 0 && !allowedSizes.Contains(pageSize))
+                pageSize = 10;
+
+            int totalPages;
+            List<Account> items;
+
+            if (pageSize == 0)
+            {
+                var effectiveTake = totalCount == 0 ? 10 : Math.Min(totalCount, 100_000);
+                page = 1;
+                items = await q.Skip(0).Take(effectiveTake).ToListAsync();
+                totalPages = 1;
+            }
+            else
+            {
+                totalPages = totalCount == 0 ? 1 : Math.Max(1, (int)Math.Ceiling(totalCount / (double)pageSize));
+                if (page > totalPages) page = totalPages;
+                items = await q.Skip((page - 1) * pageSize).Take(pageSize).ToListAsync();
+            }
 
             var model = new PagedResult<Account>(items, page, pageSize, totalCount)
             {
-                Search = s,            // نص البحث
-                SearchBy = sb,           // نوع البحث
-                SortColumn = so,           // عمود الترتيب
-                SortDescending = descending,   // ترتيب تنازلي؟
-                UseDateRange = useDateRange, // استخدام فلتر التاريخ؟
-                FromDate = fromDate,     // من تاريخ
-                ToDate = toDate        // إلى تاريخ
-                                       // مفيش FromCode/ToCode هنا، هنمررهم في ViewBag فقط
+                Search = s,
+                SearchBy = sb,
+                SortColumn = so,
+                SortDescending = descending,
+                UseDateRange = useDateRange,
+                FromDate = fromDate,
+                ToDate = toDate,
+                TotalPages = totalPages
             };
 
             ViewBag.Search = s;
             ViewBag.SearchBy = sb;
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = so;
             ViewBag.Dir = descending ? "desc" : "asc";
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
             ViewBag.Total = totalCount;
             ViewBag.TotalCount = totalCount;
+            ViewBag.LeafCountFiltered = leafCountFiltered;
+            ViewBag.ActiveCountFiltered = activeCountFiltered;
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField;
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Code = filterCol_code;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Type = filterCol_type;
             ViewBag.FilterCol_Level = filterCol_level;
+            ViewBag.FilterCol_LevelExpr = filterCol_levelExpr;
             ViewBag.FilterCol_Leaf = filterCol_leaf;
             ViewBag.FilterCol_Active = filterCol_active;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
             ViewBag.FilterCol_Notes = filterCol_notes;
 
-            // ========= خيارات البحث في الدروب داون (نفس أسماء أعمدة الجدول) =======
             ViewBag.SearchOptions = new[]
             {
                 new SelectListItem { Text = "البحث في الكل", Value = "all",   Selected = sb == "all"   },
@@ -489,7 +536,6 @@ namespace ERP.Controllers
                 new SelectListItem { Text = "مستوى الحساب", Value = "level", Selected = sb == "level" }
             };
 
-            // ========= خيارات الترتيب في البارشال (لو مستخدم) ======================
             ViewBag.SortOptions = new[]
             {
                 new SelectListItem { Text = "اسم الحساب",       Value = "name",    Selected = so == "name"    },
@@ -680,12 +726,31 @@ namespace ERP.Controllers
         }
 
         // =========================================================
-        // حذف حساب مفرد (من جدول القوائم الموحد)
+        // GET: تأكيد حذف حساب
         // =========================================================
-        [HttpPost]
-        [ValidateAntiForgeryToken]
+        [HttpGet]
         [RequirePermission("Accounts.Edit")]
         public async Task<IActionResult> Delete(int id)
+        {
+            var account = await _context.Accounts
+                .Include(a => a.ParentAccount)
+                .AsNoTracking()
+                .FirstOrDefaultAsync(a => a.AccountId == id);
+            if (account == null)
+                return NotFound();
+            if (account.AccountCode == InvestorAccountCode && !await CanViewInvestorsAsync())
+                return NotFound();
+            return View(account);
+        }
+
+        // =========================================================
+        // POST: تنفيذ حذف حساب مفرد
+        // =========================================================
+        [HttpPost]
+        [ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("Accounts.Edit")]
+        public async Task<IActionResult> DeletePost(int id)
         {
             var account = await _context.Accounts.FindAsync(id);
             if (account == null)
@@ -775,7 +840,8 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy = "all",
-            string? sort = "name",
+            string? searchMode = "contains",
+            string? sort = "code",
             string? dir = "asc",
             bool useDateRange = false,
             DateTime? fromDate = null,
@@ -784,115 +850,51 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_code = null,
             string? filterCol_name = null,
             string? filterCol_type = null,
             string? filterCol_level = null,
+            string? filterCol_levelExpr = null,
             string? filterCol_leaf = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string? filterCol_updated = null,
             string? filterCol_notes = null)
         {
-            IQueryable<Account> q = _context.Accounts.AsNoTracking();
-
-            // منع ظهور حسابات المستثمرين لغير المسموح لهم
-            if (!await CanViewInvestorsAsync())
-                q = q.Where(a => a.AccountCode != InvestorAccountCode);
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends" && sm != "contains")
+                sm = "contains";
 
             var s = (search ?? string.Empty).Trim();
             var sb = (searchBy ?? "all").Trim().ToLowerInvariant();
-            var so = (sort ?? "name").Trim().ToLowerInvariant();
-            bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
+            var so = (sort ?? "code").Trim().ToLowerInvariant();
+            var dirNorm = (dir ?? "asc").Trim().ToLowerInvariant();
 
-            // فلترة من/إلى كود
-            if (fromCode.HasValue)
-                q = q.Where(a => a.AccountId >= fromCode.Value);
+            var hideInvestor = !await CanViewInvestorsAsync();
 
-            if (toCode.HasValue)
-                q = q.Where(a => a.AccountId <= toCode.Value);
+            IQueryable<Account> q = BuildAccountsQuery(
+                hideInvestor, s, sb, sm, so, dirNorm,
+                useDateRange, fromDate, toDate, dateField, fromCode, toCode);
 
-            // فلترة بالتاريخ
-            if (useDateRange)
-            {
-                if (fromDate.HasValue)
-                {
-                    var f = fromDate.Value;
-                    if (string.Equals(dateField, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
-                        q = q.Where(a => a.UpdatedAt >= f);
-                    else
-                        q = q.Where(a => a.CreatedAt >= f);
-                }
-                if (toDate.HasValue)
-                {
-                    var t = toDate.Value;
-                    if (string.Equals(dateField, "UpdatedAt", StringComparison.OrdinalIgnoreCase))
-                        q = q.Where(a => a.UpdatedAt <= t);
-                    else
-                        q = q.Where(a => a.CreatedAt <= t);
-                }
-            }
+            q = ApplyColumnFilters(
+                q,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_code,
+                filterCol_name,
+                filterCol_type,
+                filterCol_level,
+                filterCol_levelExpr,
+                filterCol_leaf,
+                filterCol_active,
+                filterCol_created,
+                filterCol_updated,
+                filterCol_notes);
 
-            // البحث
-            if (!string.IsNullOrWhiteSpace(s))
-            {
-                switch (sb)
-                {
-                    case "name":
-                        q = q.Where(a => a.AccountName.Contains(s));
-                        break;
-                    case "code":
-                        q = q.Where(a => a.AccountCode.Contains(s));
-                        break;
-                    case "id":
-                        if (int.TryParse(s, out int idVal))
-                            q = q.Where(a => a.AccountId == idVal);
-                        else
-                            q = q.Where(a => a.AccountId.ToString().Contains(s));
-                        break;
-                    case "type":
-                        q = q.Where(a => a.AccountType.ToString().Contains(s));
-                        break;
-                    case "notes":
-                        q = q.Where(a => a.Notes != null && a.Notes.Contains(s));
-                        break;
-                    case "level":
-                        if (int.TryParse(s, out int lvlVal))
-                            q = q.Where(a => a.Level == lvlVal);
-                        else
-                            q = q.Where(a => a.Level.ToString().Contains(s));
-                        break;
-                    case "all":
-                    default:
-                        q = q.Where(a =>
-                            a.AccountName.Contains(s) ||
-                            a.AccountCode.Contains(s) ||
-                            a.AccountId.ToString().Contains(s) ||
-                            a.AccountType.ToString().Contains(s) ||
-                            (a.Notes != null && a.Notes.Contains(s)) ||
-                            a.Level.ToString().Contains(s));
-                        break;
-                }
-            }
+            q = ApplyAccountSort(q, so, dirNorm);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_code, filterCol_name, filterCol_type, filterCol_level, filterCol_leaf, filterCol_active, filterCol_created, filterCol_updated, filterCol_notes);
-
-            // الترتيب
-            q = so switch
-            {
-                "code" => (descending ? q.OrderByDescending(a => a.AccountCode) : q.OrderBy(a => a.AccountCode)),
-                "id" => (descending ? q.OrderByDescending(a => a.AccountId) : q.OrderBy(a => a.AccountId)),
-                "type" => (descending ? q.OrderByDescending(a => a.AccountType) : q.OrderBy(a => a.AccountType)),
-                "level" => (descending ? q.OrderByDescending(a => a.Level) : q.OrderBy(a => a.Level)),
-                "created" => (descending ? q.OrderByDescending(a => a.CreatedAt) : q.OrderBy(a => a.CreatedAt)),
-                "updated" => (descending ? q.OrderByDescending(a => a.UpdatedAt) : q.OrderBy(a => a.UpdatedAt)),
-                "leaf" => (descending ? q.OrderByDescending(a => a.IsLeaf) : q.OrderBy(a => a.IsLeaf)),
-                "active" => (descending ? q.OrderByDescending(a => a.IsActive) : q.OrderBy(a => a.IsActive)),
-                "notes" => (descending ? q.OrderByDescending(a => a.Notes ?? "") : q.OrderBy(a => a.Notes ?? "")),
-                "name" or _ => (descending ? q.OrderByDescending(a => a.AccountName) : q.OrderBy(a => a.AccountName)),
-            };
-
-            var list = await q.ToListAsync();    // متغير: قائمة النهائية للتصدير
+            var list = await q.ToListAsync();
 
             // بناء ملف CSV (UTF-8 مع BOM علشان العربي)
             var sbCsv = new StringBuilder();

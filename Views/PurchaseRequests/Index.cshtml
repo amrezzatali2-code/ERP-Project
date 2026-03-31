@@ -12,6 +12,7 @@
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var searchMode = (string?)ViewBag.SearchMode ?? "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "date";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "desc");
 
@@ -20,8 +21,8 @@
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * ps) + 1;
-    int end = Math.Min(total, page * ps);
+    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -44,6 +45,7 @@
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -64,6 +66,9 @@
         filterCol_created
     })!;
 
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    decimal totalNetCards = ViewBag.TotalNet != null ? (decimal)ViewBag.TotalNet : 0m;
+
     Func<string, string, IHtmlContent> sortLink = (col, caption) =>
     {
         var isCurrent = string.Equals(sort, col, StringComparison.OrdinalIgnoreCase);
@@ -72,6 +77,7 @@
         {
             search,
             searchBy,
+            searchMode,
             sort = col,
             dir = newDir,
             page = 1,
@@ -137,7 +143,7 @@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في طلبات الشراء</label>
-                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
+                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>الكل</option>
@@ -147,8 +153,15 @@
                             <option value="date"@Html.Raw(searchBy == "date" ? " selected" : "")>تاريخ الطلب</option>
                             <option value="status"@Html.Raw(searchBy == "status" ? " selected" : "")>الحالة</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">عرض</button>
-                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0" href="@Url.Action(action, controller)">إلغاء</a>
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input" style="max-width:130px;min-width:100px" title="طريقة المطابقة">
+                            <option value="contains"@Html.Raw(searchMode == "contains" ? " selected" : "")>يحتوي على</option>
+                            <option value="startswith"@Html.Raw(searchMode == "startswith" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="endswith"@Html.Raw(searchMode == "endswith" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-2 justify-content-center w-100 mt-2">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
+                        <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
@@ -190,6 +203,12 @@
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalPR">اختيار الأعمدة</button>
                         <button type="button" id="btnPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <span class="erp-list-toolbar-selected-actions d-inline-flex flex-wrap gap-2 align-items-center" role="group" aria-label="إجراءات الطلب المحدد">
+                            <button type="button" id="btnShowPR" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض الطلب">عرض</button>
+                            <button type="button" id="btnCustomerVolumePR" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="حجم تعامل المورد">حجم التعامل</button>
+                        </span>
+                    </div>
+                    <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
                         <div class="dropdown d-inline">
                             <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
@@ -201,6 +220,7 @@
                         <form method="get" asp-action="Export" asp-controller="PurchaseRequests" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
@@ -236,14 +256,35 @@
         </div>
     </div>
 
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mt-2" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي العدد (بعد الفلترة)</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي الطلبات (مبالغ)</div>
+                    <div class="h4 mb-0 text-success fw-bold">@totalNetCards.ToString("N2", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* فورم خفي لتطبيق فلتر الأعمدة *@
     <form id="prSearchForm" method="get" action="@Url.Action(action, controller)" class="d-none">
         <input type="hidden" name="search" value="@search" />
         <input type="hidden" name="searchBy" value="@searchBy" />
+        <input type="hidden" name="searchMode" value="@searchMode" />
         <input type="hidden" name="sort" value="@sort" />
         <input type="hidden" name="dir" value="@dir" />
         <input type="hidden" name="page" value="1" />
         <input type="hidden" name="pageSize" value="@ps" />
+        <input type="hidden" name="dateField" value="@dateField" />
         <input type="hidden" name="useDateRange" value="@(Model.UseDateRange ? "true" : "false")" />
         @if (Model.FromDate.HasValue) { <input type="hidden" name="fromDate" value="@Model.FromDate.Value.ToString("o")" /> }
         @if (Model.ToDate.HasValue) { <input type="hidden" name="toDate" value="@Model.ToDate.Value.ToString("o")" /> }
@@ -275,14 +316,13 @@
                     <th data-col="warehouse">@filterableCol("warehouse", "warehouse", "المخزن")</th>
                     <th style="width:100px;" data-col="status">@filterableCol("status", "status", "الحالة")</th>
                     <th style="width:140px;" data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
-                    <th class="text-nowrap no-print" data-col="actions" data-col-fixed="true" style="width:220px;"></th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-4">
+                        <td colspan="8" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -291,7 +331,12 @@
                 {
                     foreach (var pr in Model.Items)
                     {
-                        <tr>
+                        var showUrl = Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 }) ?? "";
+                        var volUrl = pr.CustomerId > 0 ? Url.Action("Show", "Customers", new { id = pr.CustomerId, frame = 1 }) ?? "" : "";
+                        <tr class="erp-list-selectable-row" data-pr-id="@pr.PRId"
+                            data-show-url="@showUrl"
+                            data-tab-title="طلب شراء"
+                            data-customer-volume-url="@volUrl">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox" class="row-select" value="@pr.PRId" />
                             </td>
@@ -302,25 +347,29 @@
                             <td data-col="warehouse">@(pr.Warehouse?.WarehouseName ?? "") (@pr.WarehouseId)</td>
                             <td data-col="status">@pr.Status</td>
                             <td data-col="created">@pr.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
-                                   href="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })"
-                                   data-tab-id="pr-show-tab" data-tab-title="طلب شراء"
-                                   data-url="@Url.Action("Show", "PurchaseRequests", new { id = pr.PRId, frame = 1 })">عرض</a>
-                                <form asp-action="Delete" asp-route-id="@pr.PRId" method="post" class="d-inline"
-                                      onsubmit="return confirm('تأكيد حذف الطلب رقم @pr.PRId ؟');">
-                                    @Html.AntiForgeryToken()
-                                    <button type="submit" class="btn btn-erp btn-erp-danger btn-erp-sm">حذف</button>
-                                </form>
-                            </td>
                         </tr>
                     }
-                    <tr class="table-secondary fw-bold">
-                        <td colspan="8" class="text-end text-start">عدد الطلبات (حسب الفلتر الحالي):</td>
-                        <td class="text-end">@total</td>
-                    </tr>
                 }
             </tbody>
+            <tfoot class="table-light">
+                <tr class="fw-bold text-start">
+                    <td class="text-center no-print" data-col="select"></td>
+                    <td data-col="id"></td>
+                    <td data-col="date"></td>
+                    <td colspan="4" class="text-end">عدد الطلبات (حسب الفلتر الحالي):</td>
+                    <td class="text-end" data-col="created">@total</td>
+                </tr>
+                <tr class="fw-bold text-start">
+                    <td class="text-center no-print" data-col="select"></td>
+                    <td data-col="id"></td>
+                    <td data-col="date"></td>
+                    <td data-col="customer" class="text-muted">إجمالي</td>
+                    <td class="text-end" data-col="total">@totalNetCards.ToString("N2", n2)</td>
+                    <td data-col="warehouse"></td>
+                    <td data-col="status"></td>
+                    <td data-col="created"></td>
+                </tr>
+            </tfoot>
         </table>
         </div>
     </div>
@@ -356,11 +405,12 @@
     </div>
 
     @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة ===== *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print">
-        <small class="text-muted">عرض @start - @end من @total</small>
-        <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
+    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
+        <small class="text-muted order-2">عرض @start - @end من @total</small>
+        <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2 order-1">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -380,10 +430,12 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
             <label class="form-label m-0 nowrap">حجم الصفحة</label>
             <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
+                <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
                 <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
                 <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
                 <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
                 <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
     </div>
@@ -434,6 +486,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -534,6 +587,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         // =========================
         // زر الطباعة — يطبع الجدول فقط (بمساعدة CSS no-print / erp-print-area)
@@ -868,5 +922,21 @@
                     panel.classList.add("d-none");
             });
         })();
+
+        if (typeof ERP !== "undefined" && ERP.initListSelection) {
+            ERP.initListSelection({
+                rowSelector: ".erp-list-selectable-row",
+                showButtonId: "btnShowPR",
+                idAttribute: "data-pr-id",
+                showUrlAttribute: "data-show-url",
+                tabTitleAttribute: "data-tab-title",
+                showTabId: "pr-show-tab",
+                movementButtonId: "btnCustomerVolumePR",
+                movementUrlAttribute: "data-customer-volume-url",
+                movementTabTitle: "حجم تعامل عميل",
+                movementTabId: "customer-engagement",
+                multiSelectCheckboxes: true
+            });
+        }
     </script>
 }

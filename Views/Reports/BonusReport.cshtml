@@ -1,96 +1,433 @@
 @using ERP.ViewModels
+@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.WebUtilities
 @{
     ViewData["Title"] = "تقرير: مبيعات أصناف البونص لكل مستخدم";
 
-    var reportData = ViewBag.ReportData as List<BonusReportDto> ?? new List<BonusReportDto>();
-    var totalSalesValue = ViewBag.TotalSalesValue as decimal? ?? 0m;
-    var totalBonusAmount = ViewBag.TotalBonusAmount as decimal? ?? 0m;
-    var totalQty = ViewBag.TotalQty as int? ?? 0;
+    var reportDetail = ViewBag.ReportDataDetail as List<BonusReportDto> ?? new List<BonusReportDto>();
+    var reportByUser = ViewBag.ReportDataByUser as List<BonusReportByUserDto> ?? new List<BonusReportByUserDto>();
+    var groupByUser = ViewBag.GroupByUser as bool? ?? false;
+
+    var totalCount = ViewBag.TotalCount as int? ?? 0;
+    var totalPages = ViewBag.TotalPages as int? ?? 0;
+    var totalQtyFiltered = ViewBag.TotalQtyFiltered as decimal? ?? 0m;
+    var totalSalesFiltered = ViewBag.TotalSalesFiltered as decimal? ?? 0m;
+    var totalBonusFiltered = ViewBag.TotalBonusFiltered as decimal? ?? 0m;
+    var reportLoaded = ViewBag.ReportLoaded as bool? ?? false;
 
     var fromDate = ViewBag.FromDate as DateTime?;
     var toDate = ViewBag.ToDate as DateTime?;
     var warehouseId = ViewBag.WarehouseId as int?;
     var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+
+    var sort = ViewBag.Sort as string ?? "TotalSalesValue";
+    var dir = ViewBag.Dir as string ?? "desc";
+    var page = ViewBag.Page as int? ?? 1;
+    var pageSize = ViewBag.PageSize as int? ?? 10;
+
+    string? filterCol_user = ViewBag.FilterCol_User as string;
+    string? filterCol_prodname = ViewBag.FilterCol_Prodname as string;
+    string? filterCol_bonusgroup = ViewBag.FilterCol_Bonusgroup as string;
+    string? filterCol_bonusperunitExpr = ViewBag.FilterCol_BonusperunitExpr as string;
+    string? filterCol_qtyExpr = ViewBag.FilterCol_QtyExpr as string;
+    string? filterCol_salesExpr = ViewBag.FilterCol_SalesExpr as string;
+    string? filterCol_bonusExpr = ViewBag.FilterCol_BonusExpr as string;
+
+    int ps = pageSize;
+    int start = totalCount == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || totalCount == 0) ? totalCount : Math.Min(totalCount, page * ps);
+    int pages = Math.Max(1, totalPages);
+    int first = 1, last = pages;
+    int prev = Math.Max(first, page - 1);
+    int next = Math.Min(last, page + 1);
+    bool hasPrevious = page > first;
+    bool hasNext = page < last;
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
+
+    var colValsDict = new Dictionary<string, string?>
+    {
+        ["fromDate"] = fromDate?.ToString("yyyy-MM-dd"),
+        ["toDate"] = toDate?.ToString("yyyy-MM-dd"),
+        ["warehouseId"] = warehouseId.HasValue && warehouseId.Value > 0 ? warehouseId.Value.ToString() : null,
+        ["groupByUser"] = groupByUser ? "true" : null,
+        ["filterCol_user"] = filterCol_user,
+        ["filterCol_prodname"] = filterCol_prodname,
+        ["filterCol_bonusgroup"] = filterCol_bonusgroup,
+        ["filterCol_bonusperunitExpr"] = filterCol_bonusperunitExpr,
+        ["filterCol_qtyExpr"] = filterCol_qtyExpr,
+        ["filterCol_salesExpr"] = filterCol_salesExpr,
+        ["filterCol_bonusExpr"] = filterCol_bonusExpr
+    };
+    var colValuesUrl = QueryHelpers.AddQueryString(Url.Action("GetBonusReportColumnValues", "Reports")!, colValsDict.Where(kv => !string.IsNullOrEmpty(kv.Value)).ToDictionary(kv => kv.Key, kv => (string?)kv.Value));
+
+    Func<int, string> pageUrl = (p) =>
+        Url.Action("BonusReport", "Reports", new
+        {
+            loadReport = true,
+            fromDate,
+            toDate,
+            warehouseId,
+            groupByUser,
+            sort,
+            dir,
+            page = p,
+            pageSize = ps,
+            filterCol_user,
+            filterCol_prodname,
+            filterCol_bonusgroup,
+            filterCol_bonusperunitExpr,
+            filterCol_qtyExpr,
+            filterCol_salesExpr,
+            filterCol_bonusExpr
+        }) ?? "#";
+
+    Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
+    {
+        string? currentFilter = colKey == "user" ? filterCol_user : colKey == "prodname" ? filterCol_prodname : colKey == "bonusgroup" ? filterCol_bonusgroup : null;
+        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
+        var sortDir = isCurrentSort ? dir : "asc";
+        var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
+        return new HtmlString($@"
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"" style=""position:relative;z-index:2;"">
+                <span class=""erp-col-title"">{caption}</span>
+                <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
+                        data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
+                        data-current-sort=""{sortKey}"" data-current-dir=""{sortDir}""
+                        title=""ترتيب وفلتر العمود"" style=""min-width:22px;"">
+                    <svg xmlns=""http://www.w3.org/2000/svg"" width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""currentColor"">
+                        <path d=""M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z""/>
+                        <path d=""M7 8l4-4 4 4H7zm0 8l4 4 4-4H7z"" opacity=""0.3""/>
+                    </svg>
+                </button>
+            </div>");
+    };
 }
 
 <div dir="rtl" class="container-fluid">
+    <h5 class="mb-2 fs-6 text-secondary d-print-none">@ViewData["Title"]</h5>
+
     <div class="erp-list-filter-bar d-print-none mt-2">
-        <form method="get" asp-action="BonusReport" asp-controller="Reports" id="filtersForm">
-            <div class="row g-3 align-items-end">
-                <input type="hidden" name="loadReport" value="true" />
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">من تاريخ</label>
-                    <input type="date" name="fromDate" dir="ltr" class="form-control erp-filter-input" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">إلى تاريخ</label>
-                    <input type="date" name="toDate" dir="ltr" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">المخزن</label>
-                    <select name="warehouseId" class="form-select erp-filter-input">
-                        <option value="">الكل</option>
-                        @foreach (var wh in warehouses)
-                        {
-                            <option value="@wh.Value" @(warehouseId?.ToString() == wh.Value ? "selected" : null)>@wh.Text</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-12 col-lg-auto erp-filter-section">
-                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
-                        <span>📊</span> تجميع التقرير
-                    </button>
-                </div>
+        <form method="get" asp-action="BonusReport" asp-controller="Reports" id="filtersFormBonus" class="row g-3 align-items-end flex-nowrap flex-wrap">
+            <input type="hidden" name="loadReport" value="true" />
+            <input type="hidden" name="sort" value="@sort" />
+            <input type="hidden" name="dir" value="@dir" />
+            <input type="hidden" name="page" value="1" />
+            <input type="hidden" name="groupByUser" value="@(groupByUser ? "true" : "false")" id="hiddenGroupByUser" />
+            @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_bonusgroup)) { <input type="hidden" name="filterCol_bonusgroup" value="@filterCol_bonusgroup" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_bonusperunitExpr)) { <input type="hidden" name="filterCol_bonusperunitExpr" value="@filterCol_bonusperunitExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_salesExpr)) { <input type="hidden" name="filterCol_salesExpr" value="@filterCol_salesExpr" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_bonusExpr)) { <input type="hidden" name="filterCol_bonusExpr" value="@filterCol_bonusExpr" /> }
+            <div class="col-12 col-lg-2 erp-filter-section">
+                <label class="form-label">من تاريخ</label>
+                <input type="date" name="fromDate" dir="ltr" class="form-control erp-filter-input" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+            </div>
+            <div class="col-12 col-lg-2 erp-filter-section">
+                <label class="form-label">إلى تاريخ</label>
+                <input type="date" name="toDate" dir="ltr" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+            </div>
+            <div class="col-12 col-lg-2 erp-filter-section">
+                <label class="form-label">المخزن</label>
+                <select name="warehouseId" class="form-select erp-filter-input">
+                    <option value="">الكل</option>
+                    @foreach (var wh in warehouses)
+                    {
+                        <option value="@wh.Value" @(warehouseId?.ToString() == wh.Value ? "selected" : null)>@wh.Text</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-lg-auto d-flex flex-wrap gap-2 align-items-end">
+                <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
             </div>
         </form>
+        <div class="erp-toolbar-two-rows mt-2">
+            @* في RTL: أول عنصر في DOM يميناً — تصدير ← Excel ← تجميع حسب المستخدم ← تفصيلي (أقصى يسار المجموعة) *@
+            <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-end align-items-center">
+                <a href="#" class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none" id="linkExportBonusDirect" title="تصدير التقرير الحالي إلى Excel">تصدير</a>
+                <div class="dropdown">
+                    <button class="btn btn-erp btn-erp-secondary btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Excel</button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" id="linkExportBonusExcel">تصدير Excel</a></li>
+                    </ul>
+                </div>
+                <button type="button" class="btn btn-erp @(groupByUser ? "btn-erp-success" : "btn-erp-secondary") btn-erp-sm" id="btnBonusGroupUser" title="تجميع إجماليات كل مستخدم في الفترة">تجميع حسب المستخدم</button>
+                <button type="button" class="btn btn-erp @(groupByUser ? "btn-erp-secondary" : "btn-erp-success") btn-erp-sm" id="btnBonusDetailMode" title="عرض سطر لكل مستخدم وصنف">تفصيلي (مستخدم + صنف)</button>
+            </div>
+        </div>
     </div>
 
-    @if (reportData.Any())
+    @if (reportLoaded)
     {
-        <div class="erp-table-wrapper mt-3">
-            <div class="table-responsive">
-                <table class="table table-sm table-striped table-hover mb-0 erp-table">
-                    <thead class="table-light sticky-top">
+        <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mb-2 mt-2" dir="rtl">
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">عدد السطور (بعد الفلترة)</div>
+                        <div class="h5 mb-0 text-primary fw-bold">@totalCount.ToString("N0", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي الكمية</div>
+                        <div class="h5 mb-0 text-success fw-bold">@totalQtyFiltered.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #6366f1 !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي المبيعات</div>
+                        <div class="h5 mb-0 fw-bold">@totalSalesFiltered.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #b45309 !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي قيمة البونص</div>
+                        <div class="h5 mb-0 fw-bold text-warning">@totalBonusFiltered.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (reportLoaded)
+    {
+    <div class="erp-table-scroll-container mt-2" dir="rtl">
+        <div id="bonusReportScrollWrapper" class="erp-table-wrapper" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
+            @if (groupByUser)
+            {
+                <table class="table table-striped table-hover mb-0 erp-table" id="bonusReportTable" data-current-sort="@sort" data-current-dir="@dir" style="min-width: 720px;">
+                    <thead class="table-light" style="position: sticky; top: 0; z-index: 10;">
                         <tr>
-                            <th style="min-width: 130px;">المستخدم</th>
-                            <th style="min-width: 180px;">اسم الصنف</th>
-                            <th style="min-width: 120px;">مجموعة البونص</th>
-                            <th class="text-end" style="min-width: 110px;">البونص لكل علبة</th>
-                            <th class="text-end" style="min-width: 90px;">الكمية</th>
-                            <th class="text-end" style="min-width: 120px;">إجمالي المبيعات</th>
-                            <th class="text-end" style="min-width: 120px;">قيمة البونص</th>
+                            <th data-col="user">@filterableCol("user", "UserName", "المستخدم")</th>
+                            <th class="text-end" data-col="qty"><div class="d-flex align-items-center justify-content-end gap-1 erp-col-header-filterable" style="position:relative;z-index:2;"><span class="erp-col-title">الكمية</span><button type="button" class="btn btn-sm p-0 erp-col-filter-btn text-muted" data-col="qty" data-sort-key="TotalQty" data-col-title="الكمية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div></th>
+                            <th class="text-end" data-col="sales"><div class="d-flex align-items-center justify-content-end gap-1 erp-col-header-filterable" style="position:relative;z-index:2;"><span class="erp-col-title">إجمالي المبيعات</span><button type="button" class="btn btn-sm p-0 erp-col-filter-btn text-muted" data-col="sales" data-sort-key="TotalSalesValue" data-col-title="إجمالي المبيعات" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div></th>
+                            <th class="text-end" data-col="bonus"><div class="d-flex align-items-center justify-content-end gap-1 erp-col-header-filterable" style="position:relative;z-index:2;"><span class="erp-col-title">قيمة البونص</span><button type="button" class="btn btn-sm p-0 erp-col-filter-btn text-muted" data-col="bonus" data-sort-key="TotalBonusAmount" data-col-title="قيمة البونص" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div></th>
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var item in reportData)
+                        @if (!reportByUser.Any())
                         {
-                            <tr>
-                                <td><strong>@(string.IsNullOrEmpty(item.UserName) ? "—" : item.UserName)</strong></td>
-                                <td>@item.ProdName</td>
-                                <td><small class="text-muted">@item.ProductBonusGroupName</small></td>
-                                <td class="text-end">@item.BonusAmountPerUnit.ToString("N2")</td>
-                                <td class="text-end">@item.TotalQty.ToString("N0")</td>
-                                <td class="text-end">@item.TotalSalesValue.ToString("N2")</td>
-                                <td class="text-end">@item.TotalBonusAmount.ToString("N2")</td>
-                            </tr>
+                            <tr><td colspan="4" class="text-center text-muted py-4">لا توجد بيانات مطابقة.</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var item in reportByUser)
+                            {
+                                <tr>
+                                    <td data-col="user"><strong>@(string.IsNullOrEmpty(item.UserName) ? "—" : item.UserName)</strong></td>
+                                    <td class="text-end" data-col="qty">@item.TotalQty.ToString("N0", n2)</td>
+                                    <td class="text-end" data-col="sales">@item.TotalSalesValue.ToString("N2", n2)</td>
+                                    <td class="text-end" data-col="bonus">@item.TotalBonusAmount.ToString("N2", n2)</td>
+                                </tr>
+                            }
                         }
                     </tbody>
-                    <tfoot class="table-secondary fw-bold">
-                        <tr>
-                            <td colspan="4" class="text-end"><strong>المجموع:</strong></td>
-                            <td class="text-end"><strong>@totalQty.ToString("N0")</strong></td>
-                            <td class="text-end"><strong>@totalSalesValue.ToString("N2")</strong></td>
-                            <td class="text-end"><strong>@totalBonusAmount.ToString("N2")</strong></td>
-                        </tr>
-                    </tfoot>
                 </table>
-            </div>
+            }
+            else
+            {
+                <table class="table table-striped table-hover mb-0 erp-table" id="bonusReportTable" data-current-sort="@sort" data-current-dir="@dir" style="min-width: 1100px;">
+                    <thead class="table-light" style="position: sticky; top: 0; z-index: 10;">
+                        <tr>
+                            <th data-col="user">@filterableCol("user", "UserName", "المستخدم")</th>
+                            <th data-col="prodname">@filterableCol("prodname", "ProdName", "اسم الصنف")</th>
+                            <th data-col="bonusgroup">@filterableCol("bonusgroup", "ProductBonusGroupName", "مجموعة البونص")</th>
+                            <th class="text-end" data-col="bonusperunit"><div class="d-flex align-items-center justify-content-end gap-1 erp-col-header-filterable" style="position:relative;z-index:2;"><span class="erp-col-title">البونص لكل علبة</span><button type="button" class="btn btn-sm p-0 erp-col-filter-btn text-muted" data-col="bonusperunit" data-sort-key="BonusAmountPerUnit" data-col-title="البونص لكل علبة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div></th>
+                            <th class="text-end" data-col="qty"><div class="d-flex align-items-center justify-content-end gap-1 erp-col-header-filterable" style="position:relative;z-index:2;"><span class="erp-col-title">الكمية</span><button type="button" class="btn btn-sm p-0 erp-col-filter-btn text-muted" data-col="qty" data-sort-key="TotalQty" data-col-title="الكمية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div></th>
+                            <th class="text-end" data-col="sales"><div class="d-flex align-items-center justify-content-end gap-1 erp-col-header-filterable" style="position:relative;z-index:2;"><span class="erp-col-title">إجمالي المبيعات</span><button type="button" class="btn btn-sm p-0 erp-col-filter-btn text-muted" data-col="sales" data-sort-key="TotalSalesValue" data-col-title="إجمالي المبيعات" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div></th>
+                            <th class="text-end" data-col="bonus"><div class="d-flex align-items-center justify-content-end gap-1 erp-col-header-filterable" style="position:relative;z-index:2;"><span class="erp-col-title">قيمة البونص</span><button type="button" class="btn btn-sm p-0 erp-col-filter-btn text-muted" data-col="bonus" data-sort-key="TotalBonusAmount" data-col-title="قيمة البونص" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button></div></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (!reportDetail.Any())
+                        {
+                            <tr><td colspan="7" class="text-center text-muted py-4">لا توجد بيانات مطابقة.</td></tr>
+                        }
+                        else
+                        {
+                            foreach (var item in reportDetail)
+                            {
+                                <tr>
+                                    <td data-col="user"><strong>@(string.IsNullOrEmpty(item.UserName) ? "—" : item.UserName)</strong></td>
+                                    <td data-col="prodname">@item.ProdName</td>
+                                    <td data-col="bonusgroup"><small class="text-muted">@item.ProductBonusGroupName</small></td>
+                                    <td class="text-end" data-col="bonusperunit">@item.BonusAmountPerUnit.ToString("N2", n2)</td>
+                                    <td class="text-end" data-col="qty">@item.TotalQty.ToString("N0", n2)</td>
+                                    <td class="text-end" data-col="sales">@item.TotalSalesValue.ToString("N2", n2)</td>
+                                    <td class="text-end" data-col="bonus">@item.TotalBonusAmount.ToString("N2", n2)</td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            }
         </div>
+    </div>
     }
-    else
+
+    @if (reportLoaded)
     {
-        <div class="alert alert-info text-center mt-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+            <small class="text-muted text-start">عرض @start - @end من @totalCount</small>
+            <form id="bonusPageSizeForm" method="get" asp-action="BonusReport" asp-controller="Reports" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="loadReport" value="true" />
+                <input type="hidden" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
+                <input type="hidden" name="groupByUser" value="@(groupByUser ? "true" : "false")" />
+                <input type="hidden" name="sort" value="@sort" />
+                <input type="hidden" name="dir" value="@dir" />
+                <input type="hidden" name="page" value="1" />
+                @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_prodname)) { <input type="hidden" name="filterCol_prodname" value="@filterCol_prodname" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_bonusgroup)) { <input type="hidden" name="filterCol_bonusgroup" value="@filterCol_bonusgroup" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_bonusperunitExpr)) { <input type="hidden" name="filterCol_bonusperunitExpr" value="@filterCol_bonusperunitExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_qtyExpr)) { <input type="hidden" name="filterCol_qtyExpr" value="@filterCol_qtyExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_salesExpr)) { <input type="hidden" name="filterCol_salesExpr" value="@filterCol_salesExpr" /> }
+                @if (!string.IsNullOrWhiteSpace(filterCol_bonusExpr)) { <input type="hidden" name="filterCol_bonusExpr" value="@filterCol_bonusExpr" /> }
+                <label class="form-label m-0 nowrap">حجم الصفحة</label>
+                <select name="pageSize" class="form-select form-select-sm" style="width:auto;min-width:88px;" onchange="this.form.submit()">
+                    <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
+                    <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                    <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                    <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                    <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                    <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
+                </select>
+            </form>
+        </div>
+        <nav aria-label="pagination" class="mt-3 no-print">
+            <ul class="pagination justify-content-center">
+                <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@pageUrl(first)">الأول</a></li>
+                <li class="page-item @(hasPrevious ? "" : "disabled")"><a class="page-link" href="@pageUrl(prev)">السابق</a></li>
+                <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
+                <li class="page-item @(hasNext ? "" : "disabled")"><a class="page-link" href="@pageUrl(next)">التالي</a></li>
+                <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@pageUrl(last)">الأخير</a></li>
+            </ul>
+        </nav>
+    }
+    else if (!reportLoaded)
+    {
+        <div class="alert alert-info text-center mt-3 no-print">
             <p class="mb-0">لا توجد بيانات لعرضها. اضغط «تجميع التقرير» بعد اختيار الفلاتر.</p>
         </div>
     }
+
+    @if (reportLoaded)
+    {
+    <div id="erpColumnFilterPanelBonus" class="erp-column-filter-panel d-none" dir="rtl" style="min-width: 280px; max-width: min(380px, 92vw); z-index: 1055;">
+        <div class="erp-column-filter-header">
+            <span id="erpColumnFilterTitleBonus">ترتيب وفلتر</span>
+            <button type="button" class="btn-close btn-sm" id="erpColumnFilterCloseBonus" aria-label="إغلاق"></button>
+        </div>
+        <div class="erp-column-filter-body">
+            <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
+                <label class="form-label small mb-1 fw-bold">الترتيب:</label>
+                <div class="d-flex flex-column gap-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc">▲ ترتيب تصاعدي</button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc">▼ ترتيب تنازلي</button>
+                </div>
+            </div>
+            <div class="erp-filter-section">
+                <div id="erpColumnFilterSearchRow">
+                    <label class="form-label small mb-1 fw-bold">الفلترة:</label>
+                    <input type="text" id="erpColumnFilterSearchBonus" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." autocomplete="off" />
+                </div>
+                <div id="erpColumnFilterListBonus" class="erp-column-filter-list">
+                    <div class="text-muted text-center py-3">جاري التحميل...</div>
+                </div>
+            </div>
+            <div class="erp-column-filter-actions">
+                <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" data-action="apply">تطبيق</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-action="clear">مسح الفلتر</button>
+            </div>
+        </div>
+    </div>
+    }
 </div>
+
+@section Styles {
+    <style>
+        #bonusReportTable thead th { background-color: #fafbfc !important; color: #212529; border-bottom: 1px solid #dee2e6; font-weight: 600; }
+        .erp-col-filter-btn { color: #64748b; }
+        #erpColumnFilterPanelBonus.erp-column-filter-panel { min-width: 280px; max-width: min(380px, 92vw); z-index: 1055; }
+    </style>
+}
+
+@section Scripts {
+<script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
+<script>
+(function () {
+    function submitWithGroupMode(isGroup) {
+        var f = document.getElementById('filtersFormBonus');
+        if (!f) return;
+        var h = document.getElementById('hiddenGroupByUser');
+        if (h) h.value = isGroup ? 'true' : 'false';
+        var inp = f.querySelector('input[name="loadReport"]');
+        if (!inp) { inp = document.createElement('input'); inp.type = 'hidden'; inp.name = 'loadReport'; inp.value = 'true'; f.appendChild(inp); }
+        else inp.value = 'true';
+        f.submit();
+    }
+    document.getElementById('btnBonusDetailMode')?.addEventListener('click', function () { submitWithGroupMode(false); });
+    document.getElementById('btnBonusGroupUser')?.addEventListener('click', function () { submitWithGroupMode(true); });
+
+    var groupByUser = @Html.Raw(groupByUser ? "true" : "false");
+    function buildExportUrl() {
+        var u = new URL('@Url.Action("ExportBonusReport", "Reports")', window.location.origin);
+        u.searchParams.set('fromDate', '@(fromDate?.ToString("yyyy-MM-dd") ?? "")');
+        u.searchParams.set('toDate', '@(toDate?.ToString("yyyy-MM-dd") ?? "")');
+        var wh = '@(warehouseId?.ToString() ?? "")';
+        if (wh) u.searchParams.set('warehouseId', wh);
+        u.searchParams.set('groupByUser', groupByUser ? 'true' : 'false');
+        u.searchParams.set('sort', '@sort');
+        u.searchParams.set('dir', '@dir');
+        var params = new URLSearchParams(window.location.search);
+        ['filterCol_user','filterCol_prodname','filterCol_bonusgroup','filterCol_bonusperunitExpr','filterCol_qtyExpr','filterCol_salesExpr','filterCol_bonusExpr'].forEach(function (k) {
+            var v = params.get(k);
+            if (v) u.searchParams.set(k, v);
+        });
+        return u.toString();
+    }
+    var exportUrl = buildExportUrl();
+    var linkEx = document.getElementById('linkExportBonusExcel');
+    if (linkEx) linkEx.href = exportUrl;
+    var linkDirect = document.getElementById('linkExportBonusDirect');
+    if (linkDirect) linkDirect.href = exportUrl;
+})();
+</script>
+@if (reportLoaded)
+{
+<script>
+(function () {
+    var wrapper = document.getElementById('bonusReportScrollWrapper');
+    if (wrapper && wrapper.scrollWidth > wrapper.clientWidth) {
+        wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
+    }
+    var colValuesUrl = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(colValuesUrl));
+    var groupByUser = @Html.Raw(groupByUser ? "true" : "false");
+    var numericCols = groupByUser
+        ? ['qty', 'sales', 'bonus']
+        : ['bonusperunit', 'qty', 'sales', 'bonus'];
+    if (typeof ERP !== 'undefined' && ERP.initListColumnFilter) {
+        ERP.initListColumnFilter({
+            panelId: 'erpColumnFilterPanelBonus',
+            tableId: 'bonusReportTable',
+            wrapperId: 'bonusReportScrollWrapper',
+            getColumnValuesUrl: colValuesUrl,
+            defaultSort: 'TotalSalesValue',
+            defaultDir: 'desc',
+            numericColumns: numericCols
+        });
+    }
+})();
+</script>
+}
+}

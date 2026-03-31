@@ -96,6 +96,18 @@
             background-color: #f8fafc !important;
         }
 
+        /* اختيار سطر من جدول السطور (بدون أزرار في الصف) */
+        #PILinesTbody tr[data-line-no] {
+            cursor: pointer;
+        }
+        #PILinesTbody tr.pi-group-row {
+            cursor: pointer;
+        }
+        #PILinesTbody tr.pi-row-selected > td {
+            background-color: #eef2ff !important;
+            box-shadow: inset 0 0 0 1px rgba(99, 102, 241, 0.45);
+        }
+
         /* إزالة الخط الفاصل بين الكروت */
         .invoice-card-line {
             display: none;
@@ -234,6 +246,32 @@
             font-size: 1.05rem;
             color: #fff !important;
         }
+
+        /* العمود الرئيسي — شفاف وبدون حد (مثل فاتورة المشتريات/المبيعات) — docs/فتح الفواتير ككتلة واحدة.md */
+        .invoice-page .col-12.col-lg-10.order-2.order-lg-1,
+        .invoice-page .col-lg-10.order-2 {
+            background: transparent !important;
+            padding: 0.5rem 1rem;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        /* حاوية المحتوى — ليست كارت: بدون حد أو خلفية */
+        #PI_BodyHost,
+        div#PI_BodyHost,
+        .invoice-page div#PI_BodyHost {
+            display: block !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            outline: none !important;
+            padding: 0 !important;
+        }
+        .invoice-page .container-fluid,
+        .invoice-page .row {
+            border: none !important;
+            box-shadow: none !important;
+        }
+
         #PI_BodyHost .invoice-header-card .form-control,
         #PI_BodyHost .invoice-header-card .form-select,
         #PI_BodyHost .invoice-product-card .form-control,
@@ -788,6 +826,14 @@
                             </button>
                         </div>
 
+                        <button type="button"
+                                id="btnRemoveSelectedLine"
+                                class="btn btn-erp btn-erp-secondary btn-erp-sm w-100"
+                                data-lock-posted="1"
+                                title="اختر سطراً في الجدول ثم اضغط لمسحه">
+                            🗑️ مسح السطر المحدد
+                        </button>
+
                         <div>
                             <button type="button" id="btnOpenProductEdit"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
@@ -873,7 +919,9 @@
                                         <label class="form-label form-label-sm">كود المورد</label>
                                         <input id="CustomerCodeDisplay"
                                                class="form-control form-control-sm text-center"
-                                               type="number" data-lock-posted="1" />
+                                               type="number"
+                                               data-lock-posted="1"
+                                               value="@(Model != null && Model.CustomerId > 0 ? Model.CustomerId.ToString() : "")" />
                                         <input type="hidden" asp-for="CustomerId" id="CustomerId" />
                                     </div>
                                     <div class="col-12 col-md-8 col-lg-4">
@@ -892,23 +940,6 @@
                                             </div>
                                             <div id="prSupplierDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
                                         </div>
-                                        <datalist id="customersList" hidden aria-hidden="true">
-                                            @if (ViewBag.Customers != null)
-                                            {
-                                                foreach (var c in ViewBag.Customers)
-                                                {
-                                                    <option value="@c.Name"
-                                                            data-id="@c.Id"
-                                                            data-phone="@c.Phone"
-                                                            data-address="@c.Address"
-                                                            data-gov="@c.Gov"
-                                                            data-district="@c.District"
-                                                            data-area="@c.Area"
-                                                            data-credit="@c.Credit">
-                                                    </option>
-                                                }
-                                            }
-                                        </datalist>
                                     </div>
                                     <div class="col-4 col-md-2 col-lg-1">
                                         <label class="form-label form-label-sm">رقم الطلب</label>
@@ -1136,24 +1167,6 @@
                                             <div id="prProductDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
                                         </div>
 
-                                        <datalist id="productsList" hidden aria-hidden="true">
-                                            @if (ViewBag.ProductsAuto != null)
-                                            {
-                                                foreach (var p in ViewBag.ProductsAuto)
-                                                {
-                                                    <option value="@p.Name"
-                                                            data-id="@p.Id"
-                                                            data-code="@p.Id"
-                                                            data-generic="@p.GenericName"
-                                                            data-company="@p.Company"
-                                                            data-price="@p.PriceRetail"
-                                                            data-hasquota="@(p.HasQuota ? "true" : "false")">
-                                                    </option>
-                                                }
-                                            }
-                                        </datalist>
-                                        <datalist id="productsListEmpty"></datalist>
-
                                         <input type="hidden" id="ProdId" />
                                     </div>
 
@@ -1226,7 +1239,6 @@
                                         <th class="text-center">سعر الجمهور</th>
                                         <th class="text-center">خصم الشراء %</th>
                                         <th class="text-center">قيمة السطر</th>
-                                        <th class="text-center no-print">مسح</th>
                                     </tr>
                                 </thead>
 
@@ -1247,7 +1259,7 @@
                                     @if (!groups.Any())
                                     {
                                         <tr>
-                                            <td colspan="9" class="text-center text-muted py-3">
+                                            <td colspan="8" class="text-center text-muted py-3">
                                                 لا يوجد سطور داخل الطلب حتى الآن.
                                             </td>
                                         </tr>
@@ -1326,14 +1338,6 @@
                                                     </td>
 
                                                     <td class="text-center line-value">@lineValue.ToString("0.00")</td>
-
-                                                    <td class="text-center no-print">
-                                                        <button type="button"
-                                                                class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                data-line-no="@line.LineNo" data-lock-posted="1">
-                                                            مسح
-                                                        </button>
-                                                    </td>
                                                 </tr>
                                             }
                                             else
@@ -1347,7 +1351,6 @@
                                                     </td>
 
                                                     <td class="text-center text-muted small">تشغيلات: @batchCount</td>
-                                                    <td class="text-center"></td>
                                                     <td class="text-center"></td>
                                                     <td class="text-center"></td>
                                                     <td class="text-center"></td>
@@ -1412,13 +1415,6 @@
                                                                    style="min-width: 80px;" />
                                                         </td>
                                                         <td class="text-center line-value">@lineValue.ToString("0.00")</td>
-                                                        <td class="text-center no-print">
-                                                            <button type="button"
-                                                                    class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                                    data-line-no="@line.LineNo">
-                                                                مسح
-                                                            </button>
-                                                        </td>
                                                     </tr>
                                                 }
                                             }
@@ -1474,6 +1470,42 @@
                                 </div>
                             </div>
                         </div>
+
+                        @* مصادر أوتوكومبليت الثقيلة — آخر PI_BodyHost حتى يُبنى هيكل الكروت أولاً (docs/فتح الفواتير ككتلة واحدة.md) *@
+                        <datalist id="customersList" hidden aria-hidden="true">
+                            @if (ViewBag.Customers != null)
+                            {
+                                foreach (var c in ViewBag.Customers)
+                                {
+                                    <option value="@c.Name"
+                                            data-id="@c.Id"
+                                            data-phone="@c.Phone"
+                                            data-address="@c.Address"
+                                            data-gov="@c.Gov"
+                                            data-district="@c.District"
+                                            data-area="@c.Area"
+                                            data-credit="@c.Credit">
+                                    </option>
+                                }
+                            }
+                        </datalist>
+                        <datalist id="productsList" hidden aria-hidden="true">
+                            @if (ViewBag.ProductsAuto != null)
+                            {
+                                foreach (var p in ViewBag.ProductsAuto)
+                                {
+                                    <option value="@p.Name"
+                                            data-id="@p.Id"
+                                            data-code="@p.Id"
+                                            data-generic="@p.GenericName"
+                                            data-company="@p.Company"
+                                            data-price="@p.PriceRetail"
+                                            data-hasquota="@(p.HasQuota ? "true" : "false")">
+                                    </option>
+                                }
+                            }
+                        </datalist>
+                        <datalist id="productsListEmpty"></datalist>
 
                     </div> @* ✅ نهاية PI_BodyHost *@
 
@@ -1597,8 +1629,9 @@
 
                          // =========================================================
                          // (A) أوتوكومبليت المورد (اسم ⇐⇒ كود + بيانات)
+                         // — تُستدعى عند أول تحميل وبعد loadInvoiceBody لأن عناصر الهيدر والـ datalist تُستبدل
                          // =========================================================
-                         (function () {
+                         function initSupplierAutocompletePr() {
 
                              // بوكسات بيانات المورد
                              const custNameInput      = document.getElementById('CustomerNameInput');    // متغير: اسم المورد
@@ -1619,97 +1652,173 @@
                                  return; // نخرج من جزء المورد فقط
                              }
 
-                             // دالة: توحيد نص المورد (وتجاهل الألف في أول الكلمة)
-                             function normalizeSupplierText(txt) {
-                                 return (txt || '')
-                                     .trim()
-                                     .toLowerCase()
-                                     .replace(/^[اأإآ]/, '')
-                                     .replace(/\s+/g, ' ');
-                             }
+                            // نفس منطق فاتورة المبيعات: بحث متعدد الكلمات + ترتيب + حد أقصى للعرض (docs + invoice-entity-search-box-pattern)
+                            const CUSTOMER_LIST_MAX = 80;
 
-                             // دالة: البحث عن مورد بالاسم (تطابق كامل)
-                             function findSupplierByName(name) {
-                                 const search = normalizeSupplierText(name);
-                                 if (!search) return null;
+                            const allSuppliers = Array.from(custDataList.options || []).map(function (opt) {
+                                return {
+                                    id: (opt.getAttribute('data-id') || '').toString(),
+                                    name: (opt.value || '').toString(),
+                                    phone: (opt.getAttribute('data-phone') || '').toString(),
+                                    address: (opt.getAttribute('data-address') || '').toString(),
+                                    gov: (opt.getAttribute('data-gov') || '').toString(),
+                                    district: (opt.getAttribute('data-district') || opt.getAttribute('data-District') || '').toString(),
+                                    area: (opt.getAttribute('data-area') || opt.getAttribute('data-Area') || '').toString(),
+                                    credit: (opt.getAttribute('data-credit') || opt.getAttribute('data-Credit') || '').toString()
+                                };
+                            });
 
-                                 const opts = custDataList.options;
-                                 for (let i = 0; i < opts.length; i++) {
-                                     if (normalizeSupplierText(opts[i].value) === search) return opts[i];
-                                 }
-                                 return null;
-                             }
+                            function normalizeDigits(s) {
+                                if (!s) return '';
+                                const map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                                    '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                                let out = '';
+                                for (let i = 0; i < s.length; i++) {
+                                    const c = s[i];
+                                    out += map[c] !== undefined ? map[c] : c;
+                                }
+                                return out;
+                            }
 
-                             // دالة: البحث عن مورد بالكود (data-id)
-                             function findSupplierByCode(code) {
-                                 const search = (code || '').toString().trim();
-                                 if (!search) return null;
+                            function normalizeWord(w) {
+                                return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+                            }
 
-                                 const opts = custDataList.options;
-                                 for (let i = 0; i < opts.length; i++) {
-                                     const optId = (opts[i].getAttribute('data-id') || '').toString();
-                                     if (optId === search) return opts[i];
-                                 }
-                                 return null;
-                             }
+                            function normalizeText(txt) {
+                                return (txt || '')
+                                    .trim()
+                                    .toLowerCase()
+                                    .split(/\s+/)
+                                    .filter(Boolean)
+                                    .map(function (w) { return normalizeWord(w); })
+                                    .filter(Boolean)
+                                    .join(' ')
+                                    .replace(/\s+/g, ' ');
+                            }
 
-                             // دالة: تعبئة كل بوكسات المورد من <option> واحد
-                             function fillSupplierFromOption(opt) {
+                            function wordMatchesQueryWord(nameWord, queryWord) {
+                                const nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                                const qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                                const nw = nw0.replace(/^[اأإآ]/u, '');
+                                const qw = qw0.replace(/^[اأإآ]/u, '');
+                                if (!qw) return true;
+                                return nw === qw || nw.startsWith(qw);
+                            }
 
-                                 // لو مفيش مورد مطابق → نفرّغ
-                                 if (!opt) {
-                                     if (custHiddenId)      custHiddenId.value      = '';
-                                     if (custCodeInput)     custCodeInput.value     = '';
-                                     if (custNameInput)     custNameInput.value     = '';
-                                     if (custPhoneInput)    custPhoneInput.value    = '';
-                                     if (custGovInput)      custGovInput.value      = '';
-                                     if (custDistrictInput) custDistrictInput.value = '';
-                                     if (custAreaInput)     custAreaInput.value     = '';
-                                     if (custAddressInput)  custAddressInput.value  = '';
-                                     if (custCreditInput)   custCreditInput.value   = '';
-                                     var btnVol = document.getElementById('btnSupplierVolume');
-                                     if (btnVol) { btnVol.href = '#'; btnVol.setAttribute('data-url', ''); }
-                                     return;
-                                 }
+                            function supplierNameMatchesSearch(supplierName, rawSearch) {
+                                const raw = (rawSearch || '').trim();
+                                if (!raw) return true;
+                                const qWords = raw.split(/\s+/).filter(Boolean);
+                                const nWords = (supplierName || '').trim().split(/\s+/).filter(Boolean);
+                                if (qWords.length === 0) return true;
+                                return qWords.every(function (qw) {
+                                    return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                                });
+                            }
 
-                                 // قراءة البيانات من الـ option
-                                 const id       = opt.getAttribute('data-id')       || ''; // متغير: كود المورد الحقيقي
-                                 const name     = opt.value                         || ''; // متغير: اسم المورد
-                                 const phone    = opt.getAttribute('data-phone')    || ''; // متغير: الهاتف
-                                 const address  = opt.getAttribute('data-address')  || ''; // متغير: العنوان
-                                 const gov      = opt.getAttribute('data-gov')      || ''; // متغير: المحافظة
-                                 const district = opt.getAttribute('data-district') || opt.getAttribute('data-District') || ''; // متغير: الحي
-                                 const area     = opt.getAttribute('data-area')     || opt.getAttribute('data-Area')     || ''; // متغير: المنطقة
-                                 const credit   = opt.getAttribute('data-credit')   || opt.getAttribute('data-Credit')   || ''; // متغير: الحد الائتماني
+                            function supplierSearchRank(name, rawSearch) {
+                                const raw = (rawSearch || '').trim();
+                                const nm = (name || '').trim();
+                                if (!raw) return 50;
+                                if (nm === raw) return 0;
+                                if (nm.startsWith(raw)) return 1;
+                                const rawWords = raw.split(/\s+/).filter(Boolean);
+                                const firstQ = rawWords[0] || '';
+                                const nmWords = nm.split(/\s+/).filter(Boolean);
+                                if (firstQ && nmWords.length) {
+                                    if (nmWords[0].startsWith(firstQ)) return 2;
+                                    const nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                                    const qw0 = normalizeDigits(firstQ.toLowerCase());
+                                    const nw = nw0.replace(/^[اأإآ]/u, '');
+                                    const qw = qw0.replace(/^[اأإآ]/u, '');
+                                    if (qw && (nw === qw || nw.startsWith(qw))) return 3;
+                                }
+                                return 4;
+                            }
 
-                                 if (custHiddenId)  custHiddenId.value  = id;
-                                 if (custCodeInput) custCodeInput.value = id;
+                            function findSupplierByName(name) {
+                                const raw = (name || '').trim();
+                                const search = normalizeText(raw);
+                                if (!search) return null;
+                                for (let i = 0; i < allSuppliers.length; i++) {
+                                    if (normalizeText(allSuppliers[i].name) === search) return allSuppliers[i];
+                                }
+                                for (let i = 0; i < allSuppliers.length; i++) {
+                                    if ((allSuppliers[i].name || '').trim() === raw) return allSuppliers[i];
+                                }
+                                return null;
+                            }
 
-                                 if (custNameInput)     custNameInput.value     = name;
-                                 if (custPhoneInput)    custPhoneInput.value    = phone;
-                                 if (custGovInput)      custGovInput.value      = gov;
-                                 if (custDistrictInput) custDistrictInput.value = district;
-                                 if (custAreaInput)     custAreaInput.value     = area;
-                                 if (custAddressInput)  custAddressInput.value  = address;
-                                 if (custCreditInput)   custCreditInput.value   = credit;
+                            function findSupplierByCode(code) {
+                                const search = (code || '').toString().trim();
+                                if (!search) return null;
+                                for (let i = 0; i < allSuppliers.length; i++) {
+                                    if ((allSuppliers[i].id || '').toString() === search) return allSuppliers[i];
+                                }
+                                return null;
+                            }
 
-                                 // تحديث زر حجم تعامل عند تغيير المورد
-                                 var btnVol = document.getElementById('btnSupplierVolume');
-                                 if (btnVol) {
-                                     var cid = parseInt(id || '0', 10) || 0;
-                                     var volBase = btnVol.getAttribute('data-base-url') || '';
-                                     var volUrl = cid > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + cid) : '#';
-                                     btnVol.href = volUrl;
-                                     btnVol.setAttribute('data-url', volUrl);
-                                 }
-                             }
+                            function fillSupplierFromRecord(rec) {
+                                if (!rec) {
+                                    if (custHiddenId)      custHiddenId.value      = '';
+                                    if (custCodeInput)     custCodeInput.value     = '';
+                                    if (custNameInput)     custNameInput.value     = '';
+                                    if (custPhoneInput)    custPhoneInput.value    = '';
+                                    if (custGovInput)      custGovInput.value      = '';
+                                    if (custDistrictInput) custDistrictInput.value = '';
+                                    if (custAreaInput)     custAreaInput.value     = '';
+                                    if (custAddressInput)  custAddressInput.value  = '';
+                                    if (custCreditInput)   custCreditInput.value   = '';
+                                    var btnVol = document.getElementById('btnSupplierVolume');
+                                    if (btnVol) { btnVol.href = '#'; btnVol.setAttribute('data-url', ''); }
+                                    return;
+                                }
+                                const id       = (rec.id || '').toString();
+                                const name     = (rec.name || '').toString();
+                                const phone    = (rec.phone || '').toString();
+                                const address  = (rec.address || '').toString();
+                                const gov      = (rec.gov || '').toString();
+                                const district = (rec.district || '').toString();
+                                const area     = (rec.area || '').toString();
+                                const credit   = (rec.credit || '').toString();
 
-                            // =========================================================
-                            // دروب داون مخصص لاسم المورد (حد أقصى 10 + Enter/Arrow)
-                            // =========================================================
-                            const CUSTOMER_LIST_MAX = 10;
+                                if (custHiddenId)  custHiddenId.value  = id;
+                                if (custCodeInput) custCodeInput.value = id;
+                                if (custNameInput)     custNameInput.value     = name;
+                                if (custPhoneInput)    custPhoneInput.value    = phone;
+                                if (custGovInput)      custGovInput.value      = gov;
+                                if (custDistrictInput) custDistrictInput.value = district;
+                                if (custAreaInput)     custAreaInput.value     = area;
+                                if (custAddressInput)  custAddressInput.value  = address;
+                                if (custCreditInput)   custCreditInput.value   = credit;
 
-                            const allSupplierOptions = Array.from(custDataList.options || []);
+                                var btnVol = document.getElementById('btnSupplierVolume');
+                                if (btnVol) {
+                                    var cid = parseInt(id || '0', 10) || 0;
+                                    var volBase = btnVol.getAttribute('data-base-url') || '';
+                                    var volUrl = cid > 0 ? (volBase + (volBase.indexOf('?') >= 0 ? '&' : '?') + 'id=' + cid) : '#';
+                                    btnVol.href = volUrl;
+                                    btnVol.setAttribute('data-url', volUrl);
+                                }
+                            }
+
+                            function fillSupplierFromOption(opt) {
+                                if (!opt) { fillSupplierFromRecord(null); return; }
+                                if (typeof opt.getAttribute === 'function') {
+                                    fillSupplierFromRecord({
+                                        id: (opt.getAttribute('data-id') || '').toString(),
+                                        name: (opt.value || '').toString(),
+                                        phone: (opt.getAttribute('data-phone') || '').toString(),
+                                        address: (opt.getAttribute('data-address') || '').toString(),
+                                        gov: (opt.getAttribute('data-gov') || '').toString(),
+                                        district: (opt.getAttribute('data-district') || opt.getAttribute('data-District') || '').toString(),
+                                        area: (opt.getAttribute('data-area') || opt.getAttribute('data-Area') || '').toString(),
+                                        credit: (opt.getAttribute('data-credit') || opt.getAttribute('data-Credit') || '').toString()
+                                    });
+                                } else {
+                                    fillSupplierFromRecord(opt);
+                                }
+                            }
 
                             const supplierDropdownWrap = document.getElementById('prSupplierDropdownWrap');
                             const supplierDropdownList = document.getElementById('prSupplierDropdownList');
@@ -1753,70 +1862,79 @@
                                 } catch { }
                             }
 
-                            function getFilteredSupplierOptions(search) {
-                                const q = normalizeSupplierText(search);
-                                if (!q) return allSupplierOptions.slice(0, CUSTOMER_LIST_MAX);
+                            function getFilteredSupplierOptions(search, max) {
+                                if (!allSuppliers || !allSuppliers.length) return [];
+                                const limit = max || CUSTOMER_LIST_MAX;
+                                const rawTrim = (search || '').trim();
+                                if (!rawTrim) return allSuppliers.slice(0, limit);
 
-                                const out = [];
-                                for (let i = 0; i < allSupplierOptions.length && out.length < CUSTOMER_LIST_MAX; i++) {
-                                    const name = normalizeSupplierText(allSupplierOptions[i].value);
-                                    if (!name) continue;
-                                    if (name.startsWith(q) || name.indexOf(q) !== -1) out.push(allSupplierOptions[i]);
+                                const qNorm = normalizeText(rawTrim);
+                                const words = rawTrim.split(/\s+/).filter(Boolean);
+                                const matched = [];
+                                for (let i = 0; i < allSuppliers.length; i++) {
+                                    const s = allSuppliers[i];
+                                    const idStr = (s.id || '').toString().trim();
+                                    const nameOk = qNorm ? supplierNameMatchesSearch(s.name || '', rawTrim) : true;
+                                    const idOk = words.length > 0 && words.some(function (w) { return idStr.indexOf(w) !== -1; });
+                                    const codeRawOk = idStr && idStr.indexOf(rawTrim) !== -1;
+                                    if (nameOk || idOk || codeRawOk) matched.push(s);
                                 }
-                                return out;
+                                matched.sort(function (a, b) {
+                                    const ra = supplierSearchRank(a.name || '', rawTrim);
+                                    const rb = supplierSearchRank(b.name || '', rawTrim);
+                                    if (ra !== rb) return ra - rb;
+                                    return (a.name || '').localeCompare(b.name || '', 'ar');
+                                });
+                                return matched.slice(0, limit);
                             }
 
                             function openSupplierDropdown() {
                                 if (!supplierDropdownList || !supplierDropdownWrap || !custNameInput) return;
 
                                 const raw = (custNameInput.value || '').trim();
-                                const list = getFilteredSupplierOptions(raw);
+                                const list = getFilteredSupplierOptions(raw, CUSTOMER_LIST_MAX);
 
                                 supplierDropdownList.innerHTML = '';
                                 supplierDropdownSelectableSuppliers = [];
 
-                                if (!list.length) {
-                                    const empty = document.createElement('div');
-                                    empty.className = 'product-dropdown-item text-muted small';
-                                    empty.textContent = raw ? 'لا توجد نتائج' : 'اكتب للبحث ثم انزل بالسهم ▼ واختر (10 كحد أقصى)';
-                                    supplierDropdownList.appendChild(empty);
-                                    supplierDropdownHighlightedIndex = -1;
-                                } else {
-                                    const currentNorm = normalizeSupplierText(custNameInput.value || '');
-                                    let highlightIdx = 0;
+                                let highlightIdx = 0;
+                                const currentVal = (custNameInput.value || '').trim();
+                                if (list.length > 0) {
                                     for (let i = 0; i < list.length; i++) {
-                                        if (normalizeSupplierText(list[i].value) === currentNorm) {
+                                        if (normalizeText(list[i].name || '').trim() === normalizeText(currentVal)) {
                                             highlightIdx = i;
                                             break;
                                         }
-                                        highlightIdx = 0;
                                     }
+                                }
 
-                                    list.forEach(function (opt, idx) {
+                                if (!list.length) {
+                                    const empty = document.createElement('div');
+                                    empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
+                                    empty.textContent = raw ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + CUSTOMER_LIST_MAX + ' كحد أقصى)');
+                                    supplierDropdownList.appendChild(empty);
+                                    supplierDropdownHighlightedIndex = -1;
+                                } else {
+                                    list.forEach(function (c, idx) {
                                         const it = document.createElement('div');
-                                        it.className = 'product-dropdown-item' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
+                                        it.className = 'product-dropdown-item py-2 px-3' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
                                         it.setAttribute('role', 'option');
-                                        it.textContent = (opt.value || '').trim();
-                                        // منع تغيير الفوكس عند الضغط (عشان سهم لتحت يفتح القائمة تاني)
-                                        it.addEventListener('mousedown', function (ev) {
-                                            ev.preventDefault();
-                                        });
+                                        it.textContent = (c.name || '').trim();
+                                        it.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
                                         it.addEventListener('click', function (ev) {
                                             ev.preventDefault();
                                             isSelectingSupplier = true;
-                                            fillSupplierFromOption(opt);
-                                            custNameInput.value = (opt.value || '').trim();
+                                            fillSupplierFromRecord(c);
+                                            custNameInput.value = (c.name || '').trim();
                                             closeSupplierDropdown();
-                                            // ارجاع الفوكس لحقل المورد عشان سهم لتحت يفتح القائمة
                                             setTimeout(function () {
                                                 custNameInput?.focus();
                                                 isSelectingSupplier = false;
                                             }, 0);
                                         });
                                         supplierDropdownList.appendChild(it);
-                                        supplierDropdownSelectableSuppliers.push(opt);
+                                        supplierDropdownSelectableSuppliers.push(c);
                                     });
-
                                     supplierDropdownHighlightedIndex = highlightIdx;
                                 }
 
@@ -1832,11 +1950,10 @@
                                 if (!selected) return false;
 
                                 isSelectingSupplier = true;
-                                fillSupplierFromOption(selected);
-                                custNameInput.value = (selected.value || '').trim();
+                                fillSupplierFromRecord(selected);
+                                custNameInput.value = (selected.name || '').trim();
                                 if (!keepOpen) closeSupplierDropdown();
 
-                                // ارجاع الفوكس لحقل المورد عشان سهم لتحت يفتح القائمة
                                 setTimeout(function () {
                                     custNameInput?.focus();
                                     isSelectingSupplier = false;
@@ -1960,7 +2077,10 @@
                                  fillSupplierFromOption(findSupplierByCode(custHiddenId.value));
                              }
 
-                         })();
+                         }
+
+                         initSupplierAutocompletePr();
+                         window.__initSupplierAutocompletePr = initSupplierAutocompletePr;
 
                          // =========================================================
                          // (B) أوتوكومبليت الصنف + كارت بياناته + التابات + إضافة سطر
@@ -2008,92 +2128,108 @@
                              }
 
                              // =========================================================
-                             // دوال مساعدة (أرقام + توحيد نص)
+                             // دوال مساعدة — نفس فاتورة المبيعات (بحث متعدد كلمات + ترتيب + كود)
                              // =========================================================
 
-                             // دالة: توحيد النص (تجاهل الألف + إزالة مسافات مكررة)
-                             function normalizeText(txt) {
+                             function normalizeDigits(txt) {
                                  if (!txt) return '';
-                                 return txt
-                                     .trim()
-                                     .toLowerCase()
-                                     // توحيد الألف (أ، إ، آ، ا)
-                                     .replace(/[أإآ]/g, 'ا')
-                                     // إزالة مسافات مكررة
-                                     .replace(/\s+/g, ' ')
-                                     // إزالة مسافات في البداية والنهاية
-                                     .trim();
+                                 const map = { '\u0660': '0', '\u0661': '1', '\u0662': '2', '\u0663': '3', '\u0664': '4',
+                                     '\u0665': '5', '\u0666': '6', '\u0667': '7', '\u0668': '8', '\u0669': '9' };
+                                 let out = '';
+                                 for (let i = 0; i < txt.length; i++) {
+                                     const c = txt[i];
+                                     out += map[c] !== undefined ? map[c] : c;
+                                 }
+                                 return out;
                              }
 
-                             // دالة: تحويل النص لرقم (decimal) بأمان
+                             function normalizeWord(w) {
+                                 return normalizeDigits((w || '').trim().toLowerCase()).replace(/^[اأإآ]/u, '');
+                             }
+
+                             function normalizeText(txt) {
+                                 return (txt || '')
+                                     .trim()
+                                     .toLowerCase()
+                                     .split(/\s+/)
+                                     .filter(Boolean)
+                                     .map(function (w) { return normalizeWord(w); })
+                                     .filter(Boolean)
+                                     .join(' ')
+                                     .replace(/\s+/g, ' ');
+                             }
+
+                             function wordMatchesQueryWord(nameWord, queryWord) {
+                                 const nw0 = normalizeDigits((nameWord || '').trim().toLowerCase());
+                                 const qw0 = normalizeDigits((queryWord || '').trim().toLowerCase());
+                                 const nw = nw0.replace(/^[اأإآ]/u, '');
+                                 const qw = qw0.replace(/^[اأإآ]/u, '');
+                                 if (!qw) return true;
+                                 return nw === qw || nw.startsWith(qw);
+                             }
+
+                             function productNameMatchesSearch(productName, rawSearch) {
+                                 const raw = (rawSearch || '').trim();
+                                 if (!raw) return true;
+                                 const qWords = raw.split(/\s+/).filter(Boolean);
+                                 const nWords = (productName || '').trim().split(/\s+/).filter(Boolean);
+                                 if (qWords.length === 0) return true;
+                                 return qWords.every(function (qw) {
+                                     return nWords.some(function (nw) { return wordMatchesQueryWord(nw, qw); });
+                                 });
+                             }
+
+                             function productSearchRank(name, rawSearch) {
+                                 const raw = (rawSearch || '').trim();
+                                 const nm = (name || '').trim();
+                                 if (!raw) return 50;
+                                 if (nm === raw) return 0;
+                                 if (nm.startsWith(raw)) return 1;
+                                 const rawWords = raw.split(/\s+/).filter(Boolean);
+                                 const firstQ = rawWords[0] || '';
+                                 const nmWords = nm.split(/\s+/).filter(Boolean);
+                                 if (firstQ && nmWords.length) {
+                                     if (nmWords[0].startsWith(firstQ)) return 2;
+                                     const nw0 = normalizeDigits(nmWords[0].toLowerCase());
+                                     const qw0 = normalizeDigits(firstQ.toLowerCase());
+                                     const nw = nw0.replace(/^[اأإآ]/u, '');
+                                     const qw = qw0.replace(/^[اأإآ]/u, '');
+                                     if (qw && (nw === qw || nw.startsWith(qw))) return 3;
+                                 }
+                                 return 4;
+                             }
+
                              function parseDecimalSafe(val) {
                                  const s = (val || '').toString().trim().replace(',', '.');
                                  const n = parseFloat(s);
                                  return isNaN(n) ? 0 : n;
                              }
 
-                             // دالة: تنسيق رقم (رقمين عشريين)
                              function fmt2(val) {
                                  return parseDecimalSafe(val).toFixed(2);
                              }
 
-                             // =========================================================
-                             // قائمة الأصناف الكاملة + فلترة الـ datalist بـ StartsWith فقط
-                             // (القائمة المنسدلة أثناء الكتابة تعرض فقط ما يبدأ بنص البحث)
-                             // =========================================================
-                             let productsFullList = [];
-                             if (prodDataList && prodDataList.options) {
-                                 for (let i = 0; i < prodDataList.options.length; i++) {
-                                     const o = prodDataList.options[i];
-                                     productsFullList.push({
-                                         value: o.value || '',
-                                         id: (o.getAttribute('data-id') || '').toString(),
-                                         code: (o.getAttribute('data-code') || o.getAttribute('data-id') || '').toString(),
-                                         generic: (o.getAttribute('data-generic') || '').toString(),
-                                         company: (o.getAttribute('data-company') || '').toString(),
-                                         price: (o.getAttribute('data-price') || '0').toString(),
-                                         hasquota: (o.getAttribute('data-hasquota') === 'true')
-                                     });
+                             function getProductDropdownFilterQuery(rawTrim) {
+                                 const raw = (rawTrim || '').trim();
+                                 if (!raw || !prodDataList || !prodDataList.options) return raw;
+                                 const nRaw = normalizeText(raw);
+                                 let canonical = '';
+                                 const opts = prodDataList.options;
+                                 for (let i = 0; i < opts.length; i++) {
+                                     const v = (opts[i].value || '').trim();
+                                     if (!v) continue;
+                                     if (v === raw) { canonical = v; break; }
+                                     if (nRaw && normalizeText(v) === nRaw) { canonical = v; break; }
                                  }
-                             }
-
-                             function createOptionFromProduct(p) {
-                                 const o = document.createElement('option');
-                                 o.value = p.value;
-                                 o.setAttribute('data-id', p.id);
-                                 o.setAttribute('data-code', p.code);
-                                 o.setAttribute('data-generic', p.generic);
-                                 o.setAttribute('data-company', p.company);
-                                 o.setAttribute('data-price', p.price);
-                                 o.setAttribute('data-hasquota', p.hasquota ? 'true' : 'false');
-                                 return o;
-                             }
-
-                             function applyDatalistFilter(searchTxt) {
-                                 if (!prodDataList) return;
-                                 const search = normalizeText(searchTxt);
-                                 prodDataList.innerHTML = '';
-                                 for (let i = 0; i < productsFullList.length; i++) {
-                                     const p = productsFullList[i];
-                                     const n = normalizeText(p.value);
-                                     if (!search || n === search || n.startsWith(search)) {
-                                         prodDataList.appendChild(createOptionFromProduct(p));
-                                     }
-                                 }
-                             }
-
-                             function restoreDatalistFull() {
-                                 if (!prodDataList) return;
-                                 prodDataList.innerHTML = '';
-                                 for (let i = 0; i < productsFullList.length; i++) {
-                                     prodDataList.appendChild(createOptionFromProduct(productsFullList[i]));
-                                 }
+                                 if (!canonical) return raw;
+                                 const parts = canonical.split(/\s+/).filter(Boolean);
+                                 return parts[0] || raw;
                              }
 
                             // =========================================================
-                            // دروب داون مخصص لاسم الصنف (حد أقصى 10 + Arrow/Enter)
+                            // دروب داون لاسم الصنف — نفس فاتورة المبيعات (حد 15 نتيجة)
                             // =========================================================
-                            const PRODUCT_LIST_MAX = 10;
+                            const PRODUCT_LIST_MAX = 15;
 
                             const productDropdownWrap = document.getElementById('prProductDropdownWrap');
                             const productDropdownList = document.getElementById('prProductDropdownList');
@@ -2138,56 +2274,92 @@
                                 } catch { }
                             }
 
-                            function getFilteredProductOptions(searchTxt, max) {
-                                const q = normalizeText(searchTxt);
+                            function getFilteredProductOptions(search, max, pinDisplayName) {
+                                if (!prodDataList || !prodDataList.options) return [];
                                 const limit = max || PRODUCT_LIST_MAX;
-
-                                if (!q) return productsFullList.slice(0, limit);
-
-                                const out = [];
-                                for (let i = 0; i < productsFullList.length && out.length < limit; i++) {
-                                    const p = productsFullList[i];
-                                    const n = normalizeText(p.value);
-                                    if (!n) continue;
-                                    if (n.startsWith(q) || n.indexOf(q) !== -1) out.push(p);
+                                const opts = prodDataList.options;
+                                const rawTrim = (search || '').trim();
+                                if (!rawTrim) {
+                                    const out = [];
+                                    for (let i = 0; i < opts.length && out.length < limit; i++) out.push(opts[i]);
+                                    return out;
                                 }
-                                return out;
+                                const qNorm = normalizeText(rawTrim);
+                                const words = rawTrim.split(/\s+/).filter(Boolean);
+                                const matched = [];
+                                for (let i = 0; i < opts.length; i++) {
+                                    const opt = opts[i];
+                                    const nameVal = (opt.value || '').trim();
+                                    const code = (opt.getAttribute('data-code') || '').toString().trim();
+                                    const idAttr = (opt.getAttribute('data-id') || '').toString().trim();
+                                    const codeOrId = code || idAttr;
+                                    const nameOk = qNorm ? productNameMatchesSearch(nameVal, rawTrim) : true;
+                                    const idOk = words.length > 0 && words.some(function (w) { return codeOrId.indexOf(w) !== -1; });
+                                    const codeRawOk = codeOrId && codeOrId.indexOf(rawTrim) !== -1;
+                                    if (nameOk || idOk || codeRawOk) matched.push(opt);
+                                }
+                                matched.sort(function (a, b) {
+                                    const ra = productSearchRank((a.value || '').trim(), rawTrim);
+                                    const rb = productSearchRank((b.value || '').trim(), rawTrim);
+                                    if (ra !== rb) return ra - rb;
+                                    return (a.value || '').localeCompare(b.value || '', 'ar');
+                                });
+                                let result = matched.slice(0, limit);
+                                const pinRaw = (pinDisplayName || '').trim();
+                                if (pinRaw) {
+                                    const nPin = normalizeText(pinRaw);
+                                    let pinOpt = null;
+                                    for (let j = 0; j < opts.length; j++) {
+                                        const v = (opts[j].value || '').trim();
+                                        if (v === pinRaw || (nPin && normalizeText(v) === nPin)) { pinOpt = opts[j]; break; }
+                                    }
+                                    if (pinOpt && matched.indexOf(pinOpt) >= 0) {
+                                        const inResult = result.some(function (o) { return o === pinOpt; });
+                                        if (!inResult) {
+                                            result = matched.slice(0, limit - 1);
+                                            result.push(pinOpt);
+                                        }
+                                    }
+                                }
+                                return result;
                             }
 
                             function openProductDropdown() {
                                 if (!productDropdownList || !productDropdownWrap || !prodNameInput) return;
 
-                                const raw = (prodNameInput.value || '').trim();
-                                const list = getFilteredProductOptions(raw, PRODUCT_LIST_MAX);
+                                const searchTerm = (prodNameInput.value || '').trim();
+                                const filterQuery = getProductDropdownFilterQuery(searchTerm);
+                                const list = getFilteredProductOptions(filterQuery, PRODUCT_LIST_MAX, searchTerm);
 
                                 productDropdownList.innerHTML = '';
                                 productDropdownSelectableProducts = [];
 
-                                if (!list.length) {
-                                    const empty = document.createElement('div');
-                                    empty.className = 'product-dropdown-item text-muted small';
-                                    empty.textContent = raw ? 'لا توجد نتائج' : 'اكتب للبحث ثم انزل بالسهم ▼ واختر (10 كحد أقصى)';
-                                    productDropdownList.appendChild(empty);
-                                    productDropdownHighlightedIndex = -1;
-                                } else {
-                                    const currentNorm = normalizeText(prodNameInput.value || '');
-                                    let highlightIdx = 0;
+                                let highlightIdx = 0;
+                                const currentVal = (prodNameInput.value || '').trim();
+                                if (list.length > 0) {
                                     for (let i = 0; i < list.length; i++) {
-                                        if (normalizeText(list[i].value) === currentNorm) {
+                                        if (normalizeText((list[i].value || '').trim()) === normalizeText(currentVal)) {
                                             highlightIdx = i;
                                             break;
                                         }
                                     }
+                                }
 
-                                    list.forEach(function (pObj, idx) {
+                                if (!list.length) {
+                                    const empty = document.createElement('div');
+                                    empty.className = 'product-dropdown-item text-muted py-2 px-3 small';
+                                    empty.textContent = searchTerm ? 'لا توجد نتائج' : ('اكتب للبحث ثم انزل بالسهم ▼ واختر (' + PRODUCT_LIST_MAX + ' كحد أقصى)');
+                                    productDropdownList.appendChild(empty);
+                                    productDropdownHighlightedIndex = -1;
+                                } else {
+                                    list.forEach(function (opt, idx) {
                                         const it = document.createElement('div');
-                                        it.className = 'product-dropdown-item' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
+                                        it.className = 'product-dropdown-item py-2 px-3' + (idx === highlightIdx ? ' product-dropdown-item-active' : '');
                                         it.setAttribute('role', 'option');
-                                        it.textContent = (pObj.value || '').trim();
+                                        it.textContent = (opt.value || '').trim();
                                         it.addEventListener('click', function (ev) {
                                             ev.preventDefault();
                                             isSelectingProduct = true;
-                                            const opt = createOptionFromProduct(pObj);
                                             prodNameInput.dataset.skipBlurEnter = '1';
                                             fillProductFromOption(opt, { skipCard: true });
                                             closeProductDropdown();
@@ -2198,9 +2370,8 @@
                                             }, 400);
                                         });
                                         productDropdownList.appendChild(it);
-                                        productDropdownSelectableProducts.push(pObj);
+                                        productDropdownSelectableProducts.push(opt);
                                     });
-
                                     productDropdownHighlightedIndex = highlightIdx;
                                 }
 
@@ -2212,13 +2383,12 @@
                                 if (productDropdownHighlightedIndex < 0) return false;
                                 if (productDropdownHighlightedIndex >= productDropdownSelectableProducts.length) return false;
 
-                                const selectedObj = productDropdownSelectableProducts[productDropdownHighlightedIndex];
-                                if (!selectedObj) return false;
+                                const selectedOpt = productDropdownSelectableProducts[productDropdownHighlightedIndex];
+                                if (!selectedOpt) return false;
 
                                 isSelectingProduct = true;
-                                const opt = createOptionFromProduct(selectedObj);
                                 prodNameInput.dataset.skipBlurEnter = '1';
-                                fillProductFromOption(opt, { skipCard: true });
+                                fillProductFromOption(selectedOpt, { skipCard: true });
 
                                 if (!keepOpen) closeProductDropdown();
                                 productDropdownPendingMoveToQty = true;
@@ -2251,24 +2421,19 @@
                              // =========================================================
 
                              function findProductByName(name) {
-                                 const search = normalizeText(name);
+                                 const raw = (name || '').trim();
+                                 const search = normalizeText(raw);
                                  if (!search) return null;
 
                                  const opts = prodDataList.options;
                                  if (!opts || opts.length === 0) return null;
 
-                                 // 1) تطابق تام
                                  for (let i = 0; i < opts.length; i++) {
-                                     const optText = normalizeText(opts[i].value);
-                                     if (optText === search) return opts[i];
+                                     if (normalizeText(opts[i].value) === search) return opts[i];
                                  }
-
-                                 // 2) يبدأ بـ (StartsWith فقط — لا Contains)
                                  for (let i = 0; i < opts.length; i++) {
-                                     const optText = normalizeText(opts[i].value);
-                                     if (optText.startsWith(search)) return opts[i];
+                                     if ((opts[i].value || '').trim() === raw) return opts[i];
                                  }
-
                                  return null;
                              }
 
@@ -2528,10 +2693,15 @@
                              if (prodNameInput) {
                                  console.log('✅ تم ربط event listeners لحقل اسم الصنف');
 
-                                // فتح الدروب داون عند الكتابة فقط
+                                // فتح الدروب داون عند الكتابة فقط — لا تفتح عند التعبئة من جدول السطور (مثل فاتورة المبيعات)
                                 prodNameInput.addEventListener('input', function () {
                                     if (this.dataset.skipBlurEnter === '1') return;
                                     if (isSelectingProduct) return;
+                                    if (window.suppressProductDropdownOnce) {
+                                        window.suppressProductDropdownOnce = false;
+                                        closeProductDropdown();
+                                        return;
+                                    }
                                     productDropdownPendingMoveToQty = false;
                                     openProductDropdown();
                                 });
@@ -2590,9 +2760,6 @@
                              }
 
                              if (prodCodeInput) {
-                                 prodCodeInput.addEventListener('focus', function () {
-                                     restoreDatalistFull();
-                                 });
                                  prodCodeInput.addEventListener('change', function () {
                                      const found = findProductByCode(this.value);
                                      fillProductFromOption(found);
@@ -2733,7 +2900,7 @@
                                             let optToSelect = null;
 
                                             if (isOpen && productDropdownHighlightedIndex >= 0 && productDropdownSelectableProducts.length > 0) {
-                                                optToSelect = createOptionFromProduct(productDropdownSelectableProducts[productDropdownHighlightedIndex]);
+                                                optToSelect = productDropdownSelectableProducts[productDropdownHighlightedIndex];
                                             } else {
                                                 optToSelect = findProductByName(prodNameInput.value);
                                             }
@@ -2786,8 +2953,8 @@
 
                          // ===============================
                          // رسم جدول السطور (هجين)
-                         // - لو الصنف غير مكرر: سطر واحد + بيانات + زر مسح
-                         // - لو الصنف مكرر (تشغيلات): سطر عنوان للصنف + سطور تشغيلات (بيانات + مسح لكل تشغيلة)
+                         // - لو الصنف غير مكرر: سطر واحد + بيانات
+                         // - لو الصنف مكرر (تشغيلات): سطر عنوان للصنف + سطور تشغيلات
                          // ===============================
                          function renderGroupedLines(lines) {
 
@@ -2800,7 +2967,7 @@
 
                              // لو مفيش بيانات
                              if (!Array.isArray(lines) || lines.length === 0) {
-                                 tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-3">لا توجد سطور</td></tr>`;
+                                 tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">لا توجد سطور</td></tr>`;
                                  return;
                              }
 
@@ -2925,14 +3092,6 @@
                                          </td>
 
                                          <td class="text-center line-value">${fmt2(lineValue)}</td>
-
-                                         <td class="text-center">
-                                             <button type="button"
-                                                     class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                     data-line-no="${lineNo}">
-                                                 مسح
-                                             </button>
-                                         </td>
                                      `;
 
                                      tbody.appendChild(tr);
@@ -2962,12 +3121,11 @@
                                      <td class="text-center"></td>
                                      <td class="text-center"></td>
                                      <td class="text-center"></td>
-                                     <td class="text-center"></td>
                                  `;
 
                                  tbody.appendChild(grpRow);
 
-                                 // (ب) سطور التشغيلات (كل تشغيلة = سطر بيانات + زر مسح)
+                                 // (ب) سطور التشغيلات
                                  sortedLines.forEach(line => {
 
                                      const lineNo = line.lineNo ?? ''; // متغير: رقم السطر
@@ -3049,14 +3207,6 @@
                                          </td>
 
                                          <td class="text-center line-value">${fmt2(lineValue)}</td>
-
-                                         <td class="text-center">
-                                             <button type="button"
-                                                     class="btn btn-danger btn-sm btnRemoveLineFromInvoice"
-                                                     data-line-no="${lineNo}">
-                                                 مسح
-                                             </button>
-                                         </td>
                                      `;
 
                                      tbody.appendChild(tr);
@@ -3602,6 +3752,8 @@
                              setText('TotalAfterDiscountValue', fmt2(totalAfterDiscount));
                          }
 
+                         window.updateSummaryBadges = updateSummaryBadges;
+                         window.recalcTotalsFromPage = recalcTotalsFromPage;
 
 
 
@@ -4115,9 +4267,8 @@
                                  const row = e.target.closest('#PILinesTbody tr[data-prodid]');
                                  if (!row) return;
 
-                                 // حماية: لو الضغط على زر (مسح) أو أي زر داخل السطر لا نختار السطر
+                                 // حماية: أزرار/روابط داخل الصف لا تُفعّل اختيار السطر
                                  if (e.target.closest('.btnRemoveProductFromInvoice') ||
-                                     e.target.closest('.btnRemoveLineFromInvoice') ||
                                      e.target.closest('button') ||
                                      e.target.closest('a')) {
                                      return;
@@ -4168,12 +4319,20 @@
                              setVal(ProdIdEl, prodId);
                              setVal(ProdCodeEl, prodId);
 
-                             // 2) جلب اسم الصنف من الخلية الثانية (فيها strong)
+                             // 2) جلب اسم الصنف (سطر تشغيلة تحت عنوان الصنف: الاسم من سطر المجموعة السابق)
                              let prodName = '';
                              const nameStrong = row.querySelector('td:nth-child(2) strong');
                              if (nameStrong) prodName = (nameStrong.innerText || '').trim();
-                             if (!prodName) prodName = (row.cells[1]?.innerText || '').trim(); // fallback
+                             if (!prodName || prodName === '↳') {
+                                 const prev = row.previousElementSibling;
+                                 if (prev && prev.classList.contains('pi-group-row')) {
+                                     const prevName = prev.querySelector('td:nth-child(2) strong');
+                                     if (prevName) prodName = (prevName.innerText || '').trim();
+                                 }
+                             }
+                             if (!prodName) prodName = (row.cells[1]?.innerText || '').trim();
 
+                             window.suppressProductDropdownOnce = true;
                              setVal(ProdNameEl, prodName);
 
                              // 3) لو السطر "تجميعي" (Multi-Batch) => نملأ الاسم/الكود فقط ونفضي باقي الحقول
@@ -4226,7 +4385,7 @@
                              }
 
                              // 7) فوكس سريع على الكمية لسهولة التعديل
-                             if (prodName) prodName.focus();
+                             if (ProdQtyEl) ProdQtyEl.focus();
 
                              });
 
@@ -4293,15 +4452,23 @@
                                          return;
                                      }
 
-                                     const ok = confirm("هل تريد مسح جميع الأصناف من الطلب؟");
-                                     if (!ok) return;
+                                     let okClear = false;
+                                     if (typeof ERP !== "undefined" && typeof ERP.showConfirmModal === "function") {
+                                         okClear = await ERP.showConfirmModal({
+                                             title: "مسح كل أصناف الطلب",
+                                             message: "هل تريد مسح جميع الأصناف من الطلب؟",
+                                             confirmText: "مسح",
+                                             cancelText: "إلغاء"
+                                         });
+                                     } else {
+                                         okClear = confirm("هل تريد مسح جميع الأصناف من الطلب؟");
+                                     }
+                                     if (!okClear) return;
 
                                      busy = true;
                                      const oldHtml = btnClearAll.innerHTML;
                                      btnClearAll.disabled = true;
                                      btnClearAll.innerHTML = "⏳ جاري المسح...";
-
-                                     showToast("جاري مسح جميع الأصناف...", "muted");
 
                                      try {
 
@@ -4339,15 +4506,26 @@
                                          }
 
                                          // ✅ تحديث الإجماليات
-                                         if (typeof recalcTotalsFromPage === "function") {
-                                             recalcTotalsFromPage();
+                                         if (typeof window.recalcTotalsFromPage === "function") {
+                                             window.recalcTotalsFromPage();
                                          }
 
                                          // ✅ إعادة تحميل body للطلب (بنفس طريقة RemoveLineJson)
                                          const baseUrl = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
                                              || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
-                                         const url = setOrReplaceParam(baseUrl, 'id', invoiceId);
-                                         await loadInvoiceBody(url);
+                                         let reloadUrl = baseUrl;
+                                         if (typeof window.setOrReplaceParam === "function") {
+                                             reloadUrl = window.setOrReplaceParam(baseUrl, "id", invoiceId);
+                                         } else {
+                                             try {
+                                                 const u = new URL(baseUrl, window.location.origin);
+                                                 u.searchParams.set("id", String(invoiceId));
+                                                 reloadUrl = u.toString();
+                                             } catch { /* ignore */ }
+                                         }
+                                         if (typeof window.loadInvoiceBody === "function") {
+                                             await window.loadInvoiceBody(reloadUrl);
+                                         }
 
                                          showToast(data.message || "تم مسح جميع الأصناف.", "success");
 
@@ -4438,15 +4616,23 @@
 
                                      if (btnPost.disabled) return;
 
-                                     const ok = confirm("هل تريد تحويل هذا الطلب إلى فاتورة مشتريات؟ بعد التحويل سيتم قفله.");
-                                     if (!ok) return;
+                                     let okConvert = false;
+                                     if (typeof ERP !== "undefined" && typeof ERP.showConfirmModal === "function") {
+                                         okConvert = await ERP.showConfirmModal({
+                                             title: "تحويل إلى فاتورة مشتريات",
+                                             message: "هل تريد تحويل هذا الطلب إلى فاتورة مشتريات؟ بعد التحويل سيتم قفله.",
+                                             confirmText: "تحويل",
+                                             cancelText: "إلغاء"
+                                         });
+                                     } else {
+                                         okConvert = confirm("هل تريد تحويل هذا الطلب إلى فاتورة مشتريات؟ بعد التحويل سيتم قفله.");
+                                     }
+                                     if (!okConvert) return;
 
                                      // تجهيز الزر
                                      btnPost.disabled = true;
                                      const oldHtml = btnPost.innerHTML;
                                      btnPost.innerHTML = "⏳ جاري التحويل...";
-
-                                     showToast("يتم حفظ التعديلات ثم التحويل...", "muted");
 
                                      try {
 
@@ -4462,7 +4648,6 @@
                                                  return;
                                              }
                                          }
-                                         showToast("يتم الآن تحويل الطلب...", "muted");
 
                                          // =========================
                                          // 1) طلب  التحويل
@@ -4837,10 +5022,11 @@
                                  (function () {
 
                              // =========================================================
-                             // ✅ Guard: يمنع تركيب نفس السكربت أكثر من مرة
+                             // ✅ Guard: يمنع تركيب نفس السكربت أكثر من مرة — علم خاص بطلب الشراء فقط
+                             // (لا تستخدم __PI_NAV_SCRIPT_LOADED__: مشترك مع فاتورة المشتريات/المبيعات ويمنع تهيئة هذه الصفحة)
                              // =========================================================
-                             if (window.__PI_NAV_SCRIPT_LOADED__) return;
-                             window.__PI_NAV_SCRIPT_LOADED__ = true;
+                             if (window.__PR_NAV_SCRIPT_LOADED__) return;
+                             window.__PR_NAV_SCRIPT_LOADED__ = true;
 
                              // =========================
                              // أدوات مساعدة
@@ -4857,6 +5043,7 @@
                                      return url + sep + key + '=' + encodeURIComponent(value);
                                  }
                              }
+                             window.setOrReplaceParam = setOrReplaceParam;
 
                              function getInt(id) {
                                  const el = document.getElementById(id);
@@ -5124,8 +5311,11 @@
                                          window.__ERP_INIT__();
                                      }
 
-                                     // ✅ إعادة تهيئة event listeners للأصناف (تأخير بسيط لاستقرار الـ DOM)
+                                     // ✅ إعادة تهيئة المورد + الأصناف (بعد استبدال الهيدر والـ datalists)
                                      setTimeout(function () {
+                                         if (typeof window.__initSupplierAutocompletePr === 'function') {
+                                             window.__initSupplierAutocompletePr();
+                                         }
                                          if (typeof window.__initProductSearch === 'function') {
                                              window.__initProductSearch();
                                          }
@@ -5147,15 +5337,18 @@
                                  }
                              }
 
+                             window.loadInvoiceBody = loadInvoiceBody;
+
                              // ✅ مثل فاتورة المبيعات: تحديث الطلب الحالي فقط (بدون فتح طلب آخر)
                              window.__ERP_REFRESH__ = function () {
                                  const currentId = parseInt((document.getElementById('NavCurrentId')?.value || '0'), 10) || 0;
                                  const baseUrl = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url') || '@Url.Action("Show", "PurchaseRequests", new { frame = 1 })';
-                                 if (currentId > 0 && typeof loadInvoiceBody === 'function') {
+                                 const load = window.loadInvoiceBody;
+                                 if (currentId > 0 && typeof load === 'function') {
                                      try {
                                          const u = new URL(baseUrl, window.location.origin);
                                          u.searchParams.set('id', currentId);
-                                         loadInvoiceBody(u.toString());
+                                         load(u.toString());
                                      } catch (e) { console.warn('__ERP_REFRESH__:', e); }
                                  }
                              };
@@ -5179,17 +5372,24 @@
 
 
                               // =========================
-                             // (0) زر مسح سطر من الطلب
+                             // (0) مسح سطر محدد من كارت الإجراءات
                              // =========================
-                             const removeBtn = t.closest('.btnRemoveLineFromInvoice');
-                             if (removeBtn) {
+                             const removeSelectedBtn = (t.id === 'btnRemoveSelectedLine' || t.closest('#btnRemoveSelectedLine'))
+                                 ? document.getElementById('btnRemoveSelectedLine')
+                                 : null;
+                             if (removeSelectedBtn) {
 
                                  ev.preventDefault();
                                  ev.stopPropagation();
                                  ev.stopImmediatePropagation();
 
-                                 // متغير: رقم السطر داخل الطلب
-                                 const lineNo = parseInt(removeBtn.getAttribute('data-line-no') || '0', 10);
+                                 const selRow = document.querySelector('#PILinesTbody tr.pi-row-selected[data-line-no]');
+                                 if (!selRow) {
+                                     alert('اختر سطراً من جدول الأصناف أولاً (اضغط على السطر غير خانات التعديل).');
+                                     return;
+                                 }
+
+                                 const lineNo = parseInt(selRow.getAttribute('data-line-no') || '0', 10);
 
                                                // ✅ رقم الطلب (لازم يتقري وقت الضغط من الـ DOM لأنه بيتغير مع الـ Reload الجزئي)
                              const PRId = parseInt((document.getElementById('InvoiceId')?.value || '0'), 10) || 0;
@@ -5198,11 +5398,21 @@
                                  if (!PRId || PRId <= 0) { alert('لا يمكن مسح سطر: رقم الطلب غير معروف.'); return; }
                                  if (!lineNo || lineNo <= 0) { alert('لا يمكن مسح سطر: رقم السطر غير صحيح.'); return; }
 
-                                 // تأكيد بسيط
-                                 if (!confirm(`هل تريد مسح السطر رقم (${lineNo})؟`)) return;
+                                 let okDelete = false;
+                                 if (typeof ERP !== 'undefined' && typeof ERP.showConfirmModal === 'function') {
+                                     okDelete = await ERP.showConfirmModal({
+                                         title: 'مسح سطر من الطلب',
+                                         message: `هل تريد مسح السطر رقم (${lineNo})؟`,
+                                         confirmText: 'مسح',
+                                         cancelText: 'إلغاء'
+                                     });
+                                 } else {
+                                     okDelete = confirm(`هل تريد مسح السطر رقم (${lineNo})؟`);
+                                 }
+                                 if (!okDelete) return;
 
                                  // منع الضغط المتكرر أثناء التنفيذ
-                                 removeBtn.disabled = true;
+                                 removeSelectedBtn.disabled = true;
 
                                  // ✅ متغير: توكن AntiForgery (من الدالة المثبتة عندك في Show)
                                  const antiToken = (window.getAntiForgeryToken ? window.getAntiForgeryToken() : '');
@@ -5252,7 +5462,11 @@
                                          purchaseDiscountPct: l.discPct ?? l.purchaseDiscountPct
                                      }));
                                      if (typeof renderGroupedLines === 'function') renderGroupedLines(lines);
-                                     if (data.totals && typeof updateSummaryBadges === 'function') updateSummaryBadges(data.totals);
+                                     if (data.totals && typeof window.updateSummaryBadges === 'function') {
+                                         window.updateSummaryBadges(data.totals);
+                                     } else if (typeof window.recalcTotalsFromPage === 'function') {
+                                         window.recalcTotalsFromPage();
+                                     }
                                      if (typeof bindEditableLineFields === 'function') setTimeout(() => bindEditableLineFields(), 50);
 
                                      showToast(data.message || 'تم حذف السطر.', 'success');
@@ -5268,8 +5482,8 @@
                                  } finally {
                                      clearTimeout(timeoutId);
 
-                                     if (document.contains(removeBtn)) {
-                                         removeBtn.disabled = false;
+                                     if (document.contains(removeSelectedBtn)) {
+                                         removeSelectedBtn.disabled = false;
                                      }
                                  }
 

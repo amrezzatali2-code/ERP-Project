@@ -1,4 +1,6 @@
 @using ERP.ViewModels
+@using Microsoft.AspNetCore.Html
+@using Microsoft.AspNetCore.WebUtilities
 @{
     ViewData["Title"] = "تقرير: أرباح الأصناف";
 
@@ -10,17 +12,13 @@
     var totalAdjustmentProfit = ViewBag.TotalAdjustmentProfit as decimal? ?? 0m;
     var totalTransferProfit = ViewBag.TotalTransferProfit as decimal? ?? 0m;
     var totalNetProfit = ViewBag.TotalNetProfit as decimal? ?? 0m;
+    var totalSalesQtyAll = ViewBag.TotalSalesQty as decimal? ?? 0m;
 
-    // إجمالي الكمية على مستوى التقرير كله
-    var totalSalesQtyAll = reportData.Sum(r => r.SalesQty);
-
-    // Pagination
     var page = ViewBag.Page as int? ?? 1;
-    var pageSize = ViewBag.PageSize as int? ?? 20;
+    var pageSize = ViewBag.PageSize as int? ?? 10;
     var totalPages = ViewBag.TotalPages as int? ?? 1;
     var totalCount = ViewBag.TotalCount as int? ?? 0;
 
-    // الفلاتر من ViewBag
     var search = ViewBag.Search as string ?? "";
     var categoryId = ViewBag.CategoryId as int?;
     var warehouseId = ViewBag.WarehouseId as int?;
@@ -28,8 +26,8 @@
     var toDate = ViewBag.ToDate as DateTime?;
     var includeZeroQty = ViewBag.IncludeZeroQty as bool? ?? false;
     var profitMethod = ViewBag.ProfitMethod as string ?? "both";
-    var sortBy = ViewBag.SortBy as string ?? "name";
-    var sortDir = ViewBag.SortDir as string ?? "asc";
+    var sort = ViewBag.Sort as string ?? "name";
+    var dir = ViewBag.Dir as string ?? "asc";
     var filterCol_code = ViewBag.FilterCol_Code as string;
     var filterCol_name = ViewBag.FilterCol_Name as string;
     var filterCol_category = ViewBag.FilterCol_Category as string;
@@ -47,79 +45,115 @@
     var categories = ViewBag.Categories as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
     var warehouses = ViewBag.Warehouses as IEnumerable<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? Enumerable.Empty<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
 
-    // دالة إنشاء رابط الترتيب
-    Func<string, string, string> sortUrl = (col, direction) =>
+    int ps = pageSize;
+    int start = totalCount == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
+    int end = (ps == 0 || totalCount == 0) ? totalCount : Math.Min(totalCount, page * ps);
+    int first = 1, last = Math.Max(1, totalPages);
+    int prev = Math.Max(first, page - 1);
+    int next = Math.Min(last, page + 1);
+
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
+
+    string? FilterForCol(string colKey) =>
+        colKey == "code" ? filterCol_code
+        : colKey == "name" ? filterCol_name
+        : colKey == "category" ? filterCol_category
+        : colKey == "salesrevenue" ? filterCol_salesrevenueExpr
+        : colKey == "salescost" ? filterCol_salescostExpr
+        : colKey == "salesprofit" ? filterCol_salesprofitExpr
+        : colKey == "salesprofitpct" ? filterCol_salesprofitpctExpr
+        : colKey == "returnprofit" ? filterCol_returnprofitExpr
+        : colKey == "adjustmentprofit" ? filterCol_adjustmentprofitExpr
+        : colKey == "transferprofit" ? filterCol_transferprofitExpr
+        : colKey == "salesqty" ? filterCol_salesqtyExpr
+        : colKey == "netprofit" ? filterCol_netprofitExpr
+        : null;
+
+    Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
-        return Url.Action("ProductProfits", "Reports", new
-        {
-            search,
-            categoryId,
-            warehouseId,
-            fromDate,
-            toDate,
-            includeZeroQty,
-            profitMethod,
-            sortBy = col,
-            sortDir = direction,
-            filterCol_code,
-            filterCol_name,
-            filterCol_category,
-            filterCol_salesrevenueExpr,
-            filterCol_salescostExpr,
-            filterCol_salesprofitExpr,
-            filterCol_salesprofitpctExpr,
-            filterCol_returnprofitExpr,
-            filterCol_adjustmentprofitExpr,
-            filterCol_transferprofitExpr,
-            filterCol_netprofitExpr,
-            filterCol_salesqtyExpr,
-            loadReport = true,
-            page,
-            pageSize
-        }) ?? "#";
+        string? currentFilter = FilterForCol(colKey);
+        bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
+        var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
+        var sortDir = isCurrentSort ? dir : "asc";
+        var btnStateClass = hasFilter ? "text-primary" : (isCurrentSort ? "text-info" : "text-muted");
+        return new HtmlString($@"
+            <div class=""d-flex align-items-center gap-1 erp-col-header-filterable"">
+                <span class=""erp-col-title"">{caption}</span>
+                <button type=""button"" class=""btn btn-sm p-0 erp-col-filter-btn {btnStateClass}""
+                        data-col=""{colKey}"" data-sort-key=""{sortKey}"" data-col-title=""{caption}""
+                        data-current-sort=""{sortKey}"" data-current-dir=""{sortDir}""
+                        title=""ترتيب وفلتر العمود"" style=""min-width:22px;"">
+                    <svg xmlns=""http://www.w3.org/2000/svg"" width=""16"" height=""16"" viewBox=""0 0 24 24"" fill=""currentColor"">
+                        <path d=""M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z""/>
+                        <path d=""M7 8l4-4 4 4H7zm0 8l4 4 4-4H7z"" opacity=""0.3""/>
+                    </svg>
+                </button>
+            </div>");
     };
 
-    // دالة إنشاء رابط Pagination
-    Func<int, string> pageUrl = (p) =>
+    string Link(int p) => Url.Action("ProductProfits", "Reports", new
     {
-        return Url.Action("ProductProfits", "Reports", new
-        {
-            search,
-            categoryId,
-            warehouseId,
-            fromDate,
-            toDate,
-            includeZeroQty,
-            profitMethod,
-            sortBy,
-            sortDir,
-            filterCol_code,
-            filterCol_name,
-            filterCol_category,
-            filterCol_salesrevenueExpr,
-            filterCol_salescostExpr,
-            filterCol_salesprofitExpr,
-            filterCol_salesprofitpctExpr,
-            filterCol_returnprofitExpr,
-            filterCol_adjustmentprofitExpr,
-            filterCol_transferprofitExpr,
-            filterCol_netprofitExpr,
-            filterCol_salesqtyExpr,
-            loadReport = true,
-            page = p,
-            pageSize
-        }) ?? "#";
+        search,
+        categoryId,
+        warehouseId,
+        fromDate,
+        toDate,
+        includeZeroQty,
+        profitMethod,
+        sort,
+        dir,
+        filterCol_code,
+        filterCol_name,
+        filterCol_category,
+        filterCol_salesrevenueExpr,
+        filterCol_salescostExpr,
+        filterCol_salesprofitExpr,
+        filterCol_salesprofitpctExpr,
+        filterCol_returnprofitExpr,
+        filterCol_adjustmentprofitExpr,
+        filterCol_transferprofitExpr,
+        filterCol_netprofitExpr,
+        filterCol_salesqtyExpr,
+        loadReport = true,
+        page = p,
+        pageSize = ps
+    })!;
+
+    var colValsDict = new Dictionary<string, string?>
+    {
+        ["loadReport"] = "true",
+        ["mainSearch"] = search,
+        ["categoryId"] = categoryId?.ToString(),
+        ["warehouseId"] = warehouseId?.ToString(),
+        ["fromDate"] = fromDate?.ToString("yyyy-MM-dd"),
+        ["toDate"] = toDate?.ToString("yyyy-MM-dd"),
+        ["includeZeroQty"] = includeZeroQty ? "true" : "false",
+        ["profitMethod"] = profitMethod,
+        ["sort"] = sort,
+        ["dir"] = dir,
+        ["filterCol_code"] = filterCol_code,
+        ["filterCol_name"] = filterCol_name,
+        ["filterCol_category"] = filterCol_category,
+        ["filterCol_salesrevenueExpr"] = filterCol_salesrevenueExpr,
+        ["filterCol_salescostExpr"] = filterCol_salescostExpr,
+        ["filterCol_salesprofitExpr"] = filterCol_salesprofitExpr,
+        ["filterCol_salesprofitpctExpr"] = filterCol_salesprofitpctExpr,
+        ["filterCol_returnprofitExpr"] = filterCol_returnprofitExpr,
+        ["filterCol_adjustmentprofitExpr"] = filterCol_adjustmentprofitExpr,
+        ["filterCol_transferprofitExpr"] = filterCol_transferprofitExpr,
+        ["filterCol_netprofitExpr"] = filterCol_netprofitExpr,
+        ["filterCol_salesqtyExpr"] = filterCol_salesqtyExpr
     };
+    var colValuesUrl = QueryHelpers.AddQueryString(Url.Action("GetProductProfitsColumnValues", "Reports")!, colValsDict.Where(kv => !string.IsNullOrEmpty(kv.Value)).ToDictionary(kv => kv.Key, kv => (string?)kv.Value));
 }
 
 <div dir="rtl" class="container-fluid">
-    @* ===== شريط الفلاتر (نفس تنسيق قائمة الأصناف) ===== *@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <form method="get" asp-action="ProductProfits" asp-controller="Reports" id="filtersForm">
             <input type="hidden" name="loadReport" value="true" />
-            <input type="hidden" name="filterCol_code" id="productProfitsFilterColCode" value="@(filterCol_code ?? "")" />
-            <input type="hidden" name="filterCol_name" id="productProfitsFilterColName" value="@(filterCol_name ?? "")" />
-            <input type="hidden" name="filterCol_category" id="productProfitsFilterColCategory" value="@(filterCol_category ?? "")" />
+            <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
+            <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
+            <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
             @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
@@ -129,10 +163,13 @@
             @if (!string.IsNullOrWhiteSpace(filterCol_transferprofitExpr)) { <input type="hidden" name="filterCol_transferprofitExpr" value="@filterCol_transferprofitExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
-            <div class="row g-3 align-items-end">
+            <input type="hidden" name="sort" value="@sort" />
+            <input type="hidden" name="dir" value="@dir" />
+            <input type="hidden" name="profitMethod" value="@profitMethod" />
+            <div class="row g-3 align-items-end flex-nowrap">
                 <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">بحث</label>
-                    <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب اسم الصنف أو جزء منه..." autocomplete="off" value="@search" />
+                    <input type="text" name="search" class="form-control erp-filter-input" placeholder="اسم الصنف أو الباركود أو الكود..." autocomplete="off" value="@search" />
                 </div>
                 <div class="col-12 col-lg-2 erp-filter-section">
                     <label class="form-label">الفئة</label>
@@ -162,70 +199,104 @@
                     <label class="form-label">إلى تاريخ</label>
                     <input type="date" name="toDate" class="form-control erp-filter-input" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section d-flex align-items-end">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") />
-                        <label class="form-check-label small" for="includeZeroQty">عرض الصفر</label>
+                <div class="col-12 col-lg-auto erp-filter-section d-flex align-items-end">
+                    <div class="form-check border rounded px-2 py-1 bg-light d-flex align-items-center gap-2 flex-nowrap" style="max-width: 220px;">
+                        <input class="form-check-input flex-shrink-0 m-0" type="checkbox" name="includeZeroQty" value="true" id="includeZeroQty" @(includeZeroQty ? "checked" : "") style="width: 1.05rem; height: 1.05rem;" />
+                        <label class="form-check-label small mb-0 lh-sm" for="includeZeroQty">أصناف بلا حركة في الفترة</label>
                     </div>
-                </div>
-                <input type="hidden" name="profitMethod" value="@profitMethod" />
-                <div class="col-12 col-lg-auto erp-filter-section ms-lg-auto d-flex flex-wrap gap-2 align-items-end">
-                    <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
-                    <a href="@Url.Action("ProductProfits", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none"><span>🔄</span> إعادة تعيين</a>
                 </div>
             </div>
         </form>
-        @* عمود التصدير خارج نموذج الفلاتر (نفس الصف بصرياً عبر الـ grid) *@
-        <div class="row g-3 align-items-end mt-0">
-            <div class="col-12 col-lg-auto erp-filter-section d-flex flex-wrap gap-2 align-items-end">
+        <div class="erp-toolbar-two-rows mt-2">
+            <div class="erp-toolbar-row flex-wrap gap-2 justify-content-end">
+                <button type="submit" form="filtersForm" class="btn btn-erp btn-erp-primary btn-erp-sm"><span>📊</span> تجميع التقرير</button>
                 <form method="get" asp-action="ProductProfits" asp-controller="Reports" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
-                        <input type="hidden" name="loadReport" value="true" />
-                        <input type="hidden" name="search" value="@search" />
-                        <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
-                        <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
-                        <input type="hidden" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
-                        <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
-                        <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
-                        <input type="hidden" name="profitMethod" value="@profitMethod" />
-                        <input type="hidden" name="sortBy" value="@sortBy" />
-                        <input type="hidden" name="sortDir" value="@sortDir" />
-                        <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
-                        <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
-                        <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
-                        @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_adjustmentprofitExpr)) { <input type="hidden" name="filterCol_adjustmentprofitExpr" value="@filterCol_adjustmentprofitExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_transferprofitExpr)) { <input type="hidden" name="filterCol_transferprofitExpr" value="@filterCol_transferprofitExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
-                        @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
-                        <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
-                            <option value="excel" selected>Excel</option>
-                            <option value="csv">CSV</option>
-                        </select>
-                        <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
+                    <input type="hidden" name="loadReport" value="true" />
+                    <input type="hidden" name="search" value="@search" />
+                    <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
+                    <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
+                    <input type="hidden" name="fromDate" value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
+                    <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
+                    <input type="hidden" name="profitMethod" value="@profitMethod" />
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
+                    <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
+                    <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
+                    <input type="hidden" name="filterCol_category" value="@(filterCol_category ?? "")" />
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesrevenueExpr)) { <input type="hidden" name="filterCol_salesrevenueExpr" value="@filterCol_salesrevenueExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salescostExpr)) { <input type="hidden" name="filterCol_salescostExpr" value="@filterCol_salescostExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitExpr)) { <input type="hidden" name="filterCol_salesprofitExpr" value="@filterCol_salesprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesprofitpctExpr)) { <input type="hidden" name="filterCol_salesprofitpctExpr" value="@filterCol_salesprofitpctExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_returnprofitExpr)) { <input type="hidden" name="filterCol_returnprofitExpr" value="@filterCol_returnprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_adjustmentprofitExpr)) { <input type="hidden" name="filterCol_adjustmentprofitExpr" value="@filterCol_adjustmentprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_transferprofitExpr)) { <input type="hidden" name="filterCol_transferprofitExpr" value="@filterCol_transferprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_netprofitExpr)) { <input type="hidden" name="filterCol_netprofitExpr" value="@filterCol_netprofitExpr" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
+                    <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="صيغة التصدير">
+                        <option value="excel" selected>Excel</option>
+                        <option value="csv">CSV</option>
+                    </select>
+                    <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                 </form>
+                <a href="@Url.Action("ProductProfits", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none"><span>🔄</span> إعادة تعيين</a>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="btnColumnsPp" data-bs-toggle="modal" data-bs-target="#columnsModalPp">اختيار الأعمدة</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="btnMovementPp" disabled title="حدد صفاً في الجدول">حركة الصنف</button>
+                <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="btnPrintPp">طباعة</button>
             </div>
         </div>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mt-2 mb-1">
-        <h5 class="mb-0">أرباح الأصناف</h5>
-        @if (reportData.Any())
-        {
-            <small class="text-muted">إجمالي الأصناف: <span id="productProfitsItemCount">@totalCount</span></small>
-        }
-    </div>
+    <h5 class="mb-2 fs-6 text-secondary d-print-none">أرباح الأصناف</h5>
 
-    @* ===== جدول البيانات (نفس تنسيق قائمة الأصناف + فلتر أعمدة إكسل) ===== *@
     @if (reportData.Any())
     {
+        <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row mb-2" dir="rtl">
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">عدد الأصناف (بعد الفلترة)</div>
+                        <div class="h5 mb-0 text-primary fw-bold">@totalCount.ToString("N0", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي البيع</div>
+                        <div class="h5 mb-0 text-success fw-bold">@totalSalesRevenue.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #b45309 !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">إجمالي التكلفة</div>
+                        <div class="h5 mb-0 fw-bold">@totalSalesCost.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-auto">
+                <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #6366f1 !important; border-radius: 12px;">
+                    <div class="card-body py-3 px-3">
+                        <div class="small text-muted mb-1">صافي الربح (مجموع)</div>
+                        <div class="h5 mb-0 text-primary fw-bold">@totalNetProfit.ToString("N2", n2)</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @if (reportData.Any())
+    {
+        <div class="erp-list-selection-actions d-print-none mb-1" id="ppSelectionBar" style="display:none;">
+            <span class="small text-muted">صف محدد — استخدم «حركة الصنف» أعلاه</span>
+        </div>
         <div class="erp-table-scroll-container mt-2" dir="rtl">
             <div id="productProfitsTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="position: relative; max-height: 70vh; overflow-y: auto; overflow-x: auto;">
-                <table id="productProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sortBy" data-current-dir="@sortDir" style="min-width: 1200px; table-layout: fixed;">
+                <table id="productProfitsTable" class="table table-striped table-hover mb-0 erp-table erp-table-sortable" data-current-sort="@sort" data-current-dir="@dir" style="min-width: 1200px; table-layout: fixed;">
                     <colgroup>
+                        <col style="width: 44px;" />
                         <col style="width: 80px;" />
                         <col style="width: 200px;" />
                         <col style="width: 100px;" />
@@ -241,126 +312,73 @@
                     </colgroup>
                     <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                         <tr>
-                            <th style="min-width: 80px;" data-col="code">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span>الكود</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="code" data-sort-key="code" data-col-title="الكود" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
+                            <th class="text-center no-print" style="width:40px;" data-col="select" data-col-fixed="true">
+                                <input type="checkbox" id="chkAllRowsPp" title="تحديد الكل في الصفحة" />
                             </th>
-                            <th style="min-width: 200px;" data-col="name">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span>اسم الصنف</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="name" data-sort-key="name" data-col-title="اسم الصنف" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th style="min-width: 100px;" data-col="category">
-                                <div class="d-flex align-items-center gap-1">
-                                    <span>الفئة</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="category" data-sort-key="category" data-col-title="الفئة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="salesrevenue">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>البيع</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesrevenue" data-sort-key="salesrevenue" data-col-title="البيع" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="salescost">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>التكلفة</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salescost" data-sort-key="salescost" data-col-title="التكلفة" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="salesprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>الربح (بيع)</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesprofit" data-sort-key="salesprofit" data-col-title="الربح (بيع)" title="ترتيب"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 100px;" data-col="salesprofitpct">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>نسبة الربح (بيع) %</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesprofitpct" data-sort-key="salesprofitpct" data-col-title="نسبة الربح (بيع) %" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="returnprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>ربح المرتجعات (يُخصم من ربح البيع)</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="returnprofit" data-sort-key="returnprofit" data-col-title="ربح المرتجعات (يُخصم)" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="adjustmentprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>الربح (تسويات)</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="adjustmentprofit" data-sort-key="adjustmentprofit" data-col-title="الربح (تسويات)" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 120px;" data-col="transferprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>الربح (تحويلات)</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="transferprofit" data-sort-key="transferprofit" data-col-title="الربح (تحويلات)" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 100px;" data-col="salesqty">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>الكمية</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="salesqty" data-sort-key="salesqty" data-col-title="الكمية" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
-                            <th class="text-end" style="min-width: 140px;" data-col="netprofit">
-                                <div class="d-flex align-items-center justify-content-end gap-1">
-                                    <span>صافي الربح</span>
-                                    <button type="button" class="btn btn-sm p-0 erp-pp-col-filter-btn" data-col="netprofit" data-sort-key="netprofit" data-col-title="صافي الربح" title="ترتيب وفلتر"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z"/></svg></button>
-                                </div>
-                            </th>
+                            <th style="min-width: 80px;" data-col="code">@filterableCol("code", "code", "الكود")</th>
+                            <th style="min-width: 200px;" data-col="name">@filterableCol("name", "name", "اسم الصنف")</th>
+                            <th style="min-width: 100px;" data-col="category">@filterableCol("category", "category", "الفئة")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salesrevenue">@filterableCol("salesrevenue", "salesrevenue", "البيع")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salescost">@filterableCol("salescost", "salescost", "التكلفة")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="salesprofit">@filterableCol("salesprofit", "salesprofit", "الربح (بيع)")</th>
+                            <th class="text-end" style="min-width: 100px;" data-col="salesprofitpct">@filterableCol("salesprofitpct", "salesprofitpct", "نسبة الربح %")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="returnprofit">@filterableCol("returnprofit", "returnprofit", "ربح المرتجعات")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="adjustmentprofit">@filterableCol("adjustmentprofit", "adjustmentprofit", "الربح (تسويات)")</th>
+                            <th class="text-end" style="min-width: 120px;" data-col="transferprofit">@filterableCol("transferprofit", "transferprofit", "الربح (تحويلات)")</th>
+                            <th class="text-end" style="min-width: 100px;" data-col="salesqty">@filterableCol("salesqty", "salesqty", "الكمية")</th>
+                            <th class="text-end" style="min-width: 140px;" data-col="netprofit">@filterableCol("netprofit", "netprofit", "صافي الربح")</th>
                         </tr>
                     </thead>
                         <tbody>
                             @foreach (var item in reportData)
                             {
-                                <tr>
-                                    <td><strong>@item.ProdCode</strong></td>
-                                    <td>@item.ProdName</td>
-                                    <td><small class="text-muted">@item.CategoryName</small></td>
+                                var movUrl = Url.Action("Show", "Products", new { id = item.ProdId }) + "?frame=1";
+                                <tr class="erp-list-selectable-row" data-prod-id="@item.ProdId" data-movement-url="@movUrl" data-tab-title="@item.ProdName">
+                                    <td class="text-center no-print" data-col="select">
+                                        <input type="checkbox" class="row-select" value="@item.ProdId" />
+                                    </td>
+                                    <td data-col="code"><strong>@item.ProdCode</strong></td>
+                                    <td data-col="name">@item.ProdName</td>
+                                    <td data-col="category"><small class="text-muted">@item.CategoryName</small></td>
                                     
                                     @* ربح البيع *@
-                                    <td class="text-end">@item.SalesRevenue.ToString("N2")</td>
-                                    <td class="text-end">@item.SalesCost.ToString("N2")</td>
-                                    <td class="text-end">
+                                    <td class="text-end" data-col="salesrevenue">@item.SalesRevenue.ToString("N2")</td>
+                                    <td class="text-end" data-col="salescost">@item.SalesCost.ToString("N2")</td>
+                                    <td class="text-end" data-col="salesprofit">
                                         <strong class="@(item.SalesProfit >= 0 ? "text-success" : "text-danger")">
                                             @item.SalesProfit.ToString("N2")
                                         </strong>
                                     </td>
-                                    <td class="text-end">
+                                    <td class="text-end" data-col="salesprofitpct">
                                         <span class="@(item.SalesProfitPercent >= 0 ? "text-success" : "text-danger")">
                                             @item.SalesProfitPercent.ToString("N2")%
                                         </span>
                                     </td>
 
                                     @* ربح المرتجعات *@
-                                    <td class="text-end">
+                                    <td class="text-end" data-col="returnprofit">
                                         <strong class="@(item.ReturnProfit >= 0 ? "text-success" : "text-danger")">
                                             @item.ReturnProfit.ToString("N2")
                                         </strong>
                                     </td>
                                     
                                     @* ربح التسويات *@
-                                    <td class="text-end">
+                                    <td class="text-end" data-col="adjustmentprofit">
                                         <strong class="@(item.AdjustmentProfit >= 0 ? "text-success" : "text-danger")">
                                             @item.AdjustmentProfit.ToString("N2")
                                         </strong>
                                     </td>
                                     
                                     @* ربح التحويلات *@
-                                    <td class="text-end">
+                                    <td class="text-end" data-col="transferprofit">
                                         <strong class="@(item.TransferProfit >= 0 ? "text-success" : "text-danger")">
                                             @item.TransferProfit.ToString("N2")
                                         </strong>
                                     </td>
                                     
                                     @* إحصائيات *@
-                                    <td class="text-end">@item.SalesQty.ToString("N2")</td>
-                                    <td class="text-end">
+                                    <td class="text-end" data-col="salesqty">@item.SalesQty.ToString("N2")</td>
+                                    <td class="text-end" data-col="netprofit">
                                         <strong class="@(item.NetProfit >= 0 ? "text-success" : "text-danger")">
                                             @item.NetProfit.ToString("N2")
                                         </strong>
@@ -370,6 +388,7 @@
                         </tbody>
                         <tfoot class="table-light fw-bold text-start">
                             <tr>
+                                <td data-col="select" class="no-print"></td>
                                 <td data-col="code" class="text-start"><strong>المجموع الإجمالي:</strong></td>
                                 <td data-col="name"></td>
                                 <td data-col="category"></td>
@@ -412,14 +431,12 @@
             </div>
         </div>
 
-        @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة + الترقيم (محاذاة لليمين) ===== *@
+        @* ===== الشريط السفلي: عرض X–Y من Z + حجم الصفحة + الترقيم ===== *@
         @if (reportData.Any())
         {
-            var startRow = totalCount == 0 ? 0 : ((page - 1) * pageSize) + 1;
-            var endRow = Math.Min(totalCount, page * pageSize);
-            <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
-                <small class="text-muted">عرض @startRow - @endRow من @totalCount</small>
-                <form method="get" asp-action="ProductProfits" asp-controller="Reports" class="d-flex align-items-center gap-2">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
+                <small class="text-muted order-1">عرض @start - @end من @totalCount</small>
+                <form method="get" asp-action="ProductProfits" asp-controller="Reports" class="d-flex align-items-center gap-2 order-2">
                     <input type="hidden" name="loadReport" value="true" />
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="categoryId" value="@(categoryId?.ToString() ?? "")" />
@@ -428,8 +445,8 @@
                     <input type="hidden" name="toDate" value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
                     <input type="hidden" name="includeZeroQty" value="@(includeZeroQty ? "true" : "false")" />
                     <input type="hidden" name="profitMethod" value="@profitMethod" />
-                    <input type="hidden" name="sortBy" value="@sortBy" />
-                    <input type="hidden" name="sortDir" value="@sortDir" />
+                    <input type="hidden" name="sort" value="@sort" />
+                    <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
                     <input type="hidden" name="filterCol_code" value="@(filterCol_code ?? "")" />
                     <input type="hidden" name="filterCol_name" value="@(filterCol_name ?? "")" />
@@ -445,24 +462,23 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
                     <label class="form-label m-0 nowrap">حجم الصفحة</label>
                     <select name="pageSize" class="form-select form-select-sm" onchange="this.form.submit()">
-                        <option value="20"@Html.Raw(pageSize == 20 ? " selected" : "")>20</option>
-                        <option value="50"@Html.Raw(pageSize == 50 ? " selected" : "")>50</option>
-                        <option value="100"@Html.Raw(pageSize == 100 ? " selected" : "")>100</option>
-                        <option value="200"@Html.Raw(pageSize == 200 ? " selected" : "")>200</option>
-                        <option value="500"@Html.Raw(pageSize == 500 ? " selected" : "")>500</option>
-                        <option value="1000"@Html.Raw(pageSize == 1000 ? " selected" : "")>1000</option>
-                        <option value="0"@Html.Raw(pageSize == 0 || pageSize >= totalCount ? " selected" : "")>الكل</option>
+                        <option value="10"@Html.Raw(ps == 10 ? " selected" : "")>10</option>
+                        <option value="25"@Html.Raw(ps == 25 ? " selected" : "")>25</option>
+                        <option value="50"@Html.Raw(ps == 50 ? " selected" : "")>50</option>
+                        <option value="100"@Html.Raw(ps == 100 ? " selected" : "")>100</option>
+                        <option value="200"@Html.Raw(ps == 200 ? " selected" : "")>200</option>
+                        <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
                     </select>
                 </form>
                 @if (totalPages > 1)
                 {
-                    <nav aria-label="pagination">
+                    <nav class="order-3" aria-label="pagination">
                         <ul class="pagination pagination-sm mb-0">
-                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(1)">الأول</a></li>
-                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@pageUrl(Math.Max(1, page - 1))">السابق</a></li>
+                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@Link(1)">الأول</a></li>
+                            <li class="page-item @(page == 1 ? "disabled" : "")"><a class="page-link" href="@Link(prev)">السابق</a></li>
                             <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(totalPages)</span></li>
-                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(page + 1)">التالي</a></li>
-                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@pageUrl(totalPages)">الأخير</a></li>
+                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@Link(next)">التالي</a></li>
+                            <li class="page-item @(page >= totalPages ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
                         </ul>
                     </nav>
                 }
@@ -518,26 +534,21 @@
                     <hr />
                     <div class="row mt-3">
                         <div class="col-12">
-                            <div class="card bg-light">
+                            <div class="card bg-light border">
                                 <div class="card-body">
-                                    <h5 class="card-title">حساب الربح من الميزانية:</h5>
                                     @{
                                         var balanceProfit = bs.CustomersDebitSum + bs.TreasuryBalance + bs.InventoryCostTotal - bs.CustomersCreditSum;
                                     }
-                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
                                         <div>
                                             <p class="mb-1"><strong>العملاء المدينون:</strong> @bs.CustomersDebitSum.ToString("N2")</p>
                                             <p class="mb-1"><strong>+ رصيد الخزنة:</strong> @bs.TreasuryBalance.ToString("N2")</p>
                                             <p class="mb-1"><strong>+ تكلفة المخزون:</strong> @bs.InventoryCostTotal.ToString("N2")</p>
                                             <p class="mb-1"><strong>− العملاء الدائنون:</strong> <span class="text-danger">@bs.CustomersCreditSum.ToString("N2")</span></p>
-                                            <hr class="my-2" />
                                             <p class="mb-0"><strong>إجمالي الربح (صافي الأصول):</strong></p>
-                                            <p class="mb-2 mt-1 small text-warning"><strong>⚠ لماذا الرقم لا يساوي (ربح الأصناف + ربح التسويات)؟</strong></p>
-                                            <p class="mb-1 small text-muted"><strong>إجمالي الربح (صافي الأصول)</strong> = رصيد تراكمي: ما تمتلكه الشركة الآن (مدينون + خزنة + مخزون) − ما عليها (دائنون). ليس مجموع أرباح الفترة.</p>
-                                            <p class="mb-1 small text-muted"><strong>ربح الأصناف</strong> (ربح البيع + ربح التسويات + ربح التحويل) = ربح <strong>الفترة المحددة فقط</strong>. صافي الأصول = صافي الأصول أول المدة + ربح الفترة + تدفقات أخرى (رأس مال، سحوبات…)، لذلك لا يتساوى ربح الفترة مع صافي الأصول.</p>
-                                            <p class="mb-2 mt-1 small text-muted">للعلم فقط (مُدمجة في تكلفة المخزون، لا تُضاف مرة ثانية):</p>
-                                            <p class="mb-1 small"><strong>ربح التسوية:</strong> @totalAdjustmentProfit.ToString("N2")</p>
-                                            <p class="mb-1 small"><strong>ربح التحويل:</strong> @totalTransferProfit.ToString("N2")</p>
+                                            <p class="small text-muted mb-0 mt-2">
+                                                ربح التسوية (@totalAdjustmentProfit.ToString("N2")) وربح التحويل (@totalTransferProfit.ToString("N2")) مدمجان في تكلفة المخزون في هذا التقرير ولا يُضافان مرة ثانية إلى ربح الميزانية.
+                                            </p>
                                         </div>
                                         <div class="text-end">
                                             <h3 class="mb-0 @(balanceProfit >= 0 ? "text-success" : "text-danger")">
@@ -548,30 +559,6 @@
                                 </div>
                             </div>
                         </div>
-                    </div>
-                        <div class="alert alert-info mt-3 mb-0">
-                        <small>
-                            <strong>طرق حساب الربح:</strong> 
-                            <ul class="mb-0">
-                                <li><strong>ربح البيع:</strong> إيرادات المبيعات − تكلفة البضاعة المباعة (من فواتير المبيعات)</li>
-                                <li><strong>ربح التسويات:</strong> فائض الجرد (زيادة مخزون) − عجز الجرد (نقصان مخزون) من التسويات المترحلة</li>
-                                <li><strong>ربح التحويلات:</strong> ربح التحويلات بين المخازن عند التحويل بخصم أقل من الخصم المرجح</li>
-                                <li><strong>ربح الميزانية:</strong> مجموع العملاء المدينين + رصيد الخزنة + تكلفة البضاعة في المخزن − مجموع العملاء الدائنين (صافي الأصول)</li>
-                                <li><strong>الفرق:</strong> ربح البيع = ربح الفترة من المبيعات. ربح الميزانية = صافي الأصول التراكمي (قد يختلف بسبب أرصدة سابقة أو فترات أخرى)</li>
-                            </ul>
-                            @if (fromDate.HasValue || toDate.HasValue)
-                            {
-                                <text><strong>تم تطبيق فلتر التاريخ: </strong></text>
-                                @if (fromDate.HasValue)
-                                {
-                                    <text>من @fromDate.Value.ToString("yyyy-MM-dd") </text>
-                                }
-                                @if (toDate.HasValue)
-                                {
-                                    <text>إلى @toDate.Value.ToString("yyyy-MM-dd")</text>
-                                }
-                            }
-                        </small>
                     </div>
                 </div>
             </div>
@@ -585,37 +572,48 @@
     }
 </div>
 
-@* لوحة ترتيب وفلتر العمود (بنمط إكسل — مثل قائمة الأصناف) *@
-<div id="erpPpColumnFilterPanel" class="erp-column-filter-panel d-none" dir="rtl">
+<div id="erpColumnFilterPanelPp" class="erp-column-filter-panel d-none" dir="rtl">
     <div class="erp-column-filter-header">
-        <span id="erpPpColumnFilterTitle">ترتيب وفلتر</span>
-        <button type="button" class="btn-close btn-sm" id="erpPpColumnFilterClose" aria-label="إغلاق"></button>
+        <span>ترتيب وفلتر</span>
+        <button type="button" class="btn-close btn-sm" aria-label="إغلاق"></button>
     </div>
     <div class="erp-column-filter-body">
         <div class="erp-filter-sort-section mb-3 pb-2 border-bottom">
-            <label class="form-label small mb-1 fw-bold">الترتيب:</label>
             <div class="d-flex flex-column gap-1">
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-pp-sort-btn" data-sort-dir="asc"><span class="me-2">▲</span> ترتيب تصاعدي</button>
-                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-pp-sort-btn" data-sort-dir="desc"><span class="me-2">▼</span> ترتيب تنازلي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="asc"><span class="erp-sort-arrow">▲</span> ترتيب تصاعدي</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary text-start erp-sort-btn" data-sort-dir="desc"><span class="erp-sort-arrow">▼</span> ترتيب تنازلي</button>
             </div>
         </div>
-        <div class="erp-filter-section erp-pp-filter-content">
-            <div id="erpPpColumnFilterNumericRow" class="d-none">
-                <label class="form-label small mb-1 fw-bold">بحث رقمي:</label>
-                <input type="text" id="erpPpColumnFilterNumeric" class="form-control form-control-sm mb-2" placeholder="مثال: 100 أو &gt;500 أو &lt;200 أو 50:150" dir="ltr" />
-                <small class="text-muted d-block">أكبر من: &gt;100، أصغر من: &lt;100، من إلى: 50:150</small>
-            </div>
-            <div id="erpPpColumnFilterSearchRow">
+        <div class="erp-filter-section">
+            <div id="erpColumnFilterSearchRow">
                 <label class="form-label small mb-1 fw-bold">الفلترة:</label>
-                <input type="text" id="erpPpColumnFilterSearch" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
+                <input type="text" class="form-control form-control-sm mb-2" placeholder="بحث في العناصر..." />
             </div>
-            <div id="erpPpColumnFilterList" class="erp-column-filter-list">
+            <div class="erp-column-filter-list">
                 <div class="text-muted text-center py-3">جاري التحميل...</div>
             </div>
         </div>
-        <div class="erp-column-filter-actions mt-2 flex-shrink-0">
-            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" id="erpPpColumnFilterOk">تطبيق</button>
-            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" id="erpPpColumnFilterClear">مسح الفلتر</button>
+        <div class="erp-column-filter-actions">
+            <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm">تطبيق</button>
+            <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm">مسح الفلتر</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade no-print erp-columns-modal" id="columnsModalPp" tabindex="-1" aria-labelledby="columnsModalPpLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content" dir="rtl">
+            <div class="modal-header">
+                <h5 class="modal-title flex-grow-1" id="columnsModalPpLabel">اختيار الأعمدة الظاهرة</h5>
+                <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="إغلاق"></button>
+            </div>
+            <div class="modal-body">
+                <div id="columnsListPp" class="erp-columns-modal-list"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-erp btn-erp-secondary" data-bs-dismiss="modal">إغلاق</button>
+                <button type="button" id="btnApplyColumnsPp" class="btn btn-erp btn-erp-primary">تطبيق</button>
+            </div>
         </div>
     </div>
 </div>
@@ -626,264 +624,52 @@
         #productProfitsTable tfoot { background-color: #e9ecef !important; border-top: 1px solid #dee2e6; }
         #productProfitsTable tfoot td { box-sizing: border-box; }
         #productProfitsTable tfoot td.text-end { text-align: end !important; }
-        .erp-pp-col-filter-btn { color: #64748b; }
-        .erp-pp-col-filter-btn:hover { color: #475569; }
-        .erp-pp-col-filter-btn.erp-pp-filter-active { color: #0d6efd !important; }
-        #erpPpColumnFilterPanel.erp-column-filter-panel { min-width: 280px; max-width: min(340px, 92vw); width: auto; max-height: 90vh; display: flex; flex-direction: column; }
-        #erpPpColumnFilterPanel .erp-column-filter-body { display: flex; flex-direction: column; max-height: 75vh; min-height: 0; overflow: hidden; }
-        #erpPpColumnFilterPanel .erp-pp-filter-content { flex: 1; min-height: 0; overflow-y: auto; }
-        #erpPpColumnFilterList .erp-filter-items { max-height: 220px; overflow-y: auto; }
+        .erp-col-filter-btn { color: #64748b; }
+        .erp-col-filter-btn:hover { color: #475569; }
+        #erpColumnFilterPanelPp.erp-column-filter-panel { min-width: 280px; max-width: min(380px, 92vw); z-index: 1055; }
     </style>
 }
 
 @section Scripts {
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
     <script>
         (function () {
-            var panel = document.getElementById('erpPpColumnFilterPanel');
-            var titleEl = document.getElementById('erpPpColumnFilterTitle');
-            var searchInp = document.getElementById('erpPpColumnFilterSearch');
-            var numericInp = document.getElementById('erpPpColumnFilterNumeric');
-            var numericRowEl = document.getElementById('erpPpColumnFilterNumericRow');
-            var searchRowEl = document.getElementById('erpPpColumnFilterSearchRow');
-            var listEl = document.getElementById('erpPpColumnFilterList');
-            var btnOk = document.getElementById('erpPpColumnFilterOk');
-            var btnClear = document.getElementById('erpPpColumnFilterClear');
-            var btnClose = document.getElementById('erpPpColumnFilterClose');
-            var form = document.getElementById('filtersForm');
-            var currentCol = '';
-            var currentSortKey = 'name';
-            var allItems = [];
-            var currentSelected = new Set();
-            var numericCols = ['salesrevenue','salescost','salesprofit','salesprofitpct','returnprofit','adjustmentprofit','transferprofit','salesqty','netprofit'];
-
-            function isNumericCol(col) { return numericCols.indexOf(col) >= 0; }
-
-            function getCurrentFilterValue(col) {
-                var url = new URL(window.location.href);
-                if (isNumericCol(col))
-                    return url.searchParams.get('filterCol_' + col + 'Expr') || '';
-                return url.searchParams.get('filterCol_' + col) || '';
-            }
-
-            function buildItemsForColumn(colKey) {
-                allItems = [];
-                var table = document.getElementById('productProfitsTable');
-                if (!table || !table.tHead || !table.tBodies.length) return;
-                var headerCells = table.tHead.rows[0].cells;
-                var colIndex = -1;
-                for (var i = 0; i < headerCells.length; i++) {
-                    if ((headerCells[i].getAttribute('data-col') || '') === colKey) {
-                        colIndex = i;
-                        break;
-                    }
-                }
-                if (colIndex === -1) return;
-                var rows = table.tBodies[0].rows;
-                var valuesSet = new Set();
-                for (var r = 0; r < rows.length; r++) {
-                    var cell = rows[r].cells[colIndex];
-                    if (!cell) continue;
-                    var val = (cell.textContent || '').trim();
-                    if (!val) continue;
-                    if (!valuesSet.has(val)) {
-                        valuesSet.add(val);
-                        allItems.push({ value: val, display: val });
-                    }
-                }
-            }
-
-            function renderList(search) {
-                var term = (search || '').toLowerCase();
-                var filtered = term
-                    ? allItems.filter(function (x) { return (x.display || x.value || '').toLowerCase().indexOf(term) >= 0; })
-                    : allItems.slice();
-                var allChecked = filtered.length > 0 && filtered.every(function (x) { return currentSelected.has(String(x.value)); });
-                var someChecked = filtered.some(function (x) { return currentSelected.has(String(x.value)); });
-
-                listEl.innerHTML =
-                    '<div class="form-check mb-1">' +
-                        '<input type="checkbox" class="form-check-input" id="erpPpFilterSelectAll" ' + (allChecked ? 'checked' : '') + '>' +
-                        '<label class="form-check-label small" for="erpPpFilterSelectAll">(تحديد الكل)</label>' +
-                    '</div>' +
-                    '<div class="erp-filter-items" style="max-height:200px;overflow-y:auto;">' +
-                        (filtered.length === 0
-                            ? '<div class="small text-muted py-2">لا توجد عناصر.</div>'
-                            : filtered.map(function (x) {
-                                var v = String(x.value);
-                                var checked = currentSelected.has(v);
-                                return '<div class="form-check">' +
-                                    '<input type="checkbox" class="form-check-input erp-pp-filter-item" value="' + v.replace(/"/g, '&quot;') + '" ' + (checked ? 'checked' : '') + '>' +
-                                    '<label class="form-check-label small">' + (x.display || v).replace(/</g, '&lt;') + '</label>' +
-                                    '</div>';
-                            }).join('')) +
-                    '</div>';
-
-                var selectAllCb = listEl.querySelector('#erpPpFilterSelectAll');
-                if (selectAllCb) {
-                    selectAllCb.indeterminate = someChecked && !allChecked;
-                    selectAllCb.addEventListener('change', function () {
-                        filtered.forEach(function (x) {
-                            var v = String(x.value);
-                            if (selectAllCb.checked) currentSelected.add(v);
-                            else currentSelected.delete(v);
-                        });
-                        renderList(searchInp.value);
-                    });
-                }
-                listEl.querySelectorAll('.erp-pp-filter-item').forEach(function (cb) {
-                    cb.addEventListener('change', function () {
-                        var v = cb.value;
-                        if (cb.checked) currentSelected.add(v);
-                        else currentSelected.delete(v);
-                    });
+            function scrollRtlStart() {
+                var el = document.getElementById('productProfitsTableScrollWrapper');
+                if (!el) return;
+                requestAnimationFrame(function () {
+                    el.scrollLeft = el.scrollWidth - el.clientWidth;
                 });
             }
-
-            function openPanel(btn) {
-                currentCol = btn.getAttribute('data-col') || '';
-                currentSortKey = btn.getAttribute('data-sort-key') || 'name';
-                titleEl.textContent = btn.getAttribute('data-col-title') || 'ترتيب وفلتر';
-                document.querySelectorAll('.erp-pp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-pp-filter-active'); });
-                btn.classList.add('erp-pp-filter-active');
-
-                var table = document.getElementById('productProfitsTable');
-                var currentDir = (table && table.getAttribute('data-current-dir')) || 'asc';
-                document.querySelectorAll('.erp-pp-sort-btn').forEach(function (b) {
-                    var isActive = b.getAttribute('data-sort-dir') === currentDir;
-                    b.classList.toggle('active', isActive);
-                });
-
-                var currentFilter = getCurrentFilterValue(currentCol);
-                currentSelected = new Set();
-                if (currentFilter && currentFilter.indexOf('|') >= 0) {
-                    currentFilter.split('|').forEach(function (v) {
-                        if (v) currentSelected.add(v);
-                    });
-                } else if (currentFilter) {
-                    currentSelected.add(currentFilter);
-                }
-
-                if (isNumericCol(currentCol)) {
-                    if (numericRowEl) numericRowEl.classList.remove('d-none');
-                    if (searchRowEl) searchRowEl.style.display = 'none';
-                    if (listEl) listEl.style.display = 'none';
-                    if (numericInp) {
-                        numericInp.value = currentFilter || '';
-                        numericInp.focus();
-                    }
-                } else {
-                    if (numericRowEl) numericRowEl.classList.add('d-none');
-                    if (searchRowEl) searchRowEl.style.display = '';
-                    if (listEl) listEl.style.display = '';
-                    buildItemsForColumn(currentCol);
-                    renderList('');
-                    if (searchInp) {
-                        searchInp.value = '';
-                        searchInp.focus();
-                    }
-                }
-
-                panel.classList.remove('d-none');
-                var rect = btn.getBoundingClientRect();
-                panel.style.position = 'fixed';
-                panel.style.left = (rect.left - panel.offsetWidth - 4) + 'px';
-                panel.style.top = Math.max(8, rect.top) + 'px';
-                panel.style.zIndex = '1050';
-            }
-
-            function closePanel() {
-                panel.classList.add('d-none');
-                document.querySelectorAll('.erp-pp-col-filter-btn').forEach(function (b) { b.classList.remove('erp-pp-filter-active'); });
-            }
-
-            function applyFilter() {
-                var sortDirBtn = document.querySelector('.erp-pp-sort-btn.active');
-                var dir = sortDirBtn ? sortDirBtn.getAttribute('data-sort-dir') : 'asc';
-                var params = new URLSearchParams(new FormData(form));
-                params.set('loadReport', 'true');
-                params.set('sortBy', currentSortKey);
-                params.set('sortDir', dir);
-                params.set('page', '1');
-
-                if (isNumericCol(currentCol)) {
-                    var expr = (numericInp && numericInp.value) ? numericInp.value.trim() : '';
-                    params.delete('filterCol_' + currentCol + 'Expr');
-                    if (expr) params.set('filterCol_' + currentCol + 'Expr', expr);
-                } else {
-                    var searchText = (searchInp && searchInp.value) ? searchInp.value.trim() : '';
-                    var selectedVal = Array.from(currentSelected).filter(Boolean).join('|');
-                    if (currentCol === 'code') {
-                        params.delete('filterCol_code');
-                        if (searchText) params.set('filterCol_code', searchText);
-                        else if (selectedVal) params.set('filterCol_code', selectedVal);
-                    }
-                    if (currentCol === 'name') {
-                        params.delete('filterCol_name');
-                        if (searchText) params.set('filterCol_name', searchText);
-                        else if (selectedVal) params.set('filterCol_name', selectedVal);
-                    }
-                    if (currentCol === 'category') {
-                        params.delete('filterCol_category');
-                        if (searchText) params.set('filterCol_category', searchText);
-                        else if (selectedVal) params.set('filterCol_category', selectedVal);
-                    }
-                }
-
-                window.location.href = (form.action || window.location.pathname) + '?' + params.toString();
-            }
-
-            function clearFilter() {
-                if (searchInp) searchInp.value = '';
-                if (numericInp) numericInp.value = '';
-                currentSelected = new Set();
-                var params = new URLSearchParams(new FormData(form));
-                params.set('loadReport', 'true');
-                params.set('page', '1');
-                params.delete('filterCol_code');
-                params.delete('filterCol_name');
-                params.delete('filterCol_category');
-                numericCols.forEach(function (c) { params.delete('filterCol_' + c + 'Expr'); });
-                window.location.href = (form.action || window.location.pathname) + '?' + params.toString();
-            }
-
-            document.querySelectorAll('.erp-pp-col-filter-btn').forEach(function (btn) {
-                btn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); openPanel(btn); });
-            });
-            document.querySelectorAll('.erp-pp-sort-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    document.querySelectorAll('.erp-pp-sort-btn').forEach(function (b) { b.classList.remove('active'); });
-                    btn.classList.add('active');
-                });
-            });
-            if (searchInp) {
-                searchInp.addEventListener('input', function () {
-                    renderList(searchInp.value);
-                });
-                searchInp.addEventListener('keydown', function (e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        applyFilter();
-                    }
-                });
-            }
-            if (numericInp) {
-                numericInp.addEventListener('keydown', function (e) {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        applyFilter();
-                    }
-                });
-            }
-            if (btnOk) btnOk.addEventListener('click', function () { applyFilter(); });
-            if (btnClear) btnClear.addEventListener('click', function () { clearFilter(); });
-            if (btnClose) btnClose.addEventListener('click', closePanel);
-            document.addEventListener('click', function (e) {
-                if (panel && !panel.classList.contains('d-none') && !panel.contains(e.target) && !e.target.closest('.erp-pp-col-filter-btn'))
-                    closePanel();
-            });
+            scrollRtlStart();
         })();
 
-        // ضمان إرسال includeZeroQty عند إرسال الفورم (عرض الصفر)
+        if (typeof ERP !== 'undefined' && ERP.initListColumnFilter) {
+            ERP.initListColumnFilter({
+                panelId: 'erpColumnFilterPanelPp',
+                tableId: 'productProfitsTable',
+                wrapperId: 'productProfitsTableScrollWrapper',
+                getColumnValuesUrl: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(colValuesUrl)),
+                defaultSort: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(sort ?? "name")),
+                defaultDir: @Html.Raw(System.Text.Json.JsonSerializer.Serialize(dir ?? "asc")),
+                numericColumns: ['salesrevenue', 'salescost', 'salesprofit', 'salesprofitpct', 'returnprofit', 'adjustmentprofit', 'transferprofit', 'salesqty', 'netprofit']
+            });
+        }
+
+        if (typeof ERP !== 'undefined' && ERP.initListSelection) {
+            ERP.initListSelection({
+                rowSelector: '.erp-list-selectable-row',
+                movementButtonId: 'btnMovementPp',
+                movementUrlAttribute: 'data-movement-url',
+                movementTabTitle: 'حركة الصنف',
+                movementTabId: 'product-profit-move-tab',
+                idAttribute: 'data-prod-id'
+            });
+        }
+
+        document.getElementById('btnPrintPp')?.addEventListener('click', function () { window.print(); });
+
         document.addEventListener('DOMContentLoaded', function () {
             var form = document.getElementById('filtersForm');
             var includeZeroCb = document.getElementById('includeZeroQty');
@@ -901,44 +687,76 @@
                 });
             }
 
-            // تمرير أفقي لأقصى اليمين + مقابض توسيع الأعمدة (تقرير أرباح الأصناف)
-            var wrapper = document.getElementById('productProfitsTableScrollWrapper');
-            if (wrapper) {
-                if (wrapper.scrollWidth > wrapper.clientWidth)
-                    wrapper.scrollLeft = wrapper.scrollWidth - wrapper.clientWidth;
-                var table = document.getElementById('productProfitsTable');
-                if (table && table.tHead) {
-                    var ths = table.tHead.rows[0].cells;
-                    for (var i = 0; i < ths.length; i++) {
-                        var th = ths[i];
-                        th.style.position = 'relative';
-                        var handle = document.createElement('div');
-                        handle.className = 'erp-col-resize-handle';
-                        th.appendChild(handle);
-                        (function (headerCell) {
-                            var startX, startWidth;
-                            handle.addEventListener('mousedown', function (e) {
-                                e.preventDefault();
-                                startX = e.pageX;
-                                startWidth = headerCell.offsetWidth;
-                                function onMouseMove(eMove) {
-                                    var diffX = eMove.pageX - startX;
-                                    var newWidth = startWidth + diffX;
-                                    if (newWidth < 50) newWidth = 50;
-                                    headerCell.style.minWidth = newWidth + 'px';
-                                    headerCell.style.width = newWidth + 'px';
-                                }
-                                function onMouseUp() {
-                                    document.removeEventListener('mousemove', onMouseMove);
-                                    document.removeEventListener('mouseup', onMouseUp);
-                                }
-                                document.addEventListener('mousemove', onMouseMove);
-                                document.addEventListener('mouseup', onMouseUp);
-                            });
-                        })(th);
-                    }
-                }
+            var table = document.getElementById('productProfitsTable');
+            var chkAll = document.getElementById('chkAllRowsPp');
+            if (table && chkAll) {
+                chkAll.addEventListener('change', function () {
+                    table.querySelectorAll('tbody .row-select').forEach(function (cb) { cb.checked = chkAll.checked; });
+                });
             }
+
+            var storageKey = 'product-profits-columns-visibility';
+            if (!table) return;
+            var headerCells = Array.from(table.querySelectorAll('thead th[data-col]'));
+            var columns = headerCells
+                .filter(function (th) { return !th.hasAttribute('data-col-fixed'); })
+                .map(function (th) {
+                    return {
+                        key: th.getAttribute('data-col'),
+                        title: (th.querySelector('.erp-col-title') && th.querySelector('.erp-col-title').textContent) || th.innerText || ''
+                    };
+                });
+            if (columns.length === 0) return;
+
+            var hidden = [];
+            try {
+                var saved = localStorage.getItem(storageKey);
+                if (saved) hidden = JSON.parse(saved);
+            } catch (e) { hidden = []; }
+
+            function applyVisibility() {
+                columns.forEach(function (col) {
+                    var isHidden = hidden.indexOf(col.key) >= 0;
+                    table.querySelectorAll("[data-col='" + col.key + "']").forEach(function (cell) {
+                        cell.classList.toggle('d-none', isHidden);
+                    });
+                });
+            }
+            applyVisibility();
+
+            var listContainer = document.getElementById('columnsListPp');
+            var btnApply = document.getElementById('btnApplyColumnsPp');
+            if (listContainer) {
+                listContainer.innerHTML = '';
+                columns.forEach(function (col) {
+                    var id = 'col_pp_' + col.key;
+                    var wrapper = document.createElement('div');
+                    wrapper.className = 'form-check mb-1';
+                    var cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'form-check-input ms-2';
+                    cb.id = id;
+                    cb.checked = hidden.indexOf(col.key) < 0;
+                    cb.dataset.colKey = col.key;
+                    var label = document.createElement('label');
+                    label.className = 'form-check-label';
+                    label.htmlFor = id;
+                    label.textContent = col.title.trim() || col.key;
+                    wrapper.appendChild(cb);
+                    wrapper.appendChild(label);
+                    listContainer.appendChild(wrapper);
+                });
+            }
+            btnApply?.addEventListener('click', function () {
+                hidden = [];
+                listContainer?.querySelectorAll('input[type="checkbox"]').forEach(function (cb) {
+                    if (!cb.checked) hidden.push(cb.dataset.colKey || '');
+                });
+                try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch (e) { }
+                applyVisibility();
+                var modal = document.getElementById('columnsModalPp');
+                if (modal && window.bootstrap) bootstrap.Modal.getOrCreateInstance(modal).hide();
+            });
         });
     </script>
 }
