@@ -1,4 +1,4 @@
-@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
+﻿@* Views/PRLines/Index.cshtml — قائمة سطور طلبات الشراء بنفس نظام القوائم الموحد *@
 @using Microsoft.AspNetCore.Html          @* لاستخدام HtmlString *@
 @using ERP.Infrastructure                 @* لاستخدام PagedResult *@
 @using ERP.Models                         @* لاستخدام الموديل PRLine *@
@@ -294,7 +294,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_qtyConvExpr)) { <input type="hidden" name="filterCol_qtyConvExpr" value="@filterCol_qtyConvExpr" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>

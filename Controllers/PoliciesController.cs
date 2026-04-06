@@ -4,6 +4,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // Policy, UserActionType
 using ERP.Security;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Mvc;                   // أساس الكنترولر
 using Microsoft.EntityFrameworkCore;              // AsNoTracking, ToListAsync, AnyAsync
 using System;                                     // متغيرات الوقت DateTime
@@ -24,11 +25,13 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly ILookupCacheService _lookupCache;
 
-        public PoliciesController(AppDbContext context, IUserActivityLogger activityLogger)
+        public PoliciesController(AppDbContext context, IUserActivityLogger activityLogger, ILookupCacheService lookupCache)
         {
             _context = context;
             _activityLogger = activityLogger;
+            _lookupCache = lookupCache;
         }
 
 
@@ -516,6 +519,8 @@ namespace ERP.Controllers
             _context.Policies.Add(policy);
             await _context.SaveChangesAsync();
 
+            _lookupCache.ClearPoliciesCache();
+
             await _activityLogger.LogAsync(UserActionType.Create, "Policy", policy.PolicyId, $"إنشاء سياسة: {policy.Name}");
 
             TempData["SuccessMessage"] = "تم إضافة السياسة بنجاح.";
@@ -580,6 +585,8 @@ namespace ERP.Controllers
 
                 // حفظ التغييرات
                 await _context.SaveChangesAsync();
+
+                _lookupCache.ClearPoliciesCache();
 
                 var newValues = System.Text.Json.JsonSerializer.Serialize(new { policy.Name, policy.Description });
                 await _activityLogger.LogAsync(UserActionType.Edit, "Policy", id, $"تعديل سياسة: {policy.Name}", oldValues, newValues);
@@ -649,6 +656,8 @@ namespace ERP.Controllers
                 _context.Policies.Remove(policy);
                 await _context.SaveChangesAsync();
 
+                _lookupCache.ClearPoliciesCache();
+
                 await _activityLogger.LogAsync(UserActionType.Delete, "Policy", id, $"حذف سياسة: {policy.Name}", oldValues: oldValues);
 
                 TempData["SuccessMessage"] = "تم حذف السياسة بنجاح.";
@@ -709,6 +718,8 @@ namespace ERP.Controllers
             _context.Policies.RemoveRange(policies);
             await _context.SaveChangesAsync();
 
+            _lookupCache.ClearPoliciesCache();
+
             TempData["SuccessMessage"] = $"تم حذف {policies.Count} سياسة.";
             return RedirectToAction(nameof(Index));
         }
@@ -754,6 +765,8 @@ namespace ERP.Controllers
 
             _context.Policies.RemoveRange(policies);
             await _context.SaveChangesAsync();
+
+            _lookupCache.ClearPoliciesCache();
 
             TempData["SuccessMessage"] = $"تم حذف {policies.Count} سياسة (حسب الفلاتر الحالية).";
             return RedirectToAction(nameof(Index));

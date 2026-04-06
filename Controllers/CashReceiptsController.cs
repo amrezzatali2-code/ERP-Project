@@ -994,6 +994,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashReceipts.Open")]
         public async Task<IActionResult> Open(int id)
         {
             try
@@ -1052,6 +1053,7 @@ namespace ERP.Controllers
         // =========================================================
 
         // GET: CashReceipts/Delete/5
+        [RequirePermission("CashReceipts.Delete")]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
@@ -1072,6 +1074,7 @@ namespace ERP.Controllers
         // POST: CashReceipts/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashReceipts.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             try
@@ -1233,6 +1236,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashReceipts.BulkDelete")]
         public async Task<IActionResult> BulkDelete(int[] ids)
         {
             if (ids == null || ids.Length == 0)
@@ -1297,6 +1301,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashReceipts.DeleteAll")]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _context.CashReceipts

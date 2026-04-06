@@ -1,4 +1,4 @@
-@using ERP.ViewModels
+﻿@using ERP.ViewModels
 @using Microsoft.AspNetCore.Html
 @using Microsoft.AspNetCore.WebUtilities
 @{
@@ -235,7 +235,7 @@
                     @if (!string.IsNullOrWhiteSpace(filterCol_salesqtyExpr)) { <input type="hidden" name="filterCol_salesqtyExpr" value="@filterCol_salesqtyExpr" /> }
                     <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="صيغة التصدير">
                         <option value="excel" selected>Excel</option>
-                        <option value="csv">CSV</option>
+                        <option value="pdf">PDF</option>
                     </select>
                     <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                 </form>
@@ -386,7 +386,7 @@
                                 </tr>
                             }
                         </tbody>
-                        <tfoot class="table-light fw-bold text-start">
+                        <tfoot class="table-light fw-bold text-start erp-list-summary-tfoot">
                             <tr>
                                 <td data-col="select" class="no-print"></td>
                                 <td data-col="code" class="text-start"><strong>المجموع الإجمالي:</strong></td>

@@ -59,6 +59,24 @@ namespace ERP.Controllers
                 "date" => asc
                     ? q.OrderBy(l => l.SalesInvoice!.SIDate).ThenBy(l => l.SalesInvoice!.SIId).ThenBy(l => l.LineNo)
                     : q.OrderByDescending(l => l.SalesInvoice!.SIDate).ThenBy(l => l.SalesInvoice!.SIId).ThenBy(l => l.LineNo),
+                "qty" => asc
+                    ? q.OrderBy(l => l.Qty).ThenByDescending(l => l.SalesInvoice!.SIDate)
+                    : q.OrderByDescending(l => l.Qty).ThenByDescending(l => l.SalesInvoice!.SIDate),
+                "unitprice" => asc
+                    ? q.OrderBy(l => l.PriceRetail).ThenByDescending(l => l.SalesInvoice!.SIDate)
+                    : q.OrderByDescending(l => l.PriceRetail).ThenByDescending(l => l.SalesInvoice!.SIDate),
+                "linetotal" => asc
+                    ? q.OrderBy(l => l.LineNetTotal).ThenByDescending(l => l.SalesInvoice!.SIDate)
+                    : q.OrderByDescending(l => l.LineNetTotal).ThenByDescending(l => l.SalesInvoice!.SIDate),
+                "batchno" => asc
+                    ? q.OrderBy(l => l.BatchNo ?? "").ThenByDescending(l => l.SalesInvoice!.SIDate)
+                    : q.OrderByDescending(l => l.BatchNo ?? "").ThenByDescending(l => l.SalesInvoice!.SIDate),
+                "expiry" => asc
+                    ? q.OrderBy(l => l.Expiry ?? DateTime.MinValue).ThenByDescending(l => l.SalesInvoice!.SIDate)
+                    : q.OrderByDescending(l => l.Expiry ?? DateTime.MinValue).ThenByDescending(l => l.SalesInvoice!.SIDate),
+                "notes" => asc
+                    ? q.OrderBy(l => l.Notes ?? "").ThenByDescending(l => l.SalesInvoice!.SIDate)
+                    : q.OrderByDescending(l => l.Notes ?? "").ThenByDescending(l => l.SalesInvoice!.SIDate),
                 _ => q.OrderByDescending(l => l.SalesInvoice!.SIDate).ThenBy(l => l.SalesInvoice!.SIId).ThenBy(l => l.LineNo)
             };
         }
@@ -82,6 +100,11 @@ namespace ERP.Controllers
                     ? q.OrderBy(l => l.PurchaseInvoice!.Warehouse != null ? l.PurchaseInvoice.Warehouse.WarehouseName : "").ThenByDescending(l => l.PurchaseInvoice!.PIDate)
                     : q.OrderByDescending(l => l.PurchaseInvoice!.Warehouse != null ? l.PurchaseInvoice.Warehouse.WarehouseName : "").ThenByDescending(l => l.PurchaseInvoice!.PIDate),
                 "date" => asc ? q.OrderBy(l => l.PurchaseInvoice!.PIDate).ThenBy(l => l.PurchaseInvoice!.PIId).ThenBy(l => l.LineNo) : q.OrderByDescending(l => l.PurchaseInvoice!.PIDate).ThenBy(l => l.PurchaseInvoice!.PIId).ThenBy(l => l.LineNo),
+                "qty" => asc ? q.OrderBy(l => l.Qty).ThenByDescending(l => l.PurchaseInvoice!.PIDate) : q.OrderByDescending(l => l.Qty).ThenByDescending(l => l.PurchaseInvoice!.PIDate),
+                "unitprice" => asc ? q.OrderBy(l => l.UnitCost).ThenByDescending(l => l.PurchaseInvoice!.PIDate) : q.OrderByDescending(l => l.UnitCost).ThenByDescending(l => l.PurchaseInvoice!.PIDate),
+                "linetotal" => asc ? q.OrderBy(l => l.Qty * l.UnitCost).ThenByDescending(l => l.PurchaseInvoice!.PIDate) : q.OrderByDescending(l => l.Qty * l.UnitCost).ThenByDescending(l => l.PurchaseInvoice!.PIDate),
+                "batchno" => asc ? q.OrderBy(l => l.BatchNo ?? "").ThenByDescending(l => l.PurchaseInvoice!.PIDate) : q.OrderByDescending(l => l.BatchNo ?? "").ThenByDescending(l => l.PurchaseInvoice!.PIDate),
+                "expiry" => asc ? q.OrderBy(l => l.Expiry ?? DateTime.MinValue).ThenByDescending(l => l.PurchaseInvoice!.PIDate) : q.OrderByDescending(l => l.Expiry ?? DateTime.MinValue).ThenByDescending(l => l.PurchaseInvoice!.PIDate),
                 _ => q.OrderByDescending(l => l.PurchaseInvoice!.PIDate).ThenBy(l => l.PurchaseInvoice!.PIId).ThenBy(l => l.LineNo)
             };
         }
@@ -99,6 +122,11 @@ namespace ERP.Controllers
                 "productname" => asc ? q.OrderBy(l => l.Product!.ProdName).ThenByDescending(l => l.PurchaseReturn!.PRetDate) : q.OrderByDescending(l => l.Product!.ProdName).ThenByDescending(l => l.PurchaseReturn!.PRetDate),
                 "partyname" => asc ? q.OrderBy(l => l.PurchaseReturn!.Customer != null ? l.PurchaseReturn.Customer.CustomerName : "").ThenByDescending(l => l.PurchaseReturn!.PRetDate) : q.OrderByDescending(l => l.PurchaseReturn!.Customer != null ? l.PurchaseReturn.Customer.CustomerName : "").ThenByDescending(l => l.PurchaseReturn!.PRetDate),
                 "date" => asc ? q.OrderBy(l => l.PurchaseReturn!.PRetDate).ThenBy(l => l.PurchaseReturn!.PRetId).ThenBy(l => l.LineNo) : q.OrderByDescending(l => l.PurchaseReturn!.PRetDate).ThenBy(l => l.PurchaseReturn!.PRetId).ThenBy(l => l.LineNo),
+                "qty" => asc ? q.OrderBy(l => l.Qty).ThenByDescending(l => l.PurchaseReturn!.PRetDate) : q.OrderByDescending(l => l.Qty).ThenByDescending(l => l.PurchaseReturn!.PRetDate),
+                "unitprice" => asc ? q.OrderBy(l => l.UnitCost).ThenByDescending(l => l.PurchaseReturn!.PRetDate) : q.OrderByDescending(l => l.UnitCost).ThenByDescending(l => l.PurchaseReturn!.PRetDate),
+                "linetotal" => asc ? q.OrderBy(l => l.Qty * l.UnitCost).ThenByDescending(l => l.PurchaseReturn!.PRetDate) : q.OrderByDescending(l => l.Qty * l.UnitCost).ThenByDescending(l => l.PurchaseReturn!.PRetDate),
+                "batchno" => asc ? q.OrderBy(l => l.BatchNo ?? "").ThenByDescending(l => l.PurchaseReturn!.PRetDate) : q.OrderByDescending(l => l.BatchNo ?? "").ThenByDescending(l => l.PurchaseReturn!.PRetDate),
+                "expiry" => asc ? q.OrderBy(l => l.Expiry ?? DateTime.MinValue).ThenByDescending(l => l.PurchaseReturn!.PRetDate) : q.OrderByDescending(l => l.Expiry ?? DateTime.MinValue).ThenByDescending(l => l.PurchaseReturn!.PRetDate),
                 _ => q.OrderByDescending(l => l.PurchaseReturn!.PRetDate).ThenBy(l => l.PurchaseReturn!.PRetId).ThenBy(l => l.LineNo)
             };
         }
@@ -117,6 +145,10 @@ namespace ERP.Controllers
                 "productcode" => asc ? q.OrderBy(l => l.Product!.ProdId).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate) : q.OrderByDescending(l => l.Product!.ProdId).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate),
                 "productname" => asc ? q.OrderBy(l => l.Product!.ProdName).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate) : q.OrderByDescending(l => l.Product!.ProdName).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate),
                 "date" => asc ? q.OrderBy(l => l.StockAdjustment!.AdjustmentDate).ThenBy(l => l.StockAdjustmentId).ThenBy(l => l.Id) : q.OrderByDescending(l => l.StockAdjustment!.AdjustmentDate).ThenBy(l => l.StockAdjustmentId).ThenBy(l => l.Id),
+                "qty" => asc ? q.OrderBy(l => l.QtyDiff).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate) : q.OrderByDescending(l => l.QtyDiff).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate),
+                "unitprice" => asc ? q.OrderBy(l => l.CostPerUnit ?? 0m).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate) : q.OrderByDescending(l => l.CostPerUnit ?? 0m).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate),
+                "linetotal" => asc ? q.OrderBy(l => l.CostDiff ?? 0m).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate) : q.OrderByDescending(l => l.CostDiff ?? 0m).ThenByDescending(l => l.StockAdjustment!.AdjustmentDate),
+                "notes" => asc ? q.OrderBy(l => l.Note ?? "").ThenByDescending(l => l.StockAdjustment!.AdjustmentDate) : q.OrderByDescending(l => l.Note ?? "").ThenByDescending(l => l.StockAdjustment!.AdjustmentDate),
                 _ => q.OrderByDescending(l => l.StockAdjustment!.AdjustmentDate).ThenBy(l => l.StockAdjustmentId).ThenBy(l => l.Id)
             };
         }
@@ -134,6 +166,10 @@ namespace ERP.Controllers
                 "productcode" => asc ? q.OrderBy(l => l.Product!.ProdId).ThenByDescending(l => l.StockTransfer!.TransferDate) : q.OrderByDescending(l => l.Product!.ProdId).ThenByDescending(l => l.StockTransfer!.TransferDate),
                 "productname" => asc ? q.OrderBy(l => l.Product!.ProdName).ThenByDescending(l => l.StockTransfer!.TransferDate) : q.OrderByDescending(l => l.Product!.ProdName).ThenByDescending(l => l.StockTransfer!.TransferDate),
                 "date" => asc ? q.OrderBy(l => l.StockTransfer!.TransferDate).ThenBy(l => l.StockTransferId).ThenBy(l => l.LineNo) : q.OrderByDescending(l => l.StockTransfer!.TransferDate).ThenBy(l => l.StockTransferId).ThenBy(l => l.LineNo),
+                "qty" => asc ? q.OrderBy(l => l.Qty).ThenByDescending(l => l.StockTransfer!.TransferDate) : q.OrderByDescending(l => l.Qty).ThenByDescending(l => l.StockTransfer!.TransferDate),
+                "unitprice" => asc ? q.OrderBy(l => l.UnitCost).ThenByDescending(l => l.StockTransfer!.TransferDate) : q.OrderByDescending(l => l.UnitCost).ThenByDescending(l => l.StockTransfer!.TransferDate),
+                "linetotal" => asc ? q.OrderBy(l => l.Qty * l.UnitCost).ThenByDescending(l => l.StockTransfer!.TransferDate) : q.OrderByDescending(l => l.Qty * l.UnitCost).ThenByDescending(l => l.StockTransfer!.TransferDate),
+                "notes" => asc ? q.OrderBy(l => l.Note ?? "").ThenByDescending(l => l.StockTransfer!.TransferDate) : q.OrderByDescending(l => l.Note ?? "").ThenByDescending(l => l.StockTransfer!.TransferDate),
                 _ => q.OrderByDescending(l => l.StockTransfer!.TransferDate).ThenBy(l => l.StockTransferId).ThenBy(l => l.LineNo)
             };
         }
@@ -153,6 +189,11 @@ namespace ERP.Controllers
                 "productname" => asc ? q.OrderBy(l => l.Product!.ProdName).ThenByDescending(l => l.PurchaseRequest!.PRDate) : q.OrderByDescending(l => l.Product!.ProdName).ThenByDescending(l => l.PurchaseRequest!.PRDate),
                 "partyname" => asc ? q.OrderBy(l => l.PurchaseRequest!.Customer != null ? l.PurchaseRequest.Customer.CustomerName : "").ThenByDescending(l => l.PurchaseRequest!.PRDate) : q.OrderByDescending(l => l.PurchaseRequest!.Customer != null ? l.PurchaseRequest.Customer.CustomerName : "").ThenByDescending(l => l.PurchaseRequest!.PRDate),
                 "date" => asc ? q.OrderBy(l => l.PurchaseRequest!.PRDate).ThenBy(l => l.PRId).ThenBy(l => l.LineNo) : q.OrderByDescending(l => l.PurchaseRequest!.PRDate).ThenBy(l => l.PRId).ThenBy(l => l.LineNo),
+                "qty" => asc ? q.OrderBy(l => l.QtyRequested).ThenByDescending(l => l.PurchaseRequest!.PRDate) : q.OrderByDescending(l => l.QtyRequested).ThenByDescending(l => l.PurchaseRequest!.PRDate),
+                "unitprice" => asc ? q.OrderBy(l => l.ExpectedCost).ThenByDescending(l => l.PurchaseRequest!.PRDate) : q.OrderByDescending(l => l.ExpectedCost).ThenByDescending(l => l.PurchaseRequest!.PRDate),
+                "linetotal" => asc ? q.OrderBy(l => l.QtyRequested * l.ExpectedCost).ThenByDescending(l => l.PurchaseRequest!.PRDate) : q.OrderByDescending(l => l.QtyRequested * l.ExpectedCost).ThenByDescending(l => l.PurchaseRequest!.PRDate),
+                "batchno" => asc ? q.OrderBy(l => l.PreferredBatchNo ?? "").ThenByDescending(l => l.PurchaseRequest!.PRDate) : q.OrderByDescending(l => l.PreferredBatchNo ?? "").ThenByDescending(l => l.PurchaseRequest!.PRDate),
+                "expiry" => asc ? q.OrderBy(l => l.PreferredExpiry ?? DateTime.MinValue).ThenByDescending(l => l.PurchaseRequest!.PRDate) : q.OrderByDescending(l => l.PreferredExpiry ?? DateTime.MinValue).ThenByDescending(l => l.PurchaseRequest!.PRDate),
                 _ => q.OrderByDescending(l => l.PurchaseRequest!.PRDate).ThenBy(l => l.PRId).ThenBy(l => l.LineNo)
             };
         }
@@ -170,6 +211,11 @@ namespace ERP.Controllers
                 "productname" => asc ? q.OrderBy(l => l.Product!.ProdName).ThenByDescending(l => l.SalesOrder!.SODate) : q.OrderByDescending(l => l.Product!.ProdName).ThenByDescending(l => l.SalesOrder!.SODate),
                 "partyname" => asc ? q.OrderBy(l => l.SalesOrder!.Customer != null ? l.SalesOrder.Customer.CustomerName : "").ThenByDescending(l => l.SalesOrder!.SODate) : q.OrderByDescending(l => l.SalesOrder!.Customer != null ? l.SalesOrder.Customer.CustomerName : "").ThenByDescending(l => l.SalesOrder!.SODate),
                 "date" => asc ? q.OrderBy(l => l.SalesOrder!.SODate).ThenBy(l => l.SalesOrder!.SOId).ThenBy(l => l.LineNo) : q.OrderByDescending(l => l.SalesOrder!.SODate).ThenBy(l => l.SalesOrder!.SOId).ThenBy(l => l.LineNo),
+                "qty" => asc ? q.OrderBy(l => l.QtyRequested).ThenByDescending(l => l.SalesOrder!.SODate) : q.OrderByDescending(l => l.QtyRequested).ThenByDescending(l => l.SalesOrder!.SODate),
+                "unitprice" => asc ? q.OrderBy(l => l.RequestedRetailPrice).ThenByDescending(l => l.SalesOrder!.SODate) : q.OrderByDescending(l => l.RequestedRetailPrice).ThenByDescending(l => l.SalesOrder!.SODate),
+                "linetotal" => asc ? q.OrderBy(l => l.QtyRequested * l.RequestedRetailPrice * (1 - l.SalesDiscountPct / 100m)).ThenByDescending(l => l.SalesOrder!.SODate) : q.OrderByDescending(l => l.QtyRequested * l.RequestedRetailPrice * (1 - l.SalesDiscountPct / 100m)).ThenByDescending(l => l.SalesOrder!.SODate),
+                "batchno" => asc ? q.OrderBy(l => l.PreferredBatchNo ?? "").ThenByDescending(l => l.SalesOrder!.SODate) : q.OrderByDescending(l => l.PreferredBatchNo ?? "").ThenByDescending(l => l.SalesOrder!.SODate),
+                "expiry" => asc ? q.OrderBy(l => l.PreferredExpiry ?? DateTime.MinValue).ThenByDescending(l => l.SalesOrder!.SODate) : q.OrderByDescending(l => l.PreferredExpiry ?? DateTime.MinValue).ThenByDescending(l => l.SalesOrder!.SODate),
                 _ => q.OrderByDescending(l => l.SalesOrder!.SODate).ThenBy(l => l.SalesOrder!.SOId).ThenBy(l => l.LineNo)
             };
         }

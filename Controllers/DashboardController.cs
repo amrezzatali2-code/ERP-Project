@@ -4,6 +4,8 @@ using ERP.Security;
 using ERP.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System;
+using System.Collections.Generic;
 using System.Security.Claims;
 using System.Linq;
 
@@ -25,6 +27,39 @@ namespace ERP.Controllers
         {
             var idStr = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             return int.TryParse(idStr, out var id) ? id : null;
+        }
+
+        /// <summary>
+        /// قيم تطابق <c>CreatedBy</c> في الفواتير مع المستخدم (اسم الدخول، الاسم المعروض، البريد من الجدول).
+        /// يُقلّل حالات «لا مبيعات» رغم وجود فواتير بسبب اختلاف النص عن الـ Claims فقط.
+        /// </summary>
+        private async Task<List<string>> GetSalesCreatorNameCandidatesAsync(int? userId)
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void Add(string? s)
+            {
+                if (!string.IsNullOrWhiteSpace(s))
+                    set.Add(s.Trim());
+            }
+
+            Add(User.Identity?.Name);
+            Add(User.FindFirst("DisplayName")?.Value);
+
+            if (userId.HasValue)
+            {
+                var row = await _context.Users.AsNoTracking()
+                    .Where(u => u.UserId == userId.Value)
+                    .Select(u => new { u.UserName, u.DisplayName, u.Email })
+                    .FirstOrDefaultAsync();
+                if (row != null)
+                {
+                    Add(row.UserName);
+                    Add(row.DisplayName);
+                    Add(row.Email);
+                }
+            }
+
+            return set.ToList();
         }
 
         /// <summary>
@@ -50,9 +85,7 @@ namespace ERP.Controllers
             };
 
             var userId = GetCurrentUserId();
-            var currentUserName = User.Identity?.Name ?? "";
-            var displayName = User.FindFirst("DisplayName")?.Value ?? "";
-            var creatorNames = new[] { currentUserName, displayName }.Where(s => !string.IsNullOrWhiteSpace(s)).Distinct().ToList();
+            var creatorNames = await GetSalesCreatorNameCandidatesAsync(userId);
             if (!userId.HasValue && creatorNames.Count == 0)
                 return View(vm);
 
@@ -61,13 +94,16 @@ namespace ERP.Controllers
                 ? await _context.Customers.Where(c => c.UserId == userId).Select(c => c.CustomerId).ToListAsync()
                 : new List<int>();
 
+            // الإجماليات والمخطط: فواتير مرحّلة فقط (متسق مع نص البطاقات في الواجهة)
             var salesBase = _context.SalesInvoices
                 .Where(si => si.IsPosted &&
-                    (myCustomerIds.Contains(si.CustomerId) || (creatorNames.Any() && creatorNames.Contains(si.CreatedBy))));
+                    (myCustomerIds.Contains(si.CustomerId) ||
+                     (creatorNames.Count > 0 && si.CreatedBy != null &&
+                      creatorNames.Contains(si.CreatedBy.Trim()))));
 
             var periodEnd = to.AddDays(1);
 
-            // عملاء مربوطون بالمستخدم + إحصائياتهم في الفترة (نافذة العرض)
+            // عملاء مربوطون بالمستخدم الحالي مباشرة (Customer.UserId) لعرضهم في النافذة
             if (userId.HasValue)
             {
                 var linked = await _context.Customers.AsNoTracking()
@@ -76,27 +112,14 @@ namespace ERP.Controllers
                     .Select(c => new { c.CustomerId, c.CustomerName, c.Phone1 })
                     .ToListAsync();
 
-                var statsList = await salesBase
-                    .Where(si => si.SIDate >= from && si.SIDate < periodEnd)
-                    .GroupBy(si => si.CustomerId)
-                    .Select(g => new { CustomerId = g.Key, Cnt = g.Count(), Sum = g.Sum(x => x.NetTotal) })
-                    .ToListAsync();
-                var statsByCustomer = statsList.ToDictionary(x => x.CustomerId, x => (x.Cnt, x.Sum));
-
-                vm.LinkedCustomersDetail = linked.Select(c =>
+                vm.LinkedCustomersDetail = linked.Select(c => new DashboardLinkedCustomerRow
                 {
-                    var has = statsByCustomer.TryGetValue(c.CustomerId, out var st);
-                    return new DashboardLinkedCustomerRow
-                    {
-                        CustomerId = c.CustomerId,
-                        CustomerName = c.CustomerName,
-                        Phone = c.Phone1,
-                        InvoicesInPeriod = has ? st.Cnt : 0,
-                        SalesTotalInPeriod = has ? st.Sum : 0m
-                    };
+                    CustomerId = c.CustomerId,
+                    CustomerName = c.CustomerName,
+                    Phone = c.Phone1
                 }).ToList();
 
-                vm.CustomersCount = vm.LinkedCustomersDetail.Count(x => x.InvoicesInPeriod > 0);
+                vm.CustomersCount = vm.LinkedCustomersDetail.Count;
             }
 
             // مبيعات الفترة حسب المنطقة (من جدول المناطق أو حقل المنطقة كنص)
@@ -169,7 +192,8 @@ namespace ERP.Controllers
 
             // آخر فواتير المندوب في الفترة (التي أنشأها أو لعملائه) — تشمل المسودة والمرحّلة
             vm.RecentItems = await _context.SalesInvoices
-                .Where(si => (myCustomerIds.Contains(si.CustomerId) || (creatorNames.Any() && creatorNames.Contains(si.CreatedBy)))
+                .Where(si => (myCustomerIds.Contains(si.CustomerId) ||
+                    (creatorNames.Count > 0 && si.CreatedBy != null && creatorNames.Contains(si.CreatedBy.Trim())))
                     && si.SIDate >= from && si.SIDate < periodEnd)
                 .Include(si => si.Customer)
                 .OrderByDescending(si => si.SIDate).ThenByDescending(si => si.SITime)

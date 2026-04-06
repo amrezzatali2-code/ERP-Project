@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc.Filters;
+using ERP.Security;
 using ERP.Services;
 using System.Security.Claims;
 
@@ -24,10 +25,12 @@ namespace ERP.Filters
             {
                 var codes = await _permissionService.GetUserPermissionCodesAsync(userId);
                 context.HttpContext.Items["UserPermissionCodes"] = codes;
+                context.HttpContext.Items["ShowListSummaries"] = await _permissionService.HasPermissionAsync(GlobalPermissionGates.ShowSummaries);
             }
             else
             {
                 context.HttpContext.Items["UserPermissionCodes"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                context.HttpContext.Items["ShowListSummaries"] = false;
             }
 
             await next();

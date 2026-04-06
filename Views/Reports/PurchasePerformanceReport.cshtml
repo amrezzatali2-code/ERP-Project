@@ -5,10 +5,9 @@
     var toStr = Model.ToDate?.ToString("yyyy-MM-dd") ?? "";
 }
 <div dir="rtl" class="container-fluid py-3">
-    <h4 class="mb-2">تقرير أداء المشتريات</h4>
-
-    @* ===== شريط الفلاتر (نمط القوائم) ===== *@
-    <div class="erp-list-filter-bar d-print-none mt-2 mb-4">
+    @* كتلة واحدة: فلاتر + كروت + رسم — أسرع تخطيطاً وأقل قفزات *@
+    <div class="erp-list-filter-bar erp-performance-report-block d-print-none">
+        <h4 class="mb-3 fs-5 text-secondary fw-bold">تقرير أداء المشتريات</h4>
         <div class="row g-3 align-items-end flex-wrap">
             <form method="get" asp-action="PurchasePerformanceReport" asp-controller="Reports" id="reportForm" class="row g-3 align-items-end flex-wrap w-100">
                 <input type="hidden" name="fromDate" value="@fromStr" />
@@ -91,23 +90,23 @@
                     </div>
                 </div>
                 <div class="col-12 col-lg-auto erp-filter-section">
-                    <label class="form-label">نوع الطرف</label>
+                    <label class="form-label">نوع الحساب</label>
                     <div class="erp-multiselect-dropdown dropdown">
-                        <button type="button" class="form-select form-select-sm erp-filter-input text-start dropdown-toggle d-flex align-items-center" style="min-width:140px" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" id="btnPartyDropdown">
+                        <button type="button" class="form-select form-select-sm erp-filter-input text-start dropdown-toggle d-flex align-items-center" style="min-width:140px" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" id="btnAccountTypeDropdown">
                             <span class="erp-multiselect-caption">الكل</span>
                         </button>
                         <div class="dropdown-menu p-2" style="max-height:280px; overflow-y:auto; min-width:200px;">
-                            <input type="text" class="form-control form-control-sm mb-2 erp-dropdown-search" placeholder="بحث..." data-search-in="partyCategories" />
+                            <input type="text" class="form-control form-control-sm mb-2 erp-dropdown-search" placeholder="بحث..." data-search-in="accountTypes" />
                             <div class="form-check mb-1">
-                                <input class="form-check-input erp-select-all" type="checkbox" id="partySelectAll" data-target="partyCategories" />
-                                <label class="form-check-label" for="partySelectAll">اختيار الكل</label>
+                                <input class="form-check-input erp-select-all" type="checkbox" id="accountTypeSelectAll" data-target="accountTypes" />
+                                <label class="form-check-label" for="accountTypeSelectAll">اختيار الكل</label>
                             </div>
                             <hr class="my-1" />
-                            @foreach (var pt in Model.PartyTypes)
+                            @foreach (var pt in Model.AccountTypeOptions)
                             {
                                 <div class="form-check erp-dropdown-option" data-caption="@pt.Text">
-                                    <input class="form-check-input erp-multiselect-cb" type="checkbox" name="partyCategories" value="@pt.Value" id="party_@pt.Value" data-caption="@pt.Text" @(pt.Selected ? "checked" : "") />
-                                    <label class="form-check-label" for="party_@pt.Value">@pt.Text</label>
+                                    <input class="form-check-input erp-multiselect-cb" type="checkbox" name="accountTypes" value="@pt.Value" id="acct_@pt.Value" data-caption="@pt.Text" @(pt.Selected ? "checked" : "") />
+                                    <label class="form-check-label" for="acct_@pt.Value">@pt.Text</label>
                                 </div>
                             }
                         </div>
@@ -188,59 +187,55 @@
                 </div>
             </form>
         </div>
-    </div>
 
-    @* ===== بطاقات المؤشرات (KPIs) ===== *@
-    <div class="row g-3 mb-4">
-        <div class="col-md-2">
-            <div class="card border-0 shadow-sm h-100 bg-primary text-white">
-                <div class="card-body py-3">
-                    <small class="d-block opacity-90">الخصم %</small>
-                    <h4 class="mb-0">@Model.DiscountPctAvg.ToString("N1")%</h4>
+        <div class="row g-3 mt-2 pt-3 erp-performance-report-divider">
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card h-100 bg-white text-dark border border-2 border-primary shadow-sm erp-kpi-card-outline">
+                    <div class="card-body py-3">
+                        <small class="d-block text-muted">الخصم %</small>
+                        <h4 class="mb-0 text-primary">@Model.DiscountPctAvg.ToString("N1")%</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card h-100 bg-white text-dark border border-2 border-info shadow-sm erp-kpi-card-outline">
+                    <div class="card-body py-3">
+                        <small class="d-block text-muted">صافي المشتريات</small>
+                        <h4 class="mb-0 text-info">@Model.NetPurchases.ToString("N0")</h4>
+                        @if (Model.TotalGrossPurchases > 0) { <small class="d-block text-muted">@Model.NetPurchasesPct.ToString("N1")% من الإجمالي</small> }
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card h-100 bg-white text-dark border border-2 border-danger shadow-sm erp-kpi-card-outline">
+                    <div class="card-body py-3">
+                        <small class="d-block text-muted">المرتجعات</small>
+                        <h4 class="mb-0 text-danger">@Model.TotalReturns.ToString("N0")</h4>
+                        @if (Model.TotalGrossPurchases > 0) { <small class="d-block text-muted">@Model.ReturnsPct.ToString("N1")% من الإجمالي</small> }
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card h-100 bg-white text-dark border border-2 border-secondary shadow-sm erp-kpi-card-outline">
+                    <div class="card-body py-3">
+                        <small class="d-block text-muted">عدد الفواتير</small>
+                        <h4 class="mb-0 text-secondary">@Model.InvoiceCount.ToString("N0")</h4>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <div class="card h-100 bg-white text-dark border border-2 border-warning shadow-sm erp-kpi-card-outline">
+                    <div class="card-body py-3">
+                        <small class="d-block text-muted">متوسط قيمة الفاتورة</small>
+                        <h4 class="mb-0 text-warning">@Model.AvgInvoiceValue.ToString("N0")</h4>
+                    </div>
                 </div>
             </div>
         </div>
-        <div class="col-md-2">
-            <div class="card border-0 shadow-sm h-100 bg-info text-white">
-                <div class="card-body py-3">
-                    <small class="d-block opacity-90">صافي المشتريات</small>
-                    <h4 class="mb-0">@Model.NetPurchases.ToString("N0")</h4>
-                    @if (Model.TotalGrossPurchases > 0) { <small class="d-block opacity-90">@Model.NetPurchasesPct.ToString("N1")% من الإجمالي</small> }
-                </div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="card border-0 shadow-sm h-100 bg-danger text-white">
-                <div class="card-body py-3">
-                    <small class="d-block opacity-90">المرتجعات</small>
-                    <h4 class="mb-0">@Model.TotalReturns.ToString("N0")</h4>
-                    @if (Model.TotalGrossPurchases > 0) { <small class="d-block opacity-90">@Model.ReturnsPct.ToString("N1")% من الإجمالي</small> }
-                </div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="card border-0 shadow-sm h-100 bg-secondary text-white">
-                <div class="card-body py-3">
-                    <small class="d-block opacity-90">عدد الفواتير</small>
-                    <h4 class="mb-0">@Model.InvoiceCount.ToString("N0")</h4>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-2">
-            <div class="card border-0 shadow-sm h-100 bg-warning text-dark">
-                <div class="card-body py-3">
-                    <small class="d-block opacity-90">متوسط قيمة الفاتورة</small>
-                    <h4 class="mb-0">@Model.AvgInvoiceValue.ToString("N0")</h4>
-                </div>
-            </div>
-        </div>
-    </div>
 
-    @* ===== رسم بياني: خطي لعنصر واحد، أعمدة لأكثر من عنصر ===== *@
-    <div class="card border-0 shadow-sm mb-4">
-        <div class="card-header bg-white"><strong>تقرير أداء المشتريات</strong></div>
-        <div class="card-body">
-            <div style="height: 320px;">
+        <div class="mt-3 pt-3 erp-performance-report-divider">
+            <div class="fw-semibold text-secondary small mb-2">الرسم البياني — أداء المشتريات</div>
+            <div class="erp-performance-chart-wrap" style="height: 320px;">
                 <canvas id="purchaseChart"></canvas>
             </div>
         </div>

@@ -66,17 +66,22 @@ namespace ERP.Controllers
 
         /// <summary>
         /// بحث + فلتر كود السطر (UserRoleId) + تاريخ الإسناد على صفوف القائمة الموحّدة.
+        /// searchMode: starts | contains | ends (للحقول النصية؛ الافتراضي contains).
         /// </summary>
         private static IQueryable<UserRoleListRow> ApplyListFilters(
             IQueryable<UserRoleListRow> query,
             string? search,
             string? searchBy,
+            string? searchMode,
             bool useDateRange,
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
             int? toCode)
         {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
             if (fromCode.HasValue)
                 query = query.Where(x => x.UserRoleId.HasValue && x.UserRoleId.Value >= fromCode.Value);
 
@@ -106,11 +111,19 @@ namespace ERP.Controllers
                         break;
 
                     case "username":
-                        query = query.Where(x => x.UserName.Contains(term));
+                        query = sm == "starts"
+                            ? query.Where(x => x.UserName.StartsWith(term))
+                            : sm == "ends"
+                                ? query.Where(x => x.UserName.EndsWith(term))
+                                : query.Where(x => x.UserName.Contains(term));
                         break;
 
                     case "display":
-                        query = query.Where(x => (x.DisplayName ?? "").Contains(term));
+                        query = sm == "starts"
+                            ? query.Where(x => (x.DisplayName ?? "").StartsWith(term))
+                            : sm == "ends"
+                                ? query.Where(x => (x.DisplayName ?? "").EndsWith(term))
+                                : query.Where(x => (x.DisplayName ?? "").Contains(term));
                         break;
 
                     case "roleid":
@@ -144,16 +157,39 @@ namespace ERP.Controllers
                         break;
 
                     default:
-                        query = query.Where(x =>
-                            (x.UserRoleId.HasValue && x.UserRoleId.Value.ToString().Contains(term)) ||
-                            x.UserId.ToString().Contains(term) ||
-                            (x.RoleId.HasValue && x.RoleId.Value.ToString().Contains(term)) ||
-                            x.UserName.Contains(term) ||
-                            (x.DisplayName ?? "").Contains(term) ||
-                            (x.RoleName != null &&
-                             (x.RoleName.Contains(term) ||
-                              (x.RoleDescription ?? "").Contains(term))) ||
-                            (x.RoleName == null && UserRoleListRow.NoRoleDisplay.Contains(term)));
+                        if (sm == "starts")
+                            query = query.Where(x =>
+                                (x.UserRoleId.HasValue && x.UserRoleId.Value.ToString().StartsWith(term)) ||
+                                x.UserId.ToString().StartsWith(term) ||
+                                (x.RoleId.HasValue && x.RoleId.Value.ToString().StartsWith(term)) ||
+                                x.UserName.StartsWith(term) ||
+                                (x.DisplayName ?? "").StartsWith(term) ||
+                                (x.RoleName != null &&
+                                 (x.RoleName.StartsWith(term) ||
+                                  (x.RoleDescription ?? "").StartsWith(term))) ||
+                                (x.RoleName == null && UserRoleListRow.NoRoleDisplay.StartsWith(term)));
+                        else if (sm == "ends")
+                            query = query.Where(x =>
+                                (x.UserRoleId.HasValue && x.UserRoleId.Value.ToString().EndsWith(term)) ||
+                                x.UserId.ToString().EndsWith(term) ||
+                                (x.RoleId.HasValue && x.RoleId.Value.ToString().EndsWith(term)) ||
+                                x.UserName.EndsWith(term) ||
+                                (x.DisplayName ?? "").EndsWith(term) ||
+                                (x.RoleName != null &&
+                                 (x.RoleName.EndsWith(term) ||
+                                  (x.RoleDescription ?? "").EndsWith(term))) ||
+                                (x.RoleName == null && UserRoleListRow.NoRoleDisplay.EndsWith(term)));
+                        else
+                            query = query.Where(x =>
+                                (x.UserRoleId.HasValue && x.UserRoleId.Value.ToString().Contains(term)) ||
+                                x.UserId.ToString().Contains(term) ||
+                                (x.RoleId.HasValue && x.RoleId.Value.ToString().Contains(term)) ||
+                                x.UserName.Contains(term) ||
+                                (x.DisplayName ?? "").Contains(term) ||
+                                (x.RoleName != null &&
+                                 (x.RoleName.Contains(term) ||
+                                  (x.RoleDescription ?? "").Contains(term))) ||
+                                (x.RoleName == null && UserRoleListRow.NoRoleDisplay.Contains(term)));
                         break;
                 }
             }
@@ -166,6 +202,7 @@ namespace ERP.Controllers
         private static IQueryable<UserRoleListRow> ApplyListColumnFilters(
             IQueryable<UserRoleListRow> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_user,
             string? filterCol_role,
             string? filterCol_primary,
@@ -178,6 +215,30 @@ namespace ERP.Controllers
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0)
                     query = query.Where(x => x.UserRoleId.HasValue && ids.Contains(x.UserRoleId.Value));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                var expr = filterCol_idExpr.Trim();
+                if (expr.StartsWith("<=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var max))
+                    query = query.Where(x => x.UserRoleId.HasValue && x.UserRoleId.Value <= max);
+                else if (expr.StartsWith(">=") && expr.Length > 2 && int.TryParse(expr.Substring(2), out var min))
+                    query = query.Where(x => x.UserRoleId.HasValue && x.UserRoleId.Value >= min);
+                else if (expr.StartsWith("<") && !expr.StartsWith("<=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var max2))
+                    query = query.Where(x => x.UserRoleId.HasValue && x.UserRoleId.Value < max2);
+                else if (expr.StartsWith(">") && !expr.StartsWith(">=") && expr.Length > 1 && int.TryParse(expr.Substring(1), out var min2))
+                    query = query.Where(x => x.UserRoleId.HasValue && x.UserRoleId.Value > min2);
+                else if ((expr.Contains(':') || expr.Contains('-')) && !expr.StartsWith("-"))
+                {
+                    var sep = expr.Contains(':') ? ':' : '-';
+                    var parts = expr.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out var fromId) && int.TryParse(parts[1].Trim(), out var toId))
+                    {
+                        if (fromId > toId) (fromId, toId) = (toId, fromId);
+                        query = query.Where(x => x.UserRoleId.HasValue && x.UserRoleId.Value >= fromId && x.UserRoleId.Value <= toId);
+                    }
+                }
+                else if (int.TryParse(expr, out var exactId))
+                    query = query.Where(x => x.UserRoleId.HasValue && x.UserRoleId.Value == exactId);
             }
 
             if (!string.IsNullOrWhiteSpace(filterCol_user))
@@ -266,17 +327,18 @@ namespace ERP.Controllers
             if (columnLower == "role" || columnLower == "rolename")
             {
                 var hasNoRole = await q.AnyAsync(x => x.RoleName == null);
-                var names = await q.Where(x => x.RoleName != null)
-                    .Select(x => x.RoleName!)
+                var fromRolesTable = await _context.Roles.AsNoTracking()
+                    .Where(r => r.Name != null)
+                    .Select(r => r.Name!)
                     .Distinct()
                     .OrderBy(x => x)
                     .Take(500)
                     .ToListAsync();
-                var list = names.ToList();
+                var list = fromRolesTable.ToList();
                 if (hasNoRole)
                     list.Insert(0, UserRoleListRow.NoRoleDisplay);
                 if (!string.IsNullOrEmpty(searchTerm))
-                    list = list.Where(s => s.ToLowerInvariant().Contains(searchTerm)).ToList();
+                    list = list.Where(s => s != null && s.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
                 return Json(list.Select(v => new { value = v, display = v }));
             }
 
@@ -348,10 +410,11 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
-            string? sort,
-            string? dir,
+            string? searchMode = "contains",
+            string? sort = null,
+            string? dir = null,
             int page = 1,
-            int pageSize = 25,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
@@ -359,6 +422,7 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_user = null,
             string? filterCol_role = null,
             string? filterCol_primary = null,
@@ -368,16 +432,20 @@ namespace ERP.Controllers
             if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
                 pageSize = psVal;
 
-            const int defaultPageSize = 25;
+            const int defaultPageSize = 10;
             var allowedSizes = new HashSet<int> { 10, 25, 50, 100, 200 };
             if (pageSize < 0)
                 pageSize = defaultPageSize;
             else if (pageSize > 0 && !allowedSizes.Contains(pageSize))
                 pageSize = defaultPageSize;
 
+            var smNorm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (smNorm != "starts" && smNorm != "ends")
+                smNorm = "contains";
+
             IQueryable<UserRoleListRow> query = BuildListQuery();
-            query = ApplyListFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
-            query = ApplyListColumnFilters(query, filterCol_id, filterCol_user, filterCol_role, filterCol_primary, filterCol_assigned);
+            query = ApplyListFilters(query, search, searchBy, smNorm, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyListColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_user, filterCol_role, filterCol_primary, filterCol_assigned);
 
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             sort ??= "UserName";
@@ -449,15 +517,24 @@ namespace ERP.Controllers
                 ToDate = toDate
             };
 
+            int usersCount = await query.Select(x => x.UserId).Distinct().CountAsync();
+            int assignedCount = await query.CountAsync(x => x.UserRoleId.HasValue);
+            int primaryCount = await query.CountAsync(x => x.UserRoleId.HasValue && x.IsPrimary);
+
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = smNorm;
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "AssignedAt";
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_User = filterCol_user;
             ViewBag.FilterCol_Role = filterCol_role;
             ViewBag.FilterCol_Primary = filterCol_primary;
             ViewBag.FilterCol_Assigned = filterCol_assigned;
+            ViewBag.UsersCount = usersCount;
+            ViewBag.AssignedCount = assignedCount;
+            ViewBag.PrimaryCount = primaryCount;
 
             return View(model);
         }
@@ -529,12 +606,17 @@ namespace ERP.Controllers
                 return View(item);
             }
 
-            item.AssignedAt = DateTime.UtcNow;
-            var allowed = new HashSet<int>(selectedPermissionIds ?? Array.Empty<int>());
             var rolePermIds = await _context.RolePermissions
                 .Where(rp => rp.RoleId == item.RoleId && rp.IsAllowed)
                 .Select(rp => rp.PermissionId)
                 .ToListAsync();
+            // لا تعتبر المصفوفة الفارغة «اختياراً صريحاً»: الـ model binder قد يربطها كـ [] بدل null،
+            // فيُحسب allowed فارغاً ويُسجَّل رفض لكل صلاحيات الدور فيُمنع المستخدم رغم ربط الدور.
+            var hasExplicitPermissionSelection = selectedPermissionIds != null && selectedPermissionIds.Length > 0;
+            item.AssignedAt = DateTime.UtcNow;
+            var allowed = hasExplicitPermissionSelection
+                ? new HashSet<int>(selectedPermissionIds!)
+                : new HashSet<int>(rolePermIds);
             // دور افتراضي = صح فقط عندما صلاحيات المستخدم (المحددة هنا) = صلاحيات الدور بالضبط
             item.IsPrimary = allowed.SetEquals(rolePermIds);
 
@@ -729,6 +811,48 @@ namespace ERP.Controllers
             return View(item);
         }
 
+        /// <summary>
+        /// إعادة ضبط صلاحيات المستخدم لتطابق تعريف الدور في «صلاحيات الأدوار»:
+        /// إزالة الممنوع والإضافي الناتجين عن تخصيص المستخدم (نفس منطق الحفظ عندما تكون الصلاحيات مطابقة للدور).
+        /// </summary>
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [RequirePermission("UserRoles.ResetToRoleDefaults")]
+        public async Task<IActionResult> ResetToRoleDefaults(int id)
+        {
+            var ur = await _context.UserRoles.FirstOrDefaultAsync(x => x.Id == id);
+            if (ur == null)
+                return NotFound();
+
+            await ResetUserPermissionsToRoleDefaultsAsync(ur.UserId, ur.RoleId);
+
+            await _context.SaveChangesAsync();
+
+            TempData["Success"] = "تم RESET: أُزيلت صلاحيات المستخدم الإضافية والممنوعة المتعلقة بهذا الدور؛ أصبحت الصلاحيات الفعلية مطابقة لما هو معرّف في «صلاحيات الأدوار» لهذا الدور.";
+            return RedirectToAction(nameof(Edit), new { id });
+        }
+
+        /// <summary>
+        /// يزيل UserDenied لصلاحيات الدور المسموحة، ويزيل UserExtra لصلاحيات خارج تعريف الدور (كما في حفظ التعديل عند التطابق مع الدور).
+        /// </summary>
+        private async Task ResetUserPermissionsToRoleDefaultsAsync(int userId, int roleId)
+        {
+            var rolePermIds = await _context.RolePermissions
+                .Where(rp => rp.RoleId == roleId && rp.IsAllowed)
+                .Select(rp => rp.PermissionId)
+                .ToListAsync();
+
+            var deniedToRemove = await _context.UserDeniedPermissions
+                .Where(x => x.UserId == userId && rolePermIds.Contains(x.PermissionId))
+                .ToListAsync();
+            _context.UserDeniedPermissions.RemoveRange(deniedToRemove);
+
+            var extraToRemove = await _context.UserExtraPermissions
+                .Where(x => x.UserId == userId && !rolePermIds.Contains(x.PermissionId))
+                .ToListAsync();
+            _context.UserExtraPermissions.RemoveRange(extraToRemove);
+        }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Edit(
@@ -760,12 +884,15 @@ namespace ERP.Controllers
                     _context.Update(item);
                     await _context.SaveChangesAsync();
 
-                    // حفظ الصلاحيات (إضافية / ممنوعة) مثل Create — يقبل صلاحيات أكثر من الدور
-                    var allowed = new HashSet<int>(selectedPermissionIds ?? Array.Empty<int>());
                     var rolePermIds = await _context.RolePermissions
                         .Where(rp => rp.RoleId == item.RoleId && rp.IsAllowed)
                         .Select(rp => rp.PermissionId)
                         .ToListAsync();
+                    var hasExplicitPermissionSelection = selectedPermissionIds != null && selectedPermissionIds.Length > 0;
+                    // حفظ الصلاحيات (إضافية / ممنوعة) مثل Create — يقبل صلاحيات أكثر من الدور
+                    var allowed = hasExplicitPermissionSelection
+                        ? new HashSet<int>(selectedPermissionIds!)
+                        : new HashSet<int>(rolePermIds);
 
                     foreach (var permId in rolePermIds.Where(pid => !allowed.Contains(pid)))
                     {
@@ -933,23 +1060,29 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
-            string? sort,
-            string? dir,
+            string? searchMode = "contains",
+            string? sort = null,
+            string? dir = null,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_user = null,
             string? filterCol_role = null,
             string? filterCol_primary = null,
             string? filterCol_assigned = null,
             string format = "excel")
         {
+            var smNorm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (smNorm != "starts" && smNorm != "ends")
+                smNorm = "contains";
+
             IQueryable<UserRoleListRow> query = BuildListQuery();
-            query = ApplyListFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
-            query = ApplyListColumnFilters(query, filterCol_id, filterCol_user, filterCol_role, filterCol_primary, filterCol_assigned);
+            query = ApplyListFilters(query, search, searchBy, smNorm, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyListColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_user, filterCol_role, filterCol_primary, filterCol_assigned);
 
             query = query
                 .OrderBy(x => x.UserName)

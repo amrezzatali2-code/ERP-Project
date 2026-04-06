@@ -2,6 +2,7 @@ using System.Diagnostics;
 using ERP.Filters;
 using ERP.Models;
 using ERP.Security;
+using ERP.Services;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;   // ✅ علشان نستخدم AllowAnonymous
@@ -13,17 +14,24 @@ namespace ERP.Controllers
     {
         private readonly ILogger<HomeController> _logger;
         private readonly ILoggerFactory _loggerFactory;
+        private readonly ILoginRedirectService _loginRedirectService;
 
-        public HomeController(ILogger<HomeController> logger, ILoggerFactory loggerFactory)
+        public HomeController(ILogger<HomeController> logger, ILoggerFactory loggerFactory, ILoginRedirectService loginRedirectService)
         {
             _logger = logger;
             _loggerFactory = loggerFactory;
+            _loginRedirectService = loginRedirectService;
         }
 
-        [RequirePermission("Home.Index")]
-        public IActionResult Index()
+        [Authorize]
+        public async Task<IActionResult> Index()
         {
-            return RedirectToAction("Sales", "Dashboard");
+            var userIdClaim = User?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            if (!int.TryParse(userIdClaim, out var userId))
+                return RedirectToAction(nameof(AccessDenied));
+
+            var target = await _loginRedirectService.GetTargetAsync(userId);
+            return RedirectToAction(target.Action, target.Controller);
         }
 
         /// <summary>صفحة سياسة الخصوصية — بدون صلاحية منفصلة (غير مستخدمة في القوائم).</summary>

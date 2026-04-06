@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<CreditNote>
@@ -123,17 +123,17 @@
 
 <div dir="rtl" class="container-fluid">
 
-    @if (TempData["Success"] != null)
+    @if (TempData["CreditNoteSuccess"] != null)
     {
         <div class="alert alert-success alert-dismissible fade show" role="alert">
-            @TempData["Success"]
+            @TempData["CreditNoteSuccess"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
-    @if (TempData["Error"] != null)
+    @if (TempData["CreditNoteError"] != null)
     {
         <div class="alert alert-danger alert-dismissible fade show" role="alert">
-            @TempData["Error"]
+            @TempData["CreditNoteError"]
             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
         </div>
     }
@@ -254,7 +254,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>

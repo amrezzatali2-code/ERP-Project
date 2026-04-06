@@ -32,6 +32,7 @@ namespace ERP.Controllers
         private readonly IPermissionService _permissionService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
         private readonly ICustomerCacheService _customerCache;
+        private readonly ILookupCacheService _lookupCache;
 
 
         // قائمة ثابتة لأنواع الأطراف (عميل / مورد / موظف / مستثمر / بنك / مصروف / مالك)
@@ -51,13 +52,15 @@ namespace ERP.Controllers
             IUserActivityLogger activityLogger,
             IPermissionService permissionService,
             IUserAccountVisibilityService accountVisibilityService,
-            ICustomerCacheService customerCache)
+            ICustomerCacheService customerCache,
+            ILookupCacheService lookupCache)
         {
             _context = context;
             _activityLogger = activityLogger;
             _permissionService = permissionService;
             _accountVisibilityService = accountVisibilityService;
             _customerCache = customerCache;
+            _lookupCache = lookupCache;
         }
 
         /// <summary>
@@ -236,12 +239,11 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> GetDistrictsByGovernorate(int governorateId)
         {
-            var list = await _context.Districts
-                .AsNoTracking()
+            var list = (await _lookupCache.GetDistrictsAsync())
                 .Where(d => d.GovernorateId == governorateId)
                 .OrderBy(d => d.DistrictName)
                 .Select(d => new { id = d.DistrictId, name = d.DistrictName })
-                .ToListAsync();
+                .ToList();
             return Json(list);
         }
 
@@ -249,12 +251,11 @@ namespace ERP.Controllers
         [HttpGet]
         public async Task<IActionResult> GetAreasByDistrict(int districtId)
         {
-            var list = await _context.Areas
-                .AsNoTracking()
+            var list = (await _lookupCache.GetAreasAsync())
                 .Where(a => a.DistrictId == districtId)
                 .OrderBy(a => a.AreaName)
                 .Select(a => new { id = a.AreaId, name = a.AreaName })
-                .ToListAsync();
+                .ToList();
             return Json(list);
         }
 
@@ -517,10 +518,7 @@ namespace ERP.Controllers
             int? selectedAreaId = null)
         {
             // قائمة المحافظات (دائماً كاملة)
-            var govs = await _context.Governorates
-                .AsNoTracking()
-                .OrderBy(g => g.GovernorateName)
-                .ToListAsync();
+            var govs = await _lookupCache.GetGovernoratesAsync();
 
             ViewBag.GovernorateId = new SelectList(
                 govs,
@@ -532,11 +530,10 @@ namespace ERP.Controllers
             // قائمة الأحياء: فقط عند وجود محافظة محددة (أو للعرض في Edit)
             if (selectedGovernorateId.HasValue)
             {
-                var dists = await _context.Districts
-                    .AsNoTracking()
+                var dists = (await _lookupCache.GetDistrictsAsync())
                     .Where(d => d.GovernorateId == selectedGovernorateId.Value)
                     .OrderBy(d => d.DistrictName)
-                    .ToListAsync();
+                    .ToList();
                 ViewBag.DistrictId = new SelectList(dists, "DistrictId", "DistrictName", selectedDistrictId);
             }
             else
@@ -547,11 +544,10 @@ namespace ERP.Controllers
             // قائمة المناطق: فقط عند وجود حي محدد (أو للعرض في Edit)
             if (selectedDistrictId.HasValue)
             {
-                var areas = await _context.Areas
-                    .AsNoTracking()
+                var areas = (await _lookupCache.GetAreasAsync())
                     .Where(a => a.DistrictId == selectedDistrictId.Value)
                     .OrderBy(a => a.AreaName)
-                    .ToListAsync();
+                    .ToList();
                 ViewBag.AreaId = new SelectList(areas, "AreaId", "AreaName", selectedAreaId);
             }
             else
@@ -826,6 +822,7 @@ namespace ERP.Controllers
             ViewBag.PartyCategoryDisplayNames = PartyCategoryDisplay.ArabicByKey;
 
             ViewBag.CanEdit = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Customers", "Edit"));
+            ViewBag.CanShowEngagement = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Customers", "Show"));
 
             return View(model);
         }

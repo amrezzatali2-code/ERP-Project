@@ -34,16 +34,30 @@ namespace ERP.Controllers
         private readonly ILedgerPostingService _ledgerPostingService;
         private readonly DocumentTotalsService _docTotals;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IListVisibilityService _listVisibilityService;
 
         // فاصل لقيم فلاتر الأعمدة (نفسه فى باقى القوائم)
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        public SalesReturnsController(AppDbContext ctx, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger)
+        public SalesReturnsController(AppDbContext ctx, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger, IListVisibilityService listVisibilityService)
         {
             context = ctx;
             _ledgerPostingService = ledgerPostingService;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
+            _listVisibilityService = listVisibilityService;
+        }
+
+        private async Task<IQueryable<SalesReturn>> ApplyOperationalListVisibilityAsync(IQueryable<SalesReturn> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(sr => sr.CreatedBy != null && creatorNames.Contains(sr.CreatedBy.Trim()));
         }
 
 
@@ -456,7 +470,7 @@ namespace ERP.Controllers
                 pageSize = 10;
 
             // (1) بناء الاستعلام حسب الفلاتر العامة
-            var q = BuildQuery(search, searchBy, sort, dir);
+            var q = await ApplyOperationalListVisibilityAsync(BuildQuery(search, searchBy, sort, dir));
 
             // (1.1) تطبيق فلاتر الأعمدة بنمط Excel
             if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
@@ -777,7 +791,8 @@ namespace ERP.Controllers
                 return RedirectToAction(nameof(Index));
             }
 
-            var existingIds = await context.SalesReturns
+            var visibleReturns = await ApplyOperationalListVisibilityAsync(context.SalesReturns);
+            var existingIds = await visibleReturns
                 .Where(x => ids.Contains(x.SRId))
                 .Select(x => x.SRId)
                 .ToListAsync();
@@ -826,7 +841,8 @@ namespace ERP.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteAll()
         {
-            var allIds = await context.SalesReturns.Select(x => x.SRId).ToListAsync();
+            var visibleReturns = await ApplyOperationalListVisibilityAsync(context.SalesReturns);
+            var allIds = await visibleReturns.Select(x => x.SRId).ToListAsync();
 
             if (allIds.Count == 0)
             {
@@ -890,7 +906,7 @@ namespace ERP.Controllers
             string? format = "excel")        // excel | csv
         {
             // نفس منطق الفلاتر المستخدم فى Index
-            var q = BuildQuery(search, searchBy, sort, dir);
+            var q = await ApplyOperationalListVisibilityAsync(BuildQuery(search, searchBy, sort, dir));
 
             // فلاتر الأعمدة (نفس Index)
             if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
@@ -1148,6 +1164,7 @@ namespace ERP.Controllers
                 .Include(sr => sr.Customer)
                     .ThenInclude(c => c.Area)
                 .Include(sr => sr.Warehouse);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             if (column == "id")
             {

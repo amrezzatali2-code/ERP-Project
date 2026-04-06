@@ -37,6 +37,7 @@ namespace ERP.Controllers
         private readonly IUserAccountVisibilityService _accountVisibilityService;
         private readonly IProductCacheService _productCache;
         private readonly ICustomerCacheService _customerCache;
+        private readonly ILookupCacheService _lookupCache;
 
         public ProductsController(
             AppDbContext db,
@@ -45,7 +46,8 @@ namespace ERP.Controllers
             IPermissionService permissionService,
             IUserAccountVisibilityService accountVisibilityService,
             IProductCacheService productCache,
-            ICustomerCacheService customerCache)
+            ICustomerCacheService customerCache,
+            ILookupCacheService lookupCache)
         {
             _db = db;
             _stockAnalysisService = stockAnalysisService;
@@ -54,6 +56,20 @@ namespace ERP.Controllers
             _accountVisibilityService = accountVisibilityService;
             _productCache = productCache;
             _customerCache = customerCache;
+            _lookupCache = lookupCache;
+        }
+
+        private async Task LoadWarehousesDDLAsync()
+        {
+            ViewBag.Warehouses = (await _lookupCache.GetWarehousesAsync())
+                .Where(w => w.IsActive)
+                .OrderBy(w => w.WarehouseName)
+                .Select(w => new SelectListItem
+                {
+                    Value = w.WarehouseId.ToString(),
+                    Text = w.WarehouseName
+                })
+                .ToList();
         }
 
 
@@ -1170,8 +1186,7 @@ namespace ERP.Controllers
             await LoadProductGroupsDDLAsync(null);
             await LoadBonusGroupsDDLAsync(null);
             await LoadClassificationDDLAsync(null);
-            ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
-                .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
+            await LoadWarehousesDDLAsync();
 
             ViewBag.ImportedOptions = GetImportedOptions(null);
 
@@ -1204,8 +1219,7 @@ namespace ERP.Controllers
                 await LoadProductGroupsDDLAsync(model.ProductGroupId);
                 await LoadBonusGroupsDDLAsync(model.ProductBonusGroupId);
                 await LoadClassificationDDLAsync(model.ClassificationId);
-                ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
-                    .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
+                await LoadWarehousesDDLAsync();
                 ViewBag.ImportedOptions = GetImportedOptions(model.Imported);
                 return View(model);
             }
@@ -1254,8 +1268,7 @@ namespace ERP.Controllers
             await LoadProductGroupsDDLAsync(m.ProductGroupId);
             await LoadBonusGroupsDDLAsync(m.ProductBonusGroupId);
             await LoadClassificationDDLAsync(m.ClassificationId);
-            ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
-                .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
+            await LoadWarehousesDDLAsync();
             ViewBag.ImportedOptions = GetImportedOptions(m.Imported);
 
             return View(m);
@@ -1281,8 +1294,7 @@ namespace ERP.Controllers
                 await LoadProductGroupsDDLAsync(model.ProductGroupId);
                 await LoadBonusGroupsDDLAsync(model.ProductBonusGroupId);
                 await LoadClassificationDDLAsync(model.ClassificationId);
-                ViewBag.Warehouses = await _db.Warehouses.Where(w => w.IsActive).OrderBy(w => w.WarehouseName)
-                    .Select(w => new Microsoft.AspNetCore.Mvc.Rendering.SelectListItem { Value = w.WarehouseId.ToString(), Text = w.WarehouseName }).ToListAsync();
+                await LoadWarehousesDDLAsync();
                 ViewBag.ImportedOptions = GetImportedOptions(model.Imported);
                 return View(model);
             }
@@ -2736,9 +2748,15 @@ namespace ERP.Controllers
         // شاشة اختيار ملف الإكسل
         // =====================
         [HttpGet]
-        [RequirePermission("Products.Import")]
         public async Task<IActionResult> Import()
         {
+            var canExcelProducts = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Settings", "ProductsExcelImport"));
+            var canOtherBulk = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Import"));
+            if (!canExcelProducts && !canOtherBulk)
+                return RedirectToAction("AccessDenied", "Home");
+            ViewBag.CanImportProductsExcel = canExcelProducts || canOtherBulk;
+            ViewBag.CanImportBulkOther = canOtherBulk;
+
             ViewBag.Success = TempData["Success"];
             ViewBag.Error = TempData["Error"];
             var governorates = await _db.Governorates.OrderBy(g => g.GovernorateName).Select(g => new { g.GovernorateId, g.GovernorateName }).ToListAsync();
@@ -2756,9 +2774,13 @@ namespace ERP.Controllers
         // =====================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        [RequirePermission("Products.Import")]
         public async Task<IActionResult> Import(IFormFile excelFile, string? importType = null)   // importType: Medicine | Accessory (لتعيين الفئة)
         {
+            var canExcelProducts = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Settings", "ProductsExcelImport"));
+            var canLegacyImport = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Products", "Import"));
+            if (!canExcelProducts && !canLegacyImport)
+                return RedirectToAction("AccessDenied", "Home");
+
             // ===== 1) التأكد من اختيار ملف =====
             if (excelFile == null || excelFile.Length == 0)
             {

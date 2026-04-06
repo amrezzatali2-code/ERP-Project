@@ -4,6 +4,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                   // كلاس PagedResult + ApplySearchSort
 using ERP.Models;                           // الموديل ProductGroupPolicy
 using ERP.Security;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;   // SelectList للقوائم المنسدلة
 using Microsoft.EntityFrameworkCore;
@@ -27,10 +28,12 @@ namespace ERP.Controllers
     public class ProductGroupPoliciesController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات
+        private readonly ILookupCacheService _lookupCache;
 
-        public ProductGroupPoliciesController(AppDbContext context)
+        public ProductGroupPoliciesController(AppDbContext context, ILookupCacheService lookupCache)
         {
             _context = context;
+            _lookupCache = lookupCache;
         }
 
         /// <summary>
@@ -72,10 +75,7 @@ namespace ERP.Controllers
             int? warehouseId = null)
         {
             // جلب مجموعات الأصناف بالاسم
-            var groups = await _context.ProductGroups
-                .AsNoTracking()
-                .OrderBy(g => g.Name)          // لو اسم العمود مختلف عدّله هنا
-                .ToListAsync();
+            var groups = await _lookupCache.GetProductGroupsAsync();
 
             ViewBag.ProductGroupList = new SelectList(
                 groups,
@@ -85,10 +85,7 @@ namespace ERP.Controllers
             );
 
             // جلب السياسات بالاسم
-            var policies = await _context.Policies
-                .AsNoTracking()
-                .OrderBy(p => p.Name)
-                .ToListAsync();
+            var policies = await _lookupCache.GetPoliciesAsync();
 
             ViewBag.PolicyList = new SelectList(
                 policies,
@@ -98,10 +95,7 @@ namespace ERP.Controllers
             );
 
             // جلب المخازن بالاسم
-            var warehouses = await _context.Warehouses
-                .AsNoTracking()
-                .OrderBy(w => w.WarehouseName) // لو عندك اسم مختلف عدّله (مثلاً Name)
-                .ToListAsync();
+            var warehouses = await _lookupCache.GetWarehousesAsync();
 
             ViewBag.WarehouseList = new SelectList(
                 warehouses,

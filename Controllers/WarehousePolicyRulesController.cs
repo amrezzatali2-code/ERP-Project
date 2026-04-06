@@ -4,6 +4,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                  // كلاس PagedResult لتقسيم الصفحات + الفلاتر
 using ERP.Models;                          // الموديل WarehousePolicyRule
 using ERP.Security;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;   // علشان SelectList
 using Microsoft.EntityFrameworkCore;
@@ -29,10 +30,12 @@ namespace ERP.Controllers
     public class WarehousePolicyRulesController : Controller
     {
         private readonly AppDbContext _context;   // متغير: اتصال بقاعدة البيانات
+        private readonly ILookupCacheService _lookupCache;
 
-        public WarehousePolicyRulesController(AppDbContext context)
+        public WarehousePolicyRulesController(AppDbContext context, ILookupCacheService lookupCache)
         {
             _context = context;
+            _lookupCache = lookupCache;
         }
 
 
@@ -313,10 +316,7 @@ namespace ERP.Controllers
         // =========================
         private async Task LoadLookupsAsync(int? warehouseId = null, int? policyId = null, bool forCreate = false)
         {
-            var warehouses = await _context.Warehouses
-                .AsNoTracking()
-                .OrderBy(w => w.WarehouseName)
-                .ToListAsync();
+            var warehouses = await _lookupCache.GetWarehousesAsync();
 
             ViewBag.WarehouseList = new SelectList(
                 warehouses,
@@ -333,11 +333,10 @@ namespace ERP.Controllers
                     .Where(r => r.WarehouseId == warehouseId.Value)
                     .Select(r => r.PolicyId)
                     .ToListAsync();
-                policies = await _context.Policies
-                    .AsNoTracking()
+                policies = (await _lookupCache.GetPoliciesAsync())
                     .Where(p => !usedPolicyIds.Contains(p.PolicyId))
                     .OrderBy(p => p.Name)
-                    .ToListAsync();
+                    .ToList();
             }
             else if (forCreate)
             {
@@ -345,10 +344,7 @@ namespace ERP.Controllers
             }
             else
             {
-                policies = await _context.Policies
-                    .AsNoTracking()
-                    .OrderBy(p => p.Name)
-                    .ToListAsync();
+                policies = (await _lookupCache.GetPoliciesAsync()).ToList();
             }
 
             ViewBag.PolicyList = new SelectList(

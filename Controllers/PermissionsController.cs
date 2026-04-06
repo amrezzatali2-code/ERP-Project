@@ -44,6 +44,7 @@ namespace ERP.Controllers
             IQueryable<Permission> query,
             string? search,
             string? searchBy,
+            string? searchMode,
             bool useDateRange,
             DateTime? fromDate,
             DateTime? toDate,
@@ -72,20 +73,36 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string term = search.Trim();
+                string mode = (searchMode ?? "contains").Trim().ToLowerInvariant();
+                if (mode != "starts" && mode != "ends")
+                {
+                    mode = "contains";
+                }
+
+                IQueryable<Permission> ApplyTextMatch(IQueryable<Permission> source, Func<Permission, string?> selector) =>
+                    mode switch
+                    {
+                        "starts" => source.Where(p => (selector(p) ?? string.Empty).StartsWith(term)),
+                        "ends" => source.Where(p => (selector(p) ?? string.Empty).EndsWith(term)),
+                        _ => source.Where(p => (selector(p) ?? string.Empty).Contains(term))
+                    };
 
                 switch ((searchBy ?? "all").ToLower())
                 {
                     case "code":
-                        query = query.Where(p => p.Code.Contains(term));
+                        query = ApplyTextMatch(query, p => p.Code);
                         break;
 
                     case "name":
-                        query = query.Where(p => p.NameAr.Contains(term));
+                        query = ApplyTextMatch(query, p => p.NameAr);
                         break;
 
                     case "module":
-                        query = query.Where(p => p.Module != null &&
-                                                 p.Module.Contains(term));
+                        query = ApplyTextMatch(query, p => p.Module);
+                        break;
+
+                    case "description":
+                        query = ApplyTextMatch(query, p => p.Description);
                         break;
 
                     case "id":
@@ -101,11 +118,24 @@ namespace ERP.Controllers
                         break;
 
                     default: // all
-                        query = query.Where(p =>
-                            p.Code.Contains(term) ||
-                            p.NameAr.Contains(term) ||
-                            (p.Module ?? "").Contains(term) ||
-                            (p.Description ?? "").Contains(term));
+                        query = mode switch
+                        {
+                            "starts" => query.Where(p =>
+                                (p.Code ?? string.Empty).StartsWith(term) ||
+                                (p.NameAr ?? string.Empty).StartsWith(term) ||
+                                (p.Module ?? string.Empty).StartsWith(term) ||
+                                (p.Description ?? string.Empty).StartsWith(term)),
+                            "ends" => query.Where(p =>
+                                (p.Code ?? string.Empty).EndsWith(term) ||
+                                (p.NameAr ?? string.Empty).EndsWith(term) ||
+                                (p.Module ?? string.Empty).EndsWith(term) ||
+                                (p.Description ?? string.Empty).EndsWith(term)),
+                            _ => query.Where(p =>
+                                (p.Code ?? string.Empty).Contains(term) ||
+                                (p.NameAr ?? string.Empty).Contains(term) ||
+                                (p.Module ?? string.Empty).Contains(term) ||
+                                (p.Description ?? string.Empty).Contains(term))
+                        };
                         break;
                 }
             }
@@ -115,9 +145,62 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static IQueryable<Permission> ApplyPermissionIdExpr(IQueryable<Permission> query, string expr)
+        {
+            if (string.IsNullOrWhiteSpace(expr))
+            {
+                return query;
+            }
+
+            var raw = expr.Trim();
+
+            if (raw.Contains(':') || raw.Contains('-'))
+            {
+                var parts = raw.Split(new[] { ':', '-' }, 2, StringSplitOptions.TrimEntries);
+                if (parts.Length == 2 &&
+                    int.TryParse(parts[0], out var minVal) &&
+                    int.TryParse(parts[1], out var maxVal))
+                {
+                    var min = Math.Min(minVal, maxVal);
+                    var max = Math.Max(minVal, maxVal);
+                    return query.Where(p => p.PermissionId >= min && p.PermissionId <= max);
+                }
+            }
+
+            string[] prefixes = { ">=", "<=", ">", "<" };
+            foreach (var prefix in prefixes)
+            {
+                if (raw.StartsWith(prefix, StringComparison.Ordinal))
+                {
+                    var numberPart = raw.Substring(prefix.Length).Trim();
+                    if (!int.TryParse(numberPart, out var number))
+                    {
+                        return query;
+                    }
+
+                    return prefix switch
+                    {
+                        ">=" => query.Where(p => p.PermissionId >= number),
+                        "<=" => query.Where(p => p.PermissionId <= number),
+                        ">" => query.Where(p => p.PermissionId > number),
+                        "<" => query.Where(p => p.PermissionId < number),
+                        _ => query
+                    };
+                }
+            }
+
+            if (int.TryParse(raw, out var exact))
+            {
+                return query.Where(p => p.PermissionId == exact);
+            }
+
+            return query;
+        }
+
         private static IQueryable<Permission> ApplyColumnFilters(
             IQueryable<Permission> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_code,
             string? filterCol_name,
             string? filterCol_module,
@@ -131,6 +214,10 @@ namespace ERP.Controllers
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0) query = query.Where(p => ids.Contains(p.PermissionId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                query = ApplyPermissionIdExpr(query, filterCol_idExpr);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_code))
             {
@@ -249,10 +336,11 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int page = 1,
-            int pageSize = 25,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
@@ -260,6 +348,7 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_code = null,
             string? filterCol_name = null,
             string? filterCol_module = null,
@@ -267,10 +356,38 @@ namespace ERP.Controllers
             string? filterCol_created = null,
             string? filterCol_updated = null)
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+            {
+                pageSize = psVal;
+            }
+
+            if (Request.Query.ContainsKey("search"))
+            {
+                search = Request.Query["search"].LastOrDefault();
+            }
+
+            if (Request.Query.ContainsKey("searchBy"))
+            {
+                searchBy = Request.Query["searchBy"].LastOrDefault();
+            }
+
+            if (Request.Query.ContainsKey("searchMode"))
+            {
+                searchMode = Request.Query["searchMode"].LastOrDefault();
+            }
+
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+            {
+                pageSize = 10;
+            }
+
             var query = _context.Permissions.AsNoTracking();
 
-            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_code, filterCol_name, filterCol_module, filterCol_description, filterCol_created, filterCol_updated);
+            query = ApplyFilters(query, search, searchBy, searchMode, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_code, filterCol_name, filterCol_module, filterCol_description, filterCol_created, filterCol_updated);
 
             // الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -290,6 +407,10 @@ namespace ERP.Controllers
                     ? query.OrderByDescending(p => p.Module)
                     : query.OrderBy(p => p.Module),
 
+                "Description" => desc
+                    ? query.OrderByDescending(p => p.Description)
+                    : query.OrderBy(p => p.Description),
+
                 "CreatedAt" => desc
                     ? query.OrderByDescending(p => p.CreatedAt)
                     : query.OrderBy(p => p.CreatedAt),
@@ -303,40 +424,44 @@ namespace ERP.Controllers
                     : query.OrderBy(p => p.PermissionId)
             };
 
-            // حساب إجمالي السجلات والصفحة الحالية
             int totalCount = await query.CountAsync();
-            pageSize = Math.Max(1, pageSize);
-            page = Math.Max(1, page);
+            int moduleCount = await query
+                .Where(p => !string.IsNullOrWhiteSpace(p.Module))
+                .Select(p => p.Module!)
+                .Distinct()
+                .CountAsync();
+            int describedCount = await query.CountAsync(p => !string.IsNullOrWhiteSpace(p.Description));
 
-            var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-
-            // تجهيز الموديل للعرض في الواجهة
-            // ✅ الترتيب الصحيح
-            var model = new PagedResult<Permission>(items, page, pageSize, totalCount)
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
             {
-                Search = search,
-                SortColumn = sort,
-                SortDescending = desc,
-                UseDateRange = useDateRange,
-                FromDate = fromDate,
-                ToDate = toDate
-            };
+                sm = "contains";
+            }
 
+            var model = await PagedResult<Permission>.CreateAsync(query, page, pageSize, sort, desc, search, searchBy ?? "all");
+            model.UseDateRange = useDateRange;
+            model.FromDate = fromDate;
+            model.ToDate = toDate;
 
+            ViewBag.Search = search;
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
+            ViewBag.Sort = sort;
+            ViewBag.Dir = desc ? "desc" : "asc";
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "CreatedAt";
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Code = filterCol_code;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Module = filterCol_module;
             ViewBag.FilterCol_Description = filterCol_description;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.ModulesCount = moduleCount;
+            ViewBag.DescribedCount = describedCount;
 
             return View(model);
         }
@@ -628,6 +753,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -636,6 +762,7 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_code = null,
             string? filterCol_name = null,
             string? filterCol_module = null,
@@ -646,8 +773,8 @@ namespace ERP.Controllers
         {
             var query = _context.Permissions.AsNoTracking();
 
-            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_code, filterCol_name, filterCol_module, filterCol_description, filterCol_created, filterCol_updated);
+            query = ApplyFilters(query, search, searchBy, searchMode, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_code, filterCol_name, filterCol_module, filterCol_description, filterCol_created, filterCol_updated);
 
             // ترتيب ثابت بالتصدير
             var list = await query

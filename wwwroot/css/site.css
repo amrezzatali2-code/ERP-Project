@@ -149,6 +149,55 @@ body {
     justify-content: center;
 }
 
+/* نافذة عائمة موحّدة — أصناف المشتريات الحديثة، لوحة مبيعاتي الشخصية، … */
+.recent-purchase-panel {
+    position: fixed;
+    z-index: 1055;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #fff;
+    border: 1px solid #6366f1;
+    display: flex;
+    flex-direction: column;
+}
+.recent-purchase-panel-header {
+    background: linear-gradient(135deg, #4f46e5 0%, #6366f1 50%, #818cf8 100%);
+    color: #fff;
+    cursor: move;
+    user-select: none;
+    flex-shrink: 0;
+}
+.recent-purchase-panel-resize-handle {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 20px;
+    height: 20px;
+    cursor: nwse-resize;
+    background: linear-gradient(135deg, transparent 50%, rgba(99, 102, 241, 0.3) 50%);
+    border-radius: 0 4px 0 0;
+}
+
+/* تقارير أداء المبيعات / المشتريات — كتلة واحدة + كروت بحدود ملونة */
+.erp-performance-report-block {
+    margin-bottom: 1rem;
+}
+.erp-performance-report-divider {
+    border-top: 1px solid rgba(99, 102, 241, 0.22);
+}
+.erp-kpi-card-outline {
+    transition: box-shadow 0.15s ease;
+}
+.erp-kpi-card-outline:hover {
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.14) !important;
+}
+.erp-performance-chart-wrap {
+    position: relative;
+    content-visibility: auto;
+    contain-intrinsic-size: 320px 320px;
+}
+
 /* شريط أدوات أعلى الجدول: يلم كل الأزرار في سطر منسق */
 .erp-toolbar {
     display: flex;
@@ -1718,4 +1767,18 @@ select#ProdBatchSelectInRow {
     text-align: right;
     margin: 0;
     cursor: pointer;
+}
+
+/* صلاحية عامة Global.ShowSummaries — إخفاء كروت الإجمالي وسطر الإجمالي (tfoot) في القوائم والتقارير المعاد هيكلها كقائمة */
+body[data-erp-list-summaries="false"] .erp-list-summary-row,
+body[data-erp-list-summaries="false"] .erp-products-summary-card,
+body[data-erp-list-summaries="false"] .erp-list-summary-card,
+body[data-erp-list-summaries="false"] .customer-ledger-summary-card,
+body[data-erp-list-summaries="false"] .erp-list-summary-tfoot,
+body[data-erp-list-summaries="false"] .erp-list-table-after-summary tfoot,
+body[data-erp-list-summaries="false"] .erp-table-scroll-container tfoot,
+body[data-erp-list-summaries="false"] .erp-list-table-frame tfoot,
+body[data-erp-list-summaries="false"] .treasury-vouchers-card tfoot,
+body[data-erp-list-summaries="false"] .dashboard-sales-page table.dashboard-modal-table tfoot {
+    display: none !important;
 }

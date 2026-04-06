@@ -52,6 +52,7 @@ namespace ERP.Controllers
             IQueryable<RolePermission> query,
             string? search,
             string? searchBy,
+            string? searchMode,
             bool useDateRange,
             DateTime? fromDate,
             DateTime? toDate,
@@ -80,7 +81,10 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string term = search.Trim();
-                string termLower = term.ToLowerInvariant();
+                string textMode = (searchMode ?? "contains").Trim().ToLowerInvariant();
+                if (textMode != "starts" && textMode != "ends")
+                    textMode = "contains";
+
                 string mode = (searchBy ?? "all").Trim().ToLowerInvariant();
 
                 switch (mode)
@@ -99,23 +103,40 @@ namespace ERP.Controllers
                         break;
                     case "role":
                     case "rolename":
-                        query = query.Where(rp =>
-                            rp.Role != null &&
-                            rp.Role.Name != null &&
-                            rp.Role.Name.ToLower().Contains(termLower));
+                        query = textMode switch
+                        {
+                            "starts" => query.Where(rp => rp.Role != null && rp.Role.Name != null && rp.Role.Name.StartsWith(term)),
+                            "ends" => query.Where(rp => rp.Role != null && rp.Role.Name != null && rp.Role.Name.EndsWith(term)),
+                            _ => query.Where(rp => rp.Role != null && rp.Role.Name != null && rp.Role.Name.Contains(term))
+                        };
                         break;
                     case "permission":
-                        query = query.Where(rp =>
-                            rp.Permission != null &&
-                            ((rp.Permission.Code != null && rp.Permission.Code.ToLower().Contains(termLower)) ||
-                             (rp.Permission.NameAr != null && rp.Permission.NameAr.ToLower().Contains(termLower)) ||
-                             (rp.Permission.Module != null && rp.Permission.Module.ToLower().Contains(termLower))));
+                        query = textMode switch
+                        {
+                            "starts" => query.Where(rp =>
+                                rp.Permission != null &&
+                                (((rp.Permission.Code ?? string.Empty).StartsWith(term)) ||
+                                 ((rp.Permission.NameAr ?? string.Empty).StartsWith(term)) ||
+                                 ((rp.Permission.Module ?? string.Empty).StartsWith(term)))),
+                            "ends" => query.Where(rp =>
+                                rp.Permission != null &&
+                                (((rp.Permission.Code ?? string.Empty).EndsWith(term)) ||
+                                 ((rp.Permission.NameAr ?? string.Empty).EndsWith(term)) ||
+                                 ((rp.Permission.Module ?? string.Empty).EndsWith(term)))),
+                            _ => query.Where(rp =>
+                                rp.Permission != null &&
+                                (((rp.Permission.Code ?? string.Empty).Contains(term)) ||
+                                 ((rp.Permission.NameAr ?? string.Empty).Contains(term)) ||
+                                 ((rp.Permission.Module ?? string.Empty).Contains(term))))
+                        };
                         break;
                     case "module":
-                        query = query.Where(rp =>
-                            rp.Permission != null &&
-                            rp.Permission.Module != null &&
-                            rp.Permission.Module.ToLower().Contains(termLower));
+                        query = textMode switch
+                        {
+                            "starts" => query.Where(rp => rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.StartsWith(term)),
+                            "ends" => query.Where(rp => rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.EndsWith(term)),
+                            _ => query.Where(rp => rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.Contains(term))
+                        };
                         break;
                     case "id":
                         if (int.TryParse(term, out int idVal))
@@ -124,15 +145,27 @@ namespace ERP.Controllers
                             query = query.Where(rp => false);
                         break;
                     default:
-                        // البحث في الكل = حقول الصلاحية والكود فقط (الموديول، اسم الصلاحية، كود الصلاحية، كود السطر) حتى تكون النتيجة سليمة
-                        // لبحث باسم الدور استخدم "اسم الدور" من القائمة
-                        query = query.Where(rp =>
-                            (rp.Permission != null && rp.Permission.Module != null && rp.Permission.Module.ToLower().Contains(termLower)) ||
-                            (rp.Permission != null && rp.Permission.NameAr != null && rp.Permission.NameAr.ToLower().Contains(termLower)) ||
-                            (rp.Permission != null && rp.Permission.Code != null && rp.Permission.Code.ToLower().Contains(termLower)) ||
-                            rp.Id.ToString().Contains(term) ||
-                            rp.RoleId.ToString().Contains(term) ||
-                            rp.PermissionId.ToString().Contains(term));
+                        query = textMode switch
+                        {
+                            "starts" => query.Where(rp =>
+                                (rp.Permission != null && ((rp.Permission.Module ?? string.Empty).StartsWith(term) ||
+                                                           (rp.Permission.NameAr ?? string.Empty).StartsWith(term) ||
+                                                           (rp.Permission.Code ?? string.Empty).StartsWith(term))) ||
+                                (rp.Role != null && (rp.Role.Name ?? string.Empty).StartsWith(term))),
+                            "ends" => query.Where(rp =>
+                                (rp.Permission != null && ((rp.Permission.Module ?? string.Empty).EndsWith(term) ||
+                                                           (rp.Permission.NameAr ?? string.Empty).EndsWith(term) ||
+                                                           (rp.Permission.Code ?? string.Empty).EndsWith(term))) ||
+                                (rp.Role != null && (rp.Role.Name ?? string.Empty).EndsWith(term))),
+                            _ => query.Where(rp =>
+                                (rp.Permission != null && ((rp.Permission.Module ?? string.Empty).Contains(term) ||
+                                                           (rp.Permission.NameAr ?? string.Empty).Contains(term) ||
+                                                           (rp.Permission.Code ?? string.Empty).Contains(term))) ||
+                                (rp.Role != null && (rp.Role.Name ?? string.Empty).Contains(term)) ||
+                                rp.Id.ToString().Contains(term) ||
+                                rp.RoleId.ToString().Contains(term) ||
+                                rp.PermissionId.ToString().Contains(term))
+                        };
                         break;
                 }
             }
@@ -264,10 +297,11 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
       string? search,
       string? searchBy,
+      string? searchMode,
       string? sort,
       string? dir,
       int page = 1,
-      int pageSize = 25,
+      int pageSize = 10,
       bool useDateRange = false,
       DateTime? fromDate = null,
       DateTime? toDate = null,
@@ -289,8 +323,22 @@ namespace ERP.Controllers
                 .Include(rp => rp.Role)
                 .Include(rp => rp.Permission);
 
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (Request.Query.ContainsKey("search"))
+                search = Request.Query["search"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchBy"))
+                searchBy = Request.Query["searchBy"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchMode"))
+                searchMode = Request.Query["searchMode"].LastOrDefault();
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
             // تطبيق البحث + فلاتر الكود + فلاتر التاريخ + فلاتر الأعمدة
-            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode,
+            query = ApplyFilters(query, search, searchBy, searchMode, useDateRange, fromDate, toDate, fromCode, toCode,
                 filterCol_id, filterCol_role, filterCol_permission, filterCol_module, filterCol_allowed,
                 filterCol_created, filterCol_updated, filterCol_idExpr);
 
@@ -337,30 +385,25 @@ namespace ERP.Controllers
                     : query.OrderBy(rp => rp.Id)
             };
 
-            // الترقيم
             int totalCount = await query.CountAsync();
-            pageSize = Math.Max(1, pageSize);
-            page = Math.Max(1, page);
+            int rolesCount = await query.Select(rp => rp.RoleId).Distinct().CountAsync();
+            int allowedCount = await query.CountAsync(rp => rp.IsAllowed);
+            int permissionsCount = await query.Select(rp => rp.PermissionId).Distinct().CountAsync();
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
 
-            var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-
-            // نفس الكونستركتور الذي استخدمته في PermissionsController
-            var model = new PagedResult<RolePermission>(items, page, pageSize, totalCount)
-            {
-                Search = search,
-                SortColumn = sort,
-                SortDescending = desc,
-                UseDateRange = useDateRange,
-                FromDate = fromDate,
-                ToDate = toDate
-            };
+            var model = await PagedResult<RolePermission>.CreateAsync(query, page, pageSize, sort, desc, search, searchBy ?? "all");
+            model.UseDateRange = useDateRange;
+            model.FromDate = fromDate;
+            model.ToDate = toDate;
 
             // إرسال قيم الفلاتر للواجهة (لضمان ظهور البحث الحالي في الفورم)
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
+            ViewBag.Sort = sort;
+            ViewBag.Dir = desc ? "desc" : "asc";
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "CreatedAt";
@@ -372,6 +415,10 @@ namespace ERP.Controllers
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
             ViewBag.FilterCol_IdExpr = filterCol_idExpr;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.RolesCount = rolesCount;
+            ViewBag.AllowedCount = allowedCount;
+            ViewBag.PermissionsCount = permissionsCount;
 
             return View(model);
         }
@@ -672,7 +719,7 @@ namespace ERP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequirePermission("RolePermissions.Edit")]
-        public async Task<IActionResult> Edit(int roleId, int[]? selectedPermissionIds, List<int>? RoleAccountIds, string? SelectedRoleAccountIds = null)
+        public async Task<IActionResult> Edit(int roleId, int[]? selectedPermissionIds, List<int>? RoleAccountIds, string? SelectedRoleAccountIds = null, bool frame = false)
         {
             // التحقق من وجود الدور قبل أي تعديل
             var role = await _context.Roles.FindAsync(roleId);
@@ -742,7 +789,7 @@ namespace ERP.Controllers
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "تم تحديث صلاحيات الدور والحسابات المسموح رؤيتها بنجاح.";
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(nameof(Edit), new { id = roleId, frame });
         }
 
 
@@ -851,6 +898,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -879,6 +927,7 @@ namespace ERP.Controllers
                 query,
                 search,
                 searchBy,
+                searchMode,
                 useDateRange,
                 fromDate,
                 toDate,

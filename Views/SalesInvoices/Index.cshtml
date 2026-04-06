@@ -1,10 +1,17 @@
-@* Views/SalesInvoices/Index.cshtml — قائمة فواتير المبيعات بنفس نموذج المحافظات *@
+﻿@* Views/SalesInvoices/Index.cshtml — قائمة فواتير المبيعات بنفس نموذج المحافظات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesInvoice>
 
 @{
-    ViewData["Title"] = "قائمة فواتير المبيعات";
+    // العنوان يُحدَّد من الكنترولر (Index = تقارير، MySales = مبيعاتي)
+    if (ViewData["Title"] == null)
+        ViewData["Title"] = "قائمة فواتير المبيعات";
+
+    var isMySalesList = ViewBag.IsMySalesList as bool? == true;
+    var getColumnValuesUrl = isMySalesList
+        ? Url.Action("GetColumnValues", "SalesInvoices", new { scope = "mine" })!
+        : Url.Action("GetColumnValues", "SalesInvoices")!;
 
     // أسماء الأكشن/الكنترولر الحالية
     var action = Convert.ToString(ViewContext.RouteData.Values["action"]) ?? "Index";
@@ -249,6 +256,7 @@
                             </ul>
                         </div>
                         <form method="get" asp-action="Export" asp-controller="SalesInvoices" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
+                            @if (isMySalesList) { <input type="hidden" name="scope" value="mine" /> }
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
                             <input type="hidden" name="sort" value="@sort" />
@@ -272,7 +280,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
@@ -280,10 +288,12 @@
                 </div>
                     <form id="bulkDeleteForm" asp-action="BulkDelete" asp-controller="SalesInvoices" method="post" class="d-none">
                         @Html.AntiForgeryToken()
+                        @if (isMySalesList) { <input type="hidden" name="returnTo" value="MySales" /> }
                         <input type="hidden" name="selectedIds" id="selectedIdsInput" />
                     </form>
                     <form id="deleteAllForm" asp-action="DeleteAll" asp-controller="SalesInvoices" method="post" class="d-none">
                         @Html.AntiForgeryToken()
+                        @if (isMySalesList) { <input type="hidden" name="returnTo" value="MySales" /> }
                     </form>
                 </div>
             </div>
@@ -674,7 +684,7 @@
             panelId: 'erpColumnFilterPanel',
             tableId: 'siTable',
             wrapperId: 'siTableScrollWrapper',
-            getColumnValuesUrl: '@Url.Action("GetColumnValues", "SalesInvoices")',
+            getColumnValuesUrl: '@getColumnValuesUrl',
             defaultSort: 'SIDate',
             defaultDir: 'desc',
             numericColumns: ['id', 'net']

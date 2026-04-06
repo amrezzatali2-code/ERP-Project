@@ -18,7 +18,7 @@ using Microsoft.EntityFrameworkCore;                // AsNoTracking, ToListAsync
 namespace ERP.Controllers
 {
     /// <summary>
-    /// كنترولر دفتر الحركة المخزنية:
+    /// كنترولر سجل الحركات:
     /// عرض + بحث + ترتيب + ترقيم + تصدير (Excel أو CSV) حسب اختيار المستخدم.
     /// </summary>
     [RequirePermission("StockLedger.Index")]
@@ -1035,14 +1035,14 @@ namespace ERP.Controllers
                 // تحويل لـ UTF-8 مع BOM علشان Excel يقرأ عربى صح
                 var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: true);
                 var bytes = utf8.GetBytes(sb.ToString());
-                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("دفتر حركة المخزون", ".csv");
+                var fileNameCsv = ExcelExportNaming.ArabicTimestampedFileName("سجل الحركات", ".csv");
 
                 return File(bytes, "text/csv; charset=utf-8", fileNameCsv);
             }
 
             // ===== الفرع الثانى: Excel (XLSX) =====
             using var workbook = new XLWorkbook();                // متغير: ملف Excel
-            var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("دفتر حركة المخزون"));
+            var ws = workbook.Worksheets.Add(ExcelExportNaming.SafeWorksheetName("سجل الحركات"));
 
             int r = 1; // متغير: رقم الصف الحالى
 
@@ -1112,7 +1112,7 @@ namespace ERP.Controllers
             workbook.SaveAs(stream);
             stream.Position = 0;
 
-            var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("دفتر حركة المخزون", ".xlsx");
+            var fileNameXlsx = ExcelExportNaming.ArabicTimestampedFileName("سجل الحركات", ".xlsx");
             const string contentTypeXlsx = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
             return File(stream.ToArray(), contentTypeXlsx, fileNameXlsx);

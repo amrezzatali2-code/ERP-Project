@@ -94,7 +94,79 @@
             padding: 0.5rem 1rem;
             font-weight: 600;
         }
-        .invoice-header-bar h5, .invoice-header-bar h6 { margin-bottom: 0; font-size: 1rem; color: #fff !important; }
+        .invoice-header-bar {
+            position: relative;
+        }
+        .invoice-header-bar h5, .invoice-header-bar h6 {
+            margin-bottom: 0;
+            font-size: 1rem;
+            color: #fff !important;
+            text-align: center;
+        }
+
+        /* طي كروت فاتورة المشتريات — زر أعلى اليسار (مثل فاتورة المبيعات) */
+        .invoice-card-collapse-btn {
+            position: absolute;
+            left: 0.4rem;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 1.75rem;
+            height: 1.75rem;
+            line-height: 1;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.18);
+            border: none;
+            color: #fff;
+            padding: 0;
+            cursor: pointer;
+            z-index: 2;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .invoice-card-collapse-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+        .invoice-card-collapse-btn:focus-visible {
+            outline: 2px solid rgba(255, 255, 255, 0.85);
+            outline-offset: 1px;
+        }
+        .invoice-card-collapse-icon {
+            display: inline-block;
+            font-size: 0.7rem;
+            line-height: 1;
+            transition: transform 0.2s ease;
+        }
+        .invoice-header-card.invoice-card-collapsed .invoice-card-collapse-icon,
+        .invoice-product-card.invoice-card-collapsed .invoice-card-collapse-icon,
+        .invoice-Add-card.invoice-card-collapsed .invoice-card-collapse-icon {
+            transform: rotate(-90deg);
+        }
+        .invoice-header-card.invoice-card-collapsed > .invoice-header-collapse-wrap {
+            display: none !important;
+        }
+        .invoice-product-card.invoice-card-collapsed > .card-body,
+        .invoice-Add-card.invoice-card-collapsed > .card-body {
+            display: none !important;
+        }
+        .invoice-product-card-bar,
+        .invoice-add-card-bar {
+            background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
+            color: #ffffff;
+            padding: 0.3rem 0.5rem;
+            min-height: 2rem;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .invoice-product-card-bar .invoice-mini-bar-title,
+        .invoice-add-card-bar .invoice-mini-bar-title {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
         .invoice-product-card .card-header,
         .invoice-Add-card .card-header {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%) !important;
@@ -804,10 +876,13 @@
                         }
 
                         <div class="invoice-header-bar">
-                            <h5 class="mb-0">فاتورة مشتريات</h5>
+                            <button type="button" class="invoice-card-collapse-btn" title="طي أو إظهار بيانات الفاتورة" aria-expanded="true" aria-controls="piInvoiceHeaderCardBody">
+                                <span class="invoice-card-collapse-icon" aria-hidden="true">▼</span>
+                            </button>
+                            <h5 class="mb-0" id="piInvoiceHeaderTitle">فاتورة مشتريات</h5>
                         </div>
 
-                        <div>
+                        <div class="invoice-header-collapse-wrap" id="piInvoiceHeaderCardBody">
                             <div class="card-body">
 
                                 <div class="row g-3 align-items-end">
@@ -970,9 +1045,14 @@
                     @* =====================================================
                        2) كارت بيانات الصنف
                        ===================================================== *@
-                    <div class="card shadow-sm mb-2 invoice-product-card">
-                        
-                            <div class="card-body pt-0 pb-0">
+                    <div id="piProductDataCard" class="card shadow-sm mb-2 invoice-product-card">
+                            <div class="invoice-product-card-bar">
+                                <button type="button" class="invoice-card-collapse-btn" title="طي أو إظهار بيانات الصنف" aria-expanded="true" aria-controls="piProductDataCardBody">
+                                    <span class="invoice-card-collapse-icon" aria-hidden="true">▼</span>
+                                </button>
+                                <span class="invoice-mini-bar-title">بيانات الصنف</span>
+                            </div>
+                            <div class="card-body pt-0 pb-0" id="piProductDataCardBody">
                                 <div class="invoice-card-line"></div>
 
                                 <div class="row g-2 mb-3">
@@ -1015,8 +1095,14 @@
                     @* =====================================================
                        4) كارت إدخال الصنف
                        ===================================================== *@
-                    <div class="card shadow-sm mb-2 invoice-Add-card">
-                        <div class="card-body pt-0">
+                    <div id="piAddProductCard" class="card shadow-sm mb-2 invoice-Add-card">
+                        <div class="invoice-add-card-bar">
+                            <button type="button" class="invoice-card-collapse-btn" title="طي أو إظهار إضافة الصنف" aria-expanded="true" aria-controls="piAddProductCardBody">
+                                <span class="invoice-card-collapse-icon" aria-hidden="true">▼</span>
+                            </button>
+                            <span class="invoice-mini-bar-title">إضافة صنف للفاتورة</span>
+                        </div>
+                        <div class="card-body pt-0" id="piAddProductCardBody">
                             <div class="invoice-card-line"></div>
 
                             <div class="row g-2 align-items-end mb-2">
@@ -3188,10 +3274,21 @@ if (isPostedDisplay) {
                     const createdByDisplay = document.getElementById('InvoiceCreatedByDisplay');
                     if (createdByDisplay && data.createdBy) createdByDisplay.value = data.createdBy;
 
-                    // ✅ المطلوب: بعد الحفظ فوكس على الصنف
-                                            const ProdNameInput = document.getElementById('ProdNameInput');
-                    ProdNameInput?.focus();
-                    ProdNameInput?.select?.();
+                    // ✅ بعد الحفظ: توسيع كارت إضافة الصنف إن كان مطوياً، تمريره لأعلى الشاشة، ثم فوكس اسم الصنف
+                    var addProductCard = document.getElementById('piAddProductCard');
+                    if (addProductCard) {
+                        if (addProductCard.classList.contains('invoice-card-collapsed')) {
+                            addProductCard.classList.remove('invoice-card-collapsed');
+                            var addCb = addProductCard.querySelector('.invoice-card-collapse-btn');
+                            if (addCb) addCb.setAttribute('aria-expanded', 'true');
+                        }
+                        addProductCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                    setTimeout(function () {
+                        const ProdNameInput = document.getElementById('ProdNameInput');
+                        ProdNameInput?.focus();
+                        ProdNameInput?.select?.();
+                    }, 100);
 
                 } catch (err) {
                     console.error(err);
@@ -3202,6 +3299,18 @@ if (isPostedDisplay) {
                 }
             });
 
+        });
+
+        // طي/فتح كروت الهيدر وبيانات الصنف وإضافة الصنف (فاتورة المشتريات)
+        document.addEventListener('click', function (ev) {
+            const collapseBtn = ev.target.closest('.invoice-card-collapse-btn');
+            if (!collapseBtn) return;
+            const card = collapseBtn.closest('.invoice-header-card, .invoice-product-card, .invoice-Add-card');
+            if (!card) return;
+            ev.preventDefault();
+            card.classList.toggle('invoice-card-collapsed');
+            const expanded = !card.classList.contains('invoice-card-collapsed');
+            collapseBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         });
 
 

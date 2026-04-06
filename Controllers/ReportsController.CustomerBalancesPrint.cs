@@ -22,6 +22,7 @@ namespace ERP.Controllers
         /// <summary>نفس منطق تصدير Excel — قائمة كاملة مفلترة ومرتبة. null = لا يوجد عملاء مطابقون.</summary>
         private async Task<List<CustomerBalanceReportDto>?> BuildCustomerBalancesReportDataForExportAsync(
             string? search,
+            string? searchMode,
             string? partyCategory,
             int? governorateId,
             DateTime? fromDate,
@@ -44,15 +45,7 @@ namespace ERP.Controllers
         {
             var customersQuery = _context.Customers.AsNoTracking().AsQueryable();
             customersQuery = await _accountVisibilityService.ApplyCustomerVisibilityFilterAsync(customersQuery);
-
-            if (!string.IsNullOrWhiteSpace(search))
-            {
-                var s = search.Trim();
-                customersQuery = customersQuery.Where(c =>
-                    (c.CustomerName != null && c.CustomerName.Contains(s)) ||
-                    (c.Phone1 != null && c.Phone1.Contains(s)) ||
-                    (c.CustomerId.ToString() == s));
-            }
+            customersQuery = ApplyCustomerBalancesSearchFilter(customersQuery, search, searchMode);
 
             if (!string.IsNullOrWhiteSpace(partyCategory))
             {
@@ -402,6 +395,7 @@ namespace ERP.Controllers
         [RequirePermission("Reports.CustomerBalances")]
         public async Task<IActionResult> PrintCustomerBalances(
             string? search,
+            string? searchMode,
             string? partyCategory,
             int? governorateId,
             DateTime? fromDate,
@@ -428,7 +422,7 @@ namespace ERP.Controllers
                 includeZeroBalance = false;
 
             var reportData = await BuildCustomerBalancesReportDataForExportAsync(
-                search, partyCategory, governorateId, fromDate, toDate, includeZeroBalance,
+                search, searchMode, partyCategory, governorateId, fromDate, toDate, includeZeroBalance,
                 sortBy, sortDir,
                 filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_account,
                 filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales, filterCol_purchases, filterCol_returns, filterCol_availablecredit);

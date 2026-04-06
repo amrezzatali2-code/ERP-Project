@@ -4,6 +4,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                          // PagedResult + UserActivityLogger
 using ERP.Models;                                  // Area, UserActionType
 using ERP.Security;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Mvc;                    // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;          // SelectList و SelectListItem
 using Microsoft.EntityFrameworkCore;               // Include, AsNoTracking, ToListAsync
@@ -24,11 +25,16 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly ILookupCacheService _lookupCache;
 
-        public AreasController(AppDbContext db, IUserActivityLogger activityLogger)
+        public AreasController(
+            AppDbContext db,
+            IUserActivityLogger activityLogger,
+            ILookupCacheService lookupCache)
         {
             _db = db;
             _activityLogger = activityLogger;
+            _lookupCache = lookupCache;
         }
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
@@ -409,6 +415,7 @@ namespace ERP.Controllers
 
             _db.Areas.Add(area);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             await _activityLogger.LogAsync(UserActionType.Create, "Area", area.AreaId, $"إنشاء منطقة: {area.AreaName}");
 
@@ -464,6 +471,7 @@ namespace ERP.Controllers
             dbItem.UpdatedAt = DateTime.Now;
 
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             var newValues = System.Text.Json.JsonSerializer.Serialize(new { dbItem.AreaName, dbItem.GovernorateId, dbItem.DistrictId, dbItem.IsActive });
             await _activityLogger.LogAsync(UserActionType.Edit, "Area", id, $"تعديل منطقة: {dbItem.AreaName}", oldValues, newValues);
@@ -505,6 +513,7 @@ namespace ERP.Controllers
             var oldValues = System.Text.Json.JsonSerializer.Serialize(new { item.AreaName, item.GovernorateId, item.DistrictId });
             _db.Areas.Remove(item);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             await _activityLogger.LogAsync(UserActionType.Delete, "Area", id, $"حذف منطقة: {item.AreaName}", oldValues: oldValues);
 
@@ -555,6 +564,7 @@ namespace ERP.Controllers
 
             _db.Areas.RemoveRange(areas);   // حذف جماعي
             await _db.SaveChangesAsync();   // حفظ التغييرات في الداتا بيز
+            _lookupCache.ClearAllGeographyCaches();
 
             TempData["Success"] = $"تم حذف {areas.Count} منطقة/مناطق بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -577,6 +587,7 @@ namespace ERP.Controllers
 
             _db.Areas.RemoveRange(allAreas);   // حذف كل المناطق
             await _db.SaveChangesAsync();       // حفظ التغييرات
+            _lookupCache.ClearAllGeographyCaches();
 
             TempData["Success"] = "تم حذف جميع المناطق بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -775,24 +786,18 @@ namespace ERP.Controllers
         private async Task LoadLookupsAsync(int? selectedGovId = null, int? selectedDistrictId = null)
         {
             ViewBag.GovernorateId = new SelectList(
-                await _db.Governorates
-                         .AsNoTracking()
-                         .OrderBy(g => g.GovernorateName)
-                         .ToListAsync(),
+                await _lookupCache.GetGovernoratesAsync(),
                 "GovernorateId",
                 "GovernorateName",
                 selectedGovId);
 
-            var dQuery = _db.Districts
-                            .AsNoTracking()
-                            .OrderBy(d => d.DistrictName);
+            var districtList = (await _lookupCache.GetDistrictsAsync())
+                .OrderBy(d => d.DistrictName);
 
             if (selectedGovId.HasValue)
-                dQuery = dQuery
+                districtList = districtList
                     .Where(d => d.GovernorateId == selectedGovId.Value)
                     .OrderBy(d => d.DistrictName);
-
-            var districtList = await dQuery.ToListAsync();
             var districtItems = new List<SelectListItem>
             {
                 new SelectListItem { Value = "", Text = "— لا يوجد حي/مركز —", Selected = !selectedDistrictId.HasValue }

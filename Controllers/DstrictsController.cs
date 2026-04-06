@@ -5,6 +5,7 @@ using ERP.Filters;
 using ERP.Infrastructure;               // PagedResult + UserActivityLogger
 using ERP.Models;                       // District, UserActionType
 using ERP.Security;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -24,11 +25,16 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly ILookupCacheService _lookupCache;
 
-        public DistrictsController(AppDbContext db, IUserActivityLogger activityLogger)
+        public DistrictsController(
+            AppDbContext db,
+            IUserActivityLogger activityLogger,
+            ILookupCacheService lookupCache)
         {
             _db = db;
             _activityLogger = activityLogger;
+            _lookupCache = lookupCache;
         }
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
@@ -351,6 +357,7 @@ namespace ERP.Controllers
 
             _db.Districts.Add(model);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             await _activityLogger.LogAsync(UserActionType.Create, "District", model.DistrictId, $"إنشاء حي/مركز: {model.DistrictName}");
 
@@ -401,6 +408,7 @@ namespace ERP.Controllers
             dbEntity.UpdatedAt = DateTime.Now;   // وقت آخر تعديل
 
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             var newValues = System.Text.Json.JsonSerializer.Serialize(new { dbEntity.DistrictName, dbEntity.GovernorateId, dbEntity.DistrictType, dbEntity.IsActive });
             await _activityLogger.LogAsync(UserActionType.Edit, "District", id, $"تعديل حي/مركز: {dbEntity.DistrictName}", oldValues, newValues);
@@ -453,6 +461,7 @@ namespace ERP.Controllers
             var oldValues = System.Text.Json.JsonSerializer.Serialize(new { item.DistrictName, item.GovernorateId, item.DistrictType });
             _db.Districts.Remove(item);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             await _activityLogger.LogAsync(UserActionType.Delete, "District", id, $"حذف حي/مركز: {item.DistrictName}", oldValues: oldValues);
 
@@ -481,6 +490,7 @@ namespace ERP.Controllers
 
             _db.Districts.RemoveRange(all);   // حذف جماعي
             await _db.SaveChangesAsync();     // حفظ التعديلات في قاعدة البيانات
+            _lookupCache.ClearAllGeographyCaches();
 
             TempData["Success"] = $"تم حذف جميع الأحياء/المراكز ({all.Count}) بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -528,6 +538,7 @@ namespace ERP.Controllers
 
             _db.Districts.RemoveRange(districts); // حذف السجلات
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             TempData["Success"] = $"تم حذف {districts.Count} حي/مركز بنجاح.";
             return RedirectToAction(nameof(Index));
@@ -719,9 +730,7 @@ namespace ERP.Controllers
         private async Task LoadFormLookupsAsync(int? governorateId = null, byte? districtType = null)
         {
             ViewBag.GovernorateId = new SelectList(
-                await _db.Governorates.AsNoTracking()
-                                       .OrderBy(g => g.GovernorateName)
-                                       .ToListAsync(),
+                await _lookupCache.GetGovernoratesAsync(),
                 "GovernorateId",
                 "GovernorateName",
                 governorateId

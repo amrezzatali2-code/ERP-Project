@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
@@ -142,52 +143,101 @@ namespace ERP.Controllers
                 .Include(e => e.Account)
                 .Where(e => e.CustomerId == customerId.Value);
 
-            // استبعاد قيود "عكس ترحيل" — نعرض القيد النهائي فقط دون ظهور عكس الترحيل
-            q = q.Where(e => e.Description == null || !e.Description.Contains("عكس ترحيل"));
-
-            // استبعاد القيود المرتبطة بمستندات محذوفة (مثل فاتورة تم حذفها ثم عُكست قيودها)
-            q = q.Where(e =>
-                !e.SourceId.HasValue
-                || e.SourceType == LedgerSourceType.Opening
-                || e.SourceType == LedgerSourceType.Journal
-                || e.SourceType == LedgerSourceType.Adjustment
-                || e.SourceType == LedgerSourceType.StockTransfer
-                || e.SourceType == LedgerSourceType.StockAdjustment
-                || (e.SourceType == LedgerSourceType.SalesInvoice && _context.SalesInvoices.Any(s => s.SIId == e.SourceId))
-                || (e.SourceType == LedgerSourceType.SalesReturn && _context.SalesReturns.Any(s => s.SRId == e.SourceId))
-                || (e.SourceType == LedgerSourceType.PurchaseInvoice && _context.PurchaseInvoices.Any(p => p.PIId == e.SourceId))
-                || (e.SourceType == LedgerSourceType.PurchaseReturn && _context.PurchaseReturns.Any(p => p.PRetId == e.SourceId))
-                || (e.SourceType == LedgerSourceType.Receipt && _context.CashReceipts.Any(r => r.CashReceiptId == e.SourceId))
-                || (e.SourceType == LedgerSourceType.Payment && _context.CashPayments.Any(p => p.CashPaymentId == e.SourceId))
-                || (e.SourceType == LedgerSourceType.DebitNote && _context.DebitNotes.Any(d => d.DebitNoteId == e.SourceId))
-                || (e.SourceType == LedgerSourceType.CreditNote && _context.CreditNotes.Any(c => c.CreditNoteId == e.SourceId)));
-
-            // لكل مستند (نوع + رقم) نأخذ آخر مرحلة ترحيل فقط — حتى لا يتكرر رقم المستند
-            q = q.Where(e => !e.SourceId.HasValue ||
-                e.PostVersion == (_context.LedgerEntries
-                    .Where(x => x.CustomerId == customerId.Value && x.SourceType == e.SourceType && x.SourceId == e.SourceId
-                        && (x.Description == null || !x.Description.Contains("عكس ترحيل"))
-                        && (!x.SourceId.HasValue
-                            || x.SourceType == LedgerSourceType.Opening
-                            || x.SourceType == LedgerSourceType.Journal
-                            || x.SourceType == LedgerSourceType.Adjustment
-                            || x.SourceType == LedgerSourceType.StockTransfer
-                            || x.SourceType == LedgerSourceType.StockAdjustment
-                            || (x.SourceType == LedgerSourceType.SalesInvoice && _context.SalesInvoices.Any(s => s.SIId == x.SourceId))
-                            || (x.SourceType == LedgerSourceType.SalesReturn && _context.SalesReturns.Any(s => s.SRId == x.SourceId))
-                            || (x.SourceType == LedgerSourceType.PurchaseInvoice && _context.PurchaseInvoices.Any(p => p.PIId == x.SourceId))
-                            || (x.SourceType == LedgerSourceType.PurchaseReturn && _context.PurchaseReturns.Any(p => p.PRetId == x.SourceId))
-                            || (x.SourceType == LedgerSourceType.Receipt && _context.CashReceipts.Any(r => r.CashReceiptId == x.SourceId))
-                            || (x.SourceType == LedgerSourceType.Payment && _context.CashPayments.Any(p => p.CashPaymentId == x.SourceId))
-                            || (x.SourceType == LedgerSourceType.DebitNote && _context.DebitNotes.Any(d => d.DebitNoteId == x.SourceId))
-                            || (x.SourceType == LedgerSourceType.CreditNote && _context.CreditNotes.Any(c => c.CreditNoteId == x.SourceId))))
-                    .Max(x => (int?)x.PostVersion) ?? 0));
-
             if (fromDate.HasValue)
                 q = q.Where(e => e.EntryDate >= fromDate.Value.Date);
 
             if (toDate.HasValue)
                 q = q.Where(e => e.EntryDate <= toDate.Value.Date.AddDays(1));
+
+            var rawEntries = await q.ToListAsync();
+
+            bool IsReverse(LedgerEntry e) => (e.Description ?? "").Contains("عكس ترحيل", StringComparison.Ordinal);
+
+            bool IsAlwaysVisibleType(LedgerSourceType t) =>
+                t == LedgerSourceType.Opening
+                || t == LedgerSourceType.Journal
+                || t == LedgerSourceType.Adjustment
+                || t == LedgerSourceType.StockTransfer
+                || t == LedgerSourceType.StockAdjustment;
+
+            var salesInvoiceIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.SalesInvoice && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+            var salesReturnIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.SalesReturn && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+            var purchaseInvoiceIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.PurchaseInvoice && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+            var purchaseReturnIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.PurchaseReturn && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+            var receiptIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.Receipt && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+            var paymentIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.Payment && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+            var debitNoteIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.DebitNote && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+            var creditNoteIds = rawEntries.Where(e => e.SourceType == LedgerSourceType.CreditNote && e.SourceId.HasValue).Select(e => e.SourceId!.Value).Distinct().ToList();
+
+            var existingSalesInvoices = new HashSet<int>(await _context.SalesInvoices.AsNoTracking().Where(x => salesInvoiceIds.Contains(x.SIId)).Select(x => x.SIId).ToListAsync());
+            var existingSalesReturns = new HashSet<int>(await _context.SalesReturns.AsNoTracking().Where(x => salesReturnIds.Contains(x.SRId)).Select(x => x.SRId).ToListAsync());
+            var existingPurchaseInvoices = new HashSet<int>(await _context.PurchaseInvoices.AsNoTracking().Where(x => purchaseInvoiceIds.Contains(x.PIId)).Select(x => x.PIId).ToListAsync());
+            var existingPurchaseReturns = new HashSet<int>(await _context.PurchaseReturns.AsNoTracking().Where(x => purchaseReturnIds.Contains(x.PRetId)).Select(x => x.PRetId).ToListAsync());
+            var existingReceipts = new HashSet<int>(await _context.CashReceipts.AsNoTracking().Where(x => receiptIds.Contains(x.CashReceiptId)).Select(x => x.CashReceiptId).ToListAsync());
+            var existingPayments = new HashSet<int>(await _context.CashPayments.AsNoTracking().Where(x => paymentIds.Contains(x.CashPaymentId)).Select(x => x.CashPaymentId).ToListAsync());
+            var existingDebitNotes = new HashSet<int>(await _context.DebitNotes.AsNoTracking().Where(x => debitNoteIds.Contains(x.DebitNoteId)).Select(x => x.DebitNoteId).ToListAsync());
+            var existingCreditNotes = new HashSet<int>(await _context.CreditNotes.AsNoTracking().Where(x => creditNoteIds.Contains(x.CreditNoteId)).Select(x => x.CreditNoteId).ToListAsync());
+
+            bool SourceExists(LedgerEntry e)
+            {
+                if (!e.SourceId.HasValue) return true;
+                if (IsAlwaysVisibleType(e.SourceType)) return true;
+
+                return e.SourceType switch
+                {
+                    LedgerSourceType.SalesInvoice => existingSalesInvoices.Contains(e.SourceId.Value),
+                    LedgerSourceType.SalesReturn => existingSalesReturns.Contains(e.SourceId.Value),
+                    LedgerSourceType.PurchaseInvoice => existingPurchaseInvoices.Contains(e.SourceId.Value),
+                    LedgerSourceType.PurchaseReturn => existingPurchaseReturns.Contains(e.SourceId.Value),
+                    LedgerSourceType.Receipt => existingReceipts.Contains(e.SourceId.Value),
+                    LedgerSourceType.Payment => existingPayments.Contains(e.SourceId.Value),
+                    LedgerSourceType.DebitNote => existingDebitNotes.Contains(e.SourceId.Value),
+                    LedgerSourceType.CreditNote => existingCreditNotes.Contains(e.SourceId.Value),
+                    _ => false
+                };
+            }
+
+            var entriesBySource = rawEntries
+                .Where(e => e.SourceId.HasValue && !IsAlwaysVisibleType(e.SourceType))
+                .GroupBy(e => (e.SourceType, SourceId: e.SourceId!.Value))
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var filteredEntriesList = new List<LedgerEntry>();
+            foreach (var entry in rawEntries)
+            {
+                if (!entry.SourceId.HasValue || IsAlwaysVisibleType(entry.SourceType))
+                {
+                    filteredEntriesList.Add(entry);
+                    continue;
+                }
+
+                var key = (entry.SourceType, SourceId: entry.SourceId.Value);
+                if (!entriesBySource.TryGetValue(key, out var sourceEntries))
+                    continue;
+
+                var sourceExists = SourceExists(entry);
+                if (!sourceExists)
+                {
+                    if (IsReverse(entry))
+                        filteredEntriesList.Add(entry);
+
+                    continue;
+                }
+
+                if (IsReverse(entry))
+                    continue;
+
+                var lastStage = sourceEntries
+                    .Where(x => !IsReverse(x))
+                    .Select(x => x.PostVersion)
+                    .DefaultIfEmpty(0)
+                    .Max();
+
+                if (entry.PostVersion == lastStage)
+                    filteredEntriesList.Add(entry);
+            }
+
+            var filteredEntries = filteredEntriesList.AsQueryable();
 
             // فلاتر أعمدة بنمط Excel
             if (!string.IsNullOrWhiteSpace(filterCol_id))
@@ -195,19 +245,19 @@ namespace ERP.Controllers
                 var ids = filterCol_id.Split(sep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var id) ? id : (int?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0)
-                    q = q.Where(e => ids.Contains(e.Id));
+                    filteredEntries = filteredEntries.Where(e => ids.Contains(e.Id));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
             {
                 var expr = filterCol_idExpr.Trim();
                 if (expr.StartsWith("<") && int.TryParse(expr.AsSpan(1).Trim(), out var maxId))
-                    q = q.Where(e => e.Id < maxId);
+                    filteredEntries = filteredEntries.Where(e => e.Id < maxId);
                 else if (expr.StartsWith(">") && int.TryParse(expr.AsSpan(1).Trim(), out var minId))
-                    q = q.Where(e => e.Id > minId);
+                    filteredEntries = filteredEntries.Where(e => e.Id > minId);
                 else if (expr.Contains(":") && int.TryParse(expr.Split(':')[0].Trim(), out var fromId) && int.TryParse(expr.Split(':')[1].Trim(), out var toId))
-                    q = q.Where(e => e.Id >= fromId && e.Id <= toId);
+                    filteredEntries = filteredEntries.Where(e => e.Id >= fromId && e.Id <= toId);
                 else if (int.TryParse(expr, out var exactId))
-                    q = q.Where(e => e.Id == exactId);
+                    filteredEntries = filteredEntries.Where(e => e.Id == exactId);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_entryDate))
             {
@@ -218,7 +268,7 @@ namespace ERP.Controllers
                     {
                         var from = new DateTime(y, m, 1, 0, 0, 0);
                         var to = from.AddMonths(1).AddTicks(-1);
-                        q = q.Where(e => e.EntryDate >= from && e.EntryDate <= to);
+                        filteredEntries = filteredEntries.Where(e => e.EntryDate >= from && e.EntryDate <= to);
                         break;
                     }
                 }
@@ -233,61 +283,65 @@ namespace ERP.Controllers
                         types.Add(t);
                 }
                 if (types.Count > 0)
-                    q = q.Where(e => types.Contains(e.SourceType));
+                    filteredEntries = filteredEntries.Where(e => types.Contains(e.SourceType));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_voucherNo))
             {
                 var vals = filterCol_voucherNo.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (vals.Count > 0)
-                    q = q.Where(e => e.VoucherNo != null && vals.Any(v => e.VoucherNo.Contains(v)));
+                    filteredEntries = filteredEntries.Where(e => e.VoucherNo != null && vals.Any(v => e.VoucherNo.Contains(v)));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_account))
             {
                 var vals = filterCol_account.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (vals.Count > 0)
-                    q = q.Where(e => e.Account != null && vals.Any(v => (e.Account.AccountCode != null && e.Account.AccountCode.Contains(v)) || (e.Account.AccountName != null && e.Account.AccountName.Contains(v))));
+                    filteredEntries = filteredEntries.Where(e => e.Account != null && vals.Any(v => (e.Account.AccountCode != null && e.Account.AccountCode.Contains(v)) || (e.Account.AccountName != null && e.Account.AccountName.Contains(v))));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_debit))
             {
                 var vals = filterCol_debit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (decimals.Count > 0)
-                    q = q.Where(e => e.Debit > 0 && decimals.Contains(e.Debit));
+                    filteredEntries = filteredEntries.Where(e => e.Debit > 0 && decimals.Contains(e.Debit));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_credit))
             {
                 var vals = filterCol_credit.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 var decimals = vals.Select(x => decimal.TryParse(x, out var d) ? d : (decimal?)null).Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (decimals.Count > 0)
-                    q = q.Where(e => e.Credit > 0 && decimals.Contains(e.Credit));
+                    filteredEntries = filteredEntries.Where(e => e.Credit > 0 && decimals.Contains(e.Credit));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_description))
             {
                 var vals = filterCol_description.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (vals.Count > 0)
-                    q = q.Where(e => e.Description != null && vals.Any(v => e.Description.Contains(v)));
+                    filteredEntries = filteredEntries.Where(e => e.Description != null && vals.Any(v => e.Description.Contains(v)));
             }
 
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
             var so = (sort ?? "entryDate").Trim().ToLowerInvariant();
-            q = so switch
+            filteredEntries = so switch
             {
-                "id" => desc ? q.OrderByDescending(e => e.Id) : q.OrderBy(e => e.Id),
-                "entrydate" => desc ? q.OrderByDescending(e => e.EntryDate).ThenByDescending(e => e.Id) : q.OrderBy(e => e.EntryDate).ThenBy(e => e.Id),
-                "sourcetype" => desc ? q.OrderByDescending(e => e.SourceType) : q.OrderBy(e => e.SourceType),
-                "voucherno" => desc ? q.OrderByDescending(e => e.VoucherNo ?? "") : q.OrderBy(e => e.VoucherNo ?? ""),
-                "account" => desc ? q.OrderByDescending(e => e.Account != null ? e.Account.AccountCode : "") : q.OrderBy(e => e.Account != null ? e.Account.AccountCode : ""),
-                "debit" => desc ? q.OrderByDescending(e => e.Debit) : q.OrderBy(e => e.Debit),
-                "credit" => desc ? q.OrderByDescending(e => e.Credit) : q.OrderBy(e => e.Credit),
-                "description" => desc ? q.OrderByDescending(e => e.Description ?? "") : q.OrderBy(e => e.Description ?? ""),
-                _ => desc ? q.OrderByDescending(e => e.EntryDate).ThenByDescending(e => e.Id) : q.OrderBy(e => e.EntryDate).ThenBy(e => e.Id)
+                "id" => desc ? filteredEntries.OrderByDescending(e => e.Id) : filteredEntries.OrderBy(e => e.Id),
+                "entrydate" => desc ? filteredEntries.OrderByDescending(e => e.EntryDate).ThenByDescending(e => e.Id) : filteredEntries.OrderBy(e => e.EntryDate).ThenBy(e => e.Id),
+                "sourcetype" => desc ? filteredEntries.OrderByDescending(e => e.SourceType) : filteredEntries.OrderBy(e => e.SourceType),
+                "voucherno" => desc ? filteredEntries.OrderByDescending(e => e.VoucherNo ?? "") : filteredEntries.OrderBy(e => e.VoucherNo ?? ""),
+                "account" => desc ? filteredEntries.OrderByDescending(e => e.Account != null ? e.Account.AccountCode : "") : filteredEntries.OrderBy(e => e.Account != null ? e.Account.AccountCode : ""),
+                "debit" => desc ? filteredEntries.OrderByDescending(e => e.Debit) : filteredEntries.OrderBy(e => e.Debit),
+                "credit" => desc ? filteredEntries.OrderByDescending(e => e.Credit) : filteredEntries.OrderBy(e => e.Credit),
+                "description" => desc ? filteredEntries.OrderByDescending(e => e.Description ?? "") : filteredEntries.OrderBy(e => e.Description ?? ""),
+                _ => desc ? filteredEntries.OrderByDescending(e => e.EntryDate).ThenByDescending(e => e.Id) : filteredEntries.OrderBy(e => e.EntryDate).ThenBy(e => e.Id)
             };
 
-            decimal totalDebit = await q.SumAsync(e => (decimal?)e.Debit) ?? 0m;
-            decimal totalCredit = await q.SumAsync(e => (decimal?)e.Credit) ?? 0m;
+            var filteredList = filteredEntries.ToList();
+            decimal totalDebit = filteredList.Sum(e => e.Debit);
+            decimal totalCredit = filteredList.Sum(e => e.Credit);
             decimal netBalance = totalDebit - totalCredit;
 
-            var model = await PagedResult<LedgerEntry>.CreateAsync(q, page, pageSize);
+            var pageNumber = page < 1 ? 1 : page;
+            var safePageSize = pageSize <= 0 ? 50 : pageSize;
+            var pageItems = filteredList.Skip((pageNumber - 1) * safePageSize).Take(safePageSize).ToList();
+            var model = new PagedResult<LedgerEntry>(pageItems, pageNumber, safePageSize, filteredList.Count);
 
             ViewBag.Customer = customer;
             ViewBag.FromDate = fromDate;

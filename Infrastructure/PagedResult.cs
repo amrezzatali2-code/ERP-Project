@@ -228,7 +228,16 @@ namespace ERP.Infrastructure
             IQueryable<T> q, int page, int pageSize, CancellationToken ct = default)
         {
             if (page < 1) page = 1;
-            if (pageSize <= 0) pageSize = 50;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize == 0)
+            {
+                var totalAll = await q.CountAsync(ct);
+                var itemsAll = totalAll == 0
+                    ? new List<T>()
+                    : await q.Take(Math.Min(totalAll, 100_000)).ToListAsync(ct);
+
+                return new PagedResult<T>(itemsAll, 1, 0, totalAll);
+            }
 
             // إجمالى السجلات بعد الفلاتر
             var total = await q.CountAsync(ct);

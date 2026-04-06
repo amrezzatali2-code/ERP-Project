@@ -1,4 +1,6 @@
 using System;                                     // متغيرات التوقيت DateTime
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;                                // أوامر LINQ مثل Where و OrderBy
 using System.Text;                                // StringBuilder لتكوين ملف CSV
 using System.Threading.Tasks;                     // async / await
@@ -42,6 +44,7 @@ namespace ERP.Controllers
             IQueryable<Role> query,   // استعلام الأدوار الأساسي
             string? search,           // نص البحث
             string? searchBy,         // الحقل الذي نبحث فيه
+            string? searchMode,       // وضع البحث النصي
             bool useDateRange,        // هل نستخدم فلتر التاريخ؟
             DateTime? fromDate,       // تاريخ من
             DateTime? toDate,         // تاريخ إلى
@@ -70,6 +73,9 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string term = search.Trim();
+                var mode = (searchMode ?? "contains").Trim().ToLowerInvariant();
+                if (mode != "starts" && mode != "ends")
+                    mode = "contains";
 
                 // توحيد قيمة searchBy (all / name / description / id)
                 var key = (searchBy ?? "all").ToLower();
@@ -86,13 +92,21 @@ namespace ERP.Controllers
                 switch (key)
                 {
                     case "name":     // البحث في اسم الدور فقط
-                        query = query.Where(r => r.Name.Contains(term));
+                        query = mode switch
+                        {
+                            "starts" => query.Where(r => r.Name.StartsWith(term)),
+                            "ends" => query.Where(r => r.Name.EndsWith(term)),
+                            _ => query.Where(r => r.Name.Contains(term))
+                        };
                         break;
 
                     case "description":   // البحث في الوصف فقط
-                        query = query.Where(r =>
-                            r.Description != null &&
-                            r.Description.Contains(term));
+                        query = mode switch
+                        {
+                            "starts" => query.Where(r => r.Description != null && r.Description.StartsWith(term)),
+                            "ends" => query.Where(r => r.Description != null && r.Description.EndsWith(term)),
+                            _ => query.Where(r => r.Description != null && r.Description.Contains(term))
+                        };
                         break;
 
                     case "id":       // البحث برقم الدور
@@ -108,10 +122,27 @@ namespace ERP.Controllers
                         break;
 
                     default:         // all: البحث في أكثر من حقل
-                        query = query.Where(r =>
-                            r.Name.Contains(term) ||
-                            r.RoleId.ToString().Contains(term) ||
-                            (r.Description ?? "").Contains(term));
+                        if (mode == "starts")
+                        {
+                            query = query.Where(r =>
+                                r.Name.StartsWith(term) ||
+                                (r.Description ?? "").StartsWith(term) ||
+                                r.RoleId.ToString().StartsWith(term));
+                        }
+                        else if (mode == "ends")
+                        {
+                            query = query.Where(r =>
+                                r.Name.EndsWith(term) ||
+                                (r.Description ?? "").EndsWith(term) ||
+                                r.RoleId.ToString().EndsWith(term));
+                        }
+                        else
+                        {
+                            query = query.Where(r =>
+                                r.Name.Contains(term) ||
+                                r.RoleId.ToString().Contains(term) ||
+                                (r.Description ?? "").Contains(term));
+                        }
                         break;
                 }
             }
@@ -121,9 +152,53 @@ namespace ERP.Controllers
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
+        private static IQueryable<Role> ApplyRoleIdExpr(IQueryable<Role> query, string? expr)
+        {
+            if (string.IsNullOrWhiteSpace(expr))
+                return query;
+
+            var text = expr.Trim();
+            if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var exact))
+                return query.Where(r => r.RoleId == exact);
+
+            if ((text.StartsWith(">=") || text.StartsWith("<=")) &&
+                int.TryParse(text.Substring(2).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var eqVal))
+            {
+                return text.StartsWith(">=")
+                    ? query.Where(r => r.RoleId >= eqVal)
+                    : query.Where(r => r.RoleId <= eqVal);
+            }
+
+            if ((text.StartsWith(">") || text.StartsWith("<")) &&
+                int.TryParse(text.Substring(1).Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var cmpVal))
+            {
+                return text.StartsWith(">")
+                    ? query.Where(r => r.RoleId > cmpVal)
+                    : query.Where(r => r.RoleId < cmpVal);
+            }
+
+            var normalized = text.Replace(" ", "");
+            string[] parts;
+            if (normalized.Contains(':'))
+                parts = normalized.Split(':', 2, StringSplitOptions.TrimEntries);
+            else
+                parts = normalized.Split('-', 2, StringSplitOptions.TrimEntries);
+
+            if (parts.Length == 2 &&
+                int.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var from) &&
+                int.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out var to))
+            {
+                if (from > to) (from, to) = (to, from);
+                return query.Where(r => r.RoleId >= from && r.RoleId <= to);
+            }
+
+            return query;
+        }
+
         private static IQueryable<Role> ApplyColumnFilters(
             IQueryable<Role> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_name,
             string? filterCol_description,
             string? filterCol_system,
@@ -137,6 +212,10 @@ namespace ERP.Controllers
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
                 if (ids.Count > 0) query = query.Where(r => ids.Contains(r.RoleId));
+            }
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+            {
+                query = ApplyRoleIdExpr(query, filterCol_idExpr);
             }
             if (!string.IsNullOrWhiteSpace(filterCol_name))
             {
@@ -249,10 +328,11 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int page = 1,
-            int pageSize = 25,
+            int pageSize = 10,
             bool useDateRange = false,
             DateTime? fromDate = null,
             DateTime? toDate = null,
@@ -260,6 +340,7 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_description = null,
             string? filterCol_system = null,
@@ -267,9 +348,24 @@ namespace ERP.Controllers
             string? filterCol_created = null,
             string? filterCol_updated = null)
         {
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (Request.Query.ContainsKey("search"))
+                search = Request.Query["search"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchBy"))
+                searchBy = Request.Query["searchBy"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchMode"))
+                searchMode = Request.Query["searchMode"].LastOrDefault();
+
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
             var query = _context.Roles.AsNoTracking();
-            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_description, filterCol_system, filterCol_active, filterCol_created, filterCol_updated);
+            query = ApplyFilters(query, search, searchBy, searchMode, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_description, filterCol_system, filterCol_active, filterCol_created, filterCol_updated);
 
             // ❸ الترتيب
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
@@ -306,30 +402,22 @@ namespace ERP.Controllers
                     : query.OrderBy(r => r.RoleId)
             };
 
-            // ❹ حساب إجمالي السجلات والصفحة الحالية
             int totalCount = await query.CountAsync();
-            pageSize = Math.Max(1, pageSize);
-            page = Math.Max(1, page);
+            int activeCount = await query.CountAsync(r => r.IsActive);
+            int systemCount = await query.CountAsync(r => r.IsSystemRole);
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
 
-            var items = await query
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
-
-            // ❺ تجهيز الموديل للعرض في الواجهة
-            var model = new PagedResult<Role>(items, page, pageSize, totalCount)
-            {
-                Search = search,         // نص البحث الحالي
-                SortColumn = sort,           // عمود الترتيب الحالي
-                SortDescending = desc,           // هل الترتيب تنازلي؟
-                UseDateRange = useDateRange,   // هل فلتر التاريخ مفعّل؟
-                FromDate = fromDate,       // تاريخ من
-                ToDate = toDate          // تاريخ إلى
-            };
+            var model = await PagedResult<Role>.CreateAsync(query, page, pageSize, sort, desc, search, searchBy ?? "all");
+            model.UseDateRange = useDateRange;
+            model.FromDate = fromDate;
+            model.ToDate = toDate;
 
             // ❻ إرسال قيم إضافية للـ ViewBag لاستخدامها في الواجهة
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = sm;
             ViewBag.Sort = sort;
             ViewBag.Dir = desc ? "desc" : "asc";
 
@@ -337,12 +425,16 @@ namespace ERP.Controllers
             ViewBag.ToCode = toCode;
             ViewBag.DateField = dateField ?? "CreatedAt";
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Name = filterCol_name;
             ViewBag.FilterCol_Description = filterCol_description;
             ViewBag.FilterCol_System = filterCol_system;
             ViewBag.FilterCol_Active = filterCol_active;
             ViewBag.FilterCol_Created = filterCol_created;
             ViewBag.FilterCol_Updated = filterCol_updated;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.ActiveCount = activeCount;
+            ViewBag.SystemCount = systemCount;
 
             return View(model);
         }
@@ -562,6 +654,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -571,6 +664,7 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_name = null,
             string? filterCol_description = null,
             string? filterCol_system = null,
@@ -579,8 +673,8 @@ namespace ERP.Controllers
             string? filterCol_updated = null)
         {
             IQueryable<Role> query = _context.Roles.AsNoTracking();
-            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
-            query = ApplyColumnFilters(query, filterCol_id, filterCol_name, filterCol_description, filterCol_system, filterCol_active, filterCol_created, filterCol_updated);
+            query = ApplyFilters(query, search, searchBy, searchMode, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyColumnFilters(query, filterCol_id, filterCol_idExpr, filterCol_name, filterCol_description, filterCol_system, filterCol_active, filterCol_created, filterCol_updated);
 
             // =========================
             // الترتيب (نفس فكرة الاندكس)

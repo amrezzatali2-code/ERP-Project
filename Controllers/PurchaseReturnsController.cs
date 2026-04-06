@@ -29,15 +29,29 @@ namespace ERP.Controllers
         private readonly DocumentTotalsService _docTotals;
         private readonly IUserActivityLogger _activityLogger;
         private readonly IPermissionService _permissionService;
+        private readonly IListVisibilityService _listVisibilityService;
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
-        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger, IPermissionService permissionService)
+        public PurchaseReturnsController(AppDbContext context, ILedgerPostingService ledgerPostingService, DocumentTotalsService docTotals, IUserActivityLogger activityLogger, IPermissionService permissionService, IListVisibilityService listVisibilityService)
         {
             _context = context;
             _ledgerPostingService = ledgerPostingService;
             _docTotals = docTotals;
             _activityLogger = activityLogger;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
+            _listVisibilityService = listVisibilityService ?? throw new ArgumentNullException(nameof(listVisibilityService));
+        }
+
+        private async Task<IQueryable<PurchaseReturn>> ApplyOperationalListVisibilityAsync(IQueryable<PurchaseReturn> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(pr => pr.CreatedBy != null && creatorNames.Contains(pr.CreatedBy.Trim()));
         }
 
 
@@ -410,29 +424,30 @@ namespace ERP.Controllers
         {
             var searchTerm = (search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var visibleReturns = await ApplyOperationalListVisibilityAsync(_context.PurchaseReturns.AsNoTracking());
 
             if (columnLower == "id")
             {
-                var ids = await _context.PurchaseReturns.AsNoTracking()
+                var ids = await visibleReturns
                     .Select(p => p.PRetId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "date")
             {
-                var dates = await _context.PurchaseReturns.AsNoTracking()
+                var dates = await visibleReturns
                     .Select(p => p.PRetDate.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
                 return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
             }
             if (columnLower == "customerid")
             {
-                var ids = await _context.PurchaseReturns.AsNoTracking()
+                var ids = await visibleReturns
                     .Select(p => p.CustomerId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "customer")
             {
                 var q = _context.Customers.AsNoTracking()
-                    .Where(c => _context.PurchaseReturns.Any(pr => pr.CustomerId == c.CustomerId))
+                    .Where(c => visibleReturns.Any(pr => pr.CustomerId == c.CustomerId))
                     .Select(c => c.CustomerName ?? "");
                 if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
@@ -440,7 +455,7 @@ namespace ERP.Controllers
             }
             if (columnLower == "warehouse")
             {
-                var ids = await _context.PurchaseReturns.AsNoTracking()
+                var ids = await visibleReturns
                     .Select(p => p.WarehouseId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 var names = await _context.Warehouses.AsNoTracking()
                     .Where(w => ids.Contains(w.WarehouseId))
@@ -464,19 +479,19 @@ namespace ERP.Controllers
             }
             if (columnLower == "refpi")
             {
-                var ids = await _context.PurchaseReturns.AsNoTracking()
+                var ids = await visibleReturns
                     .Where(p => p.RefPIId.HasValue).Select(p => p.RefPIId!.Value).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "net")
             {
-                var vals = await _context.PurchaseReturns.AsNoTracking()
+                var vals = await visibleReturns
                     .Select(p => p.NetTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
             }
             if (columnLower == "status")
             {
-                var q = _context.PurchaseReturns.AsNoTracking().Where(p => p.Status != null).Select(p => p.Status!);
+                var q = visibleReturns.Where(p => p.Status != null).Select(p => p.Status!);
                 if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(list.Select(v => new { value = v, display = v }));
@@ -488,26 +503,26 @@ namespace ERP.Controllers
             }
             if (columnLower == "postedat")
             {
-                var dates = await _context.PurchaseReturns.AsNoTracking()
+                var dates = await visibleReturns
                     .Where(p => p.PostedAt.HasValue).Select(p => p.PostedAt!.Value.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
                 return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
             }
             if (columnLower == "createdby")
             {
-                var q = _context.PurchaseReturns.AsNoTracking().Where(p => p.CreatedBy != null).Select(p => p.CreatedBy!);
+                var q = visibleReturns.Where(p => p.CreatedBy != null).Select(p => p.CreatedBy!);
                 if (!string.IsNullOrEmpty(searchTerm)) q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(list.Select(v => new { value = v, display = v }));
             }
             if (columnLower == "createdat")
             {
-                var dates = await _context.PurchaseReturns.AsNoTracking()
+                var dates = await visibleReturns
                     .Select(p => p.CreatedAt.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
                 return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
             }
             if (columnLower == "updatedat")
             {
-                var dates = await _context.PurchaseReturns.AsNoTracking()
+                var dates = await visibleReturns
                     .Where(p => p.UpdatedAt.HasValue).Select(p => p.UpdatedAt!.Value.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
                 return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
             }
@@ -688,6 +703,7 @@ namespace ERP.Controllers
                 search, searchBy, searchMode, sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             q = ApplyColumnFilters(q,
                 filterCol_id, filterCol_idExpr, filterCol_date,
@@ -893,6 +909,7 @@ namespace ERP.Controllers
                 search, searchBy, searchMode, sort, dir,
                 useDateRange, fromDate, toDate,
                 fromCode, toCode);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             q = ApplyColumnFilters(q,
                 filterCol_id, filterCol_idExpr, filterCol_date,

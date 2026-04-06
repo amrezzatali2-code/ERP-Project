@@ -24,6 +24,7 @@ public class SalesInvoicesController_SaveTaxJson_Tests
         var mockLedger = new Mock<ILedgerPostingService>();
         var mockFullReturn = new Mock<IFullReturnService>();
         var mockPerm = new Mock<IPermissionService>();
+        var mockListVisibility = new Mock<IListVisibilityService>();
         var mockVis = new Mock<IUserAccountVisibilityService>();
 
         return new SalesInvoicesController(
@@ -34,6 +35,7 @@ public class SalesInvoicesController_SaveTaxJson_Tests
             stock,
             mockFullReturn.Object,
             mockPerm.Object,
+            mockListVisibility.Object,
             mockVis.Object,
             fifo);
     }

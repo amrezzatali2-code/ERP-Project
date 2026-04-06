@@ -663,12 +663,13 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CreditNotes.BulkDelete")]
         public async Task<IActionResult> BulkDelete(int[] ids)
         {
             // لو المستخدم لم يحدد أى إشعار
             if (ids == null || ids.Length == 0)
             {
-                TempData["Error"] = "لم يتم اختيار أى إشعار للحذف.";
+                TempData["CreditNoteError"] = "لم يتم اختيار أى إشعار للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -679,7 +680,7 @@ namespace ERP.Controllers
 
             if (notes.Count == 0)
             {
-                TempData["Error"] = "لم يتم العثور على الإشعارات المحددة.";
+                TempData["CreditNoteError"] = "لم يتم العثور على الإشعارات المحددة.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -693,11 +694,11 @@ namespace ERP.Controllers
                 _context.CreditNotes.RemoveRange(notes);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = $"تم حذف {notes.Count} من إشعارات الإضافة المحددة.";
+                TempData["CreditNoteSuccess"] = $"تم حذف {notes.Count} من إشعارات الإضافة المحددة.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"لا يمكن حذف بعض الإشعارات: {ex.Message}";
+                TempData["CreditNoteError"] = $"لا يمكن حذف بعض الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -709,13 +710,14 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CreditNotes.DeleteAll")]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _context.CreditNotes.ToListAsync();
 
             if (all.Count == 0)
             {
-                TempData["Error"] = "لا توجد إشعارات لحذفها.";
+                TempData["CreditNoteError"] = "لا توجد إشعارات لحذفها.";
                 return RedirectToAction(nameof(Index));
             }
 
@@ -729,11 +731,11 @@ namespace ERP.Controllers
                 _context.CreditNotes.RemoveRange(all);
                 await _context.SaveChangesAsync();
 
-                TempData["Success"] = "تم حذف جميع إشعارات الإضافة.";
+                TempData["CreditNoteSuccess"] = "تم حذف جميع إشعارات الإضافة.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = $"لا يمكن حذف جميع الإشعارات: {ex.Message}";
+                TempData["CreditNoteError"] = $"لا يمكن حذف جميع الإشعارات: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));
@@ -849,11 +851,11 @@ namespace ERP.Controllers
                 try
                 {
                     await _ledgerPostingService.PostCreditNoteAsync(creditNote.CreditNoteId, User?.Identity?.Name ?? "System");
-                    TempData["Success"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
+                    TempData["CreditNoteSuccess"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
                 }
                 catch (Exception ex)
                 {
-                    TempData["Error"] = TempData["ErrorMessage"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
+                    TempData["CreditNoteError"] = $"تم الحفظ، لكن فشل الترحيل: {ex.Message}";
                 }
                 return RedirectToAction(nameof(Edit), new { id = creditNote.CreditNoteId });
             }
@@ -863,7 +865,8 @@ namespace ERP.Controllers
             return View(creditNote);
         }
 
-        // GET: CreditNotes/Unlock/5 — فتح الإشعار للتعديل (سيُضاف التحقق من الصلاحية لاحقاً)
+        // GET: CreditNotes/Unlock/5 — فتح الإشعار للتعديل
+        [RequirePermission("CreditNotes.Unlock")]
         public async Task<IActionResult> Unlock(int? id)
         {
             if (id == null)
@@ -960,11 +963,11 @@ namespace ERP.Controllers
                 try
                 {
                     await _ledgerPostingService.PostCreditNoteAsync(id, postedBy);
-                    TempData["Success"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
+                    TempData["CreditNoteSuccess"] = "تم حفظ وترحيل إشعار الإضافة بنجاح.";
                 }
                 catch (Exception ex)
                 {
-                    TempData["Error"] = $"تم الحفظ وعكس الترحيل القديم، لكن فشل الترحيل الجديد: {ex.Message}";
+                    TempData["CreditNoteError"] = $"تم الحفظ وعكس الترحيل القديم، لكن فشل الترحيل الجديد: {ex.Message}";
                 }
                 return RedirectToAction(nameof(Edit), new { id });
             }
@@ -978,6 +981,7 @@ namespace ERP.Controllers
         }
 
         // GET: CreditNotes/Delete/5
+        [RequirePermission("CreditNotes.Delete")]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
@@ -998,6 +1002,7 @@ namespace ERP.Controllers
         // POST: CreditNotes/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CreditNotes.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var creditNote = await _context.CreditNotes.FindAsync(id);
@@ -1015,11 +1020,11 @@ namespace ERP.Controllers
 
                 await _activityLogger.LogAsync(UserActionType.Delete, "CreditNote", id, $"حذف إشعار إضافة رقم {id}", oldValues: oldValues);
 
-                TempData["Success"] = "تم حذف إشعار الإضافة بنجاح.";
+                TempData["CreditNoteSuccess"] = "تم حذف إشعار الإضافة بنجاح.";
             }
             catch (Exception ex)
             {
-                TempData["Error"] = TempData["ErrorMessage"] = $"لا يمكن حذف الإشعار: {ex.Message}";
+                TempData["CreditNoteError"] = $"لا يمكن حذف الإشعار: {ex.Message}";
             }
 
             return RedirectToAction(nameof(Index));

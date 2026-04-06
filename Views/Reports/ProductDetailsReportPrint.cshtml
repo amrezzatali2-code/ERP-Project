@@ -1,0 +1,306 @@
+@model List<ERP.ViewModels.ProductDetailsReportRow>
+@using ERP.ViewModels
+@{
+    Layout = null;
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
+    int totalMatching = ViewBag.TotalMatching is int tm ? tm : Model.Count;
+    int printed = ViewBag.PrintedCount is int pc ? pc : Model.Count;
+    bool capped = ViewBag.Capped is bool c && c;
+    int maxRows = ViewBag.MaxRows is int mr ? mr : 100_000;
+    string sort = ViewBag.Sort as string ?? "Date";
+    string dir = ViewBag.Dir as string ?? "desc";
+    string qSearch = ViewBag.SearchSummary as string ?? "";
+    var fromDate = ViewBag.FromDate as DateTime?;
+    var toDate = ViewBag.ToDate as DateTime?;
+    string reportTypeDisplay = ViewBag.ReportTypeDisplayName as string ?? "";
+    decimal totalQty = ViewBag.TotalQtyFiltered is decimal tq ? tq : 0m;
+    decimal totalAmt = ViewBag.TotalAmountFiltered is decimal ta ? ta : 0m;
+
+    var colKeys = ViewBag.PrintColumnKeys as IList<string> ?? (IList<string>)Array.Empty<string>();
+    var colTitles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ["date"] = "التاريخ",
+        ["docno"] = "رقم المستند",
+        ["author"] = "الكاتب",
+        ["region"] = "المنطقة",
+        ["docnamear"] = "اسم المستند بالعربي",
+        ["productcode"] = "كود الصنف",
+        ["productname"] = "اسم الصنف",
+        ["qty"] = "الكمية",
+        ["unitprice"] = "السعر",
+        ["linetotal"] = "الإجمالي",
+        ["party"] = "الطرف",
+        ["warehouse"] = "المخزن",
+        ["batch"] = "التشغيلة",
+        ["expiry"] = "الصلاحية",
+        ["notes"] = "ملاحظات"
+    };
+    bool printColsFromList = ViewBag.PrintColumnsFromList is bool pcf && pcf;
+}
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <title>تقرير أصناف مفصّلة — طباعة</title>
+    <style id="printPageRules"></style>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+            font-size: 10pt;
+            color: #1e293b;
+            margin: 0;
+            padding: 12px 16px;
+            background: #fff;
+        }
+        .print-header {
+            border-bottom: 2px solid #6366f1;
+            padding-bottom: 10px;
+            margin-bottom: 12px;
+        }
+        .print-header h1 {
+            margin: 0 0 6px 0;
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #312e81;
+        }
+        .print-meta {
+            font-size: 0.85rem;
+            color: #64748b;
+            line-height: 1.6;
+        }
+        .print-meta strong { color: #475569; }
+        .print-note {
+            margin: 8px 0 12px;
+            padding: 8px 10px;
+            background: #fef3c7;
+            border: 1px solid #fcd34d;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: #92400e;
+        }
+        table.print-table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        table.print-table thead th {
+            background: #eef2ff;
+            color: #312e81;
+            font-weight: 600;
+            padding: 6px 8px;
+            border: 1px solid #c7d2fe;
+            text-align: right;
+            font-size: 9pt;
+        }
+        table.print-table tbody td {
+            padding: 5px 8px;
+            border: 1px solid #e2e8f0;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+        table.print-table tbody tr:nth-child(even) { background: #f8fafc; }
+        .num { text-align: center; font-variant-numeric: tabular-nums; }
+        .text-end-num { text-align: left; direction: ltr; font-variant-numeric: tabular-nums; }
+        .footer-print {
+            margin-top: 14px;
+            padding-top: 8px;
+            border-top: 1px solid #e2e8f0;
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+        .print-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+            padding: 10px 12px;
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+        .print-toolbar .btn-group-orient button {
+            padding: 6px 14px;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .print-toolbar .btn-group-orient button.active {
+            background: #eef2ff;
+            border-color: #6366f1;
+            color: #312e81;
+            font-weight: 600;
+        }
+        @@media print {
+            body { padding: 0; }
+            .no-print { display: none !important; }
+            table.print-table thead { display: table-header-group; }
+            table.print-table tbody tr { page-break-inside: avoid; }
+        }
+        .btn-close-print {
+            display: inline-block;
+            padding: 6px 14px;
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="print-toolbar no-print">
+        <span class="small text-muted" style="font-weight:600;">اتجاه الصفحة:</span>
+        <div class="btn-group-orient" role="group">
+            <button type="button" id="btnOrientPortrait" data-landscape="0">عمودي (Portrait)</button>
+            <button type="button" id="btnOrientLandscape" data-landscape="1">أفقي (Landscape)</button>
+        </div>
+        <button type="button" class="btn-close-print" id="btnDoPrint">🖨️ طباعة / حفظ PDF</button>
+    </div>
+
+    <div class="print-header">
+        <h1>تقرير أصناف مفصّلة@if (!string.IsNullOrEmpty(reportTypeDisplay)) { <text> — @reportTypeDisplay</text> }</h1>
+        <div class="print-meta">
+            <div><strong>إجمالي المطابقين للفلتر:</strong> @totalMatching.ToString("N0", n2)</div>
+            <div><strong>عدد السطور في هذه الصفحة:</strong> @printed.ToString("N0", n2)</div>
+            <div><strong>إجمالي الكمية:</strong> @totalQty.ToString("N2", n2)</div>
+            <div><strong>إجمالي المبالغ:</strong> @totalAmt.ToString("N2", n2)</div>
+            @if (fromDate.HasValue || toDate.HasValue)
+            {
+                <div><strong>الفترة:</strong> @(fromDate?.ToString("yyyy-MM-dd") ?? "—") — @(toDate?.ToString("yyyy-MM-dd") ?? "—")</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(qSearch))
+            {
+                <div><strong>بحث الصنف:</strong> @qSearch</div>
+            }
+            <div><strong>الترتيب:</strong> @sort @(" — " + (dir == "desc" ? "تنازلي" : "تصاعدي"))</div>
+            <div><strong>التاريخ:</strong> @DateTime.Now.ToString("yyyy-MM-dd HH:mm", n2)</div>
+            @if (printColsFromList && colKeys.Count > 0)
+            {
+                <div><strong>الأعمدة:</strong> مطابقة لما اخترته في «اختيار الأعمدة» بالقائمة (@colKeys.Count عموداً)</div>
+            }
+        </div>
+    </div>
+
+    @if (capped)
+    {
+        <div class="print-note">
+            تم تقييد الطباعة بأول @maxRows.ToString("N0", n2) سطراً لأسباب أداء. إجمالي المطابقين للفلتر أكبر — استخدم التصدير من القائمة كاملة.
+        </div>
+    }
+
+    @if (Model.Count == 0)
+    {
+        <p class="text-muted">لا توجد بيانات مطابقة للفلتر الحالي.</p>
+    }
+    else
+    {
+        <table class="print-table">
+            <thead>
+                <tr>
+                    @foreach (var col in colKeys)
+                    {
+                        var cap = colTitles.TryGetValue(col, out var t) ? t : col;
+                        <th>@cap</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in Model)
+                {
+                    <tr>
+                        @foreach (var col in colKeys)
+                        {
+                            switch (col)
+                            {
+                                case "date":
+                                    <td>@row.Date.ToString("d/M/yyyy")</td>
+                                    break;
+                                case "docno":
+                                    <td class="num">@row.DocNo</td>
+                                    break;
+                                case "author":
+                                    <td>@(row.Author ?? "")</td>
+                                    break;
+                                case "region":
+                                    <td>@(row.Region ?? "")</td>
+                                    break;
+                                case "docnamear":
+                                    <td>@(row.DocumentNameAr ?? "")</td>
+                                    break;
+                                case "productcode":
+                                    <td class="num">@row.ProductCode</td>
+                                    break;
+                                case "productname":
+                                    <td>@row.ProductName</td>
+                                    break;
+                                case "qty":
+                                    <td class="text-end-num">@row.Qty.ToString("N0", n2)</td>
+                                    break;
+                                case "unitprice":
+                                    <td class="text-end-num">@(row.UnitPrice.HasValue ? row.UnitPrice.Value.ToString("N2", n2) : "—")</td>
+                                    break;
+                                case "linetotal":
+                                    <td class="text-end-num">@(row.Total.HasValue ? row.Total.Value.ToString("N2", n2) : "—")</td>
+                                    break;
+                                case "party":
+                                    <td>@(row.PartyName ?? "")</td>
+                                    break;
+                                case "warehouse":
+                                    <td>@(row.WarehouseName ?? "")</td>
+                                    break;
+                                case "batch":
+                                    <td>@(row.BatchNo ?? "")</td>
+                                    break;
+                                case "expiry":
+                                    <td>@(row.Expiry.HasValue ? row.Expiry.Value.ToString("d/M/yyyy") : "")</td>
+                                    break;
+                                case "notes":
+                                    <td>@((row.Notes ?? "").Length > 120 ? (row.Notes ?? "").Substring(0, 120) + "…" : (row.Notes ?? ""))</td>
+                                    break;
+                                default:
+                                    <td></td>
+                                    break;
+                            }
+                        }
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    <div class="footer-print">
+        ERP — تقرير أصناف مفصّلة — طباعة حسب الفلتر الحالي
+    </div>
+
+    <script>
+        (function () {
+            var styleEl = document.getElementById("printPageRules");
+            var btnP = document.getElementById("btnOrientPortrait");
+            var btnL = document.getElementById("btnOrientLandscape");
+            var btnPrint = document.getElementById("btnDoPrint");
+
+            function setPageCss(landscape) {
+                var size = landscape ? "A4 landscape" : "A4 portrait";
+                if (btnP && btnL) {
+                    btnP.classList.toggle("active", !landscape);
+                    btnL.classList.toggle("active", landscape);
+                }
+                if (!styleEl) return;
+                styleEl.textContent =
+                    "@@page { size: " + size + "; margin: 12mm 10mm 22mm 10mm; " +
+                    "@@bottom-center { content: \"صفحة \" counter(page) \" من \" counter(pages); font-size: 9pt; color: #64748b; } }";
+            }
+
+            setPageCss(true);
+            btnP && btnP.addEventListener("click", function () { setPageCss(false); });
+            btnL && btnL.addEventListener("click", function () { setPageCss(true); });
+            btnPrint && btnPrint.addEventListener("click", function () { window.print(); });
+        })();
+    </script>
+</body>
+</html>

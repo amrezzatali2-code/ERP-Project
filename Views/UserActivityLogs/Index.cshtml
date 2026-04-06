@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<UserActivityLog>
@@ -330,16 +330,8 @@
                         <button type="button" id="btnPrintActivity" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                     </div>
 
-                    @* الصف الثاني: حذف بجانب تصدير (Excel + زر) *@
+                    @* الصف الثاني: التصدير فقط *@
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center mt-2 align-items-center">
-                        <div class="dropdown d-inline">
-                            <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
-                            <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
-                                <li><button type="button" class="dropdown-item text-danger" id="btnBulkDelete">حذف المحدد</button></li>
-                                <li><hr class="dropdown-divider" /></li>
-                                <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
-                            </ul>
-                        </div>
                         <form method="get" asp-action="Export" asp-controller="UserActivityLogs" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -361,18 +353,11 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_desc)) { <input type="hidden" name="filterCol_desc" value="@filterCol_desc" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
                     </div>
-
-                    <form id="formBulkDelete" asp-action="BulkDelete" asp-controller="UserActivityLogs" method="post" class="d-none">
-                        @Html.AntiForgeryToken()
-                    </form>
-                    <form id="formDeleteAll" asp-action="DeleteAll" asp-controller="UserActivityLogs" method="post" class="d-none">
-                        @Html.AntiForgeryToken()
-                    </form>
                 </div>
             </div>
 
@@ -385,9 +370,6 @@
             <table id="activityTable" class="table table-striped table-hover erp-table erp-table-sortable">
                 <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                     <tr>
-                        <th class="text-center no-print" style="width:42px; min-width:42px;" data-col="select" data-col-fixed="true" title="تحديد">
-                            <input type="checkbox" id="selectAll" class="form-check-input" aria-label="تحديد الكل" />
-                        </th>
                         <th data-col="id">@filterableCol("id", "Id", "المعرّف")</th>
                         <th data-col="user">@filterableCol("user", "UserName", "المستخدم")</th>
                         <th data-col="action">@filterableCol("action", "ActionType", "نوع العملية")</th>
@@ -406,7 +388,7 @@
                     @if (!Model.Items.Any())
                     {
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-4">لا توجد بيانات.</td>
+                            <td colspan="11" class="text-center text-muted py-4">لا توجد بيانات.</td>
                         </tr>
                     }
                     else
@@ -414,9 +396,6 @@
                         foreach (var r in Model.Items)
                         {
                             <tr>
-                                <td class="text-center no-print" data-col="select">
-                                    <input type="checkbox" class="form-check-input row-select" value="@r.Id" aria-label="تحديد" />
-                                </td>
                                 <td data-col="id">@r.Id</td>
                                 <td data-col="user">@(r.User?.DisplayName ?? r.User?.UserName ?? "")</td>
                                 <td data-col="action">@r.ActionType</td>
@@ -646,33 +625,6 @@
                 try { localStorage.setItem(storageKey, JSON.stringify(hidden)); } catch { }
                 applyVisibility();
                 bootstrap.Modal.getInstance(document.getElementById("columnsModalActivity"))?.hide();
-            });
-        })();
-
-        // تحديد الكل + الحذف الجماعي + حذف الكل
-        (function () {
-            const selectAll = document.getElementById("selectAll");
-            const bulkBtn = document.getElementById("btnBulkDelete");
-            const bulkForm = document.getElementById("formBulkDelete");
-            const deleteAllBtn = document.getElementById("btnDeleteAll");
-            const deleteAllForm = document.getElementById("formDeleteAll");
-            function getRowCheckboxes() { return Array.from(document.querySelectorAll(".row-select")); }
-            selectAll?.addEventListener("change", function () { getRowCheckboxes().forEach(cb => cb.checked = this.checked); });
-            bulkBtn?.addEventListener("click", function () {
-                const checks = getRowCheckboxes().filter(cb => cb.checked);
-                if (checks.length === 0) { alert("من فضلك اختر على الأقل سجل نشاط واحد للحذف."); return; }
-                if (!confirm("هل أنت متأكد من حذف سجلات النشاط المحددة؟")) return;
-                bulkForm.querySelectorAll("input[type='hidden'][name='ids']").forEach(h => h.remove());
-                checks.forEach(cb => {
-                    const input = document.createElement("input");
-                    input.type = "hidden"; input.name = "ids"; input.value = cb.value;
-                    bulkForm.appendChild(input);
-                });
-                bulkForm.submit();
-            });
-            deleteAllBtn?.addEventListener("click", function () {
-                if (!confirm("تحذير: سيتم حذف جميع سجل النشاط. هل أنت متأكد؟")) return;
-                deleteAllForm.submit();
             });
         })();
 

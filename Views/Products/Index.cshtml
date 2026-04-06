@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Product>
@@ -335,7 +335,7 @@
                         </div>
                         @if (ViewBag.CanEdit == true)
                         {
-                            <button type="button" id="btnShowProduct" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض الصنف">عرض</button>
+                            <button type="button" id="btnShowProduct" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض الصنف">تعديل</button>
                         }
                         @if (ViewBag.CanShow == true)
                         {
@@ -380,7 +380,7 @@
                             @if (codeTo.HasValue) { <input type="hidden" name="codeTo" value="@codeTo" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
@@ -399,7 +399,7 @@
     </div>
 
     @* ===== كارت إجمالي الأصناف (بعد الفلترة) ===== *@
-    <div class="row g-2 g-md-3 mb-2 no-print">
+    <div class="row g-2 g-md-3 mb-2 no-print erp-list-summary-row">
         <div class="col-12 col-sm-6 col-md-4 col-lg-3">
             <div class="card h-100 erp-products-summary-card" style="border: 1px solid #0d6efd; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden;">
                 <div class="card-body py-3 px-3 d-flex flex-column justify-content-center">

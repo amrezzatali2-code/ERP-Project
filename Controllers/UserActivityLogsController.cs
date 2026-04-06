@@ -307,6 +307,7 @@ namespace ERP.Controllers
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string term = search.Trim();
+                string numericTerm = NormalizeArabicDigitsToLatin(term);
                 string mode = (searchBy ?? "all").ToLower();
 
                 // نوع العملية enum: لا نستخدم ToString() في الـ query لأنه لا يترجم لـ SQL
@@ -338,7 +339,7 @@ namespace ERP.Controllers
                         x.Description != null && x.Description.Contains(term)),
 
                     // البحث برقم السجل
-                    "id" => int.TryParse(term, out var idVal)
+                    "id" => int.TryParse(numericTerm, out var idVal)
                         ? query.Where(x => x.Id == idVal)
                         : query.Where(x => false),
 
@@ -380,6 +381,25 @@ namespace ERP.Controllers
             }
 
             return query;
+        }
+
+        private static string NormalizeArabicDigitsToLatin(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return value;
+
+            var chars = value.ToCharArray();
+            for (var i = 0; i < chars.Length; i++)
+            {
+                chars[i] = chars[i] switch
+                {
+                    >= '\u0660' and <= '\u0669' => (char)('0' + (chars[i] - '\u0660')),
+                    >= '\u06F0' and <= '\u06F9' => (char)('0' + (chars[i] - '\u06F0')),
+                    _ => chars[i]
+                };
+            }
+
+            return new string(chars);
         }
 
         // GET: UserActivityLogs/Details/5

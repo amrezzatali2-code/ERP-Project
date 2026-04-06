@@ -29,6 +29,8 @@
         warehouseId = whParsed;
     var fromDate = ViewBag.FromDate as DateTime?;
     var toDate = ViewBag.ToDate as DateTime?;
+    var purchaseInvoiceFrom = ViewBag.PurchaseInvoiceFrom as int?;
+    var purchaseInvoiceTo = ViewBag.PurchaseInvoiceTo as int?;
     var includeZeroQty = ViewBag.IncludeZeroQty as bool? ?? false;
     var includeBatches = ViewBag.IncludeBatches as bool? ?? true;
     var sortBy = ViewBag.SortBy as string ?? "name";
@@ -54,6 +56,8 @@
             warehouseId,
             fromDate,
             toDate,
+            purchaseInvoiceFrom,
+            purchaseInvoiceTo,
             pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false",
             includeBatches,
             sortBy = col,
@@ -77,6 +81,8 @@
             warehouseId,
             fromDate,
             toDate,
+            purchaseInvoiceFrom,
+            purchaseInvoiceTo,
             pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false",
             includeBatches,
             sortBy,
@@ -98,7 +104,7 @@
             <input type="hidden" name="includeBatches" value="true" />
             @* —— صف 1: بحث مضغوط + فئة + مجموعة + مخزن + كمية أكبر من صفر + إعادة تعيين —— *@
             <div class="row g-3 g-lg-3 align-items-end erp-pb-filter-row1">
-                <div class="col-12 col-md-6 col-xl-4 col-lg-3 erp-filter-section erp-pb-col-search">
+                <div class="col-12 col-md-5 col-xl-3 col-lg-3 erp-filter-section erp-pb-col-search">
                     <label class="form-label small mb-1">بحث</label>
                     <div class="d-flex flex-wrap gap-2 align-items-stretch">
                         <select name="searchMode" class="form-select form-select-sm erp-filter-input erp-pb-search-mode" title="نوع البحث في اسم الصنف والباركود">
@@ -163,35 +169,65 @@
                         <input class="form-check-input erp-pb-qty-checkbox m-0 flex-shrink-0" type="checkbox" name="pbQtyGtZero" value="true" id="pbQtyGtZero" @(pbQtyGtZeroChecked ? "checked" : "") />
                     </div>
                 </div>
-                <div class="col-12 col-sm-auto erp-filter-section erp-pb-col-reset d-flex align-items-end">
+                <div class="col-12 col-sm-auto erp-filter-section erp-pb-col-top-actions d-flex align-items-end">
                     <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
-                    <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none">
-                        <span>🔄</span> إعادة تعيين
-                    </a>
+                    <div class="d-flex align-items-end gap-2 erp-pb-top-actions-group">
+                        <div class="d-flex align-items-end erp-pb-top-generate-wrap">
+                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
+                                <span>📊</span> تجميع التقرير
+                            </button>
+                        </div>
+                        <a href="@Url.Action("ProductBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none">
+                            <span>🔄</span> إعادة تعيين
+                        </a>
+                    </div>
                 </div>
             </div>
             @* —— صف 2: التواريخ + تجميع التقرير + (عند وجود بيانات) تصدير وحفظ وحركة وأعمدة ونقل المرجّح —— *@
             <div class="row g-0 align-items-end mt-3 erp-pb-filter-row2">
                 <div class="col-12 erp-filter-section erp-pb-filter-row2-inner">
-                    <div class="d-flex flex-wrap align-items-end gap-3 justify-content-between" dir="rtl">
-                        <div class="d-flex flex-wrap flex-lg-nowrap align-items-end gap-3 erp-pb-dates-group">
+                    <div class="d-flex flex-wrap align-items-end gap-3 justify-content-end w-100 erp-pb-row2-main" dir="rtl">
+                        <div class="d-flex flex-wrap flex-lg-nowrap align-items-end gap-3 erp-pb-dates-group erp-pb-right-fields-group">
                             <div class="erp-pb-date-from-wrap">
-                                <label class="form-label small mb-0">من (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
-                                <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="بداية المدة (يوم/شهر/سنة ووقت)" />
+                                <label class="form-label small mb-0">من تاريخ </label>
+                                <div class="input-group input-group-sm erp-pb-date-input-group" dir="ltr">
+                                    <span class="input-group-text erp-pb-date-icon" aria-hidden="true">
+                                        <svg class="erp-pb-date-icon-svg" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                            <path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v11a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1Zm13 8H4v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8ZM6 6a1 1 0 0 0-1 1v1h15V7a1 1 0 0 0-1-1H6Z"></path>
+                                        </svg>
+                                    </span>
+                                    <input type="datetime-local" name="fromDate" id="pbFromDate" dir="ltr" autocomplete="off" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" title="بداية المدة (يوم/شهر/سنة ووقت)" />
+                                </div>
                             </div>
                             <div class="erp-pb-date-to-wrap">
-                                <label class="form-label small mb-0">إلى (تاريخ ووقت) <span class="text-muted small">يوم/شهر/سنة</span></label>
-                                <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" placeholder="يوم/شهر/سنة 00:00" title="نهاية المدة (يوم/شهر/سنة ووقت)" />
+                                <label class="form-label small mb-0">إلى تاريخ </label>
+                                <div class="input-group input-group-sm erp-pb-date-input-group" dir="ltr">
+                                    <span class="input-group-text erp-pb-date-icon" aria-hidden="true">
+                                        <svg class="erp-pb-date-icon-svg" viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+                                            <path d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v11a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1Zm13 8H4v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8ZM6 6a1 1 0 0 0-1 1v1h15V7a1 1 0 0 0-1-1H6Z"></path>
+                                        </svg>
+                                    </span>
+                                    <input type="datetime-local" name="toDate" id="pbToDate" dir="ltr" autocomplete="off" class="form-control form-control-sm erp-filter-input erp-datetime-input" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" title="نهاية المدة (يوم/شهر/سنة ووقت)" />
+                                </div>
+                            </div>
+                            <div class="d-flex flex-wrap align-items-end gap-2 erp-pb-pi-range-group" title="رقم فاتورة المشتريات = المعرّف في النظام (نفس رقم الفاتورة في شاشة المشتريات)">
+                                <div class="erp-pb-pi-from-wrap">
+                                    <label class="form-label small mb-0">من فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
+                                    <input type="number" name="purchaseInvoiceFrom" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1" 
+                                           value="@(purchaseInvoiceFrom.HasValue ? purchaseInvoiceFrom.Value.ToString() : "")" />
+                                </div>
+                                <div class="erp-pb-pi-to-wrap">
+                                    <label class="form-label small mb-0">إلى فاتورة مشتريات <span class="text-muted small">(رقم)</span></label>
+                                    <input type="number" name="purchaseInvoiceTo" dir="ltr" class="form-control form-control-sm erp-filter-input" style="max-width:9rem" min="1" step="1" 
+                                           value="@(purchaseInvoiceTo.HasValue ? purchaseInvoiceTo.Value.ToString() : "")" />
+                                </div>
                             </div>
                         </div>
-                        <div class="d-flex flex-wrap gap-3 justify-content-start align-items-center erp-pb-actions-row" dir="rtl">
-                            <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">
-                                <span>📊</span> تجميع التقرير
-                            </button>
-                            @if (reportData.Any())
-                            {
+                        @if (reportData.Any())
+                        {
+                            <div class="d-flex flex-wrap gap-3 justify-content-start align-items-center erp-pb-actions-row" dir="rtl">
                                 <input type="hidden" name="pageSize" value="@pageSize" />
-                                <a href="@Url.Action("ExportProductBalances", "Reports", new { search, searchMode, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false", includeBatches, sortBy, sortDir })"
+                                <a href="@Url.Action("ExportProductBalances", "Reports", new { search, searchMode, categoryId, productGroupId, hasBonus, warehouseId, fromDate, toDate, purchaseInvoiceFrom, purchaseInvoiceTo, pbQtyGtZero = pbQtyGtZeroChecked ? "true" : "false", includeBatches, sortBy, sortDir })"
                                    class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none">
                                     <span>📥</span> تصدير Excel
                                 </a>
@@ -201,12 +237,12 @@
                                 <span id="erpPbSaveSuccessMessage" class="d-none text-success fw-bold me-2 small align-middle" style="vertical-align: middle;">تم الحفظ</span>
                                 @* ترتيب DOM: في RTL يظهر «نقل المرجّح» يمين الحزمة، ثم «حركة» و«الأعمدة» إلى يساره *@
                                 <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" id="erpPbCopyWeightedToManual" title="ينقل الخصم المرجّح (بعد التقريب لأقرب عدد صحيح) إلى خانة الخصم اليدوي لكل صف ظاهر ثم يحفظ">
-                                    <span>📋</span> نقل المرجّح → يدوي (بعد التقريب)
+                                    <span>📋</span> نقل المرجّح يدوي بعد التقريب)
                                 </button>
                                 <button type="button" id="erpPbToolbarMovement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر صفاً في الجدول أولاً">حركة الصنف</button>
                                 <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm d-print-none" data-bs-toggle="modal" data-bs-target="#columnsModalProductBalances" title="إظهار/إخفاء أعمدة التقرير">اختيار الأعمدة</button>
-                            }
-                        </div>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -217,7 +253,7 @@
     @if (reportData.Any())
     {
         var n2 = System.Globalization.CultureInfo.InvariantCulture;
-        <div class="row g-2 g-md-3 mb-2 mt-3 no-print" id="productBalancesSummaryCards">
+        <div class="row g-2 g-md-3 mb-2 mt-3 no-print erp-list-summary-row" id="productBalancesSummaryCards">
             <div class="col-12 col-sm-6 col-md-4 col-lg">
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #0d6efd !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
@@ -429,7 +465,7 @@
                 </tbody>
                 @if (reportData.Any())
                 {
-                    <tfoot class="table-secondary fw-bold" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
+                    <tfoot class="table-secondary fw-bold erp-list-summary-tfoot" id="productBalancesFooter" data-total-qty="@totalQty" data-total-sales="@totalSalesQty.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-priceretail="@totalPriceRetail.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-unitcost="@totalUnitCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)" data-total-cost="@totalCost.ToString("G", System.Globalization.CultureInfo.InvariantCulture)">
                         <tr>
                             <td data-col="select" class="no-print"></td>
                             <td data-col="code" class="text-end"><strong>المجموع الإجمالي</strong></td>
@@ -476,6 +512,8 @@
                 <input type="hidden" name="warehouseId" value="@(warehouseId?.ToString() ?? "")" />
                 <input type="hidden" name="fromDate" value="@(fromDate.HasValue ? fromDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
                 <input type="hidden" name="toDate" value="@(toDate.HasValue ? toDate.Value.ToString("yyyy-MM-ddTHH:mm") : "")" />
+                <input type="hidden" name="purchaseInvoiceFrom" value="@(purchaseInvoiceFrom?.ToString() ?? "")" />
+                <input type="hidden" name="purchaseInvoiceTo" value="@(purchaseInvoiceTo?.ToString() ?? "")" />
                 <input type="hidden" name="pbQtyGtZero" value="@(pbQtyGtZeroChecked ? "true" : "false")" />
                 <input type="hidden" name="includeBatches" value="true" />
                 <input type="hidden" name="sortBy" value="@(sortBy ?? "name")" />
@@ -576,6 +614,28 @@
         .erp-pb-filter-dark-borders .form-select {
             border-color: #94a3b8 !important;
         }
+        .erp-pb-top-generate-wrap {
+            min-width: fit-content;
+        }
+        .erp-pb-top-actions-group {
+            min-width: fit-content;
+            flex-wrap: nowrap;
+        }
+        .erp-pb-date-input-group .input-group-text {
+            min-height: 38px;
+            border-color: #94a3b8 !important;
+            background: #f7faff;
+            color: #4f46e5;
+        }
+        .erp-pb-date-input-group .form-control {
+            border-inline-start: 0;
+        }
+        .erp-pb-date-icon-svg {
+            width: 15px;
+            height: 15px;
+            display: block;
+            fill: currentColor;
+        }
         .erp-pb-qty-checkbox {
             width: 1.15rem;
             height: 1.15rem;
@@ -602,15 +662,39 @@
         }
         .erp-pb-filter-row1 .erp-pb-col-search .erp-pb-search-text {
             min-width: 0;
-            max-width: 240px;
+            max-width: 200px;
         }
         @@media (min-width: 1200px) {
             .erp-pb-filter-row1 .erp-pb-col-search {
-                max-width: 28rem;
+                max-width: 22rem;
             }
+        }
+        .erp-pb-filter-row1 {
+            justify-content: space-between;
+        }
+        .erp-pb-right-fields-group {
+            justify-content: flex-end;
+            margin-inline-start: 0;
+            width: auto;
+        }
+        .erp-pb-pi-range-group {
+            padding-inline-start: 0;
+            margin-inline-start: 0;
+        }
+        .erp-pb-row2-main {
+            width: 100%;
         }
         .erp-pb-actions-row {
             flex-wrap: wrap;
+            margin-inline-start: auto;
+        }
+        @@media (max-width: 991.98px) {
+            .erp-pb-top-actions-group {
+                flex-wrap: wrap;
+            }
+            .erp-pb-right-fields-group {
+                justify-content: flex-end;
+            }
         }
         #productBalancesTable tbody tr.erp-list-selectable-row.selected > td {
             background-color: rgba(99, 102, 241, 0.12) !important;

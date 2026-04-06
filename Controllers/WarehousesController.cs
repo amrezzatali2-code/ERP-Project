@@ -9,6 +9,7 @@ using ERP.Filters;
 using ERP.Models;
 using ERP.Infrastructure;                     // PagedResult + UserActivityLogger
 using ERP.Security;
+using ERP.Services.Caching;
 using System.IO;                 // MemoryStream
 using System.Text;               // StringBuilder + Encoding للـ CSV
 using System.Globalization;      // CultureInfo لو احتجنا تنسيق أرقام
@@ -29,11 +30,16 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly ILookupCacheService _lookupCache;
 
-        public WarehousesController(AppDbContext db, IUserActivityLogger activityLogger)
+        public WarehousesController(
+            AppDbContext db,
+            IUserActivityLogger activityLogger,
+            ILookupCacheService lookupCache)
         {
             _db = db;
             _activityLogger = activityLogger;
+            _lookupCache = lookupCache;
         }
 
         // =========================
@@ -379,6 +385,7 @@ namespace ERP.Controllers
 
             _db.Warehouses.Add(w);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearWarehousesCache();
 
             await _activityLogger.LogAsync(UserActionType.Create, "Warehouse", w.WarehouseId, $"إنشاء مخزن جديد: {w.WarehouseName}");
 
@@ -425,6 +432,7 @@ namespace ERP.Controllers
             existing.UpdatedAt = DateTime.UtcNow;
 
             await _db.SaveChangesAsync();
+            _lookupCache.ClearWarehousesCache();
 
             var newValues = System.Text.Json.JsonSerializer.Serialize(new { existing.WarehouseName, existing.BranchId, existing.IsActive });
             await _activityLogger.LogAsync(UserActionType.Edit, "Warehouse", existing.WarehouseId, $"تعديل مخزن: {existing.WarehouseName}", oldValues, newValues);
@@ -461,6 +469,7 @@ namespace ERP.Controllers
             var oldValues = System.Text.Json.JsonSerializer.Serialize(new { w.WarehouseName });
             _db.Warehouses.Remove(w);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearWarehousesCache();
 
             await _activityLogger.LogAsync(UserActionType.Delete, "Warehouse", id, $"حذف مخزن: {w.WarehouseName}", oldValues: oldValues);
 
@@ -503,6 +512,7 @@ namespace ERP.Controllers
             {
                 _db.Warehouses.RemoveRange(warehouses);
                 await _db.SaveChangesAsync();
+                _lookupCache.ClearWarehousesCache();
                 TempData["Ok"] = $"تم حذف {warehouses.Count} مخزن/مخازن.";
             }
             else
@@ -530,6 +540,7 @@ namespace ERP.Controllers
 
             _db.Warehouses.RemoveRange(all);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearWarehousesCache();
 
             TempData["Ok"] = "تم حذف جميع المخازن من النظام.";
             return RedirectToAction(nameof(Index));

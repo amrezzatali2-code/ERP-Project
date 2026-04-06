@@ -12,6 +12,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // User, UserActionType
 using ERP.Security;
+using ERP.Services;
 using ClosedXML.Excel;                      // لتصدير Excel
 using System.IO;
 
@@ -32,11 +33,13 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly IPermissionService _permissionService;
 
-        public UsersController(AppDbContext context, IUserActivityLogger activityLogger)
+        public UsersController(AppDbContext context, IUserActivityLogger activityLogger, IPermissionService permissionService)
         {
             _context = context;
             _activityLogger = activityLogger;
+            _permissionService = permissionService;
         }
 
 
@@ -51,6 +54,7 @@ namespace ERP.Controllers
         private IQueryable<User> BuildQuery(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange,
@@ -59,72 +63,114 @@ namespace ERP.Controllers
             int? fromCode,
             int? toCode)
         {
-            // (1) الاستعلام الأساسي من جدول المستخدمين مع تحميل الأدوار
-            //     + بدون تتبّع (قراءة فقط لتحسين الأداء)
             IQueryable<User> q = _context.Users
-                .Include(u => u.UserRoles)          // تحميل أدوار المستخدم
-                    .ThenInclude(ur => ur.Role)     // تحميل كائن الدور للحصول على الاسم
+                .Include(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
                 .AsNoTracking();
 
-            // (2) فلتر كود من/إلى (نعتمد هنا على UserId كرقم المستخدم)
             if (fromCode.HasValue)
                 q = q.Where(u => u.UserId >= fromCode.Value);
 
             if (toCode.HasValue)
                 q = q.Where(u => u.UserId <= toCode.Value);
 
-            // (3) فلتر التاريخ: نفلتر حسب تاريخ الإنشاء CreatedAt
             if (useDateRange && fromDate.HasValue && toDate.HasValue)
             {
-                // نجعل النهاية حتى آخر اليوم
                 DateTime from = fromDate.Value.Date;
                 DateTime to = toDate.Value.Date.AddDays(1).AddTicks(-1);
 
                 q = q.Where(u => u.CreatedAt >= from && u.CreatedAt <= to);
             }
 
-            // (4) خرائط البحث: نحدد الأعمدة النصية والرقمية للبحث الموحد
-
-            // الحقول النصية (string) التى يمكن البحث فيها
             var stringFields =
                 new Dictionary<string, Expression<Func<User, string?>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["username"] = u => u.UserName,       // البحث باسم الدخول
-                    ["display"] = u => u.DisplayName,    // البحث بالاسم الظاهر
+                    ["username"] = u => u.UserName,
+                    ["display"] = u => u.DisplayName,
                 };
 
-            // الحقول الرقمية (int) التى يمكن البحث فيها
             var intFields =
                 new Dictionary<string, Expression<Func<User, int>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["id"] = u => u.UserId                // البحث برقم المستخدم
+                    ["id"] = u => u.UserId
                 };
 
-            // الحقول المسموح الترتيب عليها
             var orderFields =
                 new Dictionary<string, Expression<Func<User, object>>>(StringComparer.OrdinalIgnoreCase)
                 {
-                    ["UserId"] = u => u.UserId,                      // رقم المستخدم
-                    ["UserName"] = u => u.UserName,                    // اسم الدخول
-                    ["DisplayName"] = u => u.DisplayName,                 // الاسم الظاهر
-                    ["IsActive"] = u => u.IsActive,                    // نشط؟
-                                                                       // ["IsAdmin"]  = u => u.IsAdmin,                     // ❌ تم إلغاؤه من الواجهة
-                    ["CreatedAt"] = u => u.CreatedAt,                   // تاريخ الإنشاء
-                    ["UpdatedAt"] = u => u.UpdatedAt ?? DateTime.MinValue // آخر تعديل
+                    ["UserId"] = u => u.UserId,
+                    ["UserName"] = u => u.UserName,
+                    ["DisplayName"] = u => u.DisplayName,
+                    ["IsActive"] = u => u.IsActive,
+                    ["CreatedAt"] = u => u.CreatedAt,
+                    ["UpdatedAt"] = u => u.UpdatedAt ?? DateTime.MinValue
                 };
 
-            // (5) تطبيق منظومة البحث/الترتيب الموحدة
+            var mode = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (mode != "starts" && mode != "ends")
+                mode = "contains";
+
+            string? searchPass = search;
+            string? searchByPass = searchBy;
+
+            if (!string.IsNullOrWhiteSpace(search) &&
+                string.Equals(searchBy, "all", StringComparison.OrdinalIgnoreCase))
+            {
+                var text = search.Trim();
+                int? pidNum = int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid) ? pid : null;
+
+                if (mode == "starts")
+                {
+                    q = q.Where(u =>
+                        (u.UserName != null && u.UserName.StartsWith(text)) ||
+                        (u.DisplayName != null && u.DisplayName.StartsWith(text)) ||
+                        (pidNum.HasValue && u.UserId == pidNum.Value) ||
+                        u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name.StartsWith(text)));
+                }
+                else if (mode == "ends")
+                {
+                    q = q.Where(u =>
+                        (u.UserName != null && u.UserName.EndsWith(text)) ||
+                        (u.DisplayName != null && u.DisplayName.EndsWith(text)) ||
+                        (pidNum.HasValue && u.UserId == pidNum.Value) ||
+                        u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name.EndsWith(text)));
+                }
+                else
+                {
+                    q = q.Where(u =>
+                        (u.UserName != null && u.UserName.Contains(text)) ||
+                        (u.DisplayName != null && u.DisplayName.Contains(text)) ||
+                        (pidNum.HasValue && u.UserId == pidNum.Value) ||
+                        u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name.Contains(text)));
+                }
+                searchPass = null;
+                searchByPass = "all";
+            }
+            else if (!string.IsNullOrWhiteSpace(search) &&
+                     string.Equals(searchBy, "roles", StringComparison.OrdinalIgnoreCase))
+            {
+                var text = search.Trim();
+                if (mode == "starts")
+                    q = q.Where(u => u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name.StartsWith(text)));
+                else if (mode == "ends")
+                    q = q.Where(u => u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name.EndsWith(text)));
+                else
+                    q = q.Where(u => u.UserRoles.Any(ur => ur.Role != null && ur.Role.Name.Contains(text)));
+                searchPass = null;
+                searchByPass = "all";
+            }
+
             q = q.ApplySearchSort(
-                search: search,
-                searchBy: searchBy,
+                search: searchPass,
+                searchBy: searchByPass ?? "all",
                 sort: sort,
                 dir: dir,
                 stringFields: stringFields,
                 intFields: intFields,
                 orderFields: orderFields,
-                defaultSearchBy: "all",       // لو المستخدم لم يحدد نوع البحث
-                defaultSortBy: "UserName"     // الترتيب الافتراضي باسم الدخول
-            );
+                defaultSearchBy: "all",
+                defaultSortBy: "UserName",
+                searchMode: searchMode);
 
             return q;
         }
@@ -134,19 +180,27 @@ namespace ERP.Controllers
         private static IQueryable<User> ApplyColumnFilters(
             IQueryable<User> query,
             string? filterCol_id,
+            string? filterCol_idExpr,
             string? filterCol_username,
             string? filterCol_roles,
+            IReadOnlyList<int> resolvedRoleIds,
+            bool includeNoRoleFromRolesFilter,
             string? filterCol_active,
             string? filterCol_created,
             string? filterCol_updated)
         {
+            var idsFromCheckboxes = new List<int>();
             if (!string.IsNullOrWhiteSpace(filterCol_id))
             {
-                var ids = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                idsFromCheckboxes = filterCol_id.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => int.TryParse(x.Trim(), out var v) ? v : (int?)null)
                     .Where(x => x.HasValue).Select(x => x!.Value).ToList();
-                if (ids.Count > 0) query = query.Where(u => ids.Contains(u.UserId));
             }
+            if (idsFromCheckboxes.Count > 0)
+                query = query.Where(u => idsFromCheckboxes.Contains(u.UserId));
+            else if (!string.IsNullOrWhiteSpace(filterCol_idExpr))
+                query = UserListNumericExpr.ApplyUserIdExpr(query, filterCol_idExpr);
+
             if (!string.IsNullOrWhiteSpace(filterCol_username))
             {
                 var vals = filterCol_username.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
@@ -157,12 +211,17 @@ namespace ERP.Controllers
             {
                 var vals = filterCol_roles.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
                     .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
-                var roleNames = vals.Where(v => v != "لا يوجد دور").ToList();
+                var roleNamesRequested = vals.Where(v => v != "لا يوجد دور").ToList();
                 var includeNoRole = vals.Contains("لا يوجد دور");
-                if (roleNames.Count > 0 || includeNoRole)
+
+                if (roleNamesRequested.Count > 0 && resolvedRoleIds.Count == 0)
+                    query = query.Where(u => false);
+                else if (roleNamesRequested.Count > 0 || includeNoRole)
+                {
                     query = query.Where(u =>
                         (includeNoRole && u.UserRoles.Count == 0) ||
-                        (u.UserRoles.Any(ur => ur.Role != null && roleNames.Contains(ur.Role.Name))));
+                        (resolvedRoleIds.Count > 0 && u.UserRoles.Any(ur => resolvedRoleIds.Contains(ur.RoleId))));
+                }
             }
             if (!string.IsNullOrWhiteSpace(filterCol_active))
             {
@@ -200,6 +259,100 @@ namespace ERP.Controllers
             return query;
         }
 
+        /// <summary>
+        /// مطابقة أسماء الأدوار من الفلتر مع جدول الأدوار (OrdinalIgnoreCase) ثم إرجاع RoleId.
+        /// </summary>
+        private async Task<(List<int> RoleIds, bool IncludeNoRole)> ResolveRoleFilterIdsAsync(string? filterCol_roles)
+        {
+            var empty = new List<int>();
+            if (string.IsNullOrWhiteSpace(filterCol_roles))
+                return (empty, false);
+
+            var vals = filterCol_roles.Split(_filterSep, StringSplitOptions.RemoveEmptyEntries)
+                .Select(x => x.Trim()).Where(x => !string.IsNullOrEmpty(x)).ToList();
+            var roleNames = vals.Where(v => v != "لا يوجد دور").ToList();
+            var includeNoRole = vals.Contains("لا يوجد دور");
+            if (roleNames.Count == 0)
+                return (empty, includeNoRole);
+
+            var allRoles = await _context.Roles.AsNoTracking()
+                .Select(r => new { r.RoleId, r.Name })
+                .ToListAsync();
+
+            var roleIds = new List<int>();
+            foreach (var rn in roleNames)
+            {
+                var m = allRoles.FirstOrDefault(r => string.Equals(r.Name, rn, StringComparison.OrdinalIgnoreCase));
+                if (m != null) roleIds.Add(m.RoleId);
+            }
+            return (roleIds, includeNoRole);
+        }
+
+        /// <summary>
+        /// تجهيز حذف المستخدمين بفك الارتباطات التي تمنع الحذف، ثم حذف الجداول التابعة مباشرة.
+        /// </summary>
+        private async Task PrepareUsersForDeletionAsync(IReadOnlyCollection<int> userIds)
+        {
+            if (userIds == null || userIds.Count == 0)
+                return;
+
+            var ids = userIds.Distinct().ToList();
+
+            var userRoles = await _context.UserRoles
+                .Where(x => ids.Contains(x.UserId))
+                .ToListAsync();
+            if (userRoles.Count > 0)
+                _context.UserRoles.RemoveRange(userRoles);
+
+            var deniedPermissions = await _context.UserDeniedPermissions
+                .Where(x => ids.Contains(x.UserId))
+                .ToListAsync();
+            if (deniedPermissions.Count > 0)
+                _context.UserDeniedPermissions.RemoveRange(deniedPermissions);
+
+            var extraPermissions = await _context.UserExtraPermissions
+                .Where(x => ids.Contains(x.UserId))
+                .ToListAsync();
+            if (extraPermissions.Count > 0)
+                _context.UserExtraPermissions.RemoveRange(extraPermissions);
+
+            var accountVisibilityOverrides = await _context.UserAccountVisibilityOverrides
+                .Where(x => ids.Contains(x.UserId))
+                .ToListAsync();
+            if (accountVisibilityOverrides.Count > 0)
+                _context.UserAccountVisibilityOverrides.RemoveRange(accountVisibilityOverrides);
+
+            var activityLogs = await _context.UserActivityLogs
+                .Where(x => x.UserId.HasValue && ids.Contains(x.UserId.Value))
+                .ToListAsync();
+            foreach (var log in activityLogs)
+                log.UserId = null;
+
+            var stockLedgerEntries = await _context.StockLedger
+                .Where(x => x.UserId.HasValue && ids.Contains(x.UserId.Value))
+                .ToListAsync();
+            foreach (var entry in stockLedgerEntries)
+                entry.UserId = null;
+
+            var customers = await _context.Customers
+                .Where(x => x.UserId.HasValue && ids.Contains(x.UserId.Value))
+                .ToListAsync();
+            foreach (var customer in customers)
+                customer.UserId = null;
+
+            var employees = await _context.Set<Employee>()
+                .Where(x => x.UserId.HasValue && ids.Contains(x.UserId.Value))
+                .ToListAsync();
+            foreach (var employee in employees)
+                employee.UserId = null;
+
+            var stockTransfers = await _context.StockTransfers
+                .Where(x => x.UserId.HasValue && ids.Contains(x.UserId.Value))
+                .ToListAsync();
+            foreach (var transfer in stockTransfers)
+                transfer.UserId = null;
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetColumnValues(string column, string? search = null)
         {
@@ -225,7 +378,8 @@ namespace ERP.Controllers
                 var roleNames = await _context.Roles.AsNoTracking().Select(r => r.Name).Where(n => n != null).Distinct().OrderBy(x => x).Take(200).ToListAsync();
                 var list = new List<string>(roleNames!);
                 list.Insert(0, "لا يوجد دور");
-                if (!string.IsNullOrEmpty(searchTerm)) list = list.Where(s => s.ToLower().Contains(searchTerm)).ToList();
+                if (!string.IsNullOrEmpty(searchTerm))
+                    list = list.Where(s => s != null && s.Contains(searchTerm, StringComparison.OrdinalIgnoreCase)).ToList();
                 return Json(list.Select(v => new { value = v, display = v }));
             }
             if (columnLower == "active" || columnLower == "isactive")
@@ -258,6 +412,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy = "all",
+            string? searchMode = "contains",
             string? sort = "UserName",
             string? dir = "asc",
             bool useDateRange = false,
@@ -266,17 +421,41 @@ namespace ERP.Controllers
             int? fromCode = null,   // من كود (UserId)
             int? toCode = null,     // إلى كود
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_username = null,
             string? filterCol_roles = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string? filterCol_updated = null,
             int page = 1,
-            int pageSize = 50)
+            int pageSize = 10)
         {
+            // تجنّب أخذ قيمة قديمة عند تكرار المعامل في الـ Query (مثل pageSize من فورم آخر)
+            var pageSizeQuery = Request.Query["pageSize"].LastOrDefault();
+            if (!string.IsNullOrEmpty(pageSizeQuery) && int.TryParse(pageSizeQuery, out var psVal))
+                pageSize = psVal;
+            if (Request.Query.ContainsKey("search"))
+                search = Request.Query["search"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchBy"))
+                searchBy = Request.Query["searchBy"].LastOrDefault();
+            if (Request.Query.ContainsKey("searchMode"))
+                searchMode = Request.Query["searchMode"].LastOrDefault();
+
+            if (page < 1) page = 1;
+            if (pageSize < 0) pageSize = 10;
+            if (pageSize > 0 && pageSize != 10 && pageSize != 25 && pageSize != 50 && pageSize != 100 && pageSize != 200)
+                pageSize = 10;
+
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
+            var (roleIds, includeNoRole) = await ResolveRoleFilterIdsAsync(filterCol_roles);
+
             var q = BuildQuery(
                 search,
                 searchBy,
+                sm,
                 sort,
                 dir,
                 useDateRange,
@@ -285,9 +464,22 @@ namespace ERP.Controllers
                 fromCode,
                 toCode);
 
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_username, filterCol_roles, filterCol_active, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_username, filterCol_roles, roleIds, includeNoRole, filterCol_active, filterCol_created, filterCol_updated);
 
-            var model = await PagedResult<User>.CreateAsync(q, page, pageSize);
+            var totalCount = await q.CountAsync();
+            var activeCount = await q.CountAsync(u => u.IsActive);
+            var inactiveCount = totalCount - activeCount;
+
+            var sortCol = sort ?? "UserName";
+            var sortDesc = !string.Equals(dir, "asc", StringComparison.OrdinalIgnoreCase);
+            var model = await PagedResult<User>.CreateAsync(
+                q,
+                page,
+                pageSize,
+                sortCol,
+                sortDesc,
+                search ?? "",
+                searchBy ?? "all");
 
             model.UseDateRange = useDateRange;
             model.FromDate = fromDate;
@@ -295,13 +487,15 @@ namespace ERP.Controllers
 
             ViewBag.Search = search ?? "";
             ViewBag.SearchBy = searchBy ?? "all";
-            ViewBag.Sort = sort ?? "UserName";
-            ViewBag.Dir = (dir?.ToLower() == "asc") ? "asc" : "desc";
+            ViewBag.SearchMode = sm;
+            ViewBag.Sort = sortCol;
+            ViewBag.Dir = sortDesc ? "desc" : "asc";
 
             ViewBag.FromCode = fromCode;
             ViewBag.ToCode = toCode;
 
             ViewBag.FilterCol_Id = filterCol_id;
+            ViewBag.FilterCol_IdExpr = filterCol_idExpr;
             ViewBag.FilterCol_Username = filterCol_username;
             ViewBag.FilterCol_Roles = filterCol_roles;
             ViewBag.FilterCol_Active = filterCol_active;
@@ -312,7 +506,12 @@ namespace ERP.Controllers
             ViewBag.Page = page;
             ViewBag.PageSize = pageSize;
 
-            ViewBag.TotalCount = model.TotalCount;
+            ViewBag.TotalCount = totalCount;
+            ViewBag.ActiveCount = activeCount;
+            ViewBag.InactiveCount = inactiveCount;
+
+            ViewBag.CanEdit = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Users", "Edit"));
+            ViewBag.CanDelete = await _permissionService.HasPermissionAsync(PermissionCodes.Code("Users", "Delete"));
 
             return View(model);
         }
@@ -463,7 +662,7 @@ namespace ERP.Controllers
         // =========================================================
         [RequirePermission("Users.Edit")]
         [HttpGet]
-        public async Task<IActionResult> Edit(int id)
+        public async Task<IActionResult> Edit(int id, string? returnUrl = null)
         {
             // التحقق من أن رقم المستخدم صحيح
             if (id <= 0)
@@ -477,6 +676,7 @@ namespace ERP.Controllers
             if (user == null)
                 return NotFound();                     // متغير: المستخدم غير موجود
 
+            ViewBag.ReturnUrl = returnUrl;
             return View(user); // Views/Users/Edit.cshtml
         }
 
@@ -494,7 +694,7 @@ namespace ERP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequirePermission("Users.Edit")]
-        public async Task<IActionResult> Edit(int id, User model)
+        public async Task<IActionResult> Edit(int id, User model, string? returnUrl = null)
         {
             // التأكد من تطابق المعرّف في الرابط مع الموديل
             if (id != model.UserId)
@@ -540,6 +740,7 @@ namespace ERP.Controllers
             // لو في أخطاء نرجع لنفس الفورم مع رسائل الخطأ
             if (!ModelState.IsValid)
             {
+                ViewBag.ReturnUrl = returnUrl;
                 return View(model);
             }
 
@@ -659,6 +860,7 @@ namespace ERP.Controllers
             try
             {
                 var oldValues = System.Text.Json.JsonSerializer.Serialize(new { user.UserName, user.DisplayName, user.Email });
+                await PrepareUsersForDeletionAsync(new[] { id });
                 _context.Users.Remove(user);
                 await _context.SaveChangesAsync();
 
@@ -695,6 +897,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -704,15 +907,22 @@ namespace ERP.Controllers
             int? fromCode = null,
             int? toCode = null,
             string? filterCol_id = null,
+            string? filterCol_idExpr = null,
             string? filterCol_username = null,
             string? filterCol_roles = null,
             string? filterCol_active = null,
             string? filterCol_created = null,
             string? filterCol_updated = null)
         {
-            var q = BuildQuery(search ?? "", searchBy ?? "all", sort ?? "UserName", dir ?? "asc",
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            if (sm != "starts" && sm != "ends")
+                sm = "contains";
+
+            var (roleIds, includeNoRole) = await ResolveRoleFilterIdsAsync(filterCol_roles);
+
+            var q = BuildQuery(search ?? "", searchBy ?? "all", sm, sort ?? "UserName", dir ?? "asc",
                 useDateRange, fromDate, toDate, fromCode, toCode);
-            q = ApplyColumnFilters(q, filterCol_id, filterCol_username, filterCol_roles, filterCol_active, filterCol_created, filterCol_updated);
+            q = ApplyColumnFilters(q, filterCol_id, filterCol_idExpr, filterCol_username, filterCol_roles, roleIds, includeNoRole, filterCol_active, filterCol_created, filterCol_updated);
             var users = await q.ToListAsync();
 
             // 7) إنشاء ملف Excel في الذاكرة باستخدام ClosedXML
@@ -792,16 +1002,30 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> BulkDelete(int[] ids)
+        [RequirePermission("Users.Delete")]
+        public async Task<IActionResult> BulkDelete([FromForm] int[]? ids)
         {
-            if (ids == null || ids.Length == 0)
+            var idList = new List<int>();
+            if (ids != null && ids.Length > 0)
+                idList.AddRange(ids);
+            else if (Request.HasFormContentType && Request.Form["ids"].Count > 0)
+            {
+                foreach (var s in Request.Form["ids"])
+                {
+                    if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out var pid))
+                        idList.Add(pid);
+                }
+            }
+            idList = idList.Distinct().ToList();
+
+            if (idList.Count == 0)
             {
                 TempData["Error"] = "لم يتم اختيار أى مستخدم للحذف.";
                 return RedirectToAction(nameof(Index));
             }
 
             var users = await _context.Users
-                                      .Where(u => ids.Contains(u.UserId))
+                                      .Where(u => idList.Contains(u.UserId))
                                       .ToListAsync();
 
             if (users.Count == 0)
@@ -812,6 +1036,7 @@ namespace ERP.Controllers
 
             try
             {
+                await PrepareUsersForDeletionAsync(idList);
                 _context.Users.RemoveRange(users);
                 await _context.SaveChangesAsync();
                 TempData["Success"] = $"تم حذف {users.Count} من المستخدمين المحددين.";
@@ -855,6 +1080,7 @@ namespace ERP.Controllers
 
             try
             {
+                await PrepareUsersForDeletionAsync(all.Select(x => x.UserId).ToList());
                 _context.Users.RemoveRange(all);
                 await _context.SaveChangesAsync();
                 TempData["Success"] = "تم حذف جميع المستخدمين.";
@@ -868,14 +1094,15 @@ namespace ERP.Controllers
         }
 
         /// <summary>
-        /// افتراضيات لكل مستخدم جديد: صلاحيات إضافية (الصفحة الرئيسية + مبيعاتي الشخصية)
+        /// افتراضيات لكل مستخدم جديد: صلاحيات إضافية (بوابة Global.Open ثم الصفحة الرئيسية + مبيعاتي الشخصية).
+        /// بدون Global.Open لا يمرّ التحقق من Dashboard.Sales / Home.Index (انظر GlobalPermissionGates + PermissionService).
         /// وقيد «الحسابات المسموح رؤيتها» على حساب العملاء 1103 إن وُجد في الدليل.
         /// </summary>
         private async Task ApplyNewUserDefaultsAsync(int userId)
         {
             if (userId <= 0) return;
 
-            string[] extraPermissionCodes = { "Home.Index", "Dashboard.Sales" };
+            string[] extraPermissionCodes = { "Global.Open", "Home.Index", "Dashboard.Sales" };
             foreach (var code in extraPermissionCodes)
             {
                 var perm = await _context.Permissions.AsNoTracking()

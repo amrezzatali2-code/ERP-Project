@@ -157,6 +157,7 @@
             }
 
             // ——— عمود غير رقمي: قائمة القيم ———
+            allItems = [];
             if (searchInp) searchInp.value = '';
             currentSelected = new Set((new URL(window.location.href).searchParams.get('filterCol_' + currentCol) || '').split(/[|,;]/).filter(Boolean));
             adjustPanelPosition();
@@ -319,7 +320,10 @@
         if (searchInp) {
             searchInp.addEventListener('input', function () {
                 if (currentCol && isNumericCol(currentCol)) return;
-                renderList(this.value, { preserveScroll: false });
+                // لا تُصفِّي القائمة قبل اكتمال تحميل قيم العمود الحالي (وإلا يظهر «لا شيء» عند الكتابة السريعة أو بيانات عمود سابق)
+                if (allItems.length) {
+                    renderList(this.value, { preserveScroll: false });
+                }
                 if (fetchDebounce) clearTimeout(fetchDebounce);
                 fetchDebounce = setTimeout(function () {
                     fetchDebounce = null;

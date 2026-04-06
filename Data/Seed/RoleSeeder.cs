@@ -11,6 +11,8 @@ namespace ERP.Data.Seed
     /// </summary>
     public static class RoleSeeder
     {
+        public static readonly string[] OwnerRoleAliases = new[] { "مالك النظام", "مسؤول النظام", "ادمن" };
+
         public static async Task SeedAsync(AppDbContext db)
         {
             var roles = new[]
@@ -28,10 +30,13 @@ namespace ERP.Data.Seed
 
             foreach (var r in roles)
             {
-                var existing = await db.Roles.FirstOrDefaultAsync(x => x.Name == r.Name);
+                var existing = r.Name == "مالك النظام"
+                    ? await db.Roles.FirstOrDefaultAsync(x => OwnerRoleAliases.Contains(x.Name))
+                    : await db.Roles.FirstOrDefaultAsync(x => x.Name == r.Name);
                 if (existing != null)
                 {
-                    existing.Description = r.Description;
+                    if (string.IsNullOrWhiteSpace(existing.Description))
+                        existing.Description = r.Description;
                     existing.IsSystemRole = r.IsSystem;
                     existing.IsActive = true;
                     existing.UpdatedAt = DateTime.UtcNow;

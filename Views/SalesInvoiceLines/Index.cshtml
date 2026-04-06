@@ -1,4 +1,4 @@
-@* Views/SalesInvoiceLines/Index.cshtml — قائمة أصناف المبيعات بنفس نموذج الفواتير *@
+﻿@* Views/SalesInvoiceLines/Index.cshtml — قائمة أصناف المبيعات بنفس نموذج الفواتير *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesInvoiceLine>
@@ -394,7 +394,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>

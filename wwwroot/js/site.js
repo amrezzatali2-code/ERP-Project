@@ -48,6 +48,27 @@ if (window.__ERP_TABS_INITED__) {
             return url + joiner + "_ts=" + Date.now();
         }
 
+        /** عندما يكون event.target عقدة نص، closest يرمي خطأ — نرفع إلى العنصر الأب */
+        function erpEventTargetElement(evt) {
+            var t = evt && evt.target;
+            if (!t) return null;
+            return t.nodeType === 1 ? t : t.parentElement;
+        }
+
+        /** استخراج معرف فاتورة مبيعات من مسار Show/{id} أو ?id= */
+        function erpParseSalesInvoiceShowIdFromHref(href) {
+            if (!href) return 0;
+            try {
+                var u = new URL(href, window.location.href);
+                var path = (u.pathname || '').replace(/\\/g, '/').toLowerCase();
+                var m = path.match(/\/salesinvoices\/show\/(\d+)/);
+                if (m) return parseInt(m[1], 10) || 0;
+                var q = u.searchParams.get('id');
+                if (q) return parseInt(String(q).trim(), 10) || 0;
+            } catch (e) { /* ignore */ }
+            return 0;
+        }
+
         // تعليق عربي: قراءة URL من data-url (لو موجود) أو href (لو لينك)
         function getTargetUrl(el) {
             if (!el) return '';
@@ -108,14 +129,21 @@ if (window.__ERP_TABS_INITED__) {
 
             document.addEventListener('click', function (event) {
 
+                // ✅ رصيف تنقّل فاتورة المبيعات (Show فقط — #siInvoiceNavDock): لا اعتراض هنا أبداً
+                // (أيضاً: closest على عقدة نص قد يفشل بدون erpEventTargetElement)
+                var elDock = erpEventTargetElement(event);
+                if (elDock && elDock.closest && elDock.closest('#siInvoiceNavDock')) return;
+
                 // =========================================================
                 // (0) زر البحث داخل فاتورة المشتريات / طلب الشراء (يبني URL حسب رقم المستخدم)
                 // =========================================================
-                var navSearchBtn = event.target.closest('#btnNavInvoiceSearch');
+                var navSearchBtn = elDock && elDock.closest ? elDock.closest('#btnNavInvoiceSearch') : null;
                 if (navSearchBtn) {
-                    // طلب الشراء (PurchaseRequests): المعالج في الصفحة نفسها (docCaptureHandler) — لا نتدخل
+                    // طلب الشراء (PurchaseRequests): المعالج في الصفحة نفسها — لا نتدخل
                     var baseUrl = (navSearchBtn.getAttribute('data-base-url') || '').toLowerCase();
                     if (baseUrl.indexOf('purchaserequests') >= 0) return;
+                    // فاتورة مبيعات Show: نفس الأزرار — لا postMessage (تجنب خلط مع pi-show-tab الافتراضي)
+                    if (baseUrl.indexOf('salesinvoices') >= 0) return;
 
                     event.preventDefault();
 
@@ -147,7 +175,7 @@ if (window.__ERP_TABS_INITED__) {
                 // =========================================================
                 // (1) التقاط الروابط/الأزرار الخاصة بنظام التابات (Delegation)
                 // =========================================================
-                var link = event.target.closest('a.app-menu-link, a.open-tab, a.open-same-tab, button.open-same-tab');
+                var link = elDock && elDock.closest ? elDock.closest('a.app-menu-link, a.open-tab, a.open-same-tab, button.open-same-tab') : null;
                 if (!link) return;
 
                 // ------------------------------
@@ -175,9 +203,12 @@ if (window.__ERP_TABS_INITED__) {
                         }
                     }
                     if (!url) url = normalizeUrl(getTargetUrl(link));
+                    // احتياط: href من خاصية DOM (مطلق) أحياناً أوضح من getAttribute — يمنع تنقّل iframe بدون postMessage
+                    if (!url && link.href) url = normalizeUrl(link.href);
 
                     if (!url) {
                         console.warn("⚠ open-same-tab: url غير موجود/فارغ (data-url/href)");
+                        event.preventDefault();
                         return;
                     }
 
@@ -236,14 +267,18 @@ if (window.__ERP_TABS_INITED__) {
                 // ------------------------------
                 var tabId2 = normalizeTabId(link.getAttribute('data-tab-id') || '');
                 var tabTitle2 = (link.getAttribute('data-tab-title') || link.textContent || '').trim();
-                var url2 = normalizeUrl(link.href);
+                var url2 = normalizeUrl(getTargetUrl(link));
+                if (!url2 && link.href) url2 = normalizeUrl(link.href);
 
                 if (!tabId2) {
                     console.warn("⚠ open-tab/app-menu-link: data-tab-id فارغ → سيتم ترك الرابط يفتح بشكل طبيعي داخل نفس التاب");
                     return;
                 }
 
-                if (!url2) return;
+                if (!url2) {
+                    event.preventDefault();
+                    return;
+                }
 
                 url2 = ensureFrameParam(url2);
                 url2 = addNoCache(url2);
@@ -264,6 +299,8 @@ if (window.__ERP_TABS_INITED__) {
             document.addEventListener('keydown', function (ev) {
                 var input = ev.target;
                 if (!input || input.id !== 'NavInvoiceSearchInput') return;
+
+                if (input.closest && input.closest('#siInvoiceNavDock')) return;
 
                 if (ev.key === 'Enter') {
                     ev.preventDefault();
@@ -405,14 +442,28 @@ if (window.__ERP_TABS_INITED__) {
                 if (existingFrame) {
 
                     var currentSrc = normalizeUrl(existingFrame.getAttribute('src') || existingFrame.src);
-                    if (currentSrc !== url) {
-                        // ✅ عند تغيير الرابط فقط: تحميل + __ERP_INIT__
+                    var shouldSetSrc = (currentSrc !== url);
+                    // بعد تنقّل داخل الـ iframe بـ location.assign قد يتطابق src الظاهر مع الرابط بينما المحتوى الفعلي مختلف — نزامن حسب id فاتورة المبيعات
+                    if (tabId === 'si-show-tab') {
+                        var wantSiId = erpParseSalesInvoiceShowIdFromHref(url);
+                        var liveSiId = 0;
+                        try {
+                            var iw = existingFrame.contentWindow;
+                            if (iw && iw.location && iw.location.href) {
+                                liveSiId = erpParseSalesInvoiceShowIdFromHref(iw.location.href);
+                            }
+                        } catch (eSync) { /* cross-origin / غير جاهز */ }
+                        if (wantSiId > 0 && liveSiId > 0 && wantSiId !== liveSiId) {
+                            shouldSetSrc = true;
+                        }
+                    }
+                    if (shouldSetSrc) {
                         existingFrame.onload = function () {
                             tryCallErpInitFromFrame(existingFrame);
                         };
                         existingFrame.src = url;
                     }
-                    // نفس الرابط: لا نعيد تعيين src (كان addNoCache يعيد تحميل الصفحة ويعيد التمرير لأعلى)
+                    // نفس الرابط ونفس معرف الفاتورة: لا نعيد تعيين src
                 }
 
                 // ✅ تحديث عنوان التاب (مثلاً فاتورة مشتريات vs طلب شراء) لئلا يبقى العنوان القديم

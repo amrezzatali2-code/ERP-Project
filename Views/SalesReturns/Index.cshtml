@@ -1,4 +1,4 @@
-@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
+﻿@* Views/SalesReturns/Index.cshtml — قائمة مرتجعات البيع بنفس نموذج المحافظات/فواتير المبيعات *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.SalesReturn>
@@ -288,7 +288,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>

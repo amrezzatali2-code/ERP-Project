@@ -43,6 +43,7 @@ namespace ERP.Controllers
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IFullReturnService _fullReturnService;
         private readonly IPermissionService _permissionService;
+        private readonly IListVisibilityService _listVisibilityService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
 
@@ -52,6 +53,7 @@ namespace ERP.Controllers
                                           ILedgerPostingService ledgerPosting,
                                           IFullReturnService fullReturnService,
                                           IPermissionService permissionService,
+                                          IListVisibilityService listVisibilityService,
                                           IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
@@ -60,6 +62,7 @@ namespace ERP.Controllers
             _ledgerPostingService = ledgerPosting;
             _fullReturnService = fullReturnService;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
+            _listVisibilityService = listVisibilityService ?? throw new ArgumentNullException(nameof(listVisibilityService));
             _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
         }
 
@@ -178,6 +181,18 @@ namespace ERP.Controllers
             return "System";
         }
 
+        private async Task<IQueryable<PurchaseInvoice>> ApplyOperationalListVisibilityAsync(IQueryable<PurchaseInvoice> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(pi => pi.CreatedBy != null && creatorNames.Contains(pi.CreatedBy.Trim()));
+        }
+
 
 
 
@@ -261,6 +276,7 @@ namespace ERP.Controllers
             IQueryable<PurchaseInvoice> query = _context.PurchaseInvoices
                 .AsNoTracking()
                 .Include(p => p.Customer);
+            query = await ApplyOperationalListVisibilityAsync(query);
 
             // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
             int? codeFrom = Request.Query.ContainsKey("codeFrom")
@@ -395,17 +411,18 @@ namespace ERP.Controllers
         {
             var searchTerm = (search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
+            var visibleInvoices = await ApplyOperationalListVisibilityAsync(_context.PurchaseInvoices.AsNoTracking());
 
             if (columnLower == "id")
             {
-                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                var ids = await visibleInvoices
                     .Select(p => p.PIId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 var items = ids.Select(v => new { value = v.ToString(), display = v.ToString() });
                 return Json(items);
             }
             if (columnLower == "status")
             {
-                var q = _context.PurchaseInvoices.AsNoTracking().Where(p => p.Status != null).Select(p => p.Status!).Distinct();
+                var q = visibleInvoices.Where(p => p.Status != null).Select(p => p.Status!).Distinct();
                 if (!string.IsNullOrEmpty(searchTerm))
                     q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.OrderBy(x => x).Take(500).ToListAsync();
@@ -414,7 +431,7 @@ namespace ERP.Controllers
             if (columnLower == "vendor")
             {
                 var q = _context.Customers.AsNoTracking()
-                    .Where(c => _context.PurchaseInvoices.Any(pi => pi.CustomerId == c.CustomerId))
+                    .Where(c => visibleInvoices.Any(pi => pi.CustomerId == c.CustomerId))
                     .Select(c => c.CustomerName ?? "");
                 if (!string.IsNullOrEmpty(searchTerm))
                     q = q.Where(s => s.ToLower().Contains(searchTerm));
@@ -423,44 +440,44 @@ namespace ERP.Controllers
             }
             if (columnLower == "warehouse")
             {
-                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                var ids = await visibleInvoices
                     .Select(p => p.WarehouseId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "refprid")
             {
-                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                var ids = await visibleInvoices
                     .Where(p => p.RefPRId.HasValue)
                     .Select(p => p.RefPRId!.Value).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "pidate")
             {
-                var dates = await _context.PurchaseInvoices.AsNoTracking()
+                var dates = await visibleInvoices
                     .Select(p => p.PIDate.Date).Distinct().OrderByDescending(x => x).Take(500).ToListAsync();
                 return Json(dates.Select(d => new { value = d.ToString("yyyy-MM-dd"), display = d.ToString("yyyy-MM-dd") }));
             }
             if (columnLower == "customerid")
             {
-                var ids = await _context.PurchaseInvoices.AsNoTracking()
+                var ids = await visibleInvoices
                     .Select(p => p.CustomerId).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(ids.Select(v => new { value = v.ToString(), display = v.ToString() }));
             }
             if (columnLower == "itemstotal")
             {
-                var vals = await _context.PurchaseInvoices.AsNoTracking()
+                var vals = await visibleInvoices
                     .Select(p => p.ItemsTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
             }
             if (columnLower == "discounttotal")
             {
-                var vals = await _context.PurchaseInvoices.AsNoTracking()
+                var vals = await visibleInvoices
                     .Select(p => p.DiscountTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
             }
             if (columnLower == "nettotal")
             {
-                var vals = await _context.PurchaseInvoices.AsNoTracking()
+                var vals = await visibleInvoices
                     .Select(p => p.NetTotal).Distinct().OrderBy(x => x).Take(500).ToListAsync();
                 return Json(vals.Select(v => new { value = v.ToString("0.00"), display = v.ToString("0.00") }));
             }
@@ -471,7 +488,7 @@ namespace ERP.Controllers
             }
             if (columnLower == "postedby")
             {
-                var q = _context.PurchaseInvoices.AsNoTracking().Where(p => p.PostedBy != null).Select(p => p.PostedBy!).Distinct();
+                var q = visibleInvoices.Where(p => p.PostedBy != null).Select(p => p.PostedBy!).Distinct();
                 if (!string.IsNullOrEmpty(searchTerm))
                     q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.OrderBy(x => x).Take(500).ToListAsync();
@@ -479,7 +496,7 @@ namespace ERP.Controllers
             }
             if (columnLower == "createdby")
             {
-                var q = _context.PurchaseInvoices.AsNoTracking().Where(p => p.CreatedBy != null).Select(p => p.CreatedBy!).Distinct();
+                var q = visibleInvoices.Where(p => p.CreatedBy != null).Select(p => p.CreatedBy!).Distinct();
                 if (!string.IsNullOrEmpty(searchTerm))
                     q = q.Where(s => s.ToLower().Contains(searchTerm));
                 var list = await q.OrderBy(x => x).Take(500).ToListAsync();
@@ -2379,7 +2396,8 @@ namespace ERP.Controllers
             }
 
             // نجيب الفواتير الموجودة فقط (علشان لو فيه أرقام مش موجودة)
-            var existingIds = await _context.PurchaseInvoices
+            var visibleQuery = await ApplyOperationalListVisibilityAsync(_context.PurchaseInvoices);
+            var existingIds = await visibleQuery
                 .Where(p => ids.Contains(p.PIId))
                 .Select(p => p.PIId)
                 .ToListAsync();
@@ -2467,7 +2485,8 @@ namespace ERP.Controllers
         public async Task<IActionResult> DeleteAll()
         {
             // نجيب كل IDs فقط لتقليل الذاكرة
-            var allIds = await _context.PurchaseInvoices
+            var visibleQuery = await ApplyOperationalListVisibilityAsync(_context.PurchaseInvoices);
+            var allIds = await visibleQuery
                 .Select(x => x.PIId)
                 .ToListAsync();
 
@@ -2886,6 +2905,7 @@ namespace ERP.Controllers
 
             // ✅ استعلام أساسي بدون تتبع
             IQueryable<PurchaseInvoice> query = _context.PurchaseInvoices.AsNoTracking();
+            query = await ApplyOperationalListVisibilityAsync(query);
 
             // ✅ تطبيق نفس الفلاتر بتاعة الـ Index
             query = ApplyFilters(

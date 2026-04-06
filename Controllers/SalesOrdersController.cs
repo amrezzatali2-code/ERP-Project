@@ -30,6 +30,7 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
         private readonly DocumentTotalsService _docTotals;
+        private readonly IListVisibilityService _listVisibilityService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
 
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
@@ -38,11 +39,13 @@ namespace ERP.Controllers
             AppDbContext context,
             IUserActivityLogger activityLogger,
             DocumentTotalsService docTotals,
+            IListVisibilityService listVisibilityService,
             IUserAccountVisibilityService accountVisibilityService)
         {
             _context = context;
             _activityLogger = activityLogger;
             _docTotals = docTotals ?? throw new ArgumentNullException(nameof(docTotals));
+            _listVisibilityService = listVisibilityService ?? throw new ArgumentNullException(nameof(listVisibilityService));
             _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
         }
 
@@ -57,6 +60,18 @@ namespace ERP.Controllers
                 if (!string.IsNullOrWhiteSpace(User.Identity?.Name)) return User.Identity.Name.Trim();
             }
             return "System";
+        }
+
+        private async Task<IQueryable<SalesOrder>> ApplyOperationalListVisibilityAsync(IQueryable<SalesOrder> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(o => o.CreatedBy != null && creatorNames.Contains(o.CreatedBy.Trim()));
         }
 
         #region خرائط الحقول للبحث والترتيب (مستخدمة في Index و Export)
@@ -277,6 +292,7 @@ namespace ERP.Controllers
                 .Include(o => o.Customer)
                     .ThenInclude(c => c!.Area)
                 .Include(o => o.Warehouse);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             // 2) تطبيق فلتر التاريخ + فلتر رقم الأمر
             q = ApplyCodeAndDateFilters(q, useDateRange, fromDate, toDate, fromCode, toCode);
@@ -649,6 +665,7 @@ namespace ERP.Controllers
                 .Include(o => o.Customer)
                     .ThenInclude(c => c!.Area)
                 .Include(o => o.Warehouse);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             q = ApplyCodeAndDateFilters(q, useDateRange, fromDate, toDate, codeFrom, codeTo);
             q = q.ApplySearchSort(
@@ -799,6 +816,7 @@ namespace ERP.Controllers
                 .Include(o => o.Customer)
                     .ThenInclude(c => c!.Area)
                 .Include(o => o.Warehouse);
+            q = await ApplyOperationalListVisibilityAsync(q);
             if (column == "date")
             {
                 var datesQuery = q.Select(o => o.SODate.Date);

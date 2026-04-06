@@ -7,7 +7,8 @@
 <div class="container" dir="rtl">
     <h2 class="mb-3">تعديل دور مستخدم — @Model.Id</h2>
 
-    <form asp-action="Edit" method="post" class="card" id="userRoleEditForm">
+    <div class="card">
+    <form asp-action="Edit" method="post" id="userRoleEditForm">
         <input type="hidden" name="SelectedRoleAccountIds" id="SelectedRoleAccountIds" value="" />
         <div class="card-body">
 
@@ -59,11 +60,20 @@
             </div>
 
         </div>
-        <div class="card-footer d-flex justify-content-between">
-            <a asp-action="Index" class="btn btn-secondary">أدوار المستخدمين</a>
-            <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
-        </div>
     </form>
+        <div class="card-footer d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <a asp-action="Index" class="btn btn-secondary">أدوار المستخدمين</a>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <form asp-action="ResetToRoleDefaults" method="post" class="d-inline"
+                      onsubmit="return confirm('إعادة ضبط صلاحيات هذا المستخدم لتطابق الدور؟\\n\\nسيتم إزالة التخصيصات (إضافي/ممنوع) بحيث تعتمد الصلاحيات على ما هو معرّف في «صلاحيات الأدوار» لهذا الدور.');">
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="id" value="@Model.Id" />
+                    <button type="submit" class="btn btn-outline-warning" title="إزالة الإضافي والممنوع؛ مطابقة صلاحيات الدور من شاشة صلاحيات الأدوار">RESET — مطابقة الدور</button>
+                </form>
+                <button type="submit" class="btn btn-primary" form="userRoleEditForm">حفظ التعديلات</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 @section Scripts {

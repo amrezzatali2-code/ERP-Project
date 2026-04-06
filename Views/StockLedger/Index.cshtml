@@ -1,10 +1,10 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<StockLedger>
 
 @{
-    ViewData["Title"] = "دفتر الحركة المخزنية";
+    ViewData["Title"] = "سجل الحركات";
 
     // أسماء الأكشن/الكنترولر
     var action = Convert.ToString(ViewContext.RouteData.Values["action"]) ?? "Index";
@@ -215,7 +215,7 @@
 
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
-                    <label class="form-label w-100 text-center">بحث في دفتر الحركة</label>
+                    <label class="form-label w-100 text-center">بحث في سجل الحركات</label>
                     <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
                         <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" style="min-width:120px" />
                         <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:160px;min-width:100px">
@@ -229,7 +229,7 @@
                             <option value="sourceid"@Html.Raw(searchBy == "sourceid" ? " selected" : "")>رقم المستند</option>
                             <option value="sourceline"@Html.Raw(searchBy == "sourceline" ? " selected" : "")>سطر المستند</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">بحث</button>
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3 flex-shrink-0">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none flex-shrink-0" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
@@ -285,12 +285,12 @@
                 </div>
             </div>
 
-            @* --- القسم الثالث: أزرار التحكم (نفس ترتيب قائمة الأصناف/سطور المرتجع) --- *@
+            @* --- القسم الثالث: أزرار التحكم (بنمط القوائم الموحد وبدون حذف) --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
                 <div class="erp-toolbar-two-rows w-100 d-flex flex-column align-items-center gap-1">
                     <div class="erp-toolbar-row d-flex flex-wrap gap-2 justify-content-center align-items-center">
-                        <button type="button" class="btn btn-erp btn-erp-primary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
+                        <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalLedger">اختيار الأعمدة</button>
                         <button type="button" id="btnPrintLedger" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <button type="button" id="btnShowLedger" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="عرض مستند المصدر للسطر المحدد">عرض</button>
@@ -340,7 +340,7 @@
                         @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
                         <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;" title="اختر صيغة التصدير">
                             <option value="excel" selected>Excel</option>
-                            <option value="csv">CSV</option>
+                            <option value="pdf">PDF</option>
                         </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
@@ -436,13 +436,12 @@
         @if (!string.IsNullOrWhiteSpace(filterCol_createdby)) { <input type="hidden" name="filterCol_createdby" value="@filterCol_createdby" /> }
     </form>
 
-    @* ===== جدول دفتر الحركة ===== *@
+    @* ===== جدول سجل الحركات ===== *@
     <div class="erp-table-scroll-container mt-3 ps-0 pe-0" dir="rtl">
         <div id="ledgerTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="ledgerTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
                 <tr>
-                    <th class="text-center no-print" style="width:48px;" data-col="select" data-col-fixed="true"></th>
                     <th style="width:90px;" data-col="entry">@filterableCol("entry", "EntryId", "رقم القيد")</th>
                     <th style="width:88px;" data-col="sourceid">@filterableCol("sourceid", "SourceId", "رقم الفاتورة")</th>
                     <th style="width:72px;" data-col="sourceline">@filterableCol("sourceline", "SourceLine", "سطر")</th>
@@ -469,7 +468,7 @@
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="21" class="text-center text-muted py-4">
+                        <td colspan="20" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -486,9 +485,6 @@
                             data-tab-title="@doc.Title"
                             data-erp-tab-id="@doc.TabId"
                             data-movement-url="@movementUrl">
-                            <td class="text-center no-print" data-col="select">
-                                <input type="checkbox" class="row-select" value="@x.EntryId" />
-                            </td>
                             <!-- رقم القيد -->
                             <td data-col="entry">@x.EntryId</td>
 
@@ -556,7 +552,6 @@
             {
                 <tfoot class="table-light border-top" style="position: sticky; bottom: 0; z-index: 9;">
                     <tr class="fw-bold">
-                        <td class="text-center no-print" data-col="select"></td>
                         <td data-col="entry" class="text-start">إجمالي</td>
                         <td data-col="sourceid"></td>
                         <td data-col="sourceline"></td>

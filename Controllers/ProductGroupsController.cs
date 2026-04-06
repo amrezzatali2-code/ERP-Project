@@ -3,6 +3,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                  // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                          // ProductGroup, UserActionType
 using ERP.Security;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
@@ -23,11 +24,13 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly ILookupCacheService _lookupCache;
 
-        public ProductGroupsController(AppDbContext context, IUserActivityLogger activityLogger)
+        public ProductGroupsController(AppDbContext context, IUserActivityLogger activityLogger, ILookupCacheService lookupCache)
         {
             _context = context;
             _activityLogger = activityLogger;
+            _lookupCache = lookupCache;
         }
 
         // =========================
@@ -399,6 +402,8 @@ namespace ERP.Controllers
             _context.ProductGroups.Add(group);
             await _context.SaveChangesAsync();
 
+            _lookupCache.ClearProductGroupsCache();
+
             await _activityLogger.LogAsync(UserActionType.Create, "ProductGroup", group.ProductGroupId, $"إنشاء مجموعة أصناف: {group.Name}");
 
             TempData["Msg"] = "تم إضافة مجموعة أصناف جديدة بنجاح.";
@@ -441,6 +446,8 @@ namespace ERP.Controllers
                 group.UpdatedAt = DateTime.Now;
                 _context.Update(group);
                 await _context.SaveChangesAsync();
+
+                _lookupCache.ClearProductGroupsCache();
 
                 var newValues = System.Text.Json.JsonSerializer.Serialize(new { group.Name });
                 await _activityLogger.LogAsync(UserActionType.Edit, "ProductGroup", id, $"تعديل مجموعة أصناف: {group.Name}", oldValues, newValues);
@@ -496,6 +503,8 @@ namespace ERP.Controllers
             _context.ProductGroups.Remove(group);
             await _context.SaveChangesAsync();
 
+            _lookupCache.ClearProductGroupsCache();
+
             await _activityLogger.LogAsync(UserActionType.Delete, "ProductGroup", id, $"حذف مجموعة أصناف: {group.Name}", oldValues: oldValues);
 
             TempData["Msg"] = "تم حذف مجموعة الأصناف.";
@@ -541,6 +550,8 @@ namespace ERP.Controllers
             _context.ProductGroups.RemoveRange(groups);
             await _context.SaveChangesAsync();
 
+            _lookupCache.ClearProductGroupsCache();
+
             TempData["Msg"] = $"تم حذف {groups.Count} مجموعة أصناف.";
             return RedirectToAction(nameof(Index));
         }
@@ -561,6 +572,8 @@ namespace ERP.Controllers
 
             _context.ProductGroups.RemoveRange(groups);
             await _context.SaveChangesAsync();
+
+            _lookupCache.ClearProductGroupsCache();
 
             TempData["Msg"] = $"تم حذف جميع مجموعات الأصناف ({groups.Count}).";
             return RedirectToAction(nameof(Index));

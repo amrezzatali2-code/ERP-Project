@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
 @model PagedResult<Customer>
@@ -255,7 +255,10 @@
                                 <li><button type="button" class="dropdown-item text-danger" id="btnDeleteAll">حذف الجميع</button></li>
                             </ul>
                         </div>
-                        <button type="button" id="btnCustomerEngagement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر عميلاً واحداً من الجدول">حجم التعامل</button>
+                        @if (ViewBag.CanShowEngagement == true)
+                        {
+                            <button type="button" id="btnCustomerEngagement" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="انقر على صف في الجدول (اختيار السطر) لفتح حجم التعامل">حجم التعامل</button>
+                        }
                         <form method="get" asp-action="Export" asp-controller="Customers" class="d-inline-flex flex-wrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
@@ -269,7 +272,7 @@
                             @if (toCode.HasValue) { <input type="hidden" name="codeTo" value="@toCode" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:70px;min-width:70px;font-size:0.8rem;padding:0.25rem 0.4rem;">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
@@ -351,11 +354,15 @@
                     foreach (var c in Model.Items)
                     {
                         var editUrlCust = Url.Action("Edit", "Customers", new { id = c.CustomerId }) + "?frame=1";
+                        var showEngUrl = ViewBag.CanShowEngagement == true
+                            ? Url.Action("Show", "Customers", new { id = c.CustomerId, frame = 1 })
+                            : "";
                         <tr class="erp-list-selectable-row"
                             data-customer-id="@c.CustomerId"
                             data-edit-url="@(ViewBag.CanEdit == true ? editUrlCust : "")"
-                            data-edit-tab-title="تعديل بيانات العميل">
-                            <td class="text-center no-print" data-col="select">
+                            data-edit-tab-title="تعديل بيانات العميل"
+                            data-movement-url="@showEngUrl">
+                            <td class="text-center no-print" data-col="select" data-col-fixed="true">
                                 <input type="checkbox"
                                        class="row-select"
                                        value="@c.CustomerId" />
@@ -414,9 +421,9 @@
         </table>
     </div>
 
-    @* ===== الشريط السفلى: عرض X–Y من Z + حجم الصفحة (مثل المبيعات) ===== *@
-    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-2 no-print" dir="rtl">
-        <small class="text-muted text-start">
+    @* ===== الشريط السفلى: عرض + حجم الصفحة — محاذاة لبداية السطر في RTL (يمين الشاشة) ===== *@
+    <div class="d-flex flex-wrap justify-content-start align-items-center gap-3 mt-2 no-print w-100" dir="rtl">
+        <small class="text-muted">
             عرض @start - @end من @total
         </small>
 
@@ -676,7 +683,6 @@
 </div>
 
 @section Scripts {
-    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script src="~/js/erp-list-print.js" asp-append-version="true"></script>
     <script>
         // جعل الشريط الأفقي يفتح من جهة اليمين (بداية الجدول في RTL)
@@ -920,10 +926,12 @@
             });
         })();
 
-        // تحديد الكل + الحذف الجماعي + حذف الجميع + حجم التعامل
+        // تحديد الكل + الحذف الجماعي + اختيار السطر (لون ثابت) + تعديل / حجم التعامل (تشيك واحد أو نقر صف فقط)
         (function () {
             const table = document.getElementById("customersTable");
             if (!table) return;
+            const tbody = table.querySelector("tbody");
+            if (!tbody) return;
 
             const selectAll = document.getElementById("selectAll");
             const bulkBtn = document.getElementById("btnBulkDelete");
@@ -931,70 +939,135 @@
             const deleteAllBtn = document.getElementById("btnDeleteAll");
             const formDeleteAll = document.getElementById("formDeleteAll");
             const bulkDeleteIdsInput = document.getElementById("bulkDeleteIdsInput");
-            const btnEngagement = document.getElementById("btnCustomerEngagement");
-            const showUrlZero = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Url.Action("Show", "Customers", new { id = 0 })));
+            const eng = document.getElementById("btnCustomerEngagement");
+            const ed = document.getElementById("btnEditCustomer");
+
+            /** آخر صف اختير بالنقر (بدون الاعتماد على تشيكات متعددة للحذف) */
+            var rowClickSelectedTr = null;
 
             function getRowCheckboxes() {
                 return Array.from(table.querySelectorAll("tbody .row-select"));
             }
 
-            function customerShowUrl(id) {
-                if (!showUrlZero) return "";
-                return String(showUrlZero).replace(/\/0(\?.*)?$/, "/" + id + "$1");
+            function countChecked() {
+                return table.querySelectorAll("tbody input.row-select:checked").length;
             }
 
-            function syncEngagementBtn() {
-                if (!btnEngagement) return;
-                const n = getRowCheckboxes().filter(cb => cb.checked).length;
-                btnEngagement.disabled = n !== 1;
+            function primaryRowForToolbar() {
+                var n = countChecked();
+                if (n > 1) return null;
+                if (n === 1) {
+                    var cb = table.querySelector("tbody input.row-select:checked");
+                    return cb ? cb.closest("tr.erp-list-selectable-row") : null;
+                }
+                if (rowClickSelectedTr && table.contains(rowClickSelectedTr)) return rowClickSelectedTr;
+                return null;
             }
+
+            function refreshVisualAndToolbar() {
+                var n = countChecked();
+                table.querySelectorAll("tbody tr.erp-list-selectable-row").forEach(function (r) {
+                    r.classList.remove("selected");
+                });
+                var highlight = null;
+                if (n === 1) {
+                    var cb = table.querySelector("tbody input.row-select:checked");
+                    highlight = cb ? cb.closest("tr.erp-list-selectable-row") : null;
+                } else if (n === 0 && rowClickSelectedTr && table.contains(rowClickSelectedTr)) {
+                    highlight = rowClickSelectedTr;
+                }
+                if (highlight) highlight.classList.add("selected");
+
+                var tr = primaryRowForToolbar();
+                var mov = tr ? (tr.getAttribute("data-movement-url") || "").trim() : "";
+                var eurl = tr ? (tr.getAttribute("data-edit-url") || "").trim() : "";
+                if (eng) eng.disabled = !mov;
+                if (ed) ed.disabled = !eurl;
+            }
+
+            function onBulkCheckboxChanged() {
+                var n = countChecked();
+                if (n > 1) rowClickSelectedTr = null;
+                else if (n === 1) {
+                    var cb = table.querySelector("tbody input.row-select:checked");
+                    rowClickSelectedTr = cb ? cb.closest("tr.erp-list-selectable-row") : null;
+                }
+                refreshVisualAndToolbar();
+            }
+
+            function openInTab(tabId, url, title) {
+                if (!url) return;
+                var inFrame = (window.top !== window);
+                try {
+                    if (inFrame) {
+                        window.top.postMessage({ type: "erp-open-tab", tabId: tabId, url: url, title: title || "تبويب" }, "*");
+                        return;
+                    }
+                    if (window.erpTabs && typeof window.erpTabs.openTab === "function") {
+                        window.erpTabs.openTab(tabId, url, title || "تبويب");
+                    } else {
+                        window.location.href = url;
+                    }
+                } catch (e) {
+                    if (!inFrame) window.location.href = url;
+                }
+            }
+
+            tbody.addEventListener("click", function (e) {
+                if (e.target.closest("input.row-select")) return;
+                var tr = e.target.closest("tr.erp-list-selectable-row");
+                if (!tr) return;
+                if (e.target.closest("a, button, textarea, select, label")) return;
+                rowClickSelectedTr = tr;
+                refreshVisualAndToolbar();
+            });
 
             selectAll?.addEventListener("change", function () {
-                const checked = this.checked;
-                getRowCheckboxes().forEach(cb => cb.checked = checked);
-                syncEngagementBtn();
+                var checked = this.checked;
+                getRowCheckboxes().forEach(function (cb) { cb.checked = checked; });
+                onBulkCheckboxChanged();
             });
 
             table.addEventListener("change", function (e) {
-                const target = e.target;
-                if (target && target.classList.contains("row-select") && !target.checked && selectAll) {
-                    selectAll.checked = false;
-                }
+                var target = e.target;
                 if (target && target.classList.contains("row-select")) {
-                    syncEngagementBtn();
+                    if (!target.checked && selectAll) selectAll.checked = false;
+                    onBulkCheckboxChanged();
                 }
             });
 
-            syncEngagementBtn();
-
-            btnEngagement?.addEventListener("click", function () {
-                const checks = getRowCheckboxes().filter(cb => cb.checked);
-                if (checks.length !== 1) {
-                    alert("اختر عميلاً واحداً من الجدول لفتح حجم التعامل.");
-                    return;
-                }
-                const id = checks[0].value;
-                const href = customerShowUrl(id);
-                if (!href) return;
-                const a = document.createElement("a");
-                a.href = href;
-                a.className = "app-menu-link";
-                a.setAttribute("data-tab-id", "customer-engagement-" + id);
-                a.setAttribute("data-tab-title", "حجم تعامل عميل");
-                a.style.display = "none";
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            });
+            if (ed) {
+                ed.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    var tr = primaryRowForToolbar();
+                    if (!tr) return;
+                    var url = (tr.getAttribute("data-edit-url") || "").trim();
+                    if (!url) return;
+                    var id = tr.getAttribute("data-customer-id") || "";
+                    var title = (tr.getAttribute("data-edit-tab-title") || "").trim() || "تعديل";
+                    openInTab("customer-edit-tab", url, title);
+                });
+            }
+            if (eng) {
+                eng.addEventListener("click", function (e) {
+                    e.preventDefault();
+                    var tr = primaryRowForToolbar();
+                    if (!tr) return;
+                    var url = (tr.getAttribute("data-movement-url") || "").trim();
+                    if (!url) return;
+                    var id = tr.getAttribute("data-customer-id") || "";
+                    openInTab("list-movement-" + id, url, "حجم تعامل عميل");
+                });
+            }
 
             bulkBtn?.addEventListener("click", function () {
-                const checks = getRowCheckboxes().filter(cb => cb.checked);
+                var checks = getRowCheckboxes().filter(function (cb) { return cb.checked; });
                 if (checks.length === 0) {
                     alert("من فضلك اختر على الأقل عميل واحد للحذف.");
                     return;
                 }
                 if (!confirm("هل أنت متأكد من حذف العملاء المحددين؟")) return;
-                if (bulkDeleteIdsInput) bulkDeleteIdsInput.value = checks.map(cb => cb.value).join(",");
+                if (bulkDeleteIdsInput) bulkDeleteIdsInput.value = checks.map(function (cb) { return cb.value; }).join(",");
                 bulkForm?.submit();
             });
 
@@ -1002,25 +1075,9 @@
                 if (!confirm("تحذير: سيتم حذف جميع العملاء. هل أنت متأكد؟")) return;
                 formDeleteAll?.submit();
             });
-        })();
 
-        @if (ViewBag.CanEdit == true)
-        {
-            <text>
-        if (window.ERP && typeof ERP.initListSelection === "function") {
-            ERP.initListSelection({
-                rowSelector: "#customersTable tbody tr.erp-list-selectable-row",
-                idAttribute: "data-customer-id",
-                tabTitleAttribute: "data-tab-title",
-                editTabTitleAttribute: "data-edit-tab-title",
-                editUrlAttribute: "data-edit-url",
-                editButtonId: "btnEditCustomer",
-                editTabId: "customer-edit-tab",
-                multiSelectCheckboxes: true
-            });
-        }
-            </text>
-        }
+            refreshVisualAndToolbar();
+        })();
 
         // =========================
         // اختيار الأعمدة + حفظها فى localStorage

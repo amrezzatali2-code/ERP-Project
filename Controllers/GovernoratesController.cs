@@ -6,6 +6,7 @@ using ERP.Filters;
 using ERP.Infrastructure;                         // PagedResult + ApplySearchSort + UserActivityLogger
 using ERP.Models;                                 // Governorate, UserActionType
 using ERP.Security;
+using ERP.Services.Caching;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
@@ -30,11 +31,16 @@ namespace ERP.Controllers
     {
         private readonly AppDbContext _db;
         private readonly IUserActivityLogger _activityLogger;
+        private readonly ILookupCacheService _lookupCache;
 
-        public GovernoratesController(AppDbContext ctx, IUserActivityLogger activityLogger)
+        public GovernoratesController(
+            AppDbContext ctx,
+            IUserActivityLogger activityLogger,
+            ILookupCacheService lookupCache)
         {
             _db = ctx;
             _activityLogger = activityLogger;
+            _lookupCache = lookupCache;
         }
 
         // =========================================================================
@@ -202,7 +208,7 @@ namespace ERP.Controllers
             if (pageSize < 1) pageSize = 50;
 
             bool descending = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);
-            var model = await PagedResult<Governorate>.CreateAsync(q, page, pageSize, null, descending, sort, null);
+            var model = await PagedResult<Governorate>.CreateAsync(q, page, pageSize, sort, descending, search, searchBy);
 
             bool dateFilterActive = useDateRange || fromDate.HasValue || toDate.HasValue;
             model.UseDateRange = dateFilterActive;
@@ -291,6 +297,7 @@ namespace ERP.Controllers
 
             _db.Governorates.Add(vm);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             await _activityLogger.LogAsync(UserActionType.Create, "Governorate", vm.GovernorateId, $"إنشاء محافظة: {vm.GovernorateName}");
 
@@ -327,6 +334,7 @@ namespace ERP.Controllers
             entity.UpdatedAt = DateTime.Now;   // تسجيل آخر تعديل
 
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             var newValues = System.Text.Json.JsonSerializer.Serialize(new { entity.GovernorateName });
             await _activityLogger.LogAsync(UserActionType.Edit, "Governorate", id, $"تعديل محافظة: {entity.GovernorateName}", oldValues, newValues);
@@ -357,6 +365,7 @@ namespace ERP.Controllers
                 var oldValues = System.Text.Json.JsonSerializer.Serialize(new { entity.GovernorateName });
                 _db.Governorates.Remove(entity);
                 await _db.SaveChangesAsync();
+                _lookupCache.ClearAllGeographyCaches();
 
                 await _activityLogger.LogAsync(UserActionType.Delete, "Governorate", id, $"حذف محافظة: {entity.GovernorateName}", oldValues: oldValues);
 
@@ -410,6 +419,7 @@ namespace ERP.Controllers
 
             _db.Governorates.RemoveRange(items);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             TempData["Ok"] = $"تم حذف {items.Count} محافظة.";
             return RedirectToAction(nameof(Index));
@@ -440,6 +450,7 @@ namespace ERP.Controllers
 
             _db.Governorates.RemoveRange(all);
             await _db.SaveChangesAsync();
+            _lookupCache.ClearAllGeographyCaches();
 
             TempData["Ok"] = "تم حذف جميع المحافظات.";
             return RedirectToAction(nameof(Index));
@@ -556,7 +567,7 @@ namespace ERP.Controllers
 
             var s = value.Replace("\"", "\"\""); // هروب علامة "
 
-            if (s.Contains(',') || s.Contains('\n') || s.Contains('\r'))
+            if (s.Contains(',') || s.Contains('\n') || s.Contains('\r') || s.Contains('"'))
                 return "\"" + s + "\"";
 
             return s;

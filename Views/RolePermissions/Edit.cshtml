@@ -17,6 +17,8 @@
         .Select(m => new { Key = m, Items = grouped[m] })
         .Concat(grouped.Where(kv => !moduleOrder.Contains(kv.Key)).Select(kv => new { Key = kv.Key, Items = kv.Value }))
         .ToList();
+    bool isFrame = string.Equals(Context.Request.Query["frame"], "1", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(Context.Request.Query["frame"], "true", StringComparison.OrdinalIgnoreCase);
 }
 
 <div class="container-fluid" dir="rtl">
@@ -28,6 +30,7 @@
     <form id="rolePermEditForm" asp-action="Edit" method="post" class="card">
         @Html.AntiForgeryToken()
         <input type="hidden" name="roleId" value="@Model.RoleId" />
+        <input type="hidden" name="frame" value="@(isFrame ? "true" : "false")" />
         <input type="hidden" name="SelectedRoleAccountIds" id="SelectedRoleAccountIds" value="" />
 
         <div class="card-body">
@@ -73,7 +76,7 @@
                                 </td>
                                 <td class="text-center align-middle" style="width: 42px;">
                                     <button type="button" class="btn btn-sm btn-outline-secondary perm-module-toggle" aria-label="فتح/إغلاق" title="فتح/إغلاق الصلاحيات">
-                                        <span class="perm-toggle-icon">−</span>
+                                        <span class="perm-toggle-icon">+</span>
                                     </button>
                                 </td>
                                 <td class="align-middle" colspan="2"><strong>@moduleName</strong></td>
@@ -112,7 +115,7 @@
                                     </td>
                                     <td class="text-center align-middle" style="width: 42px;">
                                         <button type="button" class="btn btn-sm btn-outline-secondary perm-module-toggle" aria-label="فتح/إغلاق" title="فتح/إغلاق الحسابات">
-                                            <span class="perm-toggle-icon">−</span>
+                                            <span class="perm-toggle-icon">+</span>
                                         </button>
                                     </td>
                                     <td class="align-middle" colspan="2"><strong>@accModuleTitle</strong> <span class="text-muted small fw-normal">(لهذا الدور)</span></td>
@@ -152,7 +155,7 @@
                                 </td>
                                 <td class="text-center align-middle" style="width: 42px;">
                                     <button type="button" class="btn btn-sm btn-outline-secondary perm-module-toggle" aria-label="فتح/إغلاق" title="فتح/إغلاق الحسابات">
-                                        <span class="perm-toggle-icon">−</span>
+                                        <span class="perm-toggle-icon">+</span>
                                     </button>
                                 </td>
                                 <td class="align-middle" colspan="2"><strong>@accModuleTitle</strong> <span class="text-muted small fw-normal">(لهذا الدور)</span></td>
@@ -211,8 +214,11 @@
                 const dataRows = tbody ? tbody.querySelectorAll('tr.perm-data-row') : [];
                 const moduleRows = tbody ? tbody.querySelectorAll('tr.perm-module-row') : [];
                 if (term === '') {
-                    dataRows.forEach(function (tr) { tr.style.display = ''; });
-                    moduleRows.forEach(function (tr) { tr.style.display = ''; });
+                    moduleRows.forEach(function (modRow) {
+                        modRow.dataset.searchActive = 'false';
+                        modRow.style.display = '';
+                        syncModuleVisibility(modRow);
+                    });
                     return;
                 }
                 moduleRows.forEach(function (modRow) {
@@ -229,11 +235,14 @@
                         const text = (r.getAttribute('data-search') || '').toLowerCase();
                         return text.indexOf(term) >= 0;
                     });
+                    modRow.dataset.searchActive = 'true';
                     nextRows.forEach(function (r) {
                         const text = (r.getAttribute('data-search') || '').toLowerCase();
                         r.style.display = (text.indexOf(term) >= 0) ? '' : 'none';
                     });
                     modRow.style.display = (anyVisible || moduleName.indexOf(term) >= 0) ? '' : 'none';
+                    var icon = modRow.querySelector('.perm-toggle-icon');
+                    if (icon) icon.textContent = anyVisible ? '−' : '+';
                 });
             }
 
@@ -276,6 +285,29 @@
                 if (modCb) modCb.checked = allChecked;
                 if (span) { span.textContent = allChecked ? '✔' : '✖'; span.className = 'perm-module-status ' + (allChecked ? 'text-success' : 'text-danger'); }
                 contentRows.forEach(updateDataRowStatus);
+            }
+
+            function getModuleContentRows(modRow) {
+                var rows = [];
+                var modKey = (modRow && modRow.getAttribute('data-module') || '').trim();
+                var el = modRow ? modRow.nextElementSibling : null;
+                while (el && el.classList.contains('perm-data-row') && (el.getAttribute('data-module') || '').trim() === modKey) {
+                    rows.push(el);
+                    el = el.nextElementSibling;
+                }
+                return rows;
+            }
+
+            function syncModuleVisibility(modRow) {
+                if (!modRow) return;
+                var rows = getModuleContentRows(modRow);
+                var collapsed = (modRow.dataset.collapsed || 'true') === 'true';
+                var searchActive = (modRow.dataset.searchActive || 'false') === 'true';
+                var icon = modRow.querySelector('.perm-toggle-icon');
+                if (!searchActive) {
+                    rows.forEach(function (r) { r.style.display = collapsed ? 'none' : ''; });
+                    if (icon) icon.textContent = collapsed ? '+' : '−';
+                }
             }
 
             // تشيك بوكس الموديول: عند التحديد يختار كل عناصر الموديول، عند الإلغاء يزيلها (مثل أدوار المستخدمين)
@@ -331,20 +363,17 @@
                 btn.addEventListener('click', function () {
                     var row = btn.closest('tr.perm-module-row');
                     if (!row) return;
-                    var modKey = (row.getAttribute('data-module') || '').trim();
-                    var contentRows = [];
-                    var el = row.nextElementSibling;
-                    while (el && el.classList.contains('perm-data-row') && (el.getAttribute('data-module') || '').trim() === modKey) {
-                        contentRows.push(el);
-                        el = el.nextElementSibling;
-                    }
-                    var isHidden = contentRows.length > 0 && contentRows[0].style.display === 'none';
-                    var icon = row.querySelector('.perm-toggle-icon');
-                    contentRows.forEach(function (r) {
-                        r.style.display = isHidden ? '' : 'none';
-                    });
-                    if (icon) icon.textContent = isHidden ? '−' : '+';
+                    row.dataset.searchActive = 'false';
+                    row.dataset.collapsed = ((row.dataset.collapsed || 'true') === 'true') ? 'false' : 'true';
+                    syncModuleVisibility(row);
                 });
+            });
+
+            tbody.querySelectorAll('tr.perm-module-row').forEach(function (row) {
+                row.dataset.collapsed = 'true';
+                row.dataset.searchActive = 'false';
+                syncModuleVisibility(row);
+                updateModuleRowStatus(row);
             });
 
             var rolePermForm = document.getElementById('rolePermEditForm');

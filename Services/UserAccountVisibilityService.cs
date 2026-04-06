@@ -147,31 +147,37 @@ namespace ERP.Services
                 .AnyAsync(x => roleIds.Contains(x.RoleId) && x.IsAllowed);
         }
 
-        /// <summary>معرّفات الحسابات المختارة كبذرة قبل التوسيع: مستخدم + اتحاد أدوار.</summary>
+        /// <summary>
+        /// معرّفات الحسابات المختارة كبذرة قبل التوسيع.
+        /// عند وجود قائمة حسابات على أي دور للمستخدم تصبح هي المرجع الحالي،
+        /// وتُستخدم سجلات المستخدم القديمة فقط كـ fallback إذا لم توجد أي إعدادات أدوار.
+        /// </summary>
         private async Task<List<int>> GetRawAllowedAccountIdsForUserAsync(int userId)
         {
-            var fromUser = await _context.UserAccountVisibilityOverrides
-                .AsNoTracking()
-                .Where(x => x.UserId == userId && x.IsAllowed)
-                .Select(x => x.AccountId)
-                .ToListAsync();
-
             var roleIds = await _context.UserRoles
                 .AsNoTracking()
                 .Where(ur => ur.UserId == userId)
                 .Select(ur => ur.RoleId)
                 .ToListAsync();
 
-            if (roleIds.Count == 0)
-                return fromUser.Distinct().ToList();
+            if (roleIds.Count > 0)
+            {
+                var fromRoles = await _context.RoleAccountVisibilityOverrides
+                    .AsNoTracking()
+                    .Where(x => roleIds.Contains(x.RoleId) && x.IsAllowed)
+                    .Select(x => x.AccountId)
+                    .ToListAsync();
 
-            var fromRoles = await _context.RoleAccountVisibilityOverrides
+                if (fromRoles.Count > 0)
+                    return fromRoles.Distinct().ToList();
+            }
+
+            return await _context.UserAccountVisibilityOverrides
                 .AsNoTracking()
-                .Where(x => roleIds.Contains(x.RoleId) && x.IsAllowed)
+                .Where(x => x.UserId == userId && x.IsAllowed)
                 .Select(x => x.AccountId)
+                .Distinct()
                 .ToListAsync();
-
-            return fromUser.Concat(fromRoles).Distinct().ToList();
         }
 
         /// <summary>

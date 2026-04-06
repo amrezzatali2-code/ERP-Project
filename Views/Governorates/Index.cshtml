@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @model PagedResult<ERP.Models.Governorate>
 
@@ -138,6 +138,7 @@
                         <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create">إضافة محافظة</a>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModal">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalGov">اختيار الأعمدة</button>
+                        <button type="button" id="btnEditGovernorate" class="btn btn-erp btn-erp-primary btn-erp-sm" disabled>تعديل</button>
                         <button type="button" id="btnPrintGov" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <div class="dropdown d-inline">
                             <button class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
@@ -164,7 +165,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_updated)) { <input type="hidden" name="filterCol_updated" value="@filterCol_updated" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
@@ -198,14 +199,13 @@
                     <th data-col="name">@filterableCol("name", "name", "اسم المحافظة")</th>
                     <th data-col="created">@filterableCol("created", "created", "تاريخ الإنشاء")</th>
                     <th data-col="updated">@filterableCol("updated", "updated", "آخر تعديل")</th>
-                    <th class="text-center no-print" data-col="actions" data-col-fixed="true" style="width:200px;">إجراءات</th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="6" class="text-center text-muted py-4">
+                        <td colspan="5" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -214,7 +214,11 @@
                 {
                     foreach (var g in Model.Items)
                     {
-                        <tr>
+                        var editUrl = (Url.Action("Edit", "Governorates", new { id = g.GovernorateId }) ?? "#") + "?frame=1";
+                        <tr class="erp-list-selectable-row"
+                            data-governorate-id="@g.GovernorateId"
+                            data-edit-url="@editUrl"
+                            data-tab-title="تعديل المحافظة">
                             <td class="text-center no-print" data-col="select">
                                 <input type="checkbox"
                                        class="row-select"
@@ -228,27 +232,6 @@
                             </td>
                             <td data-col="updated">
                                 @(g.UpdatedAt.HasValue? g.UpdatedAt.Value.ToString("yyyy-MM-dd HH:mm") : "")
-                            </td>
-
-                            <td class="text-nowrap no-print" data-col="actions">
-                                <a class="btn btn-erp btn-erp-secondary btn-erp-sm open-same-tab"
-                                   href="@(Url.Action("Details", "Governorates", new { id = g.GovernorateId }))?frame=1"
-                                   data-url="@(Url.Action("Details", "Governorates", new { id = g.GovernorateId }))?frame=1"
-                                   data-tab-title="تفاصيل المحافظة">
-                                    تفاصيل
-                                </a>
-                                <a class="btn btn-erp btn-erp-primary btn-erp-sm open-same-tab"
-                                   href="@(Url.Action("Edit", "Governorates", new { id = g.GovernorateId }))?frame=1"
-                                   data-url="@(Url.Action("Edit", "Governorates", new { id = g.GovernorateId }))?frame=1"
-                                   data-tab-title="تعديل المحافظة">
-                                    تعديل
-                                </a>
-                                <a class="btn btn-erp btn-erp-danger btn-erp-sm open-same-tab"
-                                   href="@(Url.Action("Delete", "Governorates", new { id = g.GovernorateId }))?frame=1"
-                                   data-url="@(Url.Action("Delete", "Governorates", new { id = g.GovernorateId }))?frame=1"
-                                   data-tab-title="حذف المحافظة">
-                                    حذف
-                                </a>
                             </td>
                         </tr>
                     }
@@ -640,6 +623,19 @@
                     modal?.hide();
                 });
         })();
+
+        if (window.ERP && typeof ERP.initListSelection === "function") {
+            ERP.initListSelection({
+                rowSelector: "#govTable tbody tr.erp-list-selectable-row",
+                idAttribute: "data-governorate-id",
+                editButtonId: "btnEditGovernorate",
+                editUrlAttribute: "data-edit-url",
+                tabTitleAttribute: "data-tab-title",
+                editTabTitleAttribute: "data-tab-title",
+                editTabId: "Governorates",
+                multiSelectCheckboxes: true
+            });
+        }
 
         // =========================
         // فلتر الكود من/إلى (نستخدم نفس IDs الحالية)

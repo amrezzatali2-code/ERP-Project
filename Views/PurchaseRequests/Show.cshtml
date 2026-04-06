@@ -17,13 +17,19 @@
 
         .invoice-page {
             background-color: #f3f6fb;
-            min-height: 0;
+            min-height: 100vh;
             padding-bottom: 1rem;
+        }
+        html.in-frame .invoice-page {
+            min-height: 100vh;
+        }
+        .invoice-page .container-fluid > .row.g-3 {
+            align-items: stretch;
+            min-height: calc(100vh - 3.25rem);
         }
 
         .invoice-header-card,
         .invoice-details-card,
-        .invoice-lines-card,
         .invoice-totals-card,
         .invoice-side-card,
         .invoice-Add-card,
@@ -59,7 +65,6 @@
         .invoice-details-card .card-header,
         .invoice-Add-card .card-header,
         .invoice-product-card .card-header,
-        .invoice-lines-card .card-header,
         .invoice-side-card .card-header {
             background: linear-gradient(90deg, #374151 0%, #0ea5e9 100%);
             color: #ffffff;
@@ -79,21 +84,25 @@
         .invoice-side-card .invoice-actions-bar hr { display: none !important; }
         .invoice-page .invoice-side-card { min-width: 220px; }
 
-        /* هيدر جدول السطور — أرضية رمادي عادي ونص أغمق */
-        .invoice-lines-header th {
-            background-color: #e2e8f0 !important;
+        /* هيدر جدول السطور — أبيض + ثابت عند التمرير (مثل فاتورة المبيعات) */
+        .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header th {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #fff !important;
             color: #0f172a !important;
             font-weight: 600;
             padding: 0.5rem 0.55rem;
-            border: 1px solid #cbd5e1 !important;
+            border: 1px solid #dee2e6 !important;
+            box-shadow: 0 1px 0 0 #dee2e6;
         }
-        /* جدول السطور: أرضية بيضاء */
-        .invoice-lines-card .erp-table-wrapper .erp-table tbody tr,
-        .invoice-lines-card .erp-table-wrapper .erp-table tbody td {
-            background-color: #fff !important;
+        /* جدول السطور: أرضية فاتحة داخل المنطقة الملونة */
+        .invoice-lines-container .erp-table-wrapper .erp-table tbody tr,
+        .invoice-lines-container .erp-table-wrapper .erp-table tbody td {
+            background-color: rgba(255, 255, 255, 0.72) !important;
         }
-        .invoice-lines-card .erp-table-wrapper .erp-table tbody tr:hover td {
-            background-color: #f8fafc !important;
+        .invoice-lines-container .erp-table-wrapper .erp-table tbody tr:hover td {
+            background-color: rgba(248, 250, 252, 0.95) !important;
         }
 
         /* اختيار سطر من جدول السطور (بدون أزرار في الصف) */
@@ -118,7 +127,6 @@
         div.card.invoice-header-card,
         div.card.invoice-product-card.invoice-product-card-list-style,
         div.card.invoice-Add-card,
-        div.card.invoice-lines-card,
         div.card.invoice-totals-card {
             border: 1px solid #6366f1 !important;
             border-radius: 12px !important;
@@ -166,8 +174,8 @@
         .invoice-Add-card .card-body .form-select-sm {
             color: #020617 !important;
         }
-        .invoice-lines-card .erp-table-wrapper .erp-table tbody td,
-        .invoice-lines-card .erp-table-wrapper .erp-table tbody th {
+        .invoice-lines-container .erp-table-wrapper .erp-table tbody td,
+        .invoice-lines-container .erp-table-wrapper .erp-table tbody th {
             color: #0f172a !important;
         }
         .invoice-totals-card .card-body,
@@ -254,17 +262,55 @@
             padding: 0.5rem 1rem;
             border: none !important;
             box-shadow: none !important;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
-        /* حاوية المحتوى — ليست كارت: بدون حد أو خلفية */
+        /* حاوية المحتوى — عمود مرن يمتد لأسفل (مثل فاتورة المبيعات) */
         #PI_BodyHost,
         div#PI_BodyHost,
         .invoice-page div#PI_BodyHost {
-            display: block !important;
+            display: flex !important;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-height: 0;
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
             padding: 0 !important;
+        }
+        /* كروت أعلى الصفحة لا تُضغط؛ جدول السطور يمتص المساحة */
+        .invoice-page #PI_BodyHost .invoice-header-card,
+        .invoice-page #PI_BodyHost .invoice-product-card,
+        .invoice-page #PI_BodyHost .invoice-Add-card {
+            flex: 0 0 auto;
+        }
+        .invoice-page #PI_BodyHost .invoice-totals-card {
+            flex: 0 0 auto;
+        }
+        /* حاوية جدول السطور — تمتد + تدرج لوني (مثل فاتورة المبيعات) */
+        .invoice-page .invoice-lines-container {
+            display: flex;
+            flex-direction: column;
+            flex: 1 1 auto;
+            min-height: 14rem;
+            margin-top: 0.85rem;
+            margin-bottom: 0.85rem !important;
+            border: 1px solid #6366f1 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 1px 3px rgba(99,102,241,.25) !important;
+            overflow: hidden;
+            background: linear-gradient(165deg, #eef2ff 0%, #e0e7ff 42%, #dbeafe 78%, #cffafe 100%);
+        }
+        .invoice-page .invoice-lines-container .erp-table-wrapper {
+            flex: 1 1 auto;
+            min-height: 16rem;
+            max-height: none !important;
+            overflow: auto;
+            border: none;
+            border-radius: 0;
+            background: rgba(255, 255, 255, 0.42);
         }
         .invoice-page .container-fluid,
         .invoice-page .row {
@@ -276,13 +322,13 @@
         #PI_BodyHost .invoice-header-card .form-select,
         #PI_BodyHost .invoice-product-card .form-control,
         #PI_BodyHost .invoice-product-card .form-select,
-        #PI_BodyHost .invoice-lines-card .form-control,
-        #PI_BodyHost .invoice-lines-card .form-select,
+        #PI_BodyHost .invoice-lines-container .form-control,
+        #PI_BodyHost .invoice-lines-container .form-select,
         #PI_BodyHost .invoice-totals-card .form-control,
         #PI_BodyHost .invoice-totals-card .form-select {
             border-color: #94a3b8 !important;
         }
-        #PI_BodyHost .invoice-lines-card .editable-line-field {
+        #PI_BodyHost .invoice-lines-container .editable-line-field {
             border-color: #94a3b8 !important;
         }
         /* انبوت اسم الصنف: حدود مميزة بدون لون داخلي */
@@ -563,11 +609,6 @@
             max-width: 130px;
         }
 
-        .erp-table-wrapper {
-            max-height: 360px;
-            overflow: auto;
-        }
-
         .summary-badge {
             min-width: 80px;
             text-align: center;
@@ -661,7 +702,7 @@
         }
 
         @@media print {
-            .erp-table-wrapper {
+            .invoice-page .invoice-lines-container .erp-table-wrapper {
                 max-height: none !important;
                 overflow: visible !important;
             }
@@ -1224,9 +1265,7 @@
                         @* =====================================================
                        5) جدول السطور
                        ===================================================== *@
-                        <div class="card shadow-sm mb-2 invoice-lines-card">
-                            <div class="invoice-card-line"></div>
-                            <div class="card-body p-0">
+                        <div class="invoice-lines-container">
                         <div class="erp-table-wrapper mb-0">
                             <table class="table table-sm table-hover mb-0 erp-table">
                                 <thead class="invoice-lines-header">
@@ -1256,17 +1295,7 @@
                                         .OrderBy(g => g.Key.ProdName);
                                     }
 
-                                    @if (!groups.Any())
-                                    {
-                                        <tr>
-                                            <td colspan="8" class="text-center text-muted py-3">
-                                                لا يوجد سطور داخل الطلب حتى الآن.
-                                            </td>
-                                        </tr>
-                                    }
-                                    else
-                                    {
-                                        foreach (var g in groups)
+                                    @foreach (var g in groups)
                                         {
                                             int batchCount = g.Count();
 
@@ -1419,11 +1448,9 @@
                                                 }
                                             }
                                         }
-                                    }
                                 </tbody>
                             </table>
                         </div>
-                            </div>
                         </div>
 
                         @* =====================================================
@@ -2965,9 +2992,7 @@
                              // تفريغ الجدول قبل الرسم
                              tbody.innerHTML = '';
 
-                             // لو مفيش بيانات
                              if (!Array.isArray(lines) || lines.length === 0) {
-                                 tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-3">لا توجد سطور</td></tr>`;
                                  return;
                              }
 

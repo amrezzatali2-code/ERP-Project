@@ -639,6 +639,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("DebitNotes.BulkDelete")]
         public async Task<IActionResult> BulkDelete(int[] ids)
         {
             // لو المستخدم لم يحدد أى إشعار
@@ -685,6 +686,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("DebitNotes.DeleteAll")]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _context.DebitNotes.ToListAsync();
@@ -837,7 +839,8 @@ namespace ERP.Controllers
             return View(debitNote);
         }
 
-        // GET: DebitNotes/Unlock/5 — فتح الإشعار للتعديل (سيُضاف التحقق من الصلاحية لاحقاً)
+        // GET: DebitNotes/Unlock/5 — فتح الإشعار للتعديل
+        [RequirePermission("DebitNotes.Unlock")]
         public async Task<IActionResult> Unlock(int? id)
         {
             if (id == null)
@@ -950,6 +953,7 @@ namespace ERP.Controllers
         }
 
         // GET: DebitNotes/Delete/5
+        [RequirePermission("DebitNotes.Delete")]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null)
@@ -969,6 +973,7 @@ namespace ERP.Controllers
         // POST: DebitNotes/Delete/5
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission("DebitNotes.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
             var debitNote = await _context.DebitNotes.FindAsync(id);

@@ -1,12 +1,17 @@
 @using ERP.Infrastructure
 @{
     ViewData["Title"] = "استيراد البيانات من ملفات Excel";
+    var canProductsExcel = ViewBag.CanImportProductsExcel as bool? == true;
+    var canBulkOther = ViewBag.CanImportBulkOther as bool? == true;
     var colProducts = string.Join("، ", ExcelImportColumns.Products);
     var colProductBal = string.Join("، ", ExcelImportColumns.ProductOpeningBalance);
     var colCustomers = string.Join("، ", ExcelImportColumns.Customers);
     var colCustBal = string.Join("، ", ExcelImportColumns.CustomerOpeningBalance);
     var colUsers = string.Join("، ", ExcelImportColumns.Users);
     var colTreasury = string.Join("، ", ExcelImportColumns.TreasuryOpeningBalance);
+    var whList = ViewBag.Warehouses as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var govList = ViewBag.Governorates as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
+    var distList = ViewBag.Districts as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
 }
 
 <div class="container-fluid mt-3" dir="rtl">
@@ -32,7 +37,9 @@
         <strong>شيت واحد:</strong> اجمع أصناف الدواء والإكسسوار في شيت واحد وأضف عمود <strong>المخزن</strong>. استيراد الأصناف يملأ قائمة الأصناف، واستيراد أرصدة الأصناف يقرأ من <strong>نفس الملف</strong> (نفس الأعمدة: صنف، مخزن، كمية، مرجح، إجمالي تكلفة).
     </p>
 
-    @* ========== 1) استيراد الأصناف — شيت واحد (دواء + اكسسوار + عمود المخزن) ========== *@
+    @* ========== 1) استيراد الأصناف — شيت واحد (دواء + اكسسوار + عمود المخزن) — صلاحية: الإعدادات › استيراد أصناف من Excel ========== *@
+    @if (canProductsExcel)
+    {
     <div class="card mb-3 border-primary">
         <div class="card-header bg-light"><strong>استيراد الأصناف</strong></div>
         <div class="card-body">
@@ -50,7 +57,10 @@
             </form>
         </div>
     </div>
+    }
 
+    @if (canBulkOther)
+    {
     @* ========== 2) استيراد أرصدة الأصناف — من نفس الملف ========== *@
     <div class="card mb-3 border-info">
         <div class="card-header bg-light"><strong>استيراد أرصدة الأصناف (رصيد أول المدة)</strong></div>
@@ -70,9 +80,6 @@
     </div>
 
     @* ========== 2ب) تحويل الأرصدة إلى المخزن المعيّن للصنف (بدون إعادة استيراد) ========== *@
-    @{
-        var whList = ViewBag.Warehouses as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
-    }
     <div class="card mb-3 border-success">
         <div class="card-header bg-light"><strong>تحويل الأرصدة إلى المخزن المعيّن للصنف</strong></div>
         <div class="card-body">
@@ -97,11 +104,6 @@
             </form>
         </div>
     </div>
-
-    @{
-        var govList = ViewBag.Governorates as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
-        var distList = ViewBag.Districts as List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> ?? new List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem>();
-    }
 
     <div class="card mb-3 border-secondary">
         <div class="card-header bg-light"><strong>أو: إنشاء مناطق من أسماء المناطق النصية للعملاء</strong></div>
@@ -221,6 +223,7 @@
         </div>
     </div>
 
+    }
     <div class="alert alert-warning">
         بعد انتهاء التجارب، يمكنك مسح كل الأصناف التجريبية من جدول <strong>Products</strong> وإعادة الاستيراد من جديد قبل تشغيل البرنامج في الشركة.
     </div>

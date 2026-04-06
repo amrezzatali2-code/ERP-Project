@@ -43,6 +43,7 @@ namespace ERP.Controllers
         private readonly IUserActivityLogger _activityLogger; // خدمة سجل النشاط
         private readonly ILedgerPostingService _ledgerPostingService; // متغير: خدمة الترحيل
         private readonly IPermissionService _permissionService;
+        private readonly IListVisibilityService _listVisibilityService;
         private readonly StockAnalysisService _stockAnalysis;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
         private static readonly char[] _filterSep = new[] { '|', ',', ';' };
@@ -52,6 +53,7 @@ namespace ERP.Controllers
                                           IUserActivityLogger activityLogger,
                                           ILedgerPostingService ledgerPosting,
                                           IPermissionService permissionService,
+                                          IListVisibilityService listVisibilityService,
                                           StockAnalysisService stockAnalysis,
                                           IUserAccountVisibilityService accountVisibilityService)
         {
@@ -60,6 +62,7 @@ namespace ERP.Controllers
             _activityLogger = activityLogger;
             _ledgerPostingService = ledgerPosting;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
+            _listVisibilityService = listVisibilityService ?? throw new ArgumentNullException(nameof(listVisibilityService));
             _stockAnalysis = stockAnalysis ?? throw new ArgumentNullException(nameof(stockAnalysis));
             _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
         }
@@ -318,6 +321,7 @@ private int? GetCurrentUserId()
                 else if (string.Equals(searchBy, "warehouse", StringComparison.OrdinalIgnoreCase))
                     query = query.Include(pr => pr.Warehouse);
             }
+            query = await ApplyOperationalListVisibilityAsync(query);
 
             // =========================================================
             // (2) قراءة fromCode/toCode من الكويري للتوافق مع Export
@@ -530,6 +534,7 @@ private int? GetCurrentUserId()
             var searchTerm = (search ?? "").Trim().ToLowerInvariant();
             var col = (column ?? "").Trim().ToLowerInvariant();
             IQueryable<PurchaseRequest> q = _context.PurchaseRequests.AsNoTracking();
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             List<(string Value, string Display)> items;
             switch (col)
@@ -2958,6 +2963,18 @@ private async Task PopulateDropDownsAsync(
             return "System";
         }
 
+        private async Task<IQueryable<PurchaseRequest>> ApplyOperationalListVisibilityAsync(IQueryable<PurchaseRequest> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(pr => pr.CreatedBy != null && creatorNames.Contains(pr.CreatedBy.Trim()));
+        }
+
 
 
 
@@ -3075,6 +3092,7 @@ private async Task PopulateDropDownsAsync(
                 else if (string.Equals(searchBy, "warehouse", StringComparison.OrdinalIgnoreCase))
                     query = query.Include(pr => pr.Warehouse);
             }
+            query = await ApplyOperationalListVisibilityAsync(query);
 
             query = ApplyFilters(query, search, searchBy, searchMode, finalFrom, finalTo, useDateRange, fromDate, toDate, dateField);
 

@@ -144,8 +144,8 @@
             </div>
         </form>
         <div class="erp-toolbar-two-rows mt-2">
-            @* في RTL: أول عنصر في DOM يميناً — تصدير ← Excel ← تجميع حسب المستخدم ← تفصيلي (أقصى يسار المجموعة) *@
-            <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-end align-items-center">
+            @* في RTL: justify-content-start يضع المجموعة عند يمين الشريط؛ ترتيب DOM من اليمين: تصدير، Excel، تجميع، تفصيلي *@
+            <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-start align-items-center">
                 <a href="#" class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none" id="linkExportBonusDirect" title="تصدير التقرير الحالي إلى Excel">تصدير</a>
                 <div class="dropdown">
                     <button class="btn btn-erp btn-erp-secondary btn-erp-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Excel</button>

@@ -810,6 +810,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashPayments.Open")]
         public async Task<IActionResult> Open(int id)
         {
             try
@@ -1019,6 +1020,7 @@ namespace ERP.Controllers
         // =========================================================
         // Delete — GET: تأكيد حذف إذن دفع
         // =========================================================
+        [RequirePermission("CashPayments.Delete")]
         public async Task<IActionResult> Delete(int? id)
         {
             if (id == null || id <= 0)
@@ -1041,19 +1043,55 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashPayments.Delete")]
         public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            var payment = await _context.CashPayments.FindAsync(id);
+            var payment = await _context.CashPayments
+                .Include(p => p.Customer)
+                .FirstOrDefaultAsync(p => p.CashPaymentId == id);
             if (payment == null)
             {
                 TempData["CashPaymentError"] = "إذن الدفع غير موجود.";
                 return RedirectToAction(nameof(Index));
             }
 
-            _context.CashPayments.Remove(payment);
-            await _context.SaveChangesAsync();
+            try
+            {
+                if (payment.IsPosted)
+                {
+                    await _ledgerPostingService.ReverseForHeaderDeleteAsync(
+                        Models.LedgerSourceType.Payment,
+                        payment.CashPaymentId,
+                        User?.Identity?.Name ?? "SYSTEM",
+                        "حذف إذن دفع نقدية");
+                }
 
-            TempData["CashPaymentSuccess"] = "تم حذف إذن الدفع.";
+                var oldValues = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    payment.PaymentNumber,
+                    payment.Amount,
+                    payment.CustomerId,
+                    payment.PaymentDate,
+                    payment.IsPosted
+                });
+
+                _context.CashPayments.Remove(payment);
+                await _context.SaveChangesAsync();
+                await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
+
+                await _activityLogger.LogAsync(
+                    UserActionType.Delete,
+                    "CashPayment",
+                    id,
+                    $"حذف إذن دفع رقم {payment.PaymentNumber}",
+                    oldValues: oldValues);
+
+                TempData["CashPaymentSuccess"] = "تم حذف إذن الدفع.";
+            }
+            catch (Exception ex)
+            {
+                TempData["CashPaymentError"] = $"حدث خطأ أثناء حذف إذن الدفع: {ex.Message}";
+            }
             return RedirectToAction(nameof(Index));
         }
 
@@ -1153,6 +1191,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashPayments.BulkDelete")]
         public async Task<IActionResult> BulkDelete(int[] ids)
         {
             // لو المستخدم لم يحدد أى إذن
@@ -1184,6 +1223,15 @@ namespace ERP.Controllers
                         "حذف جماعي إذون دفع");
                 }
 
+                foreach (var p in payments)
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "CashPayment",
+                        p.CashPaymentId,
+                        $"حذف إذن دفع رقم {p.PaymentNumber} (حذف جماعي)");
+                }
+
                 _context.CashPayments.RemoveRange(payments);
                 await _context.SaveChangesAsync();
                 await _ledgerPostingService.RecalcAllCustomerBalancesAsync();
@@ -1204,6 +1252,7 @@ namespace ERP.Controllers
         // =========================================================
         [HttpPost]
         [ValidateAntiForgeryToken]
+        [RequirePermission("CashPayments.DeleteAll")]
         public async Task<IActionResult> DeleteAll()
         {
             var all = await _context.CashPayments.ToListAsync();
@@ -1223,6 +1272,15 @@ namespace ERP.Controllers
                         p.CashPaymentId,
                         User?.Identity?.Name ?? "SYSTEM",
                         "حذف جميع إذون الدفع");
+                }
+
+                foreach (var p in all)
+                {
+                    await _activityLogger.LogAsync(
+                        UserActionType.Delete,
+                        "CashPayment",
+                        p.CashPaymentId,
+                        $"حذف إذن دفع رقم {p.PaymentNumber} (حذف الكل)");
                 }
 
                 _context.CashPayments.RemoveRange(all);

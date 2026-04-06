@@ -6,6 +6,7 @@ using ERP.Services;                  // خدمة DocumentTotalsService
 using ERP.Seed;
 using ERP.Seeders;
 using ERP.Infrastructure;           // IUserActivityLogger, UserActivityLogger, DecimalModelBinderProvider
+using ERP.Infrastructure.Export;
 using ERP.Infrastructure.TechnicalLogging;
 using ERP.Services.Caching;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -14,6 +15,7 @@ using Microsoft.AspNetCore.Mvc.Authorization;        // AuthorizeFilter العا
 using Microsoft.AspNetCore.Localization;             // خدمات التوطين
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using QuestPDF.Infrastructure;
 using Serilog;
 using Serilog.Events;
 using System.Globalization;
@@ -28,6 +30,7 @@ namespace ERP
         {
             // متغير: منشئ التطبيق
             var builder = WebApplication.CreateBuilder(args);
+            QuestPDF.Settings.License = LicenseType.Community;
 
             // تسجيل فني (Serilog): ملفات دوّارة + كونسول — منفصل عن سجل النشاط الإداري (UserActivityLog)
             builder.Host.UseSerilog((context, services, configuration) =>
@@ -103,6 +106,8 @@ namespace ERP
             builder.Services.AddScoped<ERP.Services.SalesFifoCostRepairService>();
             builder.Services.AddScoped<IFullReturnService, FullReturnService>();
             builder.Services.AddScoped<ERP.Services.IPermissionService, ERP.Services.PermissionService>();
+            builder.Services.AddScoped<ERP.Services.ILoginRedirectService, ERP.Services.LoginRedirectService>();
+            builder.Services.AddScoped<ERP.Services.IListVisibilityService, ERP.Services.ListVisibilityService>();
             builder.Services.AddScoped<ERP.Services.IUserAccountVisibilityService, ERP.Services.UserAccountVisibilityService>();
 
             // متغير: نظام الصلاحيات (PermissionService للتحقق من الصلاحيات)
@@ -207,8 +212,9 @@ namespace ERP
                         // 3) ضمان وجود الأدوار الأساسية (تحديث أو إدراج — بدون مسح أدوار مخصّصة)
                         await RoleSeeder.SeedAsync(db);
 
-                        // 4) دور «مالك النظام»: إضافة أي صلاحية جديدة فقط (لا نلمس بقية الأدوار)
-                        var ownerRole = await db.Roles.FirstOrDefaultAsync(r => r.Name == "مالك النظام");
+                        // 4) دور المسؤول الأعلى: إضافة أي صلاحية جديدة فقط (لا نلمس بقية الأدوار)
+                        var ownerAliases = ERP.Data.Seed.RoleSeeder.OwnerRoleAliases;
+                        var ownerRole = await db.Roles.FirstOrDefaultAsync(r => ownerAliases.Contains(r.Name));
                         if (ownerRole != null)
                         {
                             var allPerms = await db.Permissions.AsNoTracking().ToListAsync();
@@ -232,6 +238,12 @@ namespace ERP
                             }
                             await db.SaveChangesAsync();
                         }
+
+                        // 4b) صلاحيات عامة Global.*: ربطها بكل دور نشط إن لم تكن مضافة (توافق التثبيتات السابقة)
+                        await ERP.Data.Seed.GlobalPermissionSeeder.EnsureAllRolesHaveGlobalPermissionsAsync(db);
+
+                        // 4c) صلاحيات افتراضية مقترحة لكل دور (تُضاف الناقص فقط — لا تُمس تعديلات العميل في RolePermissions)
+                        await ERP.Data.Seed.RoleDefaultPermissionsSeeder.EnsureRoleDefaultPermissionsAsync(db);
 
                         // 5) سياسات التسعير (لو موجودة)
                         await PolicySeeder.SeedAsync(db);
@@ -297,6 +309,8 @@ namespace ERP
             app.UseStaticFiles();
 
             app.UseRouting();
+
+            app.UseMiddleware<PdfExportMiddleware>();
 
             app.UseSerilogRequestLogging(options =>
             {

@@ -26,6 +26,7 @@ namespace ERP.Controllers
 
         private readonly AppDbContext _context;            // متغير: كائن الاتصال بقاعدة البيانات
         private readonly DocumentTotalsService _docTotals; // متغير: خدمة إجماليات المستندات (لإعادة تجميع هيدر فاتورة البيع بعد الحذف)
+        private readonly IListVisibilityService _listVisibilityService;
 
         private static int? TryParseNullableInt(string? s) =>
             int.TryParse((s ?? "").Trim(), out var v) ? v : null;
@@ -39,10 +40,24 @@ namespace ERP.Controllers
                     .ToList();
 
         public SalesInvoiceLinesController(AppDbContext context,
-                                           DocumentTotalsService docTotals)
+                                           DocumentTotalsService docTotals,
+                                           IListVisibilityService listVisibilityService)
         {
             _context = context;       // تخزين سياق قاعدة البيانات
             _docTotals = docTotals;   // تخزين سيرفيس التجميع لإعادة حساب إجماليات فاتورة البيع
+            _listVisibilityService = listVisibilityService;
+        }
+
+        private async Task<IQueryable<SalesInvoiceLine>> ApplyOperationalListVisibilityAsync(IQueryable<SalesInvoiceLine> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(x => x.SalesInvoice != null && x.SalesInvoice.CreatedBy != null && creatorNames.Contains(x.SalesInvoice.CreatedBy.Trim()));
         }
 
         // =========================================================
@@ -577,6 +592,7 @@ namespace ERP.Controllers
                 filterCol_siidExpr, filterCol_linenoExpr, filterCol_prodidExpr, filterCol_qtyExpr, filterCol_priceExpr,
                 filterCol_disc1Expr, filterCol_disc2Expr, filterCol_disc3Expr, filterCol_discvalExpr,
                 filterCol_totalExpr, filterCol_netExpr);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             int totalQty = await q.SumAsync(line => (int?)line.Qty) ?? 0;
             decimal totalDiscountValue = await q.SumAsync(line => (decimal?)line.DiscountValue) ?? 0m;
@@ -784,11 +800,12 @@ namespace ERP.Controllers
             column = column.Trim().ToLowerInvariant();
             search = (search ?? "").Trim();
 
-            var q = _context.SalesInvoiceLines.AsNoTracking()
+            IQueryable<SalesInvoiceLine> q = _context.SalesInvoiceLines.AsNoTracking()
                 .Include(x => x.Product)
                 .Include(x => x.SalesInvoice)
                     .ThenInclude(si => si!.Customer)
                         .ThenInclude(c => c!.Area);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             if (column == "siid")
             {
@@ -1146,6 +1163,7 @@ namespace ERP.Controllers
                 filterCol_siidExpr, filterCol_linenoExpr, filterCol_prodidExpr, filterCol_qtyExpr, filterCol_priceExpr,
                 filterCol_disc1Expr, filterCol_disc2Expr, filterCol_disc3Expr, filterCol_discvalExpr,
                 filterCol_totalExpr, filterCol_netExpr);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             var list = await q
                 .OrderBy(l => l.SIId)

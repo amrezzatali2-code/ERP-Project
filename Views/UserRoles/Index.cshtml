@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Html
+﻿@using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.ViewModels
 @model PagedResult<UserRoleListRow>
@@ -11,6 +11,8 @@
 
     var search = Model.Search ?? (string?)ViewBag.Search ?? "";
     var searchBy = (string?)ViewBag.SearchBy ?? "all";
+    var searchMode = ((string?)ViewBag.SearchMode ?? "contains").ToLowerInvariant();
+    if (searchMode != "starts" && searchMode != "ends") searchMode = "contains";
     var sort = Model.SortColumn ?? (string?)ViewBag.Sort ?? "UserName";
     var dir = Model.SortDescending ? "desc" : ((string?)ViewBag.Dir ?? "asc");
 
@@ -19,8 +21,8 @@
     int page = Model.PageNumber;
     int pages = Model.TotalPages;
 
-    int start = total == 0 ? 0 : ((page - 1) * (ps > 0 ? ps : 1)) + 1;
-    int end = (ps == 0 || total == 0) ? total : Math.Min(total, page * ps);
+    int start = Model.StartIndex;
+    int end = Model.EndIndex;
 
     int first = 1, last = Math.Max(1, pages);
     int prev = Math.Max(first, page - 1);
@@ -35,15 +37,21 @@
     var dateField = (string?)ViewBag.DateField ?? "AssignedAt";
 
     string? filterCol_id = ViewBag.FilterCol_Id as string;
+    string? filterCol_idExpr = ViewBag.FilterCol_IdExpr as string;
     string? filterCol_user = ViewBag.FilterCol_User as string;
     string? filterCol_role = ViewBag.FilterCol_Role as string;
     string? filterCol_primary = ViewBag.FilterCol_Primary as string;
     string? filterCol_assigned = ViewBag.FilterCol_Assigned as string;
+    int usersCount = ViewBag.UsersCount is int uc ? uc : 0;
+    int assignedCount = ViewBag.AssignedCount is int asc ? asc : 0;
+    int primaryCount = ViewBag.PrimaryCount is int pc ? pc : 0;
+    var n2 = System.Globalization.CultureInfo.InvariantCulture;
 
     string Link(int p) => Url.Action(action, controller, new
     {
         search,
         searchBy,
+        searchMode,
         sort,
         dir,
         page = p,
@@ -55,6 +63,7 @@
         fromCode,
         toCode,
         filterCol_id,
+        filterCol_idExpr,
         filterCol_user,
         filterCol_role,
         filterCol_primary,
@@ -63,7 +72,7 @@
 
     Func<string, string, string, IHtmlContent> filterableCol = (colKey, sortKey, caption) =>
     {
-        string? currentFilter = colKey == "id" ? filterCol_id : colKey == "user" ? filterCol_user : colKey == "role" ? filterCol_role : colKey == "primary" ? filterCol_primary : colKey == "assigned" ? filterCol_assigned : null;
+        string? currentFilter = colKey == "id" ? (!string.IsNullOrWhiteSpace(filterCol_idExpr) ? filterCol_idExpr : filterCol_id) : colKey == "user" ? filterCol_user : colKey == "role" ? filterCol_role : colKey == "primary" ? filterCol_primary : colKey == "assigned" ? filterCol_assigned : null;
         bool hasFilter = !string.IsNullOrWhiteSpace(currentFilter);
         var isCurrentSort = string.Equals(sort, sortKey, StringComparison.OrdinalIgnoreCase);
         var sortDir = isCurrentSort ? dir : "asc";
@@ -86,13 +95,18 @@
     <div class="erp-list-filter-bar d-print-none mt-2">
         <div class="row g-3 align-items-center flex-wrap justify-content-center">
 
-            @* --- القسم الأول: البحث العام --- *@
+            @* --- القسم الأول: البحث العام (نفس نمط العملاء) --- *@
             <div class="col-12 col-lg-4 erp-filter-section d-flex flex-column align-items-center">
                 <form method="get" action="@Url.Action(action, controller)" class="erp-list-search-form d-flex flex-column align-items-center w-100">
                     <label class="form-label w-100 text-center">بحث في أدوار المستخدمين</label>
-                    <div class="d-flex flex-wrap align-items-center gap-2 erp-list-search-row justify-content-center w-100">
-                        <input type="text" name="search" class="form-control erp-filter-input" placeholder="اكتب نص البحث..." value="@search" />
-                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input" style="max-width:150px">
+                    <div class="d-flex flex-nowrap align-items-center gap-2 erp-list-search-row justify-content-center w-100" style="overflow-x:auto;">
+                        <select name="searchMode" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:110px;min-width:100px">
+                            <option value="starts"@Html.Raw(searchMode == "starts" ? " selected" : "")>يبدأ بـ</option>
+                            <option value="contains"@Html.Raw(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? " selected" : "")>يحتوي</option>
+                            <option value="ends"@Html.Raw(searchMode == "ends" ? " selected" : "")>ينتهي بـ</option>
+                        </select>
+                        <input type="text" name="search" class="form-control erp-filter-input flex-shrink-1" placeholder="نص أو رقم..." value="@search" style="min-width:100px;max-width:200px;width:180px;" />
+                        <select name="searchBy" class="form-select form-select-arrow erp-filter-input flex-shrink-0" style="max-width:160px;min-width:130px">
                             <option value="all"@Html.Raw(searchBy == "all" ? " selected" : "")>البحث في الكل</option>
                             <option value="id"@Html.Raw(searchBy == "id" ? " selected" : "")>كود السطر</option>
                             <option value="username"@Html.Raw(searchBy == "username" ? " selected" : "")>اسم الدخول</option>
@@ -102,7 +116,9 @@
                             <option value="roleid"@Html.Raw(searchBy == "roleid" ? " selected" : "")>كود الدور</option>
                             <option value="primary"@Html.Raw(searchBy == "primary" ? " selected" : "")>الأدوار الافتراضية فقط</option>
                         </select>
-                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm">عرض</button>
+                    </div>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-2 w-100">
+                        <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm px-3">عرض</button>
                         <a class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none" href="@Url.Action(action, controller)">إلغاء</a>
                     </div>
                     <input type="hidden" name="sort" value="@sort" />
@@ -116,6 +132,7 @@
                     @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                     @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_role)) { <input type="hidden" name="filterCol_role" value="@filterCol_role" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_primary)) { <input type="hidden" name="filterCol_primary" value="@filterCol_primary" /> }
@@ -142,9 +159,10 @@
                         <a class="btn btn-erp btn-erp-success btn-erp-sm" asp-action="Create" asp-controller="UserRoles">إسناد دور لمستخدم</a>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#dateFilterModalUR">فلترة بالتاريخ/الوقت</button>
                         <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm" data-bs-toggle="modal" data-bs-target="#columnsModalUR">اختيار الأعمدة</button>
-                        <button type="button" id="btnPrintUR" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
+                        <button type="button" id="btnEditUserRole" class="btn btn-erp btn-erp-secondary btn-erp-sm" disabled title="اختر سطراً ثم اضغط تعديل (سطر له ربط دور)">تعديل</button>
                     </div>
                     <div class="erp-toolbar-row d-flex flex-nowrap gap-2 justify-content-center align-items-center">
+                        <button type="button" id="btnPrintUR" class="btn btn-erp btn-erp-secondary btn-erp-sm">🖨️ طباعة</button>
                         <div class="btn-group">
                             <button type="button" class="btn btn-erp btn-erp-danger btn-erp-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">حذف</button>
                             <ul class="dropdown-menu dropdown-menu-end" dir="rtl">
@@ -155,6 +173,7 @@
                         <form method="get" asp-action="Export" asp-controller="UserRoles" class="d-inline-flex flex-nowrap gap-2 align-items-center erp-export-form">
                             <input type="hidden" name="search" value="@search" />
                             <input type="hidden" name="searchBy" value="@searchBy" />
+                            <input type="hidden" name="searchMode" value="@searchMode" />
                             <input type="hidden" name="sort" value="@sort" />
                             <input type="hidden" name="dir" value="@dir" />
                             <input type="hidden" name="dateField" value="@dateField" />
@@ -164,13 +183,14 @@
                             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
                             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_role)) { <input type="hidden" name="filterCol_role" value="@filterCol_role" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_primary)) { <input type="hidden" name="filterCol_primary" value="@filterCol_primary" /> }
                             @if (!string.IsNullOrWhiteSpace(filterCol_assigned)) { <input type="hidden" name="filterCol_assigned" value="@filterCol_assigned" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>
@@ -188,8 +208,43 @@
         </div>
     </div>
 
+    <div class="row g-2 g-md-3 justify-content-start no-print erp-list-summary-row" dir="rtl">
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #4338ca !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">إجمالي السطور</div>
+                    <div class="h4 mb-0 text-primary fw-bold">@total.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #15803d !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">المستخدمون بعد الفلترة</div>
+                    <div class="h4 mb-0 text-success fw-bold">@usersCount.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #2563eb !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">الأسطر المسندة</div>
+                    <div class="h4 mb-0 text-info fw-bold">@assignedCount.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-auto">
+            <div class="card h-100 border-0 erp-list-summary-card" style="border: 1px solid #b45309 !important; border-radius: 12px; box-shadow: none !important; overflow: hidden;">
+                <div class="card-body py-3 px-3">
+                    <div class="small text-muted mb-1">الأدوار الافتراضية</div>
+                    <div class="h4 mb-0 text-warning fw-bold">@primaryCount.ToString("N0", n2)</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     @* ===== جدول UserRoles (حاوية تمرير + رأس ثابت + فلتر أعمدة + توسعة) ===== *@
-    <div class="erp-table-scroll-container mt-3 ps-0 pe-0" dir="rtl">
+    <div class="erp-table-scroll-container erp-list-table-after-summary mt-3 ps-0 pe-0" dir="rtl">
         <div id="urTableScrollWrapper" class="erp-table-wrapper erp-print-area" style="max-height: 70vh; overflow-y: auto; overflow-x: auto;">
         <table id="urTable" class="table table-striped table-hover erp-table erp-table-sortable">
             <thead class="table-light" style="position: sticky; top: 0; z-index: 10; background: #fafbfc !important;">
@@ -202,14 +257,13 @@
                     <th data-col="role">@filterableCol("role", "RoleName", "الدور")</th>
                     <th data-col="primary">@filterableCol("primary", "IsPrimary", "دور افتراضي؟")</th>
                     <th data-col="assigned">@filterableCol("assigned", "AssignedAt", "تاريخ الإسناد")</th>
-                    <th class="text-center no-print" data-col="actions" data-col-fixed="true" style="width:200px;">إجراءات</th>
                 </tr>
             </thead>
             <tbody>
                 @if (!Model.Items.Any())
                 {
                     <tr>
-                        <td colspan="7" class="text-center text-muted py-4">
+                        <td colspan="6" class="text-center text-muted py-4">
                             لا توجد بيانات.
                         </td>
                     </tr>
@@ -220,8 +274,14 @@
                     {
                         var userDisplayName = string.IsNullOrWhiteSpace(x.DisplayName) ? x.UserName : x.DisplayName;
                         var hasAssignment = x.UserRoleId.HasValue;
+                        var editUrlUr = hasAssignment && x.UserRoleId.HasValue
+                            ? Url.Action("Edit", "UserRoles", new { id = x.UserRoleId.Value }) + "?frame=1"
+                            : "";
 
-                        <tr>
+                        <tr class="erp-list-selectable-row"
+                            data-user-role-id="@(x.UserRoleId?.ToString() ?? "")"
+                            data-edit-url="@editUrlUr"
+                            data-edit-tab-title="تعديل إسناد الدور">
                             <td class="text-center no-print" data-col="select">
                                 @if (hasAssignment)
                                 {
@@ -265,30 +325,6 @@
                             <td data-col="assigned">
                                 @(x.AssignedAt?.ToString("yyyy-MM-dd HH:mm") ?? "—")
                             </td>
-
-                            <td class="text-nowrap no-print" data-col="actions">
-                                @if (hasAssignment)
-                                {
-                                    <a class="btn btn-erp btn-erp-primary btn-erp-sm"
-                                       asp-action="Edit"
-                                       asp-route-id="@x.UserRoleId">
-                                        تعديل
-                                    </a>
-                                    <a class="btn btn-erp btn-erp-danger btn-erp-sm"
-                                       asp-action="Delete"
-                                       asp-route-id="@x.UserRoleId">
-                                        حذف
-                                    </a>
-                                }
-                                else
-                                {
-                                    <a class="btn btn-erp btn-erp-success btn-erp-sm"
-                                       asp-action="Create"
-                                       asp-route-userId="@x.UserId">
-                                        إسناد دور
-                                    </a>
-                                }
-                            </td>
                         </tr>
                     }
                 }
@@ -327,12 +363,12 @@
         </div>
     </div>
 
-    @* الشريط السفلي (محاذاة لليمين في RTL) *@
-    <div class="d-flex flex-wrap justify-content-end align-items-center gap-3 mt-2 no-print" dir="rtl">
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mt-3 no-print" dir="rtl">
         <small class="text-muted">عرض @start - @end من @total</small>
         <form method="get" action="@Url.Action(action, controller)" class="d-flex align-items-center gap-2">
             <input type="hidden" name="search" value="@search" />
             <input type="hidden" name="searchBy" value="@searchBy" />
+            <input type="hidden" name="searchMode" value="@searchMode" />
             <input type="hidden" name="sort" value="@sort" />
             <input type="hidden" name="dir" value="@dir" />
             <input type="hidden" name="page" value="1" />
@@ -343,6 +379,7 @@
             @if (fromCode.HasValue) { <input type="hidden" name="fromCode" value="@fromCode" /> }
             @if (toCode.HasValue) { <input type="hidden" name="toCode" value="@toCode" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_role)) { <input type="hidden" name="filterCol_role" value="@filterCol_role" /> }
             @if (!string.IsNullOrWhiteSpace(filterCol_primary)) { <input type="hidden" name="filterCol_primary" value="@filterCol_primary" /> }
@@ -357,20 +394,17 @@
                 <option value="0"@Html.Raw(ps == 0 ? " selected" : "")>الكل</option>
             </select>
         </form>
-        <nav aria-label="pagination">
-            <ul class="pagination pagination-sm mb-0">
-                <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
-                <li class="page-item @(Model.HasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
-                <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
-                <li class="page-item @(Model.HasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
-                <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
-            </ul>
-        </nav>
     </div>
 
-    <div class="no-print">
-        <small class="text-muted d-none d-md-inline">إجمالي السطور: @total</small>
-    </div>
+    <nav class="pagination justify-content-center mt-3 no-print" dir="rtl" aria-label="pagination">
+        <ul class="pagination pagination-sm mb-0">
+            <li class="page-item @(page == first ? "disabled" : "")"><a class="page-link" href="@Link(first)">الأول</a></li>
+            <li class="page-item @(Model.HasPrevious ? "" : "disabled")"><a class="page-link" href="@Link(prev)">السابق</a></li>
+            <li class="page-item disabled"><span class="page-link">صفحة @(page) من @(pages)</span></li>
+            <li class="page-item @(Model.HasNext ? "" : "disabled")"><a class="page-link" href="@Link(next)">التالي</a></li>
+            <li class="page-item @(page == last ? "disabled" : "")"><a class="page-link" href="@Link(last)">الأخير</a></li>
+        </ul>
+    </nav>
 </div>
 
 @* Modal فلترة التاريخ/الوقت *@
@@ -395,6 +429,7 @@
                 <div class="modal-body">
                     <input type="hidden" name="search" value="@search" />
                     <input type="hidden" name="searchBy" value="@searchBy" />
+                    <input type="hidden" name="searchMode" value="@searchMode" />
                     <input type="hidden" name="sort" value="@sort" />
                     <input type="hidden" name="dir" value="@dir" />
                     <input type="hidden" name="page" value="1" />
@@ -403,6 +438,7 @@
                     <input type="hidden" name="toCode" value="@(toCode?.ToString() ?? "")" />
                     <input type="hidden" name="dateField" value="@dateField" />
                     @if (!string.IsNullOrWhiteSpace(filterCol_id)) { <input type="hidden" name="filterCol_id" value="@filterCol_id" /> }
+                    @if (!string.IsNullOrWhiteSpace(filterCol_idExpr)) { <input type="hidden" name="filterCol_idExpr" value="@filterCol_idExpr" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_user)) { <input type="hidden" name="filterCol_user" value="@filterCol_user" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_role)) { <input type="hidden" name="filterCol_role" value="@filterCol_role" /> }
                     @if (!string.IsNullOrWhiteSpace(filterCol_primary)) { <input type="hidden" name="filterCol_primary" value="@filterCol_primary" /> }
@@ -489,14 +525,28 @@
 
 @section Scripts {
     <script src="~/js/erp-list-column-filter.js" asp-append-version="true"></script>
+    <script src="~/js/erp-list-selectable.js" asp-append-version="true"></script>
     <script>
         document.getElementById("btnPrintUR")?.addEventListener("click", function () { window.print(); });
+
+        if (window.ERP && typeof ERP.initListSelection === "function") {
+            ERP.initListSelection({
+                rowSelector: "#urTable tbody tr.erp-list-selectable-row",
+                idAttribute: "data-user-role-id",
+                editUrlAttribute: "data-edit-url",
+                editTabTitleAttribute: "data-edit-tab-title",
+                editButtonId: "btnEditUserRole",
+                editTabId: "userrole-edit-tab",
+                multiSelectCheckboxes: true
+            });
+        }
 
         ERP.initListColumnFilter({
             panelId: 'erpColumnFilterPanelUR',
             tableId: 'urTable',
             wrapperId: 'urTableScrollWrapper',
             getColumnValuesUrl: '@Url.Action("GetColumnValues", "UserRoles")',
+            numericColumns: ['id'],
             defaultSort: 'UserName',
             defaultDir: 'asc'
         });

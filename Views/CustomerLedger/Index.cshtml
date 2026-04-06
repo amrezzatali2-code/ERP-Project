@@ -270,7 +270,7 @@
     <h4 class="mb-3">كشف حساب تفصيلي لعميل — @(customer?.CustomerName ?? "اختر عميلاً")</h4>
 
     @* خانات التجميعات — أكبر وأوضح *@
-    <div class="row g-3 mb-3">
+    <div class="row g-3 mb-3 erp-list-summary-row">
         <div class="col-12 col-md-4">
             <div class="customer-ledger-summary-card customer-ledger-summary-debit rounded-3 shadow-sm border-0 p-3 text-white">
                 <div class="customer-ledger-summary-label">إجمالي المدين</div>
@@ -338,7 +338,7 @@
                     }
                 }
             </tbody>
-            <tfoot class="table-light">
+            <tfoot class="table-light erp-list-summary-tfoot">
                 <tr class="fw-bold">
                     <td colspan="6" class="text-end">الإجمالي:</td>
                     <td class="text-end">@totalDebit.ToString("N2")</td>

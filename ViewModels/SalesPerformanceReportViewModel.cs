@@ -12,7 +12,8 @@ namespace ERP.ViewModels
         public List<int> SelectedDistrictIds { get; set; } = new();
         public List<int> SelectedAreaIds { get; set; } = new();
         public List<int> SelectedCustomerIds { get; set; } = new();
-        public List<string> SelectedPartyCategories { get; set; } = new();
+        /// <summary>فلتر أنواع الحساب المحاسبية (AccountType) للحساب المرتبط بالطرف.</summary>
+        public List<int> SelectedAccountTypes { get; set; } = new();
         public List<int> SelectedUserIds { get; set; } = new();
         public List<int> SelectedProductIds { get; set; } = new();
 
@@ -65,7 +66,7 @@ namespace ERP.ViewModels
         public List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> Areas { get; set; } = new();
         public List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> Users { get; set; } = new();
         public List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> Customers { get; set; } = new();
-        public List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> PartyTypes { get; set; } = new();
+        public List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> AccountTypeOptions { get; set; } = new();
         public List<Microsoft.AspNetCore.Mvc.Rendering.SelectListItem> Products { get; set; } = new();
     }
 

@@ -1,10 +1,10 @@
 using System.Linq;
 using System.Security.Claims;                        // الـ Claims الخاصة بالمستخدم
-using System.Security.Cryptography;
-using System.Text;
 using System.Threading.Tasks;
 using ERP.Data;                                     // AppDbContext
+using ERP.Infrastructure;                           // PasswordHasher
 using ERP.Models;                                   // User
+using ERP.Services;
 using ERP.ViewModels;                               // LoginViewModel
 using Microsoft.AspNetCore.Authentication;          // SignInAsync / SignOutAsync
 using Microsoft.AspNetCore.Authentication.Cookies;  // CookieAuthenticationDefaults
@@ -21,10 +21,12 @@ namespace ERP.Controllers
     public class LoginController : Controller
     {
         private readonly AppDbContext _db;  // متغير: سياق قاعدة البيانات
+        private readonly ILoginRedirectService _loginRedirectService;
 
-        public LoginController(AppDbContext db)
+        public LoginController(AppDbContext db, ILoginRedirectService loginRedirectService)
         {
             _db = db;
+            _loginRedirectService = loginRedirectService;
         }
 
         // ================================================================
@@ -105,7 +107,7 @@ namespace ERP.Controllers
             }
 
             // التحقق من كلمة المرور
-            if (!VerifyPassword(model.Password, user.PasswordHash))
+            if (!PasswordHasher.VerifyPassword(model.Password, user.PasswordHash))
             {
                 ModelState.AddModelError(string.Empty, "اسم المستخدم أو كلمة المرور غير صحيحة.");
                 return View("Index", model);
@@ -160,8 +162,8 @@ namespace ERP.Controllers
                 return Redirect(model.ReturnUrl);
             }
 
-            // هنا ممكن توجهه لقائمة فواتير المشتريات مثلاً (الآن إلى Home/Index)
-            return RedirectToAction("Index", "Home");
+            var target = await _loginRedirectService.GetTargetAsync(user.UserId);
+            return RedirectToAction(target.Action, target.Controller);
         }
 
         // ================================================================
@@ -177,29 +179,5 @@ namespace ERP.Controllers
             return RedirectToAction("Index", "Login");
         }
 
-        // ================================================================
-        // دالة مساعدة: التحقق من كلمة المرور
-        // ================================================================
-        private bool VerifyPassword(string inputPassword, string storedHash)
-        {
-            if (string.IsNullOrEmpty(storedHash))
-                return false;
-
-            // حساب SHA256 للنص الذي كتبه المستخدم
-            using var sha = SHA256.Create();
-            var bytes = Encoding.UTF8.GetBytes(inputPassword);     // متغير: البايتات الداخلة للتشفير
-            var hashBytes = sha.ComputeHash(bytes);                // متغير: نتيجة التشفير
-            var inputHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLower();
-
-            // مقارنة: لو مخزّن كهاش
-            if (string.Equals(storedHash, inputHash, StringComparison.OrdinalIgnoreCase))
-                return true;
-
-            // مقارنة إضافية: لو كلمة المرور مخزنة كنص عادي (لبيانات قديمة)
-            if (string.Equals(storedHash, inputPassword))
-                return true;
-
-            return false;
-        }
     }
 }

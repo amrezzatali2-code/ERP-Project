@@ -30,6 +30,7 @@ namespace ERP.Controllers
         private readonly StockAnalysisService _StockAnalysisService; // متغير: خدمة الترحيل
         private readonly IFullReturnService _fullReturnService;
         private readonly IPermissionService _permissionService;
+        private readonly IListVisibilityService _listVisibilityService;
         private readonly IUserAccountVisibilityService _accountVisibilityService;
         private readonly SalesFifoCostRepairService _fifoCostRepairService;
 
@@ -45,6 +46,7 @@ namespace ERP.Controllers
                                         StockAnalysisService stockAnalysisService,
                                         IFullReturnService fullReturnService,
                                         IPermissionService permissionService,
+                                        IListVisibilityService listVisibilityService,
                                         IUserAccountVisibilityService accountVisibilityService,
                                         SalesFifoCostRepairService fifoCostRepairService)
 
@@ -56,6 +58,7 @@ namespace ERP.Controllers
             _StockAnalysisService = stockAnalysisService;
             _fullReturnService = fullReturnService;
             _permissionService = permissionService ?? throw new ArgumentNullException(nameof(permissionService));
+            _listVisibilityService = listVisibilityService ?? throw new ArgumentNullException(nameof(listVisibilityService));
             _accountVisibilityService = accountVisibilityService ?? throw new ArgumentNullException(nameof(accountVisibilityService));
             _fifoCostRepairService = fifoCostRepairService ?? throw new ArgumentNullException(nameof(fifoCostRepairService));
         }
@@ -186,6 +189,18 @@ namespace ERP.Controllers
 
             // فى الحالات الاستثنائية (مثلاً أثناء Seed أو لو مفيش Login)
             return "System";
+        }
+
+        private async Task<IQueryable<SalesInvoice>> ApplyOperationalListVisibilityAsync(IQueryable<SalesInvoice> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(si => si.CreatedBy != null && creatorNames.Contains(si.CreatedBy.Trim()));
         }
 
         /// <summary>
@@ -2985,9 +3000,98 @@ namespace ERP.Controllers
 
 
         // =========================
-        // Index — عرض قائمة فواتير البيع (صلاحية View أو Create تكفي للفتح)
+        // Index — قائمة فواتير المبيعات — مع فلترة تلقائية حسب الصلاحية العامة Global.GeneralList
         // =========================
-        public async Task<IActionResult> Index(
+        [HttpGet]
+        public Task<IActionResult> Index(
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? dateField = "SIDate",
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_date = null,
+            string? filterCol_time = null,
+            string? filterCol_customer = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_net = null,
+            string? filterCol_netExpr = null,
+            string? filterCol_status = null,
+            string? filterCol_posted = null,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null,
+            int page = 1,
+            int pageSize = 10
+        )
+        {
+            return SalesInvoicesListAsync(false, search, searchBy, sort, dir, useDateRange, fromDate, toDate, dateField, fromCode, toCode, filterCol_id, filterCol_idExpr, filterCol_date, filterCol_time, filterCol_customer, filterCol_warehouse, filterCol_net, filterCol_netExpr, filterCol_status, filterCol_posted, filterCol_region, filterCol_createdby, page, pageSize);
+        }
+
+        [HttpGet]
+        public Task<IActionResult> MySales(
+            string? search,
+            string? searchBy,
+            string? sort,
+            string? dir,
+            bool useDateRange = false,
+            DateTime? fromDate = null,
+            DateTime? toDate = null,
+            string? dateField = "SIDate",
+            int? fromCode = null,
+            int? toCode = null,
+            string? filterCol_id = null,
+            string? filterCol_idExpr = null,
+            string? filterCol_date = null,
+            string? filterCol_time = null,
+            string? filterCol_customer = null,
+            string? filterCol_warehouse = null,
+            string? filterCol_net = null,
+            string? filterCol_netExpr = null,
+            string? filterCol_status = null,
+            string? filterCol_posted = null,
+            string? filterCol_region = null,
+            string? filterCol_createdby = null,
+            int page = 1,
+            int pageSize = 10
+        )
+        {
+            return Task.FromResult<IActionResult>(RedirectToAction(nameof(Index), new
+            {
+                search,
+                searchBy,
+                sort,
+                dir,
+                useDateRange,
+                fromDate,
+                toDate,
+                dateField,
+                fromCode,
+                toCode,
+                filterCol_id,
+                filterCol_idExpr,
+                filterCol_date,
+                filterCol_time,
+                filterCol_customer,
+                filterCol_warehouse,
+                filterCol_net,
+                filterCol_netExpr,
+                filterCol_status,
+                filterCol_posted,
+                filterCol_region,
+                filterCol_createdby,
+                page,
+                pageSize
+            }));
+        }
+
+        private async Task<IActionResult> SalesInvoicesListAsync(
+            bool personalOnly,
             string? search,                      // نص البحث
             string? searchBy,                    // نوع البحث: id / customer / warehouse / date / status
             string? sort,                        // عمود الترتيب: id / date / customer / warehouse / net / status / posted ...
@@ -3014,10 +3118,7 @@ namespace ERP.Controllers
             int pageSize = 10                    // حجم الصفحة (افتراضي 10 — نفس نمط قائمة الأصناف والقوائم المحدّثة)
         )
         {
-            bool canView = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index"));
-            bool canCreate = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Create"));
-            bool canMySales = await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index"));
-            if (!canView && !canCreate && !canMySales)
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index")))
                 return RedirectToAction("AccessDenied", "Home");
 
             // قراءة حجم الصفحة من الـ Query (آخر قيمة) لضمان تطابق القائمة المنسدلة مع الرقم المعروض — نمط موحّد لجميع القوائم
@@ -3044,13 +3145,7 @@ namespace ERP.Controllers
                     .ThenInclude(c => c!.Area)
                 .Include(s => s.Warehouse);
 
-            // قائمة مبيعات خاصة: عرض مبيعات المستخدم الحالي فقط (بدون صلاحية عرض الكل)
-            if (canMySales && !canView)
-            {
-                var currentUser = GetCurrentUserDisplayName();
-                if (!string.IsNullOrEmpty(currentUser))
-                    query = query.Where(si => si.CreatedBy == currentUser);
-            }
+            query = await ApplyOperationalListVisibilityAsync(query);
 
             // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
             int? codeFrom = Request.Query.ContainsKey("codeFrom")
@@ -3275,7 +3370,10 @@ namespace ERP.Controllers
             // إجمالي الصافي
             ViewBag.TotalNet = totalNet;
 
-            return View(model);
+            ViewData["Title"] = "قائمة فواتير المبيعات";
+            ViewBag.IsMySalesList = false;
+
+            return View("Index", model);
         }
 
 
@@ -3548,6 +3646,9 @@ namespace ERP.Controllers
             string? filterCol_createdby = null,
             string? format = "excel")        // excel | csv
         {
+            if (!await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index")))
+                return RedirectToAction("AccessDenied", "Home");
+
             // قيم افتراضية
             searchBy ??= "all";
             sort ??= "SIDate";
@@ -3563,6 +3664,7 @@ namespace ERP.Controllers
                 .Include(s => s.Customer)
                     .ThenInclude(c => c!.Area)
                 .Include(s => s.Warehouse);
+            q = await ApplyOperationalListVisibilityAsync(q);
 
             // قراءة codeFrom/codeTo من الكويري (للتوافق مع الاندكس/الإكسبورت)
             int? finalCodeFrom = Request.Query.ContainsKey("codeFrom")
@@ -3819,6 +3921,9 @@ namespace ERP.Controllers
                 if (string.IsNullOrWhiteSpace(column))
                     return Json(Array.Empty<string>());
 
+                if (!await _permissionService.HasPermissionAsync(PermissionCodes.Code("SalesInvoices", "Index")))
+                    return Json(Array.Empty<string>());
+
                 column = column.ToLowerInvariant();
                 search = (search ?? string.Empty).Trim();
 
@@ -3827,6 +3932,7 @@ namespace ERP.Controllers
                     .Include(s => s.Customer)
                         .ThenInclude(c => c!.Area)
                     .Include(s => s.Warehouse);
+                q = await ApplyOperationalListVisibilityAsync(q);
 
                 if (column == "id")
                 {
@@ -4025,18 +4131,20 @@ namespace ERP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequirePermission("SalesInvoices.BulkDelete")]
-        public async Task<IActionResult> BulkDelete(string? selectedIds)
+        public async Task<IActionResult> BulkDelete(string? selectedIds, string? returnTo = null)
         {
+            var listAction = nameof(Index);
+
             if (!await _permissionService.HasPermissionAsync("SalesInvoices.BulkDelete"))
             {
                 TempData["PermissionDeniedMessage"] = "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(listAction);
             }
 
             if (string.IsNullOrWhiteSpace(selectedIds))
             {
                 TempData["ErrorMessage"] = "لم يتم اختيار أي فواتير للحذف.";
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(listAction);
             }
 
             var ids = selectedIds.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -4049,18 +4157,18 @@ namespace ERP.Controllers
             if (!ids.Any())
             {
                 TempData["ErrorMessage"] = "لم يتم اختيار أي فواتير صحيحة للحذف.";
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(listAction);
             }
 
-            var existingIds = await _context.SalesInvoices
-                .Where(x => ids.Contains(x.SIId))
-                .Select(x => x.SIId)
-                .ToListAsync();
+            var idQuery = _context.SalesInvoices.Where(x => ids.Contains(x.SIId));
+            idQuery = await ApplyOperationalListVisibilityAsync(idQuery);
+
+            var existingIds = await idQuery.Select(x => x.SIId).ToListAsync();
 
             if (!existingIds.Any())
             {
                 TempData["ErrorMessage"] = "لم يتم العثور على الفواتير المحددة في قاعدة البيانات.";
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(listAction);
             }
 
             int deletedCount = 0;
@@ -4110,7 +4218,7 @@ namespace ERP.Controllers
                     TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} — {string.Join(" — ", failedReasons)}";
             }
 
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(listAction);
         }
 
 
@@ -4125,22 +4233,27 @@ namespace ERP.Controllers
         [HttpPost]
         [ValidateAntiForgeryToken]
         [RequirePermission("SalesInvoices.DeleteAll")]
-        public async Task<IActionResult> DeleteAll()
+        public async Task<IActionResult> DeleteAll(string? returnTo = null)
         {
+            var listAction = nameof(Index);
+
             if (!await _permissionService.HasPermissionAsync("SalesInvoices.DeleteAll"))
             {
                 TempData["PermissionDeniedMessage"] = "ليس لديك صلاحية لتنفيذ هذا الإجراء.";
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(listAction);
             }
 
-            var allIds = await _context.SalesInvoices
+            var q = _context.SalesInvoices.AsQueryable();
+            q = await ApplyOperationalListVisibilityAsync(q);
+
+            var allIds = await q
                 .Select(x => x.SIId)
                 .ToListAsync();
 
             if (!allIds.Any())
             {
                 TempData["ErrorMessage"] = "لا توجد فواتير مبيعات لحذفها.";
-                return RedirectToAction(nameof(Index));
+                return RedirectToAction(listAction);
             }
 
             int deletedCount = 0;
@@ -4190,7 +4303,7 @@ namespace ERP.Controllers
                     TempData["ErrorMessage"] = $"{TempData["ErrorMessage"]} — {string.Join(" — ", failedReasons)}";
             }
 
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction(listAction);
         }
 
         private int? GetCurrentUserId()

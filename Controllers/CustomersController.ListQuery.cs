@@ -160,9 +160,14 @@ namespace ERP.Controllers
             }
             if (!string.IsNullOrWhiteSpace(filterCol_account))
             {
+                // GetColumnValues وعمود الجدول يعرضان "كود — اسم" (نفس فاصل PopulateDropDowns في العملاء).
+                // الفلتر كان يطبّق Contains على الكود والاسم منفصلين فلا يطابق القيمة الكاملة من لوحة الفلتر.
                 var vals = filterCol_account.Split(sep, StringSplitOptions.RemoveEmptyEntries).Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
                 if (vals.Count > 0)
-                    q = q.Where(c => c.Account != null && vals.Any(v => (c.Account.AccountCode != null && c.Account.AccountCode.Contains(v)) || (c.Account.AccountName != null && c.Account.AccountName.Contains(v))));
+                    q = q.Where(c => c.Account != null && vals.Any(v =>
+                        (c.Account.AccountCode ?? "") + " — " + (c.Account.AccountName ?? "") == v
+                        || (c.Account.AccountCode != null && c.Account.AccountCode.Contains(v))
+                        || (c.Account.AccountName != null && c.Account.AccountName.Contains(v))));
             }
             if (!string.IsNullOrWhiteSpace(filterCol_PolicyId))
             {

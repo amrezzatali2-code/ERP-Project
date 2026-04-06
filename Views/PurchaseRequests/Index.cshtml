@@ -1,4 +1,4 @@
-@* Views/PurchaseRequests/Index.cshtml — قائمة طلبات الشراء بنمط القوائم الموحد *@
+﻿@* Views/PurchaseRequests/Index.cshtml — قائمة طلبات الشراء بنمط القوائم الموحد *@
 @using Microsoft.AspNetCore.Html
 @using ERP.Infrastructure
 @using ERP.Models
@@ -238,7 +238,7 @@
                             @if (!string.IsNullOrWhiteSpace(filterCol_created)) { <input type="hidden" name="filterCol_created" value="@filterCol_created" /> }
                             <select name="format" class="form-select form-select-arrow erp-filter-input" style="width:85px;min-width:85px;font-size:0.95rem;font-weight:500;padding:0.3rem 0.5rem;" title="اختر صيغة التصدير">
                                 <option value="excel" selected>Excel</option>
-                                <option value="csv">CSV</option>
+                                <option value="pdf">PDF</option>
                             </select>
                             <button type="submit" class="btn btn-erp btn-erp-success btn-erp-sm">تصدير</button>
                         </form>

@@ -82,6 +82,44 @@ namespace ERP.Services.Caching
         }
 
         /// <inheritdoc />
+        public async Task<IReadOnlyList<Policy>> GetPoliciesAsync(CancellationToken cancellationToken = default)
+        {
+            if (_cache.TryGetValue(CacheKeys.Policies.AllV1, out IReadOnlyList<Policy>? cached) && cached != null)
+                return cached;
+
+            var list = await _db.Policies
+                .AsNoTracking()
+                .OrderBy(p => p.Name)
+                .ToListAsync(cancellationToken);
+
+            _cache.Set(
+                CacheKeys.Policies.AllV1,
+                list,
+                new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = WarehouseCacheDuration });
+
+            return list;
+        }
+
+        /// <inheritdoc />
+        public async Task<IReadOnlyList<ProductGroup>> GetProductGroupsAsync(CancellationToken cancellationToken = default)
+        {
+            if (_cache.TryGetValue(CacheKeys.ProductGroups.AllV1, out IReadOnlyList<ProductGroup>? cached) && cached != null)
+                return cached;
+
+            var list = await _db.ProductGroups
+                .AsNoTracking()
+                .OrderBy(g => g.Name)
+                .ToListAsync(cancellationToken);
+
+            _cache.Set(
+                CacheKeys.ProductGroups.AllV1,
+                list,
+                new MemoryCacheEntryOptions { AbsoluteExpirationRelativeToNow = WarehouseCacheDuration });
+
+            return list;
+        }
+
+        /// <inheritdoc />
         public async Task<IReadOnlyList<Warehouse>> GetWarehousesAsync(CancellationToken cancellationToken = default)
         {
             if (_cache.TryGetValue(CacheKeys.Warehouses.AllV1, out IReadOnlyList<Warehouse>? cached) && cached != null)
@@ -109,6 +147,12 @@ namespace ERP.Services.Caching
 
         /// <inheritdoc />
         public void ClearAreasCache() => _cache.Remove(CacheKeys.Geography.AreasV1);
+
+        /// <inheritdoc />
+        public void ClearPoliciesCache() => _cache.Remove(CacheKeys.Policies.AllV1);
+
+        /// <inheritdoc />
+        public void ClearProductGroupsCache() => _cache.Remove(CacheKeys.ProductGroups.AllV1);
 
         /// <inheritdoc />
         public void ClearWarehousesCache() => _cache.Remove(CacheKeys.Warehouses.AllV1);

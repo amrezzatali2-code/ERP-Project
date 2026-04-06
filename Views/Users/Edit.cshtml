@@ -2,6 +2,7 @@
 
 @{
     ViewData["Title"] = "تعديل مستخدم";
+    var returnUrl = ViewBag.ReturnUrl as string;
 }
 
 <div class="container" dir="rtl">
@@ -10,6 +11,10 @@
     <form asp-action="Edit" method="post" class="card p-3">
         @Html.AntiForgeryToken()
         <input type="hidden" asp-for="UserId" />
+        @if (!string.IsNullOrWhiteSpace(returnUrl))
+        {
+            <input type="hidden" name="returnUrl" value="@returnUrl" />
+        }
 
         <div asp-validation-summary="ModelOnly" class="text-danger"></div>
 
@@ -43,7 +48,18 @@
 
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary">حفظ التعديلات</button>
-            <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            @if (!string.IsNullOrWhiteSpace(returnUrl))
+            {
+                <a href="@returnUrl"
+                   class="btn btn-secondary open-same-tab"
+                   data-url="@returnUrl"
+                   data-tab-id="Users"
+                   data-tab-title="المستخدمين">رجوع للقائمة</a>
+            }
+            else
+            {
+                <a asp-action="Index" class="btn btn-secondary">رجوع للقائمة</a>
+            }
         </div>
     </form>
 </div>

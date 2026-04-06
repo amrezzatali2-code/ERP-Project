@@ -1,6 +1,7 @@
 using System.Linq;
 using System.Security.Claims;
 using ERP.Data;
+using ERP.Security;
 using Microsoft.EntityFrameworkCore;
 
 namespace ERP.Services
@@ -135,6 +136,13 @@ namespace ERP.Services
                 }
             }
             if (perm == null) return false;
+
+            var globalGate = GlobalPermissionGates.TryGetRequiredGlobalCode(code);
+            if (!string.IsNullOrEmpty(globalGate) && !string.Equals(globalGate, code, StringComparison.OrdinalIgnoreCase))
+            {
+                if (!await HasPermissionAsync(userId, globalGate))
+                    return false;
+            }
 
             // التحقق: ممنوع؟ من الدور؟ إضافي؟
             var denied = await _context.UserDeniedPermissions

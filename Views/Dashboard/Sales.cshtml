@@ -23,6 +23,7 @@
                 @if (Model.Level == "sales")
                 {
                     <span>أضف عملاءك، ثم أنشئ أول فاتورة مبيعات. ستظهر إحصائياتك الشخصية هنا تلقائياً.</span>
+                    <span class="d-block mt-2 small">إن وُجدت فواتير بالفعل ولا تظهر: تأكد أن <strong>من تاريخ / إلى تاريخ</strong> يشمل أيام إصدار فواتيرك؛ واعلم أن <strong>إجمالي المبيعات</strong> و<strong>عدد الفواتير</strong> يحسبان <strong>الفواتير المرحّلة</strong> فقط، بينما «أحدث العمليات» يعرض المسودات والمرحّلة ضمن الفترة.</span>
                 }
                 else
                 {
@@ -33,18 +34,18 @@
         @if (Model.Level == "sales")
         {
             <div class="card border-0 shadow-sm mt-3 mb-3 dashboard-filter-card">
-                <div class="card-body py-2">
-                    <form method="get" asp-controller="Dashboard" asp-action="Sales" class="row g-2 align-items-end flex-wrap">
+                <div class="card-body dashboard-filter-card__body">
+                    <form method="get" asp-controller="Dashboard" asp-action="Sales" class="row g-3 align-items-end flex-wrap">
                         <div class="col-auto">
-                            <label class="form-label small mb-0">من تاريخ</label>
-                            <input type="date" name="fromDate" class="form-control form-control-sm" style="min-width:140px" value="@fromStr" />
+                            <label class="form-label dashboard-filter-card__label mb-1">من تاريخ</label>
+                            <input type="date" name="fromDate" class="form-control dashboard-filter-card__input" dir="ltr" value="@fromStr" />
                         </div>
                         <div class="col-auto">
-                            <label class="form-label small mb-0">إلى تاريخ</label>
-                            <input type="date" name="toDate" class="form-control form-control-sm" style="min-width:140px" value="@toStr" />
+                            <label class="form-label dashboard-filter-card__label mb-1">إلى تاريخ</label>
+                            <input type="date" name="toDate" class="form-control dashboard-filter-card__input" dir="ltr" value="@toStr" />
                         </div>
-                        <div class="col-auto">
-                            <button type="submit" class="btn btn-primary btn-sm">عرض</button>
+                        <div class="col-auto pt-md-1">
+                            <button type="submit" class="btn btn-erp btn-erp-primary dashboard-sales-filter-submit">عرض</button>
                         </div>
                     </form>
                 </div>
@@ -61,10 +62,10 @@
                     <div class="dashboard-kpi-card__body">
                         <div class="dashboard-kpi-card__label">عدد العملاء</div>
                         <div class="dashboard-kpi-card__value">@Model.CustomersCount.ToString("N0")</div>
-                        <div class="dashboard-kpi-card__hint">عملاء مربوطون بك بمبيعات في الفترة</div>
+                        <div class="dashboard-kpi-card__hint">عملاء مربوطون بك كمستخدم مسئول</div>
                         @if (Model.LinkedCustomersDetail.Any())
                         {
-                            <button type="button" class="btn btn-sm dashboard-kpi-card__btn mt-2" data-bs-toggle="modal" data-bs-target="#modalDashboardCustomers">
+                            <button type="button" class="btn btn-sm dashboard-kpi-card__btn mt-2" id="btnOpenDashboardLinkedCustomers">
                                 عرض قائمة العملاء
                             </button>
                         }
@@ -124,7 +125,7 @@
                         <div class="dashboard-kpi-card__label">عدد المناطق</div>
                         <div class="dashboard-kpi-card__value">@Model.RegionsCount.ToString("N0")</div>
                         <div class="dashboard-kpi-card__hint">مناطق بها مبيعات — @periodHint</div>
-                        <button type="button" class="btn btn-sm dashboard-kpi-card__btn mt-2" data-bs-toggle="modal" data-bs-target="#modalDashboardRegions">
+                        <button type="button" class="btn btn-sm dashboard-kpi-card__btn mt-2" id="btnOpenDashboardRegions">
                             عرض المناطق والمبيعات
                         </button>
                     </div>
@@ -199,124 +200,154 @@
     </div>
 </div>
 
-@* نافذة عملائي المربوطين *@
-<div class="modal fade" id="modalDashboardCustomers" tabindex="-1" aria-labelledby="modalDashboardCustomersLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content dashboard-modal-content">
-            <div class="modal-header dashboard-modal-content__header">
-                <h5 class="modal-title" id="modalDashboardCustomersLabel">عملائي المربوطون — إحصائيات الفترة</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body p-0">
-                @if (Model.LinkedCustomersDetail.Any())
-                {
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0 dashboard-modal-table align-middle">
-                            <thead>
-                                <tr>
-                                    <th>العميل</th>
-                                    <th>الهاتف</th>
-                                    <th class="text-center">فواتير الفترة</th>
-                                    <th class="text-end">إجمالي المبيعات</th>
-                                    <th class="text-center" style="width:1%">إجراء</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @foreach (var c in Model.LinkedCustomersDetail)
-                                {
-                                    <tr class="@(c.InvoicesInPeriod == 0 ? "dashboard-modal-table__row-muted" : "")">
-                                        <td class="fw-medium">@c.CustomerName</td>
-                                        <td class="text-muted small">@(string.IsNullOrWhiteSpace(c.Phone) ? "—" : c.Phone)</td>
-                                        <td class="text-center">
-                                            <span class="dashboard-badge-soft">@c.InvoicesInPeriod.ToString("N0")</span>
-                                        </td>
-                                        <td class="text-end font-monospace">@c.SalesTotalInPeriod.ToString("N2")</td>
-                                        <td class="text-center">
-                                            <a class="btn btn-sm btn-outline-primary py-0 px-2" target="_blank" rel="noopener" asp-controller="Customers" asp-action="Show" asp-route-id="@c.CustomerId" asp-route-frame="1">عرض</a>
-                                        </td>
-                                    </tr>
-                                }
-                            </tbody>
-                        </table>
-                    </div>
-                }
-                else
-                {
-                    <p class="text-muted text-center py-5 mb-0">لا توجد بيانات عملاء مربوطين.</p>
-                }
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
-            </div>
-        </div>
+@* نوافذ عائمة — نفس نمط «أصناف المشتريات الحديثة» في فاتورة المبيعات (سحب + تغيير حجم) *@
+<div id="panelDashboardLinkedCustomers" class="recent-purchase-panel d-none" dir="rtl"
+     style="width: 560px; min-width: 360px; max-width: 95vw; height: 420px; min-height: 260px; max-height: 90vh;">
+    <div class="recent-purchase-panel-header d-flex align-items-center justify-content-between px-3 py-2">
+        <h6 class="mb-0 fw-semibold">العملاء المرتبطون بي</h6>
+        <button type="button" class="btn btn-sm btn-light btn-recent-purchase-close" aria-label="إغلاق" style="opacity: .9;">✕</button>
     </div>
+    <div class="recent-purchase-panel-body flex-grow-1 overflow-auto p-0" style="min-height: 0;">
+        @if (Model.LinkedCustomersDetail.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 dashboard-modal-table align-middle dashboard-linked-customers-table">
+                    <thead>
+                        <tr>
+                            <th>العميل</th>
+                            <th>الهاتف</th>
+                            <th class="text-center" style="width:1%">حجم التعامل</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var c in Model.LinkedCustomersDetail)
+                        {
+                            <tr>
+                                <td class="fw-medium">@c.CustomerName</td>
+                                <td class="text-muted small">@(string.IsNullOrWhiteSpace(c.Phone) ? "—" : c.Phone)</td>
+                                <td class="text-center">
+                                    <a class="btn btn-sm dashboard-linked-customers-table__action app-menu-link text-decoration-none"
+                                       asp-controller="Customers" asp-action="Show" asp-route-id="@c.CustomerId" asp-route-frame="1"
+                                       data-url="@Url.Action("Show", "Customers", new { id = c.CustomerId, frame = 1 })"
+                                       data-tab-id="customer-engagement"
+                                       data-tab-title="حجم تعامل عميل">
+                                        <span>حجم التعامل</span>
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted text-center py-5 mb-0 px-3">لا توجد بيانات عملاء مربوطين.</p>
+        }
+    </div>
+    <div class="recent-purchase-panel-resize-handle"></div>
 </div>
 
-@* نافذة المناطق ومبيعات كل منطقة *@
-<div class="modal fade" id="modalDashboardRegions" tabindex="-1" aria-labelledby="modalDashboardRegionsLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
-        <div class="modal-content dashboard-modal-content">
-            <div class="modal-header dashboard-modal-content__header">
-                <h5 class="modal-title" id="modalDashboardRegionsLabel">مبيعاتي حسب المنطقة</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="إغلاق"></button>
-            </div>
-            <div class="modal-body p-0">
-                @if (Model.RegionSalesRows.Any())
-                {
-                    <p class="text-muted small px-3 pt-3 mb-2">الفترة: <strong>@Model.FromDate?.ToString("yyyy-MM-dd")</strong> — <strong>@Model.ToDate?.ToString("yyyy-MM-dd")</strong> — فواتير مرحّلة فقط.</p>
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0 dashboard-modal-table align-middle">
-                            <thead>
-                                <tr>
-                                    <th>المنطقة</th>
-                                    <th class="text-center">عدد الفواتير</th>
-                                    <th class="text-end">إجمالي المبيعات (ج.م)</th>
-                                    <th class="text-end" style="width:1%">النسبة</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                @{
-                                    var regTotal = Model.RegionSalesRows.Sum(r => r.SalesTotal);
-                                }
-                                @foreach (var r in Model.RegionSalesRows)
-                                {
-                                    var pct = regTotal > 0 ? (r.SalesTotal / regTotal * 100m) : 0m;
-                                    <tr>
-                                        <td class="fw-medium">@r.AreaName</td>
-                                        <td class="text-center"><span class="dashboard-badge-soft">@r.InvoiceCount.ToString("N0")</span></td>
-                                        <td class="text-end font-monospace">@r.SalesTotal.ToString("N2")</td>
-                                        <td class="text-end small text-muted">@pct.ToString("N1")%</td>
-                                    </tr>
-                                }
-                            </tbody>
-                            <tfoot>
-                                <tr class="dashboard-modal-table__foot">
-                                    <th>الإجمالي</th>
-                                    <th class="text-center">@Model.RegionSalesRows.Sum(r => r.InvoiceCount).ToString("N0")</th>
-                                    <th class="text-end font-monospace">@regTotal.ToString("N2")</th>
-                                    <th class="text-end">100%</th>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                }
-                else
-                {
-                    <p class="text-muted text-center py-5 mb-0">لا توجد مبيعات في الفترة لعرض مناطق.</p>
-                }
-            </div>
-            <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">إغلاق</button>
-            </div>
-        </div>
+<div id="panelDashboardRegions" class="recent-purchase-panel d-none" dir="rtl"
+     style="width: 560px; min-width: 380px; max-width: 95vw; height: 420px; min-height: 280px; max-height: 90vh;">
+    <div class="recent-purchase-panel-header d-flex align-items-center justify-content-between px-3 py-2">
+        <h6 class="mb-0 fw-semibold">مبيعاتي حسب المنطقة</h6>
+        <button type="button" class="btn btn-sm btn-light btn-recent-purchase-close" aria-label="إغلاق" style="opacity: .9;">✕</button>
     </div>
+    <div class="recent-purchase-panel-body flex-grow-1 overflow-auto p-0" style="min-height: 0;">
+        @if (Model.RegionSalesRows.Any())
+        {
+            <p class="text-muted small px-3 pt-3 mb-2">الفترة: <strong>@Model.FromDate?.ToString("yyyy-MM-dd")</strong> — <strong>@Model.ToDate?.ToString("yyyy-MM-dd")</strong> — فواتير مرحّلة فقط.</p>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0 dashboard-modal-table align-middle">
+                    <thead>
+                        <tr>
+                            <th>المنطقة</th>
+                            <th class="text-center">عدد الفواتير</th>
+                            <th class="text-end">إجمالي المبيعات (ج.م)</th>
+                            <th class="text-end" style="width:1%">النسبة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            var regTotalFloating = Model.RegionSalesRows.Sum(r => r.SalesTotal);
+                        }
+                        @foreach (var r in Model.RegionSalesRows)
+                        {
+                            var pct = regTotalFloating > 0 ? (r.SalesTotal / regTotalFloating * 100m) : 0m;
+                            <tr>
+                                <td class="fw-medium">@r.AreaName</td>
+                                <td class="text-center"><span class="dashboard-badge-soft">@r.InvoiceCount.ToString("N0")</span></td>
+                                <td class="text-end font-monospace">@r.SalesTotal.ToString("N2")</td>
+                                <td class="text-end small text-muted">@pct.ToString("N1")%</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="dashboard-modal-table__foot">
+                            <th>الإجمالي</th>
+                            <th class="text-center">@Model.RegionSalesRows.Sum(r => r.InvoiceCount).ToString("N0")</th>
+                            <th class="text-end font-monospace">@regTotalFloating.ToString("N2")</th>
+                            <th class="text-end">100%</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+        else
+        {
+            <p class="text-muted text-center py-5 mb-0 px-3">لا توجد مبيعات في الفترة لعرض مناطق.</p>
+        }
+    </div>
+    <div class="recent-purchase-panel-resize-handle"></div>
 </div>
 
 <style>
     .dashboard-sales-page .dashboard-filter-card {
         border: 1px solid #6366f1 !important;
-        border-radius: 12px;
-        box-shadow: 0 1px 3px rgba(99,102,241,.2) !important;
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(99,102,241,.18) !important;
+    }
+
+    .dashboard-sales-page .dashboard-filter-card__body {
+        padding: 1.15rem 1.35rem 1.2rem;
+    }
+
+    .dashboard-sales-page .dashboard-filter-card__label {
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #64748b;
+        letter-spacing: 0.02em;
+    }
+
+    .dashboard-sales-page .dashboard-filter-card__input {
+        min-width: 158px;
+        min-height: 38px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        border-radius: 8px;
+        border: 1px solid #cbd5e1;
+        padding: 0.4rem 0.65rem;
+    }
+
+    .dashboard-sales-page .dashboard-filter-card__input:focus {
+        border-color: var(--erp-primary, #2563eb);
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+        outline: none;
+    }
+
+    .dashboard-sales-page .dashboard-sales-filter-submit {
+        min-height: 38px;
+        padding: 0.45rem 1.35rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        box-shadow: 0 2px 10px rgba(37, 99, 235, 0.28);
+        transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .dashboard-sales-page .dashboard-sales-filter-submit:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.35);
     }
 
     .dashboard-kpi-card {
@@ -385,6 +416,32 @@
         color: #fff;
     }
 
+    .dashboard-linked-customers-table th:nth-child(1) { width: 46%; }
+    .dashboard-linked-customers-table th:nth-child(2) { width: 26%; }
+    .dashboard-linked-customers-table th:nth-child(3) { width: 28%; }
+
+    .dashboard-linked-customers-table__action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 108px;
+        padding: 0.42rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid #4f46e5;
+        background: linear-gradient(135deg, rgba(79,70,229,.1), rgba(59,130,246,.1));
+        color: #4338ca;
+        font-weight: 700;
+        font-size: 0.82rem;
+        transition: transform .12s ease, box-shadow .12s ease, background .12s ease, color .12s ease;
+    }
+
+    .dashboard-linked-customers-table__action:hover {
+        color: #fff;
+        background: linear-gradient(135deg, #4f46e5, #2563eb);
+        box-shadow: 0 8px 18px rgba(79,70,229,.22);
+        transform: translateY(-1px);
+    }
+
     .dashboard-panel-card {
         border: 1px solid #6366f1 !important;
         border-radius: 12px !important;
@@ -406,22 +463,6 @@
         color: #4338ca;
         font-size: 0.8rem;
         border-bottom: 1px solid rgba(99, 102, 241, 0.2);
-    }
-
-    .dashboard-modal-content {
-        border: 1px solid #6366f1;
-        border-radius: 14px;
-        overflow: hidden;
-    }
-
-    .dashboard-modal-content__header {
-        background: linear-gradient(90deg, #6366f1, #818cf8);
-        color: #fff;
-        border-bottom: none;
-    }
-
-    .dashboard-modal-content__header .btn-close {
-        filter: brightness(0) invert(1);
     }
 
     .dashboard-modal-table thead th {
@@ -452,6 +493,82 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            (function initDashboardFloatingPanels() {
+                function openFloatingPanel(panel) {
+                    if (!panel) return;
+                    panel.classList.remove('d-none');
+                    requestAnimationFrame(function () {
+                        if (!panel.style.left && !panel.style.right) {
+                            panel.style.left = Math.max(20, (window.innerWidth - panel.offsetWidth) / 2) + 'px';
+                            panel.style.top = Math.max(20, (window.innerHeight - panel.offsetHeight) / 2) + 'px';
+                        }
+                    });
+                }
+                function bindDraggableFloatingPanel(panel) {
+                    if (!panel || panel.dataset.erpFloatingBound) return;
+                    panel.dataset.erpFloatingBound = '1';
+                    var header = panel.querySelector('.recent-purchase-panel-header');
+                    var resizeHandle = panel.querySelector('.recent-purchase-panel-resize-handle');
+                    var closeBtn = panel.querySelector('.btn-recent-purchase-close');
+                    if (closeBtn) {
+                        closeBtn.addEventListener('click', function () { panel.classList.add('d-none'); });
+                    }
+                    if (header) {
+                        var drag = { active: false, x: 0, y: 0, left: 0, top: 0 };
+                        header.addEventListener('mousedown', function (e) {
+                            if (e.target.closest('.btn-recent-purchase-close')) return;
+                            drag.active = true;
+                            drag.x = e.clientX;
+                            drag.y = e.clientY;
+                            var rect = panel.getBoundingClientRect();
+                            drag.left = rect.left;
+                            drag.top = rect.top;
+                        });
+                        document.addEventListener('mousemove', function (e) {
+                            if (!drag.active) return;
+                            panel.style.left = (drag.left + (e.clientX - drag.x)) + 'px';
+                            panel.style.top = (drag.top + (e.clientY - drag.y)) + 'px';
+                            panel.style.right = 'auto';
+                            panel.style.bottom = 'auto';
+                        });
+                        document.addEventListener('mouseup', function () { drag.active = false; });
+                    }
+                    if (resizeHandle) {
+                        var res = { active: false, startW: 0, startH: 0, startX: 0, startY: 0 };
+                        resizeHandle.addEventListener('mousedown', function (e) {
+                            e.preventDefault();
+                            res.active = true;
+                            res.startW = panel.offsetWidth;
+                            res.startH = panel.offsetHeight;
+                            res.startX = e.clientX;
+                            res.startY = e.clientY;
+                        });
+                        document.addEventListener('mousemove', function (e) {
+                            if (!res.active) return;
+                            var dw = e.clientX - res.startX;
+                            var dh = e.clientY - res.startY;
+                            var w = Math.max(380, Math.min(window.innerWidth * 0.95, res.startW + dw));
+                            var h = Math.max(280, Math.min(window.innerHeight * 0.9, res.startH + dh));
+                            panel.style.width = w + 'px';
+                            panel.style.height = h + 'px';
+                        });
+                        document.addEventListener('mouseup', function () { res.active = false; });
+                    }
+                }
+                var panelCustomers = document.getElementById('panelDashboardLinkedCustomers');
+                var panelRegions = document.getElementById('panelDashboardRegions');
+                bindDraggableFloatingPanel(panelCustomers);
+                bindDraggableFloatingPanel(panelRegions);
+                var btnOpenCustomers = document.getElementById('btnOpenDashboardLinkedCustomers');
+                var btnOpenRegions = document.getElementById('btnOpenDashboardRegions');
+                if (btnOpenCustomers && panelCustomers) {
+                    btnOpenCustomers.addEventListener('click', function () { openFloatingPanel(panelCustomers); });
+                }
+                if (btnOpenRegions && panelRegions) {
+                    btnOpenRegions.addEventListener('click', function () { openFloatingPanel(panelRegions); });
+                }
+            })();
+
             var chartData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.ChartData, new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }));
             if (chartData && chartData.length > 0) {
                 var ctx = document.getElementById('dashboardSalesChart');

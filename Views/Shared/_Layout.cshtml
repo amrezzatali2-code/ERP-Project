@@ -161,7 +161,10 @@
     </style>
 </head>
 
-<body class="bg-light">
+@{
+    var erpListSummaries = Context.Items["ShowListSummaries"] is bool _sls ? _sls : true;
+}
+<body class="bg-light" data-erp-list-summaries="@(erpListSummaries ? "true" : "false")">
     @* ================= النافبار الرئيسي (ثابت أعلى الشاشة) ================= *@
     <header>
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm">
@@ -195,6 +198,16 @@
                                         الترقيم
                                     </a>
                                 </li> *@
+
+                                <li>
+                                    <a class="dropdown-item app-menu-link"
+                                       asp-controller="Account"
+                                       asp-action="ChangePassword"
+                                       data-tab-id="account-change-password"
+                                       data-tab-title="تغيير كلمة المرور">
+                                        تغيير كلمة المرور
+                                    </a>
+                                </li>
 
                                 <li>
                                     <a class="dropdown-item app-menu-link"
@@ -1249,6 +1262,8 @@
     <script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
     <script src="~/js/erp-ui-feedback.js" asp-append-version="true"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
+    @* تعطيل حفظ المتصفح / Autofill على الحقول (يمكن السماح بحقل معيّن بـ data-erp-allow-autocomplete) *@
+    <script src="~/js/erp-disable-browser-autofill.js" asp-append-version="true"></script>
     <script src="~/js/erp-columns-modal.js" asp-append-version="true"></script>
     @* تهيئة حقول التاريخ والوقت بنظام 24 ساعة (بدلاً من AM/PM) *@
     <script>
@@ -1367,6 +1382,11 @@
                     if (plower.indexOf('/salesinvoices/show') >= 0) {
                         let id = getInt('NavCurrentId');
                         if (id <= 0) id = getInt('InvoiceId');
+                        // إن نزّل المحتوى جزئياً أو تأخر الـ DOM: آخر رقم في مسار Show/{id}
+                        if (id <= 0) {
+                            const m = (win.location.pathname || '').replace(/\\/g, '/').toLowerCase().match(/\/salesinvoices\/show\/(\d+)/);
+                            if (m) id = parseInt(m[1], 10) || 0;
+                        }
                         if (id > 0) {
                             const u = new URL('/SalesInvoices/Show', origin);
                             u.searchParams.set('id', String(id));
@@ -1375,6 +1395,10 @@
                     } else if (plower.indexOf('/purchaseinvoices/show') >= 0) {
                         let id = getInt('NavCurrentId');
                         if (id <= 0) id = getInt('InvoiceId');
+                        if (id <= 0) {
+                            const m2 = (win.location.pathname || '').replace(/\\/g, '/').toLowerCase().match(/\/purchaseinvoices\/show\/(\d+)/);
+                            if (m2) id = parseInt(m2[1], 10) || 0;
+                        }
                         if (id > 0) {
                             const u = new URL('/PurchaseInvoices/Show', origin);
                             u.searchParams.set('id', String(id));

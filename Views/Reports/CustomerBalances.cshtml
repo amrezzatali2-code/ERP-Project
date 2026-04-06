@@ -30,6 +30,7 @@
 
     // الفلاتر من ViewBag
     var search = ViewBag.Search as string ?? "";
+    var searchMode = ViewBag.SearchMode as string ?? "contains";
     var partyCategory = ViewBag.PartyCategory as string;
     var governorateId = ViewBag.GovernorateId as int?;
     var fromDate = ViewBag.FromDate as DateTime?;
@@ -83,6 +84,7 @@
         return Url.Action("CustomerBalances", "Reports", new
         {
             search,
+            searchMode,
             partyCategory,
             governorateId,
             fromDate,
@@ -102,6 +104,7 @@
     var printUrl = Url.Action("PrintCustomerBalances", "Reports", new
     {
         search,
+        searchMode,
         partyCategory,
         governorateId,
         fromDate,
@@ -126,31 +129,39 @@
 
 <div dir="rtl" class="container-fluid">
     @* ===== شريط الفلاتر الموحد (نفس Index) ===== *@
-    <div class="erp-list-filter-bar d-print-none mt-2">
+    <div class="erp-list-filter-bar d-print-none mt-2 customer-balances-report">
         <form method="get" asp-action="CustomerBalances" asp-controller="Reports" id="filtersForm">
-            <div class="row g-3 align-items-end">
-                <input type="hidden" name="loadReport" value="true" />
-                @if (!string.IsNullOrWhiteSpace(filterCol_code)) { <input type="hidden" name="filterCol_code" value="@filterCol_code" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_phone)) { <input type="hidden" name="filterCol_phone" value="@filterCol_phone" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_debit)) { <input type="hidden" name="filterCol_debit" value="@filterCol_debit" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_credit)) { <input type="hidden" name="filterCol_credit" value="@filterCol_credit" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_creditlimit)) { <input type="hidden" name="filterCol_creditlimit" value="@filterCol_creditlimit" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_sales)) { <input type="hidden" name="filterCol_sales" value="@filterCol_sales" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_purchases)) { <input type="hidden" name="filterCol_purchases" value="@filterCol_purchases" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_returns)) { <input type="hidden" name="filterCol_returns" value="@filterCol_returns" /> }
-                @if (!string.IsNullOrWhiteSpace(filterCol_availablecredit)) { <input type="hidden" name="filterCol_availablecredit" value="@filterCol_availablecredit" /> }
-                <div class="col-12 col-lg-3 erp-filter-section">
-                    <label class="form-label">بحث</label>
-                    <input type="text"
-                           name="search"
-                           list="customersList"
-                           class="form-control erp-filter-input"
-                           placeholder="اكتب اسم العميل أو جزء منه..."
-                           autocomplete="off"
-                           value="@search" />
+            <input type="hidden" name="loadReport" value="true" />
+            @if (!string.IsNullOrWhiteSpace(filterCol_code)) { <input type="hidden" name="filterCol_code" value="@filterCol_code" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_name)) { <input type="hidden" name="filterCol_name" value="@filterCol_name" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_category)) { <input type="hidden" name="filterCol_category" value="@filterCol_category" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_phone)) { <input type="hidden" name="filterCol_phone" value="@filterCol_phone" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_account)) { <input type="hidden" name="filterCol_account" value="@filterCol_account" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_debit)) { <input type="hidden" name="filterCol_debit" value="@filterCol_debit" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_credit)) { <input type="hidden" name="filterCol_credit" value="@filterCol_credit" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_creditlimit)) { <input type="hidden" name="filterCol_creditlimit" value="@filterCol_creditlimit" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_sales)) { <input type="hidden" name="filterCol_sales" value="@filterCol_sales" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_purchases)) { <input type="hidden" name="filterCol_purchases" value="@filterCol_purchases" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_returns)) { <input type="hidden" name="filterCol_returns" value="@filterCol_returns" /> }
+            @if (!string.IsNullOrWhiteSpace(filterCol_availablecredit)) { <input type="hidden" name="filterCol_availablecredit" value="@filterCol_availablecredit" /> }
+
+            <div class="row g-2 g-lg-2 align-items-end customer-balances-filter-row1">
+                <div class="col-12 col-md-6 col-lg-3 erp-filter-section customer-balances-col-search">
+                    <label class="form-label small mb-1">بحث</label>
+                    <div class="d-flex flex-nowrap gap-2 align-items-stretch">
+                        <select name="searchMode" class="form-select form-select-sm erp-filter-input customer-balances-search-mode" title="نوع البحث في اسم العميل والهاتف">
+                            <option value="starts" @(searchMode == "starts" ? "selected" : null)>يبدأ بـ</option>
+                            <option value="contains" @(searchMode == "contains" || string.IsNullOrEmpty(searchMode) ? "selected" : null)>يحتوي</option>
+                            <option value="ends" @(searchMode == "ends" ? "selected" : null)>ينتهي بـ</option>
+                        </select>
+                        <input type="text"
+       name="search"
+       list="customersList"
+       class="form-control form-control-sm erp-filter-input customer-balances-search-text flex-grow-1"
+       placeholder="نص البحث..."
+       autocomplete="off"
+       value="@search" />
+                    </div>
                     <datalist id="customersList">
                         @if (ViewBag.CustomersAuto != null)
                         {
@@ -161,87 +172,81 @@
                         }
                     </datalist>
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">فئة العميل</label>
-                    <input type="text"
-                           name="partyCategory"
-                           class="form-control erp-filter-input"
-                           placeholder="عميل / مورد..."
-                           value="@partyCategory" />
-                </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">المحافظة</label>
-                    <select name="governorateId" class="form-select erp-filter-input">
-                        <option value="">الكل</option>
-                        @foreach (var gov in governorates)
-                        {
-                            <option value="@gov.Value" selected="@(governorateId?.ToString() == gov.Value)">@gov.Text</option>
-                        }
-                    </select>
-                </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">من تاريخ</label>
+
+             
+
+          
+
+                <div class="col-6 col-md-3 col-lg-2 erp-filter-section">
+                    <label class="form-label small mb-1">من تاريخ</label>
                     <input type="date"
                            name="fromDate"
                            dir="ltr"
-                           class="form-control erp-filter-input"
+                           class="form-control form-control-sm erp-filter-input"
                            value="@(fromDate?.ToString("yyyy-MM-dd") ?? "")" />
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">إلى تاريخ</label>
+
+                <div class="col-6 col-md-3 col-lg-2 erp-filter-section">
+                    <label class="form-label small mb-1">إلى تاريخ</label>
                     <input type="date"
                            name="toDate"
                            dir="ltr"
-                           class="form-control erp-filter-input"
+                           class="form-control form-control-sm erp-filter-input"
                            value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
                 </div>
-                <div class="col-12 col-lg-2 erp-filter-section">
-                    <label class="form-label">خيارات</label>
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="form-check mb-0">
-                            <input class="form-check-input"
-                                   type="checkbox"
-                                   name="includeZeroBalance"
-                                   value="true"
-                                   id="includeZeroBalance"
-                                   @(includeZeroBalance ? "checked" : "") />
-                            <label class="form-check-label small" for="includeZeroBalance">عرض الصفر</label>
-                        </div>
+
+                <div class="col-12 col-sm-auto erp-filter-section customer-balances-col-zero">
+                    <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
+                    <div class="d-flex align-items-center gap-2 customer-balances-zero-wrap mb-0 px-2">
+                        <label class="form-check-label small mb-0" for="includeZeroBalance">عرض الصفر</label>
+                        <input class="form-check-input m-0 flex-shrink-0"
+                               type="checkbox"
+                               name="includeZeroBalance"
+                               value="true"
+                               id="includeZeroBalance"
+                               @(includeZeroBalance ? "checked" : "") />
                     </div>
                 </div>
-                <div class="col-12 col-lg-auto erp-filter-section">
-                    <label class="form-label d-none d-md-block" style="visibility:hidden">أوامر</label>
-                    <div class="d-flex flex-nowrap gap-2 customer-balances-btns">
-                        @* في RTL: أول عنصر في DOM يظهر يميناً — تجميع ← إعادة ← حجم التعامل ← اختيار الأعمدة ← تصدير Excel ← طباعة (أقصى يسار المجموعة) *@
+
+                <div class="col-12 col-sm-auto erp-filter-section customer-balances-col-top-actions d-flex align-items-end">
+                    <label class="form-label small mb-1 d-block" style="visibility:hidden">—</label>
+                    <div class="d-flex align-items-end gap-2 customer-balances-top-actions-group">
                         <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm customer-balances-btn customer-balances-btn-primary">
                             <span>📊</span> تجميع التقرير
                         </button>
                         <a href="@Url.Action("CustomerBalances", "Reports")" class="btn btn-erp btn-erp-secondary btn-erp-sm text-decoration-none customer-balances-btn customer-balances-btn-secondary">
                             <span>🔄</span> إعادة تعيين
                         </a>
-                        @if (reportData.Any())
-                        {
+                    </div>
+                </div>
+            </div>
+
+            @if (reportData.Any())
+            {
+                <div class="row g-2 g-lg-3 align-items-end mt-2 customer-balances-filter-row2">
+                    <div class="col-12">
+                        <div class="d-flex flex-wrap gap-2 customer-balances-btns">
                             <button type="button" id="btnCbEngagement" class="btn btn-erp btn-erp-secondary btn-erp-sm customer-balances-btn customer-balances-btn-secondary" disabled title="حدّد صفاً أو عميلاً واحداً بالتشيك بوكس">حجم التعامل</button>
                             <button type="button" class="btn btn-erp btn-erp-secondary btn-erp-sm customer-balances-btn customer-balances-btn-secondary" data-bs-toggle="modal" data-bs-target="#columnsModalCb">اختيار الأعمدة</button>
-                            <a href="@Url.Action("ExportCustomerBalances", "Reports", new { search, partyCategory, governorateId, fromDate, toDate, includeZeroBalance, sortBy, sortDir, filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_account, filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales, filterCol_purchases, filterCol_returns, filterCol_availablecredit })"
+                            <a href="@Url.Action("ExportCustomerBalances", "Reports", new { search, searchMode, partyCategory, governorateId, fromDate, toDate, includeZeroBalance, sortBy, sortDir, filterCol_code, filterCol_name, filterCol_category, filterCol_phone, filterCol_account, filterCol_debit, filterCol_credit, filterCol_creditlimit, filterCol_sales, filterCol_purchases, filterCol_returns, filterCol_availablecredit })"
                                class="btn btn-erp btn-erp-success btn-erp-sm text-decoration-none customer-balances-btn customer-balances-btn-success">
                                 <span>📥</span> تصدير Excel
                             </a>
                             <button type="button" id="btnCustomerBalancesPrint" class="btn btn-erp btn-erp-secondary btn-erp-sm customer-balances-btn customer-balances-btn-secondary" title="طباعة حسب الأعمدة الظاهرة">
                                 <span>🖨️</span> طباعة
                             </button>
-                        }
+                        </div>
                     </div>
                 </div>
-            </div>
+            }
         </form>
     </div>
 
     @* ===== كروت الإجماليات (بين شريط الفلاتر والجدول — مثل أرصدة الأصناف) ===== *@
     @if (reportData.Any())
     {
-        <div class="row g-2 g-md-3 mb-2 no-print">
-            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+        <div class="row g-2 g-md-3 mb-2 no-print erp-list-summary-row">
+            @* <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #6366f1 !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(99,102,241,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
                         <div class="small text-muted mb-1">إجمالي العملاء</div>
@@ -249,7 +254,7 @@
                         <div class="small text-muted mt-1">قبل فلاتر الأعمدة</div>
                     </div>
                 </div>
-            </div>
+            </div> *@
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <div class="card h-100 border-0 shadow-sm" style="border: 1px solid #0d6efd !important; border-radius: 12px; box-shadow: 0 1px 3px rgba(13,110,253,.25); overflow: hidden;">
                     <div class="card-body py-3 px-3">
@@ -339,7 +344,7 @@
                         </tr>
                     }
                 </tbody>
-                <tfoot class="table-secondary fw-bold">
+                <tfoot class="table-secondary fw-bold erp-list-summary-tfoot">
                     <tr>
                         <td class="no-print" data-col="select"></td>
                         <td data-col="code"></td>
@@ -485,23 +490,31 @@
         a.text-decoration-none:hover { text-decoration: underline !important; }
 
         /* أزرار التقرير: ألوان هادئة للعين */
-        .customer-balances-btns { flex-wrap: nowrap; }
+        .customer-balances-search-mode { min-width: 6.5rem; max-width: 7.5rem; }
+        .customer-balances-search-text { min-width: 12rem; }
+        .customer-balances-zero-wrap {
+            border: 1px solid #9aaece;
+            border-radius: .5rem;
+            min-height: calc(1.5em + .5rem + 2px);
+            background: #fff;
+        }
+        .customer-balances-btns { flex-wrap: wrap; }
         .customer-balances-btn {
-            background-color: #fff !important;
-            border-width: 1.5px !important;
+            border-width: 1px !important;
             border-style: solid !important;
         }
         .customer-balances-btn-primary {
-            color: #5b6b7a !important;
-            border-color: #94a3b8 !important;
+            color: #fff !important;
+            background-color: #2563eb !important;
+            border-color: #2563eb !important;
         }
         .customer-balances-btn-primary:hover {
-            background-color: #f1f5f9 !important;
-            color: #475569 !important;
-            border-color: #64748b !important;
+            background-color: #1d4ed8 !important;
+            border-color: #1d4ed8 !important;
         }
         .customer-balances-btn-secondary {
-            color: #64748b !important;
+            color: #475569 !important;
+            background-color: #fff !important;
             border-color: #cbd5e1 !important;
         }
         .customer-balances-btn-secondary:hover {
@@ -509,12 +522,25 @@
             color: #475569 !important;
         }
         .customer-balances-btn-success {
-            color: #4d7c5a !important;
-            border-color: #86efac !important;
+            color: #fff !important;
+            background-color: #16a34a !important;
+            border-color: #16a34a !important;
         }
         .customer-balances-btn-success:hover {
-            background-color: #f0fdf4 !important;
-            color: #166534 !important;
+            background-color: #15803d !important;
+            border-color: #15803d !important;
+            color: #fff !important;
+        }
+
+        @@media (max-width: 991.98px) {
+            .customer-balances-filter-row1 .customer-balances-col-search { order: 1; }
+            .customer-balances-filter-row1 .customer-balances-col-zero { order: 8; }
+            .customer-balances-filter-row1 .customer-balances-col-top-actions { order: 9; }
+        }
+
+        @@media (min-width: 992px) {
+            .customer-balances-col-top-actions { min-width: 14rem; }
+            .customer-balances-top-actions-group { justify-content: flex-start; }
         }
     </style>
 }

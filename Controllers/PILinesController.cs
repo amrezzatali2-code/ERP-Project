@@ -12,6 +12,7 @@ using ERP.Filters;
 using ERP.Models;                               // الموديل PILine + PurchaseInvoice
 using ERP.Infrastructure;                       // PagedResult لتقسيم الصفحات
 using ERP.Security;
+using ERP.Services;
 
 namespace ERP.Controllers
 {
@@ -28,10 +29,24 @@ namespace ERP.Controllers
     {
         // كائن الاتصال بقاعدة البيانات
         private readonly AppDbContext _context;
+        private readonly IListVisibilityService _listVisibilityService;
 
-        public PILinesController(AppDbContext context)
+        public PILinesController(AppDbContext context, IListVisibilityService listVisibilityService)
         {
             _context = context;
+            _listVisibilityService = listVisibilityService;
+        }
+
+        private async Task<IQueryable<PILine>> ApplyOperationalListVisibilityAsync(IQueryable<PILine> query)
+        {
+            if (await _listVisibilityService.CanViewAllOperationalListsAsync())
+                return query;
+
+            var creatorNames = await _listVisibilityService.GetCurrentUserCreatorNamesAsync();
+            if (creatorNames.Count == 0)
+                return query.Where(_ => false);
+
+            return query.Where(l => l.PurchaseInvoice != null && l.PurchaseInvoice.CreatedBy != null && creatorNames.Contains(l.PurchaseInvoice.CreatedBy.Trim()));
         }
 
         #region Index (قائمة سطور فواتير الشراء)
@@ -98,6 +113,7 @@ namespace ERP.Controllers
                 .Include(l => l.Product)          // اسم الصنف
                 .Include(l => l.PurchaseInvoice)       // تحميل الفاتورة للحصول على التاريخ وغيره
                 .AsNoTracking();
+            query = await ApplyOperationalListVisibilityAsync(query);
 
             // نقرأ codeFrom / codeTo من الكويري لو موجودين
             int? codeFrom = Request.Query.ContainsKey("codeFrom")
@@ -237,7 +253,8 @@ namespace ERP.Controllers
             var searchTerm = (search ?? "").Trim().ToLowerInvariant();
             var columnLower = (column ?? "").Trim().ToLowerInvariant();
 
-            var baseQuery = _context.PILines.Include(l => l.Product).Include(l => l.PurchaseInvoice).AsNoTracking();
+            var baseQuery = await ApplyOperationalListVisibilityAsync(
+                _context.PILines.Include(l => l.Product).Include(l => l.PurchaseInvoice).AsNoTracking());
 
             if (columnLower == "piid")
             {
@@ -445,6 +462,7 @@ namespace ERP.Controllers
                 .Include(l => l.Product)
                 .Include(l => l.PurchaseInvoice)
                 .AsNoTracking();
+            query = await ApplyOperationalListVisibilityAsync(query);
 
             query = ApplyFilters(
                 query,

@@ -21,6 +21,16 @@ namespace ERP.Services.Caching
             public const string PartyLookupV1 = "ERP:Cache:v1:Customers:PartyLookup";
         }
 
+        public static class Policies
+        {
+            public const string AllV1 = "ERP:Cache:v1:Policies:All";
+        }
+
+        public static class ProductGroups
+        {
+            public const string AllV1 = "ERP:Cache:v1:ProductGroups:All";
+        }
+
         public static class Warehouses
         {
             public const string AllV1 = "ERP:Cache:v1:Warehouses:All";
