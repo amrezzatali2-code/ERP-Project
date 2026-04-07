@@ -222,7 +222,7 @@
                            href="#"
                            id="btnProductMovement"
                            data-lock-posted="1"
-                           title="حركة الصنف في تبويب جديد">
+                           title="حركة الصنف داخل النظام">
                             📊 حركة الصنف
                         </a>
 
@@ -1194,6 +1194,15 @@
                 alert('الكمية يجب أن تكون أكبر من صفر.');
                 return;
             }
+            const qtyAvailable = parseInt(document.getElementById('QtyAvailableInput')?.value || '0', 10);
+            if (!qtyAvailable || qtyAvailable <= 0) {
+                alert('هذا الصنف غير متاح في المخزن المصدر حالياً، لا يمكن إضافة سطر تحويل له.');
+                return;
+            }
+            if (qty > qtyAvailable) {
+                alert(`الكمية المطلوبة (${qty}) أكبر من الكمية المتاحة (${qtyAvailable}).`);
+                return;
+            }
 
             const dto = {
                 stockTransferId: transferId,
@@ -1323,7 +1332,19 @@
                 return;
             }
             const url = '@Url.Action("Show", "Products", new { id = 999999 })'.replace('999999', String(id)) + '?frame=1';
-            window.open(url, '_blank');
+            try {
+                if (window.top && window.top !== window) {
+                    window.top.postMessage({
+                        type: 'erp-update-current-tab',
+                        url: url,
+                        title: 'حركة الصنف'
+                    }, '*');
+                    return;
+                }
+            } catch (err) {
+                console.warn('تعذر تحديث التاب الحالي عبر postMessage:', err);
+            }
+            window.location.assign(url);
         });
 
         // Save header

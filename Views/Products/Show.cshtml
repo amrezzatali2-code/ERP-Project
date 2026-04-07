@@ -330,15 +330,30 @@
                 <input type="hidden" id="productSearchId" name="prodId" value="@(selectedProdId?.ToString() ?? "")" />
                 <input type="hidden" id="customerSearchId" name="customerId" value="@(selectedCustomerId?.ToString() ?? "")" />
 
-                <div class="col-12 col-lg-4 erp-filter-section">
-                    <label class="form-label">بحث بالكود أو الاسم</label>
+                @* كود الصنف: عمود ضيق + حد أقصى لعرض الحقل *@
+                <div class="col-4 col-sm-3 col-lg-1 erp-filter-section">
+                    <label class="form-label small mb-1">كود الصنف</label>
+                    <div class="mx-auto mx-lg-0" style="max-width: 4.75rem;">
+                        <input id="productCodeSearchInput"
+                               type="text"
+                               inputmode="numeric"
+                               class="form-control form-control-sm erp-filter-input text-center px-1"
+                               placeholder="كود"
+                               autocomplete="off"
+                               dir="ltr"
+                               value="@(selectedProdId?.ToString() ?? "")" />
+                    </div>
+                </div>
+
+                <div class="col-8 col-sm-5 col-lg-4 erp-filter-section">
+                    <label class="form-label">اسم الصنف</label>
                     <div class="position-relative" id="productMovementDropdownWrap">
                         <div class="product-dropdown-onebox" id="productMovementDropdownInputGroup">
                             <span class="product-dropdown-arrow-inside" id="productMovementDropdownArrow" title="افتح القائمة">▼</span>
                             <input id="productSearchInput"
                                    type="text"
-                                   class="form-control erp-filter-input product-dropdown-input"
-                                   placeholder="اكتب اسم الصنف"
+                                   class="form-control form-control-sm erp-filter-input product-dropdown-input"
+                                   placeholder="بحث بالاسم..."
                                    autocomplete="off"
                                    title="بحث مثل فاتورة المبيعات: عدة كلمات، أرقام عربية، تطبيع الألف"
                                    value="@selectedProductDisplay" />
@@ -394,7 +409,7 @@
                            value="@(to?.ToString("yyyy-MM-dd") ?? "")" />
                 </div>
 
-                <div class="col-12 col-lg-2 erp-filter-section">
+                <div class="col-12 col-lg-1 erp-filter-section">
                     <label class="form-label d-none d-md-block" style="visibility:hidden">عرض</label>
                     <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm w-100">
                         عرض
@@ -1116,27 +1131,31 @@
             }
 
             function findProductByCode(code) {
-                var search = (code || '').toString().trim();
+                var search = normalizeDigits((code || '').toString().trim());
                 if (!search) return null;
                 var opts = prodDataList ? prodDataList.options : [];
                 for (var i = 0; i < opts.length; i++) {
-                    var idAttr = (opts[i].getAttribute('data-id') || '').toString();
-                    var codeAttr = (opts[i].getAttribute('data-code') || '').toString();
+                    var idAttr = normalizeDigits((opts[i].getAttribute('data-id') || '').toString());
+                    var codeAttr = normalizeDigits((opts[i].getAttribute('data-code') || '').toString());
                     if (idAttr === search || codeAttr === search) return opts[i];
                 }
                 return null;
             }
 
+            var codeInput = document.getElementById('productCodeSearchInput');
+
             function fillFromProductOpt(opt) {
                 if (!opt) {
                     if (hiddenId) hiddenId.value = '';
                     if (input) input.value = '';
+                    if (codeInput) codeInput.value = '';
                     return;
                 }
                 var id = (opt.getAttribute('data-id') || '').toString();
                 var name = (opt.value || '').trim();
                 if (hiddenId) hiddenId.value = id;
                 if (input) input.value = name;
+                if (codeInput) codeInput.value = id;
             }
 
             function closeProductDropdown() {
@@ -1247,8 +1266,24 @@
                     if (isSelectingProduct) return;
                     activeIndex = -1;
                     hiddenId.value = '';
+                    if (codeInput) codeInput.value = '';
                     openProductDropdown();
                 });
+
+                if (codeInput) {
+                    codeInput.addEventListener('input', function () {
+                        if (isSelectingProduct) return;
+                        var c = normalizeDigits((this.value || '').trim());
+                        hiddenId.value = '';
+                        var optC = c ? findProductByCode(c) : null;
+                        if (optC) {
+                            isSelectingProduct = true;
+                            fillFromProductOpt(optC);
+                            closeProductDropdown();
+                            setTimeout(function () { isSelectingProduct = false; }, 0);
+                        }
+                    });
+                }
 
                 if (dropdownArrow) {
                     dropdownArrow.addEventListener('click', function (ev) {
@@ -1314,10 +1349,16 @@
                 }
 
                 form.addEventListener('submit', function (e) {
+                    var codeTxt = codeInput ? normalizeDigits((codeInput.value || '').trim()) : '';
+                    if (!hiddenId.value && codeTxt) {
+                        var optByCode = findProductByCode(codeTxt);
+                        if (optByCode) fillFromProductOpt(optByCode);
+                        else if (/^\d+$/.test(codeTxt)) hiddenId.value = codeTxt;
+                    }
                     var txt = (input.value || '').trim();
                     if (!hiddenId.value && txt.length > 0) {
-                        if (/^\d+$/.test(txt)) {
-                            hiddenId.value = txt;
+                        if (/^\d+$/.test(normalizeDigits(txt))) {
+                            hiddenId.value = normalizeDigits(txt);
                         } else {
                             var exactOpt = findProductByName(txt);
                             if (!exactOpt && txt.indexOf('—') !== -1) {

@@ -120,6 +120,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Index(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             int page = 1,
@@ -151,6 +152,7 @@ namespace ERP.Controllers
                 query,
                 search,
                 searchBy,
+                searchMode,
                 useDateRange,
                 fromDate,
                 toDate,
@@ -200,15 +202,14 @@ namespace ERP.Controllers
                 query,
                 page,
                 pageSize,
-                search,     // نص البحث
-                desc,       // ترتيب تنازلي؟
-                sort,       // اسم عمود الترتيب
-                searchBy);  // طريقة البحث
-
-
+                sort,
+                desc,
+                search,
+                searchBy);
 
             ViewBag.Search = search;
             ViewBag.SearchBy = searchBy ?? "all";
+            ViewBag.SearchMode = NormalizeActivitySearchMode(searchMode);
             ViewBag.Sort = sort;
             ViewBag.Dir = desc ? "desc" : "asc";
             ViewBag.FromCode = fromCode;
@@ -297,69 +298,98 @@ namespace ERP.Controllers
             IQueryable<UserActivityLog> query,
             string? search,
             string? searchBy,
+            string? searchMode,
             bool useDateRange,
             DateTime? fromDate,
             DateTime? toDate,
             int? fromCode,
             int? toCode)
         {
-            // فلتر البحث النصّي
+            // فلتر البحث النصّي (وضع النص: يبدأ / يحتوي / ينتهي — مثل قائمة العملاء)
             if (!string.IsNullOrWhiteSpace(search))
             {
                 string term = search.Trim();
                 string numericTerm = NormalizeArabicDigitsToLatin(term);
-                string mode = (searchBy ?? "all").ToLower();
+                string mode = (searchBy ?? "all").ToLowerInvariant();
+                var sm = NormalizeActivitySearchMode(searchMode);
 
-                // نوع العملية enum: لا نستخدم ToString() في الـ query لأنه لا يترجم لـ SQL
-                var matchingActionTypes = Enum.GetValues<UserActionType>()
-                    .Where(e => e.ToString().Contains(term, StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
+                var matchingActionTypes = GetMatchingActionTypesForSearch(term, sm);
 
                 query = mode switch
                 {
-                    // البحث باسم المستخدم أو الاسم الظاهر
-                    "user" => query.Where(x =>
-                        x.User != null &&
-                        (
-                            x.User.UserName.Contains(term) ||
-                            (x.User.DisplayName != null && x.User.DisplayName.Contains(term))
-                        )),
+                    "user" => sm switch
+                    {
+                        "starts" => query.Where(x =>
+                            x.User != null &&
+                            (x.User.UserName.StartsWith(term) ||
+                             (x.User.DisplayName != null && x.User.DisplayName.StartsWith(term)))),
+                        "ends" => query.Where(x =>
+                            x.User != null &&
+                            (x.User.UserName.EndsWith(term) ||
+                             (x.User.DisplayName != null && x.User.DisplayName.EndsWith(term)))),
+                        _ => query.Where(x =>
+                            x.User != null &&
+                            (x.User.UserName.Contains(term) ||
+                             (x.User.DisplayName != null && x.User.DisplayName.Contains(term))))
+                    },
 
-                    // البحث بنوع العملية (مقارنة enum بدون ToString في SQL)
                     "action" => matchingActionTypes.Length > 0
                         ? query.Where(x => matchingActionTypes.Contains(x.ActionType))
                         : query.Where(x => false),
 
-                    // البحث باسم الكيان
-                    "entity" => query.Where(x =>
-                        x.EntityName != null && x.EntityName.Contains(term)),
+                    "entity" => sm switch
+                    {
+                        "starts" => query.Where(x => x.EntityName != null && x.EntityName.StartsWith(term)),
+                        "ends" => query.Where(x => x.EntityName != null && x.EntityName.EndsWith(term)),
+                        _ => query.Where(x => x.EntityName != null && x.EntityName.Contains(term))
+                    },
 
-                    // البحث بالوصف
-                    "description" => query.Where(x =>
-                        x.Description != null && x.Description.Contains(term)),
+                    "description" => sm switch
+                    {
+                        "starts" => query.Where(x => x.Description != null && x.Description.StartsWith(term)),
+                        "ends" => query.Where(x => x.Description != null && x.Description.EndsWith(term)),
+                        _ => query.Where(x => x.Description != null && x.Description.Contains(term))
+                    },
 
-                    // البحث برقم السجل
                     "id" => int.TryParse(numericTerm, out var idVal)
                         ? query.Where(x => x.Id == idVal)
-                        : query.Where(x => false),
+                        : sm switch
+                        {
+                            "starts" => query.Where(x => x.Id.ToString().StartsWith(numericTerm)),
+                            "ends" => query.Where(x => x.Id.ToString().EndsWith(numericTerm)),
+                            _ => query.Where(x => x.Id.ToString().Contains(numericTerm))
+                        },
 
-                    // البحث في الكل (ActionType عبر enum values بدل ToString)
-                    _ => query.Where(x =>
-                        (x.User != null &&
-                            (
-                                x.User.UserName.Contains(term) ||
-                                (x.User.DisplayName != null && x.User.DisplayName.Contains(term))
-                            ))
-                        ||
-                        (x.EntityName != null && x.EntityName.Contains(term))
-                        ||
-                        (x.Description != null && x.Description.Contains(term))
-                        ||
-                        (x.OldValues != null && x.OldValues.Contains(term))
-                        ||
-                        (x.NewValues != null && x.NewValues.Contains(term))
-                        ||
-                        (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType)))
+                    _ => sm switch
+                    {
+                        "starts" => query.Where(x =>
+                            (x.User != null &&
+                             (x.User.UserName.StartsWith(term) ||
+                              (x.User.DisplayName != null && x.User.DisplayName.StartsWith(term))))
+                            || (x.EntityName != null && x.EntityName.StartsWith(term))
+                            || (x.Description != null && x.Description.StartsWith(term))
+                            || (x.OldValues != null && x.OldValues.StartsWith(term))
+                            || (x.NewValues != null && x.NewValues.StartsWith(term))
+                            || (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType))),
+                        "ends" => query.Where(x =>
+                            (x.User != null &&
+                             (x.User.UserName.EndsWith(term) ||
+                              (x.User.DisplayName != null && x.User.DisplayName.EndsWith(term))))
+                            || (x.EntityName != null && x.EntityName.EndsWith(term))
+                            || (x.Description != null && x.Description.EndsWith(term))
+                            || (x.OldValues != null && x.OldValues.EndsWith(term))
+                            || (x.NewValues != null && x.NewValues.EndsWith(term))
+                            || (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType))),
+                        _ => query.Where(x =>
+                            (x.User != null &&
+                             (x.User.UserName.Contains(term) ||
+                              (x.User.DisplayName != null && x.User.DisplayName.Contains(term))))
+                            || (x.EntityName != null && x.EntityName.Contains(term))
+                            || (x.Description != null && x.Description.Contains(term))
+                            || (x.OldValues != null && x.OldValues.Contains(term))
+                            || (x.NewValues != null && x.NewValues.Contains(term))
+                            || (matchingActionTypes.Length > 0 && matchingActionTypes.Contains(x.ActionType)))
+                    }
                 };
             }
 
@@ -400,6 +430,25 @@ namespace ERP.Controllers
             }
 
             return new string(chars);
+        }
+
+        private static string NormalizeActivitySearchMode(string? searchMode)
+        {
+            var sm = (searchMode ?? "contains").Trim().ToLowerInvariant();
+            return sm is "starts" or "ends" or "contains" ? sm : "contains";
+        }
+
+        /// <summary>مطابقة أسماء enum لنوع العملية مع وضع النص (يبدأ / يحتوي / ينتهي).</summary>
+        private static UserActionType[] GetMatchingActionTypesForSearch(string term, string sm)
+        {
+            return Enum.GetValues<UserActionType>()
+                .Where(e => sm switch
+                {
+                    "starts" => e.ToString().StartsWith(term, StringComparison.OrdinalIgnoreCase),
+                    "ends" => e.ToString().EndsWith(term, StringComparison.OrdinalIgnoreCase),
+                    _ => e.ToString().Contains(term, StringComparison.OrdinalIgnoreCase)
+                })
+                .ToArray();
         }
 
         // GET: UserActivityLogs/Details/5
@@ -566,6 +615,7 @@ namespace ERP.Controllers
         public async Task<IActionResult> Export(
             string? search,
             string? searchBy,
+            string? searchMode,
             string? sort,
             string? dir,
             bool useDateRange = false,
@@ -587,7 +637,7 @@ namespace ERP.Controllers
                 .AsNoTracking()
                 .Include(x => x.User);
 
-            query = ApplyFilters(query, search, searchBy, useDateRange, fromDate, toDate, fromCode, toCode);
+            query = ApplyFilters(query, search, searchBy, searchMode, useDateRange, fromDate, toDate, fromCode, toCode);
             query = ApplyColumnFilters(query, filterCol_id, filterCol_user, filterCol_action, filterCol_entity, filterCol_entityId, filterCol_time, filterCol_ip, filterCol_desc);
 
             bool desc = string.Equals(dir, "desc", StringComparison.OrdinalIgnoreCase);

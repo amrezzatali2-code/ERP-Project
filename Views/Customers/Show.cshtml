@@ -337,15 +337,29 @@
                     <input type="hidden" name="frame" value="1" />
                 }
 
-                <div class="col-12 col-lg-4 erp-filter-section">
-                    <label class="form-label">بحث بالكود أو الاسم</label>
+                <div class="col-4 col-sm-3 col-lg-1 erp-filter-section">
+                    <label class="form-label small mb-1">كود العميل</label>
+                    <div class="mx-auto mx-lg-0" style="max-width: 4.75rem;">
+                        <input id="partyCodeSearchInput"
+                               type="text"
+                               inputmode="numeric"
+                               class="form-control form-control-sm erp-filter-input text-center px-1"
+                               placeholder="كود"
+                               autocomplete="off"
+                               dir="ltr"
+                               value="@(Model?.CustomerId.ToString() ?? "")" />
+                    </div>
+                </div>
+
+                <div class="col-8 col-sm-5 col-lg-4 erp-filter-section">
+                    <label class="form-label">اسم العميل</label>
                     <div class="position-relative" id="partyDropdownWrap">
                         <div class="product-dropdown-onebox" id="partyDropdownInputGroup">
                             <span class="product-dropdown-arrow-inside" id="partyDropdownArrow" title="افتح القائمة">▼</span>
                             <input id="partySearchInput"
                                    type="text"
-                                   class="form-control erp-filter-input product-dropdown-input"
-                                   placeholder="اكتب جزء من اسم العميل أو الكود..."
+                                   class="form-control form-control-sm erp-filter-input product-dropdown-input"
+                                   placeholder="بحث بالاسم..."
                                    autocomplete="off"
                                    value="@(Model != null ? Model.CustomerName : "")" />
                         </div>
@@ -387,7 +401,7 @@
                            value="@(toDate?.ToString("yyyy-MM-dd") ?? "")" />
                 </div>
 
-                <div class="col-12 col-lg-2 erp-filter-section">
+                <div class="col-12 col-lg-1 erp-filter-section">
                     <label class="form-label d-none d-md-block" style="visibility:hidden">عرض</label>
                     <button type="submit" class="btn btn-erp btn-erp-primary btn-erp-sm w-100">
                         عرض
@@ -1010,6 +1024,7 @@
             var dropdownList = document.getElementById('partyDropdownList');
             var dropdownArrow = document.getElementById('partyDropdownArrow');
             var form = document.getElementById('customerSearchForm');
+            var codeInput = document.getElementById('partyCodeSearchInput');
 
             var activeIndex = -1;
             var selectableCustomers = [];
@@ -1115,10 +1130,10 @@
             }
 
             function findByCode(code) {
-                var search = (code || '').toString().trim();
+                var search = normalizeDigits((code || '').toString().trim());
                 if (!search) return null;
                 for (var i = 0; i < allCustomers.length; i++) {
-                    if ((allCustomers[i].id || '').toString() === search) return allCustomers[i];
+                    if (normalizeDigits((allCustomers[i].id || '').toString()) === search) return allCustomers[i];
                 }
                 return null;
             }
@@ -1127,10 +1142,12 @@
                 if (!opt) {
                     if (hiddenId) hiddenId.value = '';
                     if (input) input.value = '';
+                    if (codeInput) codeInput.value = '';
                     return;
                 }
                 if (hiddenId) hiddenId.value = (opt.id || '').toString();
                 if (input) input.value = (opt.name || '').trim();
+                if (codeInput) codeInput.value = (opt.id || '').toString();
             }
 
             function getFilteredCustomerOptions(search, max) {
@@ -1286,9 +1303,27 @@
                 input.addEventListener('input', function () {
                     if (isSelectingCustomer) return;
                     activeIndex = -1;
-                    if (!this.value || this.value.trim().length < 1) hiddenId.value = '';
+                    if (!this.value || this.value.trim().length < 1) {
+                        hiddenId.value = '';
+                        if (codeInput) codeInput.value = '';
+                    }
                     openPartyDropdown();
                 });
+
+                if (codeInput) {
+                    codeInput.addEventListener('input', function () {
+                        if (isSelectingCustomer) return;
+                        var c = normalizeDigits((this.value || '').trim());
+                        hiddenId.value = '';
+                        var fc = c ? findByCode(c) : null;
+                        if (fc) {
+                            isSelectingCustomer = true;
+                            fillFromParty(fc);
+                            closePartyDropdown();
+                            setTimeout(function () { isSelectingCustomer = false; }, 0);
+                        }
+                    });
+                }
 
                 if (dropdownArrow) {
                     dropdownArrow.addEventListener('click', function (ev) {
@@ -1383,6 +1418,12 @@
                 }
 
                 form.addEventListener('submit', function (e) {
+                    var codeTxt = codeInput ? normalizeDigits((codeInput.value || '').trim()) : '';
+                    if (!hiddenId.value && codeTxt) {
+                        var byCodeField = findByCode(codeTxt);
+                        if (byCodeField) fillFromParty(byCodeField);
+                        else if (/^\d+$/.test(codeTxt)) hiddenId.value = codeTxt;
+                    }
                     var txt = (input.value || '').trim();
                     var currentId = (hiddenId.value || '').trim();
                     var currentName = '';
@@ -1396,13 +1437,15 @@
 
                     function tryResolve() {
                         if (!txt) return;
-                        if (/^\d+$/.test(txt)) {
-                            var byId = findByCode(txt);
+                        var txtDigits = normalizeDigits(txt);
+                        if (/^\d+$/.test(txtDigits)) {
+                            var byId = findByCode(txtDigits);
                             if (byId) {
                                 fillFromParty(byId);
                                 return;
                             }
-                            hiddenId.value = txt;
+                            hiddenId.value = txtDigits;
+                            if (codeInput) codeInput.value = txtDigits;
                             return;
                         }
                         var exact = findByName(txt);

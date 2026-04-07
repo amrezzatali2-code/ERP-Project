@@ -119,7 +119,7 @@ namespace ERP.Controllers
         // - أو مع SalesInvoiceId لعمل مرتجع من فاتورة بيع
         // =========================
         [HttpGet]
-        public async Task<IActionResult> Create(int? salesInvoiceId, bool standalone = false)
+        public async Task<IActionResult> Create(int? salesInvoiceId, int? customerId, bool standalone = false)
         {
             if (salesInvoiceId.HasValue)
                 standalone = false;
@@ -155,6 +155,17 @@ namespace ERP.Controllers
                 model.SalesInvoiceId = invoice.SIId;    // ربط المرتجع بالفاتورة الأصلية
                 model.CustomerId = invoice.CustomerId;  // نفس العميل
                 model.WarehouseId = invoice.WarehouseId; // نفس المخزن
+            }
+            else if (customerId.HasValue && customerId.Value > 0)
+            {
+                // مرتجع مستقل (بدون ربط بفاتورة أصلية) لكنه يبدأ بنفس العميل
+                var exists = await context.Customers
+                    .AsNoTracking()
+                    .AnyAsync(c => c.CustomerId == customerId.Value);
+                if (exists)
+                {
+                    model.CustomerId = customerId.Value;
+                }
             }
 
             // تحميل العملاء والمخازن للواجهة

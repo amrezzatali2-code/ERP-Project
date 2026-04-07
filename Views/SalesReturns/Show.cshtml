@@ -835,6 +835,14 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            // فتح شاشة المرتجع: فوكس مباشر على اسم العميل لتسريع الإدخال
+            setTimeout(function () {
+                var custName = document.getElementById('CustomerNameInput');
+                if (custName) {
+                    custName.focus();
+                    if (typeof custName.select === 'function') custName.select();
+                }
+            }, 120);
 
             function showToast(text, type, durationMs) {
                 if (!text) return;

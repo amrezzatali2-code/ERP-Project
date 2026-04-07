@@ -235,7 +235,7 @@
         .invoice-page .invoice-lines-container .erp-table-wrapper {
             flex: 1 1 auto;
             min-height: 16rem;
-            max-height: none !important;
+            max-height: 55vh !important;
             overflow: auto;
             border: none;
             border-radius: 0;
@@ -460,14 +460,17 @@
             border-color: #0d6efd !important;
             box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
         }
-        /* القائمة المنسدلة — تظهر تحت البوكس (position fixed لعدم القص) */
+        /* القائمة المنسدلة — ملتصقة ببوكس الصنف داخل نفس الـ wrap */
         .product-dropdown-list {
-            position: fixed;
+            position: absolute;
+            top: calc(100% + 2px);
+            right: 0;
+            left: 0;
+            width: 100%;
             max-height: 220px;
             min-height: 40px;
             overflow-y: auto;
-            z-index: 9999;
-            margin-top: 2px;
+            z-index: 12000;
             border: 1px solid #dee2e6;
             border-radius: 0.375rem;
             background: #fff;
@@ -480,10 +483,26 @@
             display: block !important;
         }
         #productDropdownWrap {
+            position: relative;
             overflow: visible !important;
+            z-index: 12010;
         }
+        #customerDropdownWrap {
+            position: relative;
+            overflow: visible !important;
+            z-index: 12010;
+        }
+        .invoice-Add-card,
         .invoice-Add-card .card-body {
             overflow: visible !important;
+            position: relative;
+            z-index: 30;
+        }
+        .invoice-lines-card,
+        .invoice-lines-card .card-body,
+        .erp-table-wrapper {
+            position: relative;
+            z-index: 1;
         }
         .product-dropdown-item {
             cursor: pointer;
@@ -701,10 +720,12 @@
         }
 
         /* هيدر جدول السطور — مثل قائمة المبيعات (ثابت عند التمرير) */
+        .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header,
+        .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header tr,
         .invoice-lines-container .erp-table-wrapper table thead.invoice-lines-header th {
             position: sticky;
             top: 0;
-            z-index: 10;
+            z-index: 12;
             background-color: #fff !important;
             color: #212529 !important;
             font-weight: 600;
@@ -861,6 +882,16 @@
         #siToastContainer .si-toast.text-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
         #siToastContainer .si-toast.text-danger { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
         #siToastContainer .si-toast.text-muted { background: #f1f5f9; color: #334155; border: 1px solid #64748b; }
+
+        .si-settings-panel {
+            border: 1px solid #dbe3ff;
+            border-radius: 10px;
+            padding: 8px;
+            background: #f8faff;
+            display: none;
+        }
+
+        .si-settings-panel.show { display: block; }
     </style>
 }
 
@@ -903,7 +934,7 @@
 
 
 
-                    <div class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
+                    <div id="siInvoiceNavDock" class="invoice-actions-bar invoice-actions-sticky d-flex flex-column gap-2">
 
                         @{
                             int? navFirst = ViewBag.NavFirstId == null ? (int?)null : (int)ViewBag.NavFirstId;
@@ -929,10 +960,9 @@
                         <div class="d-flex flex-wrap align-items-center gap-1 justify-content-center">
                             <button type="button"
                                     id="btnFirstInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="si-show-tab"
-                                    data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navFirst ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-local-nav="1"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(navFirst ?? 0)"
                                     title="أول فاتورة"
                                     @(canFirst ? "" : "disabled")>
@@ -941,10 +971,9 @@
 
                             <button type="button"
                                     id="btnPrevInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="si-show-tab"
-                                    data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (prevEffective ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-local-nav="1"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(prevEffective ?? 0)"
                                     title="الفاتورة السابقة"
                                     @(canPrev ? "" : "disabled")>
@@ -953,10 +982,9 @@
 
                             <button type="button"
                                     id="btnNextInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="si-show-tab"
-                                    data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (nextEffective ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-local-nav="1"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(nextEffective ?? 0)"
                                     title="الفاتورة التالية"
                                     @(canNext ? "" : "disabled")>
@@ -965,10 +993,9 @@
 
                             <button type="button"
                                     id="btnLastInvoice"
-                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm open-same-tab"
-                                    data-tab-id="si-show-tab"
-                                    data-tab-title="فاتورة مبيعات"
-                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { id = (navLast ?? 0), frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
+                                    class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-local-nav="1"
+                                    data-base-url="@Url.Action("Show", "SalesInvoices", new { frame = 1, includeZeroQty = ViewBag.IncludeZeroQty })"
                                     data-id="@(navLast ?? 0)"
                                     title="آخر فاتورة"
                                     @(canLast ? "" : "disabled")>
@@ -986,10 +1013,47 @@
                             <button type="button"
                                     id="btnNavInvoiceSearch"
                                     class="btn btn-erp btn-erp-outline-primary btn-erp-sm"
+                                    data-local-nav="1"
                                     data-tab-id="si-show-tab"
                                     data-tab-title="فاتورة مبيعات"
                                     data-base-url="@Url.Action("Show", "SalesInvoices", new { frame = 1 })">
                                 بحث
+                            </button>
+                        </div>
+
+                        <button type="button"
+                                id="btnInvoiceSettingsToggle"
+                                class="btn btn-erp btn-erp-outline-secondary btn-erp-sm w-100">
+                            ⚙️ إعدادات الفاتورة
+                        </button>
+
+                        <div id="siInvoiceSettingsPanel" class="si-settings-panel">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="siShowClearAllChk">
+                                <label class="form-check-label" for="siShowClearAllChk">إظهار زر مسح كل الأصناف</label>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1" for="siMaxItemsInput">الحد الأقصى لعدد الأصناف</label>
+                                <input type="number" id="siMaxItemsInput" class="form-control form-control-sm text-center" min="1" step="1" value="35" />
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label form-label-sm mb-1" for="siSortModeSelect">نظام ترتيب السطور</label>
+                                <select id="siSortModeSelect" class="form-select form-select-sm">
+                                    <option value="location">بالموقع (A → Z)</option>
+                                    <option value="auto">تلقائي (حسب ترتيب النزول)</option>
+                                    <option value="alpha">أبجدي (حسب اسم الصنف)</option>
+                                </select>
+                            </div>
+                            @{
+                                var canShowFullReturnBtn = (Model?.SIId ?? 0) > 0;
+                            }
+                            <div id="fullReturnBtnWrapper" class="mb-2 @(canShowFullReturnBtn ? "" : "d-none")">
+                                <button type="button" class="btn btn-erp btn-erp-outline-warning btn-erp-sm w-100" id="btnCreateFullReturn" data-lock-posted="1">
+                                    ↩️ مرتجع فاتورة مبيعات بالكامل
+                                </button>
+                            </div>
+                            <button type="button" id="btnSaveInvoiceSettingsInline" class="btn btn-erp btn-erp-outline-primary btn-erp-sm w-100">
+                                حفظ الإعدادات
                             </button>
                         </div>
 
@@ -1017,15 +1081,15 @@
                             ⏪ فتح الفاتورة
                         </button>
 
-                        @{
-                            var canShowFullReturnBtn = Model?.SIId > 0 && (Model.IsPosted || Model.Status == "مفتوحة للتعديل" || (Model.Status != null && Model.Status.StartsWith("مرحلة")));
-                        }
-                        @* الزر يُعرض دائماً في DOM ليتحدّث عند التنقل (loadInvoiceBody / refreshSideNavButtons) *@
-                        <div id="fullReturnBtnWrapper" class="@(canShowFullReturnBtn ? "" : "d-none")">
-                            <button type="button" class="btn btn-erp btn-erp-outline-warning btn-erp-sm w-100" id="btnCreateFullReturn" data-lock-posted="1">
-                                ↩️ مرتجع فاتورة مبيعات بالكامل
-                            </button>
-                        </div>
+                        <a class="btn btn-erp btn-erp-outline-warning btn-erp-sm open-same-tab w-100 text-decoration-none"
+                           id="btnCreateEmptyReturnFromCustomer"
+                           data-lock-posted="1"
+                           data-tab-id="sales-return-show-tab"
+                           data-tab-title="مرتجع بيع"
+                           data-base-url="@Url.Action("Create", "SalesReturns", new { salesInvoiceId = 0, customerId = 0, standalone = false, frame = 1 })"
+                           data-url="@Url.Action("Create", "SalesReturns", new { salesInvoiceId = Model?.SIId, customerId = Model?.CustomerId, standalone = false, frame = 1 })">
+                            ↩️ مرتجع جديد باسم العميل
+                        </a>
 
                         <button type="button"
                                 class="btn btn-erp btn-erp-outline-danger btn-erp-sm w-100"
@@ -1172,7 +1236,10 @@
                                                        type="text"
                                                        class="form-control form-control-sm product-dropdown-input"
                                                        placeholder="اكتب اسم العميل"
-                                                       autocomplete="off"
+                                                       autocomplete="new-password"
+                                                       autocorrect="off"
+                                                       autocapitalize="off"
+                                                       spellcheck="false"
                                                        value="@ViewBag.SelectedCustomerName"
                                                        data-lock-posted="1" />
                                             </div>
@@ -1393,10 +1460,14 @@
                                             <div class="product-dropdown-onebox" id="productDropdownInputGroup">
                                                 <span class="product-dropdown-arrow-inside" id="productDropdownArrow" title="افتح القائمة">▼</span>
                                                 <input id="ProdNameInput"
+                                                       name="si_product_lookup"
                                                        type="text"
                                                        class="form-control form-control-sm pi-input pi-product-name-input product-dropdown-input"
                                                        placeholder="اختر صنف..."
-                                                       autocomplete="off"
+                                                       autocomplete="new-password"
+                                                       autocorrect="off"
+                                                       autocapitalize="off"
+                                                       spellcheck="false"
                                                        data-lock-posted="1" />
                                             </div>
                                             <div id="productDropdownList" class="product-dropdown-list" role="listbox" data-open="false"></div>
@@ -1420,6 +1491,13 @@
                                         <input type="number" id="ProdDisc1Input"
                                                class="form-control form-control-sm text-center pi-input"
                                                value="0" data-lock-posted="1" />
+                                    </div>
+                                    <div class="col-lg-1 col-md-2">
+                                        <label class="form-label form-label-sm">إجمالي الصنف</label>
+                                        <input type="text" id="ProdLineTotalPreview"
+                                               class="form-control form-control-sm text-center bg-light text-muted"
+                                               value="0.00"
+                                               readonly />
                                     </div>
                                     <div class="col-lg-1 col-md-2">
                                         <label class="form-label form-label-sm">الباتش</label>
@@ -2011,6 +2089,108 @@
                 }, ms);
             }
             document.addEventListener("DOMContentLoaded", applyPostedUiLock);
+            document.addEventListener("DOMContentLoaded", function () {
+                // محاولة إضافية لمنع نافذة Saved info من المتصفح لحقل العميل/الصنف
+                const custName = document.getElementById('CustomerNameInput');
+                const prodName = document.getElementById('ProdNameInput');
+                function hardDisableSavedInfo(input, seed) {
+                    if (!input) return;
+                    input.setAttribute('autocomplete', 'off');
+                    input.setAttribute('autocorrect', 'off');
+                    input.setAttribute('autocapitalize', 'off');
+                    input.setAttribute('spellcheck', 'false');
+                    input.setAttribute('data-form-type', 'other');
+                    input.setAttribute('name', seed + '_' + Date.now());
+                    // حيلة معروفة: readonly مبدئياً لمنع اقتراحات "Saved info"، ثم نزيله عند أول تركيز.
+                    input.setAttribute('readonly', 'readonly');
+                    const unlock = function () {
+                        input.removeAttribute('readonly');
+                    };
+                    input.addEventListener('focus', unlock, { once: true });
+                    input.addEventListener('pointerdown', unlock, { once: true });
+                    input.addEventListener('keydown', unlock, { once: true });
+                }
+                try {
+                    hardDisableSavedInfo(custName, 'si_customer_lookup');
+                    hardDisableSavedInfo(prodName, 'si_product_lookup');
+                } catch { }
+            });
+
+            // =========================================================
+            // (0.5) إعدادات واجهة الفاتورة (حاليًا: إظهار/إخفاء زر مسح كل الأصناف)
+            // =========================================================
+            const SI_UI_SETTINGS_KEY = 'erp.salesinvoice.ui.settings.v1';
+            function readSiUiSettings() {
+                try {
+                    const raw = localStorage.getItem(SI_UI_SETTINGS_KEY);
+                    if (!raw) return { showClearAll: true, maxItems: 35, sortMode: 'location' };
+                    const parsed = JSON.parse(raw);
+                    const sortModeRaw = (parsed.sortMode || '').toString().toLowerCase();
+                    const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
+                        ? sortModeRaw
+                        : 'location';
+                    return {
+                        showClearAll: parsed.showClearAll !== false,
+                        maxItems: (Number(parsed.maxItems) > 0 ? Number(parsed.maxItems) : 35),
+                        sortMode: sortMode
+                    };
+                } catch {
+                    return { showClearAll: true, maxItems: 35, sortMode: 'location' };
+                }
+            }
+            function writeSiUiSettings(s) {
+                const maxItems = (Number(s.maxItems) > 0 ? Number(s.maxItems) : 35);
+                const sortModeRaw = (s.sortMode || '').toString().toLowerCase();
+                const sortMode = (sortModeRaw === 'alpha' || sortModeRaw === 'location' || sortModeRaw === 'auto')
+                    ? sortModeRaw
+                    : 'location';
+                localStorage.setItem(SI_UI_SETTINGS_KEY, JSON.stringify({
+                    showClearAll: !!s.showClearAll,
+                    maxItems: maxItems,
+                    sortMode: sortMode
+                }));
+            }
+            function applySiUiSettings() {
+                const s = readSiUiSettings();
+                const clearBtn = document.getElementById('btnClearInvoiceLines');
+                const chk = document.getElementById('siShowClearAllChk');
+                const maxItemsInput = document.getElementById('siMaxItemsInput');
+                const sortModeSelect = document.getElementById('siSortModeSelect');
+                if (chk) chk.checked = s.showClearAll;
+                if (maxItemsInput) maxItemsInput.value = String(s.maxItems || 35);
+                if (sortModeSelect) sortModeSelect.value = (s.sortMode === 'alpha' ? 'alpha' : (s.sortMode === 'auto' ? 'auto' : 'location'));
+                if (clearBtn) clearBtn.classList.toggle('d-none', !s.showClearAll);
+            }
+            document.addEventListener('DOMContentLoaded', function () {
+                const toggleBtn = document.getElementById('btnInvoiceSettingsToggle');
+                const panel = document.getElementById('siInvoiceSettingsPanel');
+                const saveBtn = document.getElementById('btnSaveInvoiceSettingsInline');
+                const chk = document.getElementById('siShowClearAllChk');
+                const maxItemsInput = document.getElementById('siMaxItemsInput');
+                const sortModeSelect = document.getElementById('siSortModeSelect');
+                if (toggleBtn && panel) {
+                    toggleBtn.addEventListener('click', function () {
+                        panel.classList.toggle('show');
+                    });
+                }
+                if (saveBtn && chk) {
+                    saveBtn.addEventListener('click', function () {
+                        const maxItems = maxItemsInput ? parseInt(maxItemsInput.value || '35', 10) : 35;
+                        const sortMode = sortModeSelect ? sortModeSelect.value : 'location';
+                        writeSiUiSettings({
+                            showClearAll: chk.checked,
+                            maxItems: (isNaN(maxItems) ? 35 : maxItems),
+                            sortMode: sortMode
+                        });
+                        applySiUiSettings();
+                        if (window.__piLinesCache && typeof window.renderGroupedLines === 'function') {
+                            window.renderGroupedLines(window.__piLinesCache);
+                        }
+                        showToast('تم حفظ إعدادات الفاتورة.', 'success', 2000);
+                    });
+                }
+                applySiUiSettings();
+            });
 
                       // =========================================================
             // (A) أوتوكومبليت العميل (اسم ⇐⇒ كود + بيانات + سياسة)
@@ -2324,8 +2504,10 @@
                     if (customerDropdownList.getAttribute('data-open') !== 'true') return;
                     const r = customerDropdownWrap.getBoundingClientRect();
                     customerDropdownList.style.width = r.width + 'px';
-                    customerDropdownList.style.top = r.bottom + 'px';
-                    customerDropdownList.style.left = r.left + 'px';
+                    customerDropdownList.style.position = 'absolute';
+                    customerDropdownList.style.top = 'calc(100% + 2px)';
+                    customerDropdownList.style.right = '0px';
+                    customerDropdownList.style.left = '0px';
                 }
 
                 function closeCustomerDropdown() {
@@ -2716,6 +2898,69 @@
                             return parseDecimalSafe(val).toFixed(2);
                         }
 
+                        function getInvoiceMaxItemsFromSettings() {
+                            try {
+                                const raw = localStorage.getItem('erp.salesinvoice.ui.settings.v1');
+                                if (!raw) return 35;
+                                const parsed = JSON.parse(raw);
+                                const n = Number(parsed.maxItems);
+                                return (Number.isFinite(n) && n > 0) ? n : 35;
+                            } catch {
+                                return 35;
+                            }
+                        }
+
+                        function showMaxItemsReachedMessage(maxItems) {
+                            const msg = 'لا يمكن كتابة أصناف أكثر من الرقم المسجل (' + maxItems + '). نرجو ترحيل الفاتورة.';
+                            if (typeof ERP !== 'undefined' && typeof ERP.showAlertModal === 'function') {
+                                ERP.showAlertModal({
+                                    title: 'حد أصناف الفاتورة',
+                                    message: msg,
+                                    okText: 'حسناً'
+                                });
+                            } else {
+                                alert(msg);
+                            }
+                        }
+
+                        function getDistinctProductsInCurrentInvoice() {
+                            // الأفضل: من الكاش القادم من السيرفر
+                            if (Array.isArray(window.__piLinesCache) && window.__piLinesCache.length) {
+                                const set = new Set();
+                                window.__piLinesCache.forEach(function (l) {
+                                    const id = Number(l && l.prodId);
+                                    if (Number.isFinite(id) && id > 0) set.add(id);
+                                });
+                                return set;
+                            }
+
+                            // fallback: من الجدول المرئي
+                            const set = new Set();
+                            const tbody = document.getElementById('PILinesTbody');
+                            if (tbody) {
+                                tbody.querySelectorAll('tr[data-prodid]').forEach(function (tr) {
+                                    const id = Number(tr.getAttribute('data-prodid') || '0');
+                                    if (Number.isFinite(id) && id > 0) set.add(id);
+                                });
+                            }
+                            return set;
+                        }
+
+                        // معاينة فورية لإجمالي الصنف قبل الإضافة (بدون حفظ/بدون إضافة)
+                        function recalcProductLineTotalPreview() {
+                            const totalBox = document.getElementById('ProdLineTotalPreview');
+                            if (!totalBox) return;
+                            const qty = Math.max(0, parseDecimalSafe(prodQtyInput?.value || 0));
+                            const price = Math.max(0, parseDecimalSafe(prodPriceInput?.value || 0));
+                            let disc = parseDecimalSafe(prodDisc1Input?.value || 0);
+                            if (!Number.isFinite(disc)) disc = 0;
+                            disc = Math.max(0, Math.min(100, disc));
+
+                            const gross = qty * price;
+                            const net = gross * (1 - (disc / 100));
+                            totalBox.value = fmt2(net);
+                        }
+
                         // =========================================================
                         // جدول التشغيلات (FEFO): معاينة الكميات المتبقية بعد كمية البيع في سطر الإضافة
                         // (نفس ترتيب السيرفر؛ يخصم من أول تشغيلة ثم التالية)
@@ -2991,8 +3236,10 @@
                             if (!panel || !wrap || panel.getAttribute('data-open') !== 'true') return;
                             const r = wrap.getBoundingClientRect();
                             panel.style.width = r.width + 'px';
-                            panel.style.top = r.bottom + 'px';
-                            panel.style.left = r.left + 'px';
+                            panel.style.position = 'absolute';
+                            panel.style.top = 'calc(100% + 2px)';
+                            panel.style.left = '0px';
+                            panel.style.right = '0px';
                         }
                         function closeProductDropdown() {
                             const panel = document.getElementById('productDropdownList');
@@ -3055,6 +3302,7 @@
                                 if (prodAltSelect) {
                                     prodAltSelect.innerHTML = '<option value="">لا توجد بدائل</option>';
                                 }
+                                recalcProductLineTotalPreview();
                                 return;
                             }
 
@@ -3105,6 +3353,7 @@
 
                             // عرض قائمة «تركيزات/أشكال أخرى» من الداتاليست (بدون طلب سيرفر)
                             if (typeof refreshVariantsDropdown === 'function') refreshVariantsDropdown(opt);
+                            recalcProductLineTotalPreview();
                         }
 
 
@@ -3253,9 +3502,11 @@
 
                     // ✅ تثبيت قفل السعر دائمًا
                     forcePriceLocked();
+                    recalcProductLineTotalPreview();
 
                 } catch (err) {
                     console.error('❌ خطأ أثناء تحميل بيانات الصنف:', err);
+                    recalcProductLineTotalPreview();
                 } finally {
                     busyLoadInfo = false;
                 }
@@ -3285,6 +3536,7 @@
                         tr.classList.toggle('table-success', i === idx);
                     });
                 }
+                recalcProductLineTotalPreview();
             }
             if (prodBatchSelect) {
                 prodBatchSelect.addEventListener('change', function () {
@@ -3811,6 +4063,13 @@
                             return;
                         }
 
+                        // مسلسل عرض فقط: 1..N حسب ترتيب العرض الحالي (لا يرتبط بـ LineNo)
+                        let displaySerial = 0;
+                        function nextDisplaySerial() {
+                            displaySerial += 1;
+                            return displaySerial;
+                        }
+
                         // ===============================
                         // 1) تجميع السطور حسب prodId + prodName
                         // ===============================
@@ -3827,9 +4086,54 @@
                             map.get(key).lines.push(l);
                         });
 
-                        // ترتيب المجموعات بالاسم
-                        const groups = Array.from(map.values())
-                            .sort((a, b) => (a.prodName || '').localeCompare(b.prodName || '', 'ar'));
+                        function getLinesSortModeSetting() {
+                            try {
+                                const raw = localStorage.getItem('erp.salesinvoice.ui.settings.v1');
+                                if (!raw) return 'location';
+                                const parsed = JSON.parse(raw);
+                                const mode = (parsed.sortMode || '').toString().toLowerCase();
+                                if (mode === 'alpha' || mode === 'location' || mode === 'auto') return mode;
+                                // default الجديد
+                                return 'location';
+                            } catch {
+                                return 'location';
+                            }
+                        }
+
+                        function minLineNoOfGroup(g) {
+                            const arr = (g && g.lines ? g.lines : []);
+                            if (!arr.length) return Number.MAX_SAFE_INTEGER;
+                            return arr.reduce(function (mn, x) {
+                                const n = Number(x && x.lineNo);
+                                if (!Number.isFinite(n) || n <= 0) return mn;
+                                return Math.min(mn, n);
+                            }, Number.MAX_SAFE_INTEGER);
+                        }
+
+                        const sortMode = getLinesSortModeSetting();
+                        const groups = Array.from(map.values());
+                        if (sortMode === 'alpha') {
+                            groups.sort((a, b) => (a.prodName || '').localeCompare(b.prodName || '', 'ar'));
+                        } else if (sortMode === 'location') {
+                            function groupLocationText(g) {
+                                const first = (g && g.lines && g.lines.length) ? g.lines[0] : null;
+                                const raw = first && first.location != null ? String(first.location).trim() : '';
+                                return raw;
+                            }
+                            groups.sort(function (a, b) {
+                                const aLoc = groupLocationText(a);
+                                const bLoc = groupLocationText(b);
+                                if (!aLoc && !bLoc) return minLineNoOfGroup(a) - minLineNoOfGroup(b);
+                                if (!aLoc) return 1;
+                                if (!bLoc) return -1;
+                                const cmp = aLoc.localeCompare(bLoc, 'ar', { sensitivity: 'base', numeric: true });
+                                if (cmp !== 0) return cmp;
+                                return minLineNoOfGroup(a) - minLineNoOfGroup(b);
+                            });
+                        } else {
+                            // تلقائي: حسب أول نزول للصنف في الفاتورة (أصغر LineNo)
+                            groups.sort((a, b) => minLineNoOfGroup(a) - minLineNoOfGroup(b));
+                        }
 
                         // ===============================
                         // 2) رسم كل مجموعة حسب عدد التشغيلات
@@ -3851,6 +4155,7 @@
                                 const line = sortedLines[0];
 
                                 const lineNo = line.lineNo ?? ''; // متغير: رقم السطر
+                                const serialNo = nextDisplaySerial(); // متغير: مسلسل العرض
                                 const batchNo = line.batchNo ?? ''; // متغير: التشغيلة
 
                                 const expiryText = line.expiryText
@@ -3877,7 +4182,7 @@
                                 tr.setAttribute('data-prodid', g.prodId);
 
                                 tr.innerHTML = `
-                                    <td class="text-center">${lineNo}</td>
+                                    <td class="text-center">${serialNo}</td>
                                     <td class="text-center text-muted small">${locCell}</td>
                                     <td>
                                         <strong>${escapeHtml(g.prodName)}</strong>
@@ -3931,6 +4236,7 @@
                             sortedLines.forEach(line => {
 
                                 const lineNo = line.lineNo ?? ''; // متغير: رقم السطر
+                                const serialNo = nextDisplaySerial(); // متغير: مسلسل العرض
                                 const batchNo = line.batchNo ?? ''; // متغير: التشغيلة
 
                                 const expiryText = line.expiryText
@@ -3957,7 +4263,7 @@
                                 tr.setAttribute('data-prodid', g.prodId);
 
                                 tr.innerHTML = `
-                                    <td class="text-center">${lineNo}</td>
+                                    <td class="text-center">${serialNo}</td>
                                     <td class="text-center text-muted small">${dLocCell}</td>
                                     <td class="text-muted small">↳</td>
 
@@ -4545,6 +4851,49 @@
                             return;
                         }
 
+                        // 3.0) منع البيع بصفر رصيد (تحقق فوري من رصيد المخزن الحالي المحمّل من السيرفر)
+                        if (__siServerWarehouseQty != null) {
+                            const availableNow = Number(__siServerWarehouseQty) || 0;
+                            if (availableNow <= 0) {
+                                alert('لا يمكن بيع هذا الصنف: الكمية المتاحة في المخزن = 0.');
+                                prodQtyInput?.focus();
+                                prodQtyInput?.select?.();
+                                return;
+                            }
+                            if (qty > availableNow) {
+                                alert(`الكمية المطلوبة (${qty}) أكبر من الكمية المتاحة (${availableNow}).`);
+                                prodQtyInput?.focus();
+                                prodQtyInput?.select?.();
+                                return;
+                            }
+                        }
+
+                        // 3.1) تطبيق حد أقصى لعدد الأصناف المسموح بها في الفاتورة (Distinct products)
+                        const maxItems = getInvoiceMaxItemsFromSettings();
+                        const existingProducts = getDistinctProductsInCurrentInvoice();
+                        const isExistingProduct = existingProducts.has(Number(prodId));
+                        if (!isExistingProduct && existingProducts.size >= maxItems) {
+                            showMaxItemsReachedMessage(maxItems);
+                            prodNameInput?.focus();
+                            prodNameInput?.select?.();
+                            return;
+                        }
+
+                        if (isExistingProduct) {
+                            let okMerge = false;
+                            if (typeof ERP !== 'undefined' && ERP.showConfirmModal) {
+                                okMerge = await ERP.showConfirmModal({
+                                    title: 'الصنف موجود بالفعل',
+                                    message: 'هذا الصنف موجود مسبقاً في الفاتورة. هل تريد زيادة الكمية عليه؟',
+                                    confirmText: 'نعم، زوّد الكمية',
+                                    cancelText: 'إلغاء'
+                                });
+                            } else {
+                                okMerge = confirm('هذا الصنف موجود مسبقاً في الفاتورة. هل تريد زيادة الكمية عليه؟');
+                            }
+                            if (!okMerge) return;
+                        }
+
                         // 4) تجهيز DTO
                         const dto = {
                             id: invoiceId,
@@ -4557,6 +4906,7 @@
                             unitCost: 0,
                             priceRetail: priceRetail,
                             purchaseDiscountPct: purchaseDiscountPct,
+                            allowLoss: false,
 
                             batchNo: batchNo,
                             expiryText: expiryText
@@ -4568,27 +4918,62 @@
                         if (btnAddLine) btnAddLine.disabled = true; // تعليق: منع الضغط المتكرر
 
                         try {
+                            async function postAddLine(currentDto) {
+                                const resp = await fetch('@Url.Action("AddLineJson", "SalesInvoices")', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'RequestVerificationToken': token
+                                    },
+                                    body: JSON.stringify(currentDto)
+                                });
+                                return resp;
+                            }
 
-                            const resp = await fetch('@Url.Action("AddLineJson", "SalesInvoices")', {
-                                method: 'POST',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'RequestVerificationToken': token
-                                },
-                                body: JSON.stringify(dto)
-                            });
+                            let resp = await postAddLine(dto);
 
                             // لو السيرفر رجّع خطأ HTTP (مثل 400 BadRequest)
                             if (!resp.ok) {
                                 const errTxt = await resp.text().catch(() => '');
                                 let errMsg = 'حدث خطأ أثناء إضافة السطر.';
+                                let errJson = null;
                                 try {
-                                    const errJson = errTxt ? JSON.parse(errTxt) : null;
+                                    errJson = errTxt ? JSON.parse(errTxt) : null;
                                     if (errJson && (errJson.message || errJson.error))
                                         errMsg = errJson.message || errJson.error;
                                 } catch (_) { }
-                                alert(errMsg);
-                                return;
+
+                                if (errJson && errJson.code === 'LOSS_CONFIRM_REQUIRED') {
+                                    let okLoss = false;
+                                    if (typeof ERP !== 'undefined' && ERP.showConfirmModal) {
+                                        okLoss = await ERP.showConfirmModal({
+                                            title: 'تنبيه بيع بخسارة',
+                                            message: errMsg || 'هذا السطر يسبب خسارة. هل تريد المتابعة؟',
+                                            confirmText: 'متابعة البيع',
+                                            cancelText: 'إلغاء'
+                                        });
+                                    } else {
+                                        okLoss = confirm(errMsg || 'هذا السطر يسبب خسارة. هل تريد المتابعة؟');
+                                    }
+                                    if (!okLoss) return;
+
+                                    dto.allowLoss = true;
+                                    resp = await postAddLine(dto);
+                                    if (!resp.ok) {
+                                        const errTxt2 = await resp.text().catch(() => '');
+                                        let errMsg2 = 'حدث خطأ أثناء إضافة السطر.';
+                                        try {
+                                            const errJson2 = errTxt2 ? JSON.parse(errTxt2) : null;
+                                            if (errJson2 && (errJson2.message || errJson2.error))
+                                                errMsg2 = errJson2.message || errJson2.error;
+                                        } catch (_) { }
+                                        alert(errMsg2);
+                                        return;
+                                    }
+                                } else {
+                                    alert(errMsg);
+                                    return;
+                                }
                             }
 
                             // نقرأ الرد كنص ثم JSON (أكثر أماناً)
@@ -5013,7 +5398,14 @@
                         if (prodQtyInput) {
                             prodQtyInput.addEventListener('input', applyLineQtyPreviewToProductCard);
                             prodQtyInput.addEventListener('change', applyLineQtyPreviewToProductCard);
+                            prodQtyInput.addEventListener('input', recalcProductLineTotalPreview);
+                            prodQtyInput.addEventListener('change', recalcProductLineTotalPreview);
                         }
+                        if (prodDisc1Input) {
+                            prodDisc1Input.addEventListener('input', recalcProductLineTotalPreview);
+                            prodDisc1Input.addEventListener('change', recalcProductLineTotalPreview);
+                        }
+                        recalcProductLineTotalPreview();
 
                         window.__siSyncProductCardAfterGetSalesProductInfo = function (info) {
                             if (!info || info.ok === false) return;
@@ -5522,59 +5914,6 @@
 
 
 
-            @* =========================================================
-   احتياط: openInvoice + bindNavButton (إن لم يُعطِ docCaptureHandler أولوية في مرحلة الالتقاط)
-   ========================================================= *@
-            document.addEventListener('DOMContentLoaded', function () {
-                try {
-                    if (window.bootstrap && typeof bootstrap.Tooltip === 'function') {
-                        document.querySelectorAll('[title]').forEach(el => new bootstrap.Tooltip(el));
-                    }
-                } catch (e) { }
-
-                const showBaseUrl = '@Url.Action("Show", "SalesInvoices")';
-                function openInvoice(id) {
-                    id = parseInt(id || '0', 10);
-                    if (!id || id <= 0) return;
-                    const base = showBaseUrl.replace(/\/$/, '');
-                    const url = base + '/' + encodeURIComponent(id) + '?frame=1';
-                    window.location.href = url;
-                }
-                function bindNavButton(btnId) {
-                    const btn = document.getElementById(btnId);
-                    if (!btn) return;
-                    btn.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        if (btn.disabled) return;
-                        const id = btn.getAttribute('data-id');
-                        openInvoice(id);
-                    });
-                }
-                bindNavButton('btnFirstInvoice');
-                bindNavButton('btnPrevInvoice');
-                bindNavButton('btnNextInvoice');
-                bindNavButton('btnLastInvoice');
-                const searchInput = document.getElementById('NavInvoiceSearchInput');
-                const searchBtn = document.getElementById('btnNavInvoiceSearch');
-                function doSearch() {
-                    const v = (searchInput?.value || '').trim();
-                    if (!v) return;
-                    openInvoice(v);
-                }
-                searchBtn?.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    doSearch();
-                });
-                searchInput?.addEventListener('keydown', (e) => {
-                    if (e.key === 'Enter') {
-                        e.preventDefault();
-                        doSearch();
-                    }
-                });
-            });
-
-
-
                          // =========================================================
                         // زر: ترحيل الفاتورة
                         // =========================================================
@@ -5938,6 +6277,7 @@
                         function refreshProductsDatalist() {
                             const list = document.getElementById('productsList');
                             if (list) list.innerHTML = ''; // تفريغ فوراً حتى لا يظهر أصناف قديمة قبل وصول الاستجابة
+                            if (typeof closeProductDropdown === 'function') closeProductDropdown();
                             const chk = document.getElementById('chkIncludeZeroQty');
                             const warehouseId = parseInt((document.getElementById('WarehouseId')?.value || '0'), 10) || 0;
                             const includeZero = chk ? !!chk.checked : false;
@@ -6046,12 +6386,6 @@
 
                             (function () {
 
-                        // =========================================================
-                        // ✅ Guard: يمنع تركيب نفس السكربت أكثر من مرة
-                        // =========================================================
-                        if (window.__PI_NAV_SCRIPT_LOADED__) return;
-                        window.__PI_NAV_SCRIPT_LOADED__ = true;
-
                         // =========================
                         // أدوات مساعدة
                         // =========================
@@ -6065,6 +6399,26 @@
                                 const has = new RegExp('[?&]' + key + '=').test(url);
                                 if (has) return url.replace(new RegExp('([?&]' + key + '=)[^&]*'), '$1' + encodeURIComponent(value));
                                 return url + sep + key + '=' + encodeURIComponent(value);
+                            }
+                        }
+
+                        function buildShowUrlById(id) {
+                            const n = parseInt(String(id || '0'), 10);
+                            if (!Number.isFinite(n) || n <= 0) return '';
+                            // قالب مسار صريح: /SalesInvoices/Show/{id}?frame=1
+                            const baseTemplate = '@Url.Action("Show", "SalesInvoices", new { id = 987654321, frame = 1 })';
+                            let out = baseTemplate.replace('987654321', String(n));
+                            try {
+                                const u = new URL(out, window.location.origin);
+                                u.searchParams.set('frame', '1');
+                                u.searchParams.delete('frag');
+                                const chk = document.getElementById('chkIncludeZeroQty');
+                                if (chk && chk.checked) u.searchParams.set('includeZeroQty', 'true');
+                                else u.searchParams.delete('includeZeroQty');
+                                u.searchParams.set('_ts', String(Date.now()));
+                                return u.toString();
+                            } catch {
+                                return out;
                             }
                         }
 
@@ -6165,11 +6519,30 @@
                         function refreshSideNavButtons() {
 
                             // القيم الجديدة داخل PI_BodyHost (تتغير مع كل فاتورة)
-                            const navFirst = getInt('NavFirstId');
-                            const navLast = getInt('NavLastId');
-                            const navPrev = getInt('NavPrevId');
-                            const navNext = getInt('NavNextId');
-                            const currentId = getInt('NavCurrentId'); // 0 = فاتورة جديدة
+                            const btnFirst = document.getElementById('btnFirstInvoice');
+                            const btnPrev = document.getElementById('btnPrevInvoice');
+                            const btnNext = document.getElementById('btnNextInvoice');
+                            const btnLast = document.getElementById('btnLastInvoice');
+
+                            const attrInt = function (el, attr) {
+                                const raw = (el && el.getAttribute(attr)) ? el.getAttribute(attr) : '';
+                                const n = parseInt(String(raw || '0'), 10);
+                                return Number.isFinite(n) ? n : 0;
+                            };
+
+                            let navFirst = getInt('NavFirstId');
+                            let navLast = getInt('NavLastId');
+                            let navPrev = getInt('NavPrevId');
+                            let navNext = getInt('NavNextId');
+                            let currentId = getInt('NavCurrentId'); // 0 = فاتورة جديدة
+
+                            // Fallback قوي: إذا حقول Nav المخفية غير جاهزة/مفقودة (شائع عند فتح من قائمة المبيعات)
+                            // نقرأ من data-id الموجودة على الأزرار + رقم الفاتورة الحالي.
+                            if (navFirst <= 0) navFirst = attrInt(btnFirst, 'data-id');
+                            if (navLast <= 0) navLast = attrInt(btnLast, 'data-id');
+                            if (navPrev <= 0) navPrev = attrInt(btnPrev, 'data-id');
+                            if (navNext <= 0) navNext = attrInt(btnNext, 'data-id');
+                            if (currentId <= 0) currentId = getInt('InvoiceId');
 
                             const hasAny = (navFirst > 0 && navLast > 0);
 
@@ -6181,12 +6554,6 @@
                             const canLast = hasAny && navLast > 0 && navLast !== currentId;
                             const canPrev = hasAny && prevEffective > 0 && prevEffective !== currentId;
                             const canNext = hasAny && nextEffective > 0 && nextEffective !== currentId;
-
-                            // الأزرار
-                            const btnFirst = document.getElementById('btnFirstInvoice');
-                            const btnPrev = document.getElementById('btnPrevInvoice');
-                            const btnNext = document.getElementById('btnNextInvoice');
-                            const btnLast = document.getElementById('btnLastInvoice');
 
                             // base URL للعرض (بدون id)
                             let base = document.getElementById('btnNavInvoiceSearch')?.getAttribute('data-base-url')
@@ -6206,10 +6573,10 @@
                             }
 
                             // نجهز URLs
-                            const urlFirst = setOrReplaceParam(base, 'id', navFirst);
-                            const urlLast = setOrReplaceParam(base, 'id', navLast);
-                            const urlPrev = setOrReplaceParam(base, 'id', prevEffective);
-                            const urlNext = setOrReplaceParam(base, 'id', nextEffective);
+                            const urlFirst = buildShowUrlById(navFirst);
+                            const urlLast = buildShowUrlById(navLast);
+                            const urlPrev = buildShowUrlById(prevEffective);
+                            const urlNext = buildShowUrlById(nextEffective);
 
                             // ✅ تحديث data-url و data-id للأزرار (لجميع الأزرار، حتى المعطلة)
                             if (btnFirst) { 
@@ -6245,6 +6612,21 @@
                                 btnVolume.setAttribute('data-url', volumeUrl);
                             }
 
+                            // ✅ زر مرتجع جديد باسم العميل (مرتجع مستقل بدون ربط بالفاتورة الأصلية)
+                            const btnEmptyReturn = document.getElementById('btnCreateEmptyReturnFromCustomer');
+                            if (btnEmptyReturn) {
+                                const retBase = btnEmptyReturn.getAttribute('data-base-url')
+                                    || '@Url.Action("Create", "SalesReturns", new { salesInvoiceId = 0, customerId = 0, standalone = false, frame = 1 })';
+                                let returnUrl = setOrReplaceParam(retBase, 'customerId', customerId > 0 ? customerId : 0);
+                                returnUrl = setOrReplaceParam(returnUrl, 'salesInvoiceId', currentId > 0 ? currentId : 0);
+                                const postedNow = (typeof isInvoicePosted === 'function') ? isInvoicePosted() : false;
+                                const isEnabled = customerId > 0 && currentId > 0 && !postedNow;
+                                btnEmptyReturn.setAttribute('data-url', isEnabled ? returnUrl : '#');
+                                btnEmptyReturn.setAttribute('href', isEnabled ? returnUrl : '#');
+                                btnEmptyReturn.classList.toggle('disabled', !isEnabled);
+                                btnEmptyReturn.setAttribute('aria-disabled', isEnabled ? 'false' : 'true');
+                            }
+
                             const btnExportSi = document.getElementById('btnExportSalesInvoiceExcel');
                             if (btnExportSi && SI_EXPORT_EXCEL_URL_TEMPLATE) {
                                 if (currentId > 0) {
@@ -6256,6 +6638,10 @@
                                     btnExportSi.classList.add('d-none');
                                     btnExportSi.style.display = 'none';
                                 }
+                            }
+
+                            if (typeof applySiUiSettings === 'function') {
+                                applySiUiSettings();
                             }
                         }
                         window.__refreshSideNavButtons = refreshSideNavButtons;
@@ -6303,7 +6689,7 @@
                                 if (invFlagEl) invFlagEl.value = bodyIsPosted ? "1" : "0";
                                 const fullRetWrap = document.getElementById("fullReturnBtnWrapper");
                                 if (fullRetWrap) {
-                                    const canShow = bodyInvoiceId > 0 && (bodyIsPosted || bodyStatus === "مفتوحة للتعديل" || (bodyStatus && bodyStatus.startsWith("مرحلة")));
+                                    const canShow = bodyInvoiceId > 0;
                                     if (canShow) fullRetWrap.classList.remove("d-none");
                                     else fullRetWrap.classList.add("d-none");
                                 }
@@ -6398,12 +6784,31 @@
                             }
                         };
 
+                        // تنقّل كامل داخل نفس إطار التاب (أكثر ثباتًا من التبديل الجزئي لأسهم/بحث الفاتورة)
+                        function navigateInvoiceFull(url) {
+                            if (!url) return;
+                            try {
+                                const u = new URL(url, window.location.origin);
+                                u.searchParams.set('frame', '1');
+                                u.searchParams.delete('frag');
+                                const chk = document.getElementById('chkIncludeZeroQty');
+                                if (chk && chk.checked) u.searchParams.set('includeZeroQty', 'true');
+                                else if (chk) u.searchParams.delete('includeZeroQty');
+                                u.searchParams.set('_ts', String(Date.now()));
+                                window.location.assign(u.toString());
+                            } catch {
+                                window.location.assign(url);
+                            }
+                        }
+
                         // =========================
                         // اعتراض الأسهم/البحث (capture) — تحميل جسم الفاتورة فقط كما قبل تعديل التحديث
                         // =========================
                         async function docCaptureHandler(ev) {
-                            const t = ev.target;
-                            if (!(t instanceof Element)) return;
+                            const t = (ev.target instanceof Element)
+                                ? ev.target
+                                : (ev.target && ev.target.parentElement ? ev.target.parentElement : null);
+                            if (!t) return;
 
                             const btn = t.closest('#btnFirstInvoice, #btnPrevInvoice, #btnNextInvoice, #btnLastInvoice, #btnNavInvoiceSearch');
                             if (!btn) return;
@@ -6420,12 +6825,9 @@
                                 const input = document.getElementById('NavInvoiceSearchInput');
                                 const val = input ? parseInt(input.value || '0', 10) : 0;
                                 if (!val || val <= 0) return;
-
-                                const baseUrl = btn.getAttribute('data-base-url');
-                                if (!baseUrl) return;
-
-                                const url = setOrReplaceParam(baseUrl, 'id', val);
-                                loadInvoiceBody(url);
+                                const url = buildShowUrlById(val);
+                                if (!url) return;
+                                navigateInvoiceFull(url);
                                 return;
                             }
 
@@ -6433,17 +6835,39 @@
 
                             let url = btn.getAttribute('data-url');
 
+                            // أولوية: حساب الهدف مباشرة من قيم Nav المخفية الحالية (لتجنب أي data-url قديم)
+                            const navFirstNow = getInt('NavFirstId');
+                            const navLastNow = getInt('NavLastId');
+                            const navPrevNow = getInt('NavPrevId');
+                            const navNextNow = getInt('NavNextId');
+                            const navCurrentNow = getInt('NavCurrentId');
+                            const prevEffNow = (navCurrentNow === 0) ? navLastNow : navPrevNow;
+                            const nextEffNow = (navCurrentNow === 0) ? navFirstNow : navNextNow;
+                            const btnDataIdNow = parseInt((btn.getAttribute('data-id') || '0'), 10) || 0;
+
+                            let targetId = 0;
+                            // أولوية 1: data-id على الزر نفسه (الأكثر التصاقاً بالحالة المرئية)
+                            if (btnDataIdNow > 0) targetId = btnDataIdNow;
+                            // أولوية 2: Nav* المخفي
+                            else if (btn.id === 'btnFirstInvoice') targetId = navFirstNow;
+                            else if (btn.id === 'btnLastInvoice') targetId = navLastNow;
+                            else if (btn.id === 'btnPrevInvoice') targetId = prevEffNow;
+                            else if (btn.id === 'btnNextInvoice') targetId = nextEffNow;
+
+                            if (targetId > 0) {
+                                url = buildShowUrlById(targetId);
+                            }
+
                             if (!url || !url.trim()) {
-                                const baseUrl = btn.getAttribute('data-base-url');
                                 const btnId = btn.getAttribute('data-id');
-                                if (baseUrl && btnId) {
-                                    url = setOrReplaceParam(baseUrl, 'id', parseInt(btnId || '0', 10));
+                                if (btnId) {
+                                    url = buildShowUrlById(parseInt(btnId || '0', 10));
                                 }
                             }
 
                             if (!url || !url.trim()) return;
 
-                            loadInvoiceBody(url);
+                            navigateInvoiceFull(url);
                         }
 
 
@@ -6653,7 +7077,10 @@
                         // =========================
                         // تشغيل: اعتراض الأسهم/البحث + تهيئة الشريط الجانبي
                         // =========================
-                        document.addEventListener('click', docCaptureHandler, true);
+                        if (!document.__siDocCaptureBound__) {
+                            document.addEventListener('click', docCaptureHandler, true);
+                            document.__siDocCaptureBound__ = true;
+                        }
 
                         document.addEventListener('DOMContentLoaded', function () {
                             refreshSideNavButtons();

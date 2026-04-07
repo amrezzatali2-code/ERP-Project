@@ -6,6 +6,7 @@ using ERP.Security;
 using ERP.Services;                              // ILedgerPostingService
 using Microsoft.AspNetCore.Mvc;                  // أساس الكنترولر
 using Microsoft.AspNetCore.Mvc.Rendering;        // SelectList و SelectListItem
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;             // Include, AsNoTracking, ToListAsync
 using Microsoft.Extensions.DependencyInjection;  // GetRequiredService
 using System;                                     // متغيرات التوقيت DateTime
@@ -30,6 +31,8 @@ namespace ERP.Controllers
         private readonly AppDbContext _context;
         private readonly StockAnalysisService _stockAnalysisService;
         private readonly IUserActivityLogger _activityLogger;
+        private static string? _legacyInvoiceQtyQuerySql;
+        private static readonly object _legacyInvoiceQtyLock = new();
 
         private static string NormalizeArabicDigitsToLatin(string s)
         {
@@ -48,6 +51,136 @@ namespace ERP.Controllers
             _context = context;
             _stockAnalysisService = stockAnalysisService;
             _activityLogger = activityLogger;
+        }
+
+        /// <summary>
+        /// الكمية المتاحة للتحويل:
+        /// 1) نحاول أولاً معادلة برنامج المشتريات من INVOICE_D/INVOICES_D:
+        ///    CurrentQty = QTY_BEFORE - TOTAL_QTY_ALL (من آخر فاتورة للصنف حسب التاريخ ثم رقم الفاتورة).
+        /// 2) إن لم تتوفر الجداول/الأعمدة في قاعدة ERP الحالية: fallback إلى StockLedger.
+        /// </summary>
+        private async Task<int> GetTransferAvailableQtyAsync(int prodId, int warehouseId)
+        {
+            var legacyQty = await TryGetCurrentQtyFromLegacyInvoiceDAsync(prodId);
+            if (legacyQty.HasValue)
+                return legacyQty.Value;
+
+            return await _stockAnalysisService.GetCurrentQtyAsync(prodId, warehouseId);
+        }
+
+        private async Task<int?> TryGetCurrentQtyFromLegacyInvoiceDAsync(int prodId)
+        {
+            if (prodId <= 0) return null;
+
+            // بعد أول نجاح نخزن SQL الصحيح لتفادي التجربة المتكررة.
+            string? cachedSql;
+            lock (_legacyInvoiceQtyLock)
+            {
+                cachedSql = _legacyInvoiceQtyQuerySql;
+            }
+            if (!string.IsNullOrWhiteSpace(cachedSql))
+            {
+                var cached = await ExecuteLegacyQtyScalarAsync(cachedSql!, prodId);
+                if (cached.HasValue) return cached;
+            }
+
+            var candidates = new[]
+            {
+                BuildLegacyInvoiceQtySql("[dbo].[INVOICE_D]", "[INVOICES_H_ID]"),
+                BuildLegacyInvoiceQtySql("[dbo].[INVOICE_D]", "[INVOICE_H_ID]"),
+                BuildLegacyInvoiceQtySql("[dbo].[INVOICES_D]", "[INVOICES_H_ID]"),
+                BuildLegacyInvoiceQtySql("[dbo].[INVOICES_D]", "[INVOICE_H_ID]")
+            };
+
+            foreach (var sql in candidates)
+            {
+                var val = await ExecuteLegacyQtyScalarAsync(sql, prodId);
+                if (val.HasValue)
+                {
+                    lock (_legacyInvoiceQtyLock)
+                    {
+                        _legacyInvoiceQtyQuerySql = sql;
+                    }
+                    return val.Value;
+                }
+            }
+
+            return null;
+        }
+
+        private static string BuildLegacyInvoiceQtySql(string tableName, string invoiceIdColumn)
+        {
+            return $@"
+IF OBJECT_ID(N'{tableName}', N'U') IS NULL
+    SELECT CAST(NULL AS DECIMAL(18,3));
+ELSE
+BEGIN
+    ;WITH MXD AS
+    (
+        SELECT d.[PROD_ID], MAX(CAST(d.[DATE_D] AS DATE)) AS [MAX_DAY]
+        FROM {tableName} d
+        WHERE d.[PROD_ID] = @prodId
+        GROUP BY d.[PROD_ID]
+    ),
+    MXID AS
+    (
+        SELECT d.[PROD_ID], CAST(d.[DATE_D] AS DATE) AS [DD], MAX(d.{invoiceIdColumn}) AS [MAX_HID]
+        FROM {tableName} d
+        JOIN MXD m
+            ON m.[PROD_ID] = d.[PROD_ID]
+           AND CAST(d.[DATE_D] AS DATE) = m.[MAX_DAY]
+        GROUP BY d.[PROD_ID], CAST(d.[DATE_D] AS DATE)
+    )
+    SELECT TOP(1)
+        (COALESCE(CAST(d.[QTY_BEFORE] AS DECIMAL(18,3)), 0) - COALESCE(CAST(d.[TOTAL_QTY_ALL] AS DECIMAL(18,3)), 0)) AS [CurrentQty]
+    FROM {tableName} d
+    JOIN MXID x
+        ON x.[PROD_ID] = d.[PROD_ID]
+       AND CAST(d.[DATE_D] AS DATE) = x.[DD]
+       AND d.{invoiceIdColumn} = x.[MAX_HID];
+END";
+        }
+
+        private async Task<int?> ExecuteLegacyQtyScalarAsync(string sql, int prodId)
+        {
+            try
+            {
+                var connection = _context.Database.GetDbConnection();
+                var shouldClose = connection.State != System.Data.ConnectionState.Open;
+                if (shouldClose)
+                    await connection.OpenAsync();
+
+                try
+                {
+                    await using var command = connection.CreateCommand();
+                    command.CommandText = sql;
+                    var p = command.CreateParameter();
+                    p.ParameterName = "@prodId";
+                    p.Value = prodId;
+                    p.DbType = System.Data.DbType.Int32;
+                    command.Parameters.Add(p);
+
+                    var result = await command.ExecuteScalarAsync();
+                    if (result == null || result == DBNull.Value)
+                        return null;
+
+                    var dec = Convert.ToDecimal(result, CultureInfo.InvariantCulture);
+                    return (int)Math.Round(dec, MidpointRounding.AwayFromZero);
+                }
+                finally
+                {
+                    if (shouldClose)
+                        await connection.CloseAsync();
+                }
+            }
+            catch (SqlException)
+            {
+                return null;
+            }
+            catch (InvalidOperationException)
+            {
+                return null;
+            }
         }
 
         #region Index (قائمة التحويلات بالنظام الموحد)
@@ -1125,7 +1258,7 @@ namespace ERP.Controllers
                 .ThenBy(sb => sb.BatchNo)
                 .ToListAsync();
 
-            int ledgerQty = await _stockAnalysisService.GetCurrentQtyAsync(prodId, fromWarehouseId);
+            int ledgerQty = await GetTransferAvailableQtyAsync(prodId, fromWarehouseId);
 
             var batchInfos = new List<TransferBatchInfo>();
             foreach (var sb in stockBatches)
@@ -1216,6 +1349,10 @@ namespace ERP.Controllers
             {
                 return BadRequest(new { ok = false, message = "لا يمكن إضافة سطور لتحويل مترحل." });
             }
+            if (transfer.FromWarehouseId <= 0)
+            {
+                return BadRequest(new { ok = false, message = "اختر المخزن المصدر أولاً ثم احفظ التحويل قبل إضافة السطور." });
+            }
 
             if (dto.ProductId <= 0)
             {
@@ -1242,6 +1379,70 @@ namespace ERP.Controllers
                 var batchExists = await _context.Batches.AnyAsync(b => b.BatchId == batchId.Value);
                 if (!batchExists)
                     batchId = null;
+            }
+
+            int ledgerAvailableQty = await GetTransferAvailableQtyAsync(dto.ProductId, transfer.FromWarehouseId);
+            int reservedQtyInDraftLines = transfer.Lines
+                .Where(l => l.ProductId == dto.ProductId)
+                .Sum(l => l.Qty);
+            int remainingQty = ledgerAvailableQty - reservedQtyInDraftLines;
+            if (remainingQty <= 0)
+            {
+                return BadRequest(new
+                {
+                    ok = false,
+                    message = "لا توجد كمية متاحة لهذا الصنف في المخزن المصدر قبل التحويل."
+                });
+            }
+            if (dto.Qty > remainingQty)
+            {
+                return BadRequest(new
+                {
+                    ok = false,
+                    message = $"الكمية المطلوبة ({dto.Qty}) أكبر من المتاح ({remainingQty}) في المخزن المصدر."
+                });
+            }
+
+            if (batchId.HasValue)
+            {
+                var selectedBatch = await _context.Batches
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(b => b.BatchId == batchId.Value);
+                if (selectedBatch != null)
+                {
+                    int batchOnHand = await _context.StockBatches
+                        .AsNoTracking()
+                        .Where(sb =>
+                            sb.WarehouseId == transfer.FromWarehouseId &&
+                            sb.ProdId == dto.ProductId &&
+                            sb.BatchNo == selectedBatch.BatchNo &&
+                            sb.Expiry.HasValue &&
+                            sb.Expiry.Value.Date == selectedBatch.Expiry.Date)
+                        .Select(sb => sb.QtyOnHand)
+                        .FirstOrDefaultAsync();
+
+                    int batchReservedInDraft = transfer.Lines
+                        .Where(l => l.ProductId == dto.ProductId && l.BatchId == batchId.Value)
+                        .Sum(l => l.Qty);
+                    int batchRemaining = batchOnHand - batchReservedInDraft;
+
+                    if (batchRemaining <= 0)
+                    {
+                        return BadRequest(new
+                        {
+                            ok = false,
+                            message = "التشغيلة المختارة لا تحتوي على كمية متاحة في المخزن المصدر."
+                        });
+                    }
+                    if (dto.Qty > batchRemaining)
+                    {
+                        return BadRequest(new
+                        {
+                            ok = false,
+                            message = $"الكمية المطلوبة أكبر من المتاح في التشغيلة المختارة ({batchRemaining})."
+                        });
+                    }
+                }
             }
 
             decimal unitCost = dto.UnitCost;

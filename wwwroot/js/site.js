@@ -129,10 +129,10 @@ if (window.__ERP_TABS_INITED__) {
 
             document.addEventListener('click', function (event) {
 
-                // ✅ رصيف تنقّل فاتورة المبيعات (Show فقط — #siInvoiceNavDock): لا اعتراض هنا أبداً
+                // ✅ عناصر التنقل المحلية فقط (مثال: أسهم/بحث فاتورة المبيعات)
                 // (أيضاً: closest على عقدة نص قد يفشل بدون erpEventTargetElement)
                 var elDock = erpEventTargetElement(event);
-                if (elDock && elDock.closest && elDock.closest('#siInvoiceNavDock')) return;
+                if (elDock && elDock.closest && elDock.closest('[data-local-nav="1"]')) return;
 
                 // =========================================================
                 // (0) زر البحث داخل فاتورة المشتريات / طلب الشراء (يبني URL حسب رقم المستخدم)

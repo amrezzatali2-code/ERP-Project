@@ -396,16 +396,7 @@ namespace ERP.Controllers
 
             if (!includeZeroQty)
             {
-                var prodIdsWithStock = _context.StockLedger
-                    .AsNoTracking()
-                    .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
-                    .Select(sl => sl.ProdId);
-                if (warehouseId.HasValue && warehouseId.Value > 0)
-                    prodIdsWithStock = _context.StockLedger
-                        .AsNoTracking()
-                        .Where(sl => sl.WarehouseId == warehouseId.Value && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
-                        .Select(sl => sl.ProdId);
-                var ids = await prodIdsWithStock.Distinct().ToListAsync();
+                var ids = await GetProductIdsWithPositiveNetQtyAsync(warehouseId);
                 productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
             }
 
@@ -426,6 +417,26 @@ namespace ERP.Controllers
             ViewBag.ProductsAuto = products;
         }
 
+        /// <summary>
+        /// إرجاع أكواد الأصناف التي لها رصيد فعلي قابل للبيع (> 0)
+        /// بالاعتماد على RemainingQty لحركات الدخول فقط (QtyIn > 0)، مع دعم فلتر المخزن.
+        /// </summary>
+        private async Task<List<int>> GetProductIdsWithPositiveNetQtyAsync(int? warehouseId = null)
+        {
+            var ledger = _context.StockLedger.AsNoTracking().AsQueryable();
+            if (warehouseId.HasValue && warehouseId.Value > 0)
+            {
+                ledger = ledger.Where(sl => sl.WarehouseId == warehouseId.Value);
+            }
+
+            return await ledger
+                .Where(sl => sl.QtyIn > 0)
+                .GroupBy(sl => sl.ProdId)
+                .Where(g => g.Sum(x => (x.RemainingQty ?? 0)) > 0)
+                .Select(g => g.Key)
+                .ToListAsync();
+        }
+
         // =========================================================
         // API: إرجاع قائمة الأصناف للداتاليست (بدون إعادة تحميل الصفحة)
         // - يستخدم عند تغيير تشيك بوكس "عرض الصفر"
@@ -437,16 +448,7 @@ namespace ERP.Controllers
 
             if (!includeZeroQty)
             {
-                var prodIdsWithStock = _context.StockLedger
-                    .AsNoTracking()
-                    .Where(sl => sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
-                    .Select(sl => sl.ProdId);
-                if (warehouseId.HasValue && warehouseId.Value > 0)
-                    prodIdsWithStock = _context.StockLedger
-                        .AsNoTracking()
-                        .Where(sl => sl.WarehouseId == warehouseId.Value && sl.QtyIn > 0 && (sl.RemainingQty ?? 0) > 0)
-                        .Select(sl => sl.ProdId);
-                var ids = await prodIdsWithStock.Distinct().ToListAsync();
+                var ids = await GetProductIdsWithPositiveNetQtyAsync(warehouseId);
                 productsQuery = productsQuery.Where(p => ids.Contains(p.ProdId)).OrderBy(p => p.ProdName);
             }
 
@@ -849,6 +851,7 @@ namespace ERP.Controllers
 
             public string? BatchNo { get; set; }          // متغير: رقم التشغيلة (جاية من الواجهة)
             public string? expiryText { get; set; }       // متغير: الصلاحية كنص MM/YYYY أو yyyy-MM-dd حسب الواجهة
+            public bool allowLoss { get; set; }           // متغير: موافقة المستخدم الصريحة على البيع بخسارة
         }
 
         private DateTime? ParseExpiryText(string? expiryText)
@@ -1116,15 +1119,6 @@ namespace ERP.Controllers
                     }
                 }
 
-                // (ج) أصناف من الاستيراد فقط (لا توجد تشغيلات في المخزن) — نسمح بإضافة السطر كسطر "بدون تشغيلة"
-                bool hasImportOnlySegment = false;
-                if (remainingToSell > 0 && segments.Count == 0)
-                {
-                    segments.Add(("", DateTime.UtcNow.Date, dto.qty));
-                    remainingToSell = 0;
-                    hasImportOnlySegment = true;
-                }
-
                 // لو بعد كل ده لسه في كمية متبقية → المخزون غير كافي
                 if (remainingToSell > 0)
                 {
@@ -1142,7 +1136,6 @@ namespace ERP.Controllers
                 // — StockBatches = رصيد سريع للتشغيلات ويجب أن يظل مطابقاً لـ StockLedger (كل تحديث لمخزون يمس الاثنين).
                 // — إذا وُجدت كمية في StockBatches دون حركات دخول في StockLedger يُرفض البيع.
                 // =========================
-                if (!hasImportOnlySegment)
                 {
                     int availableFromLedger = await _context.StockLedger
                         .Where(x => x.WarehouseId == invoice.WarehouseId && x.ProdId == dto.prodId && x.QtyIn > 0)
@@ -1439,6 +1432,19 @@ namespace ERP.Controllers
                     decimal revenueSeg = qtyDelta * unitSalePrice * (1m - (saleDisc1 / 100m));
                     decimal profitValue = revenueSeg - costTotal;
                     decimal profitPercent = revenueSeg > 0 ? (profitValue / revenueSeg) * 100m : 0m;
+
+                    if (profitValue < 0m && !dto.allowLoss)
+                    {
+                        await tx.RollbackAsync();
+                        var lossAbs = Math.Abs(Math.Round(profitValue, 2));
+                        return BadRequest(new
+                        {
+                            ok = false,
+                            code = "LOSS_CONFIRM_REQUIRED",
+                            message = $"هذا السطر يسبب خسارة ({lossAbs:0.##}). هل تريد المتابعة؟",
+                            lossValue = lossAbs
+                        });
+                    }
 
                     // ملء حقول التكلفة/الربح في SalesInvoiceLine
                     affectedLine.CostPerUnit = costPerUnit;
